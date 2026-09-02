@@ -86,6 +86,24 @@ SNAPSHOT_FORMAT = "spetsmat-%Y%m%dT%H%M%SZ.db.gz"
 #: probe exists to exercise the three assertions, not to imitate a season.
 PROBE_MARKS = 12
 
+#: The first sixteen bytes of every SQLite database file.  Assertion 1 checks them BEFORE
+#: it asks the pragma anything, because ``sqlite3.connect`` on an EMPTY file does not fail:
+#: it creates a brand-new empty database there, and ``pragma integrity_check`` then answers
+#: ``ok`` about it.  A zero-byte snapshot is the exact failure this whole tool exists to
+#: rule out -- "the backup ran for years" -- and without this constant the assertion named
+#: ``целостность`` would call it healthy.  *Found by the §3 verifier, which restored a
+#: zero-byte snapshot and got ``[ок] целостность`` back.*
+SQLITE_HEADER = b"SQLite format 3\x00"
+
+#: How far into the future a mark's ``valid_at`` may sit before the freshness assertion
+#: calls it wrong rather than fresh.  Not zero: the mark is stamped by the bot's machine and
+#: read by whatever machine runs the check, and a few minutes of clock skew between them is
+#: ordinary.  Not generous either -- a mark dated tomorrow is a data error, and without this
+#: bound ONE such row makes assertion 3 green forever, which is staleness wearing a green
+#: badge.  *Also found by the §3 verifier: a mark dated a year ahead passed as "возраст
+#: -365 дн."*
+FUTURE_TOLERANCE = timedelta(minutes=5)
+
 
 class DatabaseMissing(Exception):
     """The database to back up does not exist."""
@@ -138,6 +156,15 @@ def proverit_snimok(snapshot: Path, *, now: Optional[datetime] = None) -> list:
                 Proverka("свежесть отметки", False, nedostupno),
             ]
 
+        zagolovok = _proverka_zagolovka(restored)
+        if not zagolovok.ok:
+            nedostupno = "не проверено: в снимке нет базы"
+            return [
+                zagolovok,
+                Proverka("учеников", False, nedostupno),
+                Proverka("свежесть отметки", False, nedostupno),
+            ]
+
         connection = sqlite3.connect(str(restored))
         connection.row_factory = sqlite3.Row
         try:
@@ -152,6 +179,26 @@ def proverit_snimok(snapshot: Path, *, now: Optional[datetime] = None) -> list:
             return [celostnost, _proverka_uchenikov(connection), _proverka_svezhesti(connection, now)]
         finally:
             connection.close()
+
+
+def _proverka_zagolovka(restored: Path) -> Proverka:
+    """The first half of assertion 1: what came out of the snapshot IS a database file.
+
+    ``pragma integrity_check`` cannot answer this question, because by the time it is asked
+    the damage is already repaired: ``sqlite3.connect`` on a zero-byte file quietly creates
+    an empty database there and the pragma then reports ``ok`` about the thing it just made.
+    So the bytes are looked at first -- a snapshot that unpacked to nothing, or to something
+    that is not a database, fails HERE, under the same name the задание gives assertion 1.
+    """
+    razmer = restored.stat().st_size
+    if razmer == 0:
+        return Proverka("целостность", False, "в снимке 0 байт: восстанавливать нечего")
+    with restored.open("rb") as handle:
+        zagolovok = handle.read(len(SQLITE_HEADER))
+    if zagolovok != SQLITE_HEADER:
+        return Proverka("целостность", False,
+                        "распаковалось не в базу SQLite: %d байт, заголовок %r" % (razmer, zagolovok))
+    return Proverka("целостность", True, "")
 
 
 def _proverka_celostnosti(connection: sqlite3.Connection) -> Proverka:
@@ -198,9 +245,26 @@ def _proverka_svezhesti(connection: sqlite3.Connection, now: datetime) -> Prover
         moment = parse_iso(row[0])
     except ValueError:
         return Proverka("свежесть отметки", False, "нечитаемая дата последней отметки: %r" % row[0])
-    age = (now - moment).days
-    return Proverka("свежесть отметки", age <= FRESH_DAYS,
-                    "%s, возраст %d дн. (нужно не больше %d)" % (row[0], age, FRESH_DAYS))
+
+    # NOT ``.days``.  ``timedelta.days`` floors, so a mark seven days and twenty-three hours
+    # old measured as 7 and passed a rule that says "no older than a week" -- the assertion
+    # was quietly a day and a half wider than it claimed.  The comparison is on the interval
+    # itself and the printed age is fractional, so the number in the alarm is the number the
+    # rule used.  *Found by the §3 verifier.*
+    razryv = now - moment
+    vozrast = razryv.total_seconds() / 86400.0
+
+    # A mark dated in the future is not "fresh", it is wrong -- a skewed clock or a bad
+    # import -- and one such row would otherwise hold this assertion green forever while
+    # nobody marked anything at all.  It is called out by name rather than folded into the
+    # ordinary red, because the repair is a different repair.
+    if razryv < -FUTURE_TOLERANCE:
+        return Proverka("свежесть отметки", False,
+                        "%s — дата В БУДУЩЕМ на %.1f дн.: сбитые часы или кривой импорт, "
+                        "свежесть по такой отметке не считается" % (row[0], -vozrast))
+
+    return Proverka("свежесть отметки", razryv <= timedelta(days=FRESH_DAYS),
+                    "%s, возраст %.1f дн. (нужно не больше %d)" % (row[0], vozrast, FRESH_DAYS))
 
 
 # ------------------------------------------------------------------------ the snapshot
@@ -393,14 +457,50 @@ def _upakovat(plain: Path, snapshot: Path) -> None:
         shutil.copyfileobj(source, target)
 
 
+def _porcha_pustoy_snimok(snapshot: Path) -> str:
+    """Leave the snapshot file empty.  The backup "ran" and copied nothing.
+
+    🔴 THIS CORRUPTION EXISTS BECAUSE THE CHECK ONCE SURVIVED IT GREEN.  The §3 verifier
+    restored a zero-byte snapshot and got ``[ок] целостность`` back: ``gzip`` yields an
+    empty stream without complaining, ``sqlite3.connect`` makes a fresh empty database out
+    of the nothing, and the pragma reports ``ok`` about the database it just created.  It
+    is listed here and not only in the tests so that the criterion command itself would go
+    red if the repair were ever undone.
+    """
+    snapshot.write_bytes(b"")
+    return "целостность"
+
+
+def _porcha_otmetka_iz_budushchego(snapshot: Path) -> str:
+    """Date the newest mark a year ahead.  Not fresh -- wrong.
+
+    🔴 ALSO FOUND GREEN BY THE §3 VERIFIER: the freshness assertion measured "возраст -365
+    дн." and passed it, so a single skewed row could have held the assertion green while
+    nobody marked anything for a term.
+    """
+    def surgery(connection: sqlite3.Connection) -> None:
+        connection.execute("drop trigger if exists marks_append_only_update")
+        budushchee = to_iso(datetime.now(timezone.utc) + timedelta(days=365))
+        connection.execute("update marks set valid_at = ?", (budushchee,))
+
+    _operaciya_nad_snimkom(snapshot, surgery)
+    return "свежесть отметки"
+
+
 #: Every corruption, with the assertion each one is aimed at.  An explicit registry for the
 #: same reason the importer keeps one: a corruption that is not listed cannot be counted,
-#: and "покраснело 4" means nothing without the 4 it is out of.
+#: and "покраснело 6" means nothing without the 6 it is out of.
+#:
+#: The last two entries were not designed here -- they are the two false greens the §3
+#: verifier of this position found by attacking the check from outside.  A finding that goes
+#: into the registry cannot come back; a finding that goes only into the report can.
 PORCHI = {
     "обрезан": _porcha_obrezan,
     "бит перевёрнут": _porcha_bajt,
     "таблица учеников пуста": _porcha_net_uchenikov,
     "последняя отметка состарена": _porcha_staraya_otmetka,
+    "снимок пуст": _porcha_pustoy_snimok,
+    "отметка из будущего": _porcha_otmetka_iz_budushchego,
 }
 
 

@@ -5,8 +5,10 @@ break a snapshot on purpose and demand that it says so.  Every test here is that
 plus the one test that is easy to forget: that the corruption run itself notices a
 corruption coming back GREEN, because otherwise the self-test is the hope.
 
-Coverage is stated, not implied: four corruptions, each named, each aimed at a named
-assertion, and the boundaries of the two numeric assertions checked on both sides.
+Coverage is stated, not implied: six corruptions, each named, each aimed at a named
+assertion, and the boundaries of the two numeric assertions checked on both sides.  Two of
+the six -- an empty snapshot and a mark dated in the future -- are there because the §3
+verifier of this position found the check GREEN on them; they are regressions now.
 """
 
 from __future__ import annotations
@@ -68,6 +70,8 @@ def test_celyj_snimok_zelyonyj_po_vsem_tryom(celyj_snimok):
         ("бит перевёрнут", "целостность"),
         ("таблица учеников пуста", "учеников"),
         ("последняя отметка состарена", "свежесть отметки"),
+        ("снимок пуст", "целостность"),
+        ("отметка из будущего", "свежесть отметки"),
     ],
 )
 def test_kazhdaya_porcha_krasneet_na_svoyom_utverzhdenii(celyj_snimok, tmp_path, imya, celilis):
@@ -87,10 +91,10 @@ def test_kazhdaya_porcha_krasneet_na_svoyom_utverzhdenii(celyj_snimok, tmp_path,
 
 
 def test_reestr_porch_pokryvaet_vse_tri_utverzhdeniya(celyj_snimok, tmp_path):
-    """Between them the four corruptions aim at all three assertions.
+    """Between them the corruptions aim at all three assertions.
 
-    A registry that reddened only assertion 1 four times would report "порч 4, покраснело
-    4" while assertions 2 and 3 had never once been shown to work.
+    A registry that reddened only assertion 1 six times would report "порч 6, покраснело 6"
+    while assertions 2 and 3 had never once been shown to work.
     """
     celi = set()
     for imya, porcha in PORCHI.items():
@@ -146,18 +150,93 @@ def test_granica_chisla_uchenikov(celyj_snimok, tmp_path, uchenikov, ozhidaem_kr
     assert str(uchenikov) in proverki[1].znachenie
 
 
-@pytest.mark.parametrize("dney, ozhidaem_krasnoe", [(FRESH_DAYS, False), (FRESH_DAYS + 1, True)])
-def test_granica_svezhesti(celyj_snimok, tmp_path, dney, ozhidaem_krasnoe):
-    """Assertion 3 is ``<=``: at seven days it passes, at eight it does not."""
-    staraya = to_iso(datetime.now(timezone.utc) - timedelta(days=dney, minutes=1))
-    porchenyj = tmp_path / ("vozrast-%d.db.gz" % dney)
+@pytest.mark.parametrize(
+    "minut_ot_granicy, ozhidaem_krasnoe", [(-1, False), (1, True), (60 * 23, True)]
+)
+def test_granica_svezhesti_schitaetsya_po_intervalu_a_ne_po_celym_dnyam(
+    celyj_snimok, tmp_path, minut_ot_granicy, ozhidaem_krasnoe
+):
+    """Assertion 3 measures the interval, not ``timedelta.days``.
+
+    🔴 THE THIRD CASE IS THE ONE THAT USED TO PASS.  ``.days`` floors, so a mark seven days
+    and twenty-three hours old measured as 7 and sailed through a rule that says "no older
+    than a week": the assertion was quietly a day and a half wider than it claimed, and it
+    was the §3 verifier that measured it.
+    """
+    vozrast = timedelta(days=FRESH_DAYS, minutes=minut_ot_granicy)
+    staraya = to_iso(datetime.now(timezone.utc) - vozrast)
+    porchenyj = tmp_path / ("vozrast-%d.db.gz" % minut_ot_granicy)
     _hirurgiya(celyj_snimok, porchenyj,
                "drop trigger if exists marks_append_only_update",
                "update marks set valid_at = '%s'" % staraya)
 
     proverki = proverit_snimok(porchenyj)
     assert ("свежесть отметки" in _krasnye(proverki)) is ozhidaem_krasnoe
-    assert str(dney) in proverki[2].znachenie
+    assert "возраст" in proverki[2].znachenie
+
+
+def test_otmetka_iz_budushchego_krasnaya_i_nazvana_otdelno(celyj_snimok, tmp_path):
+    """A mark dated ahead of now is red, and red for its own reason.
+
+    🔴 IT USED TO BE GREEN, at "возраст -365 дн." -- one skewed row would have held this
+    assertion green while nobody marked anything for a term.  The verdict names the clock
+    rather than the staleness, because the repair is a different repair.
+    """
+    budushchee = to_iso(datetime.now(timezone.utc) + timedelta(days=365))
+    porchenyj = tmp_path / "budushchee.db.gz"
+    _hirurgiya(celyj_snimok, porchenyj,
+               "drop trigger if exists marks_append_only_update",
+               "update marks set valid_at = '%s'" % budushchee)
+
+    proverki = proverit_snimok(porchenyj)
+    assert "свежесть отметки" in _krasnye(proverki)
+    assert "БУДУЩЕМ" in proverki[2].znachenie
+
+
+def test_nebolshoy_sdvig_chasov_ne_krasneet(celyj_snimok, tmp_path):
+    """A mark a minute ahead of now is ordinary clock skew, not a corrupted backup.
+
+    The bound has to be a bound and not zero: the mark is stamped by the bot's machine and
+    read by whichever machine runs the check.
+    """
+    chut_vperedi = to_iso(datetime.now(timezone.utc) + timedelta(minutes=1))
+    porchenyj = tmp_path / "sdvig.db.gz"
+    _hirurgiya(celyj_snimok, porchenyj,
+               "drop trigger if exists marks_append_only_update",
+               "update marks set valid_at = '%s'" % chut_vperedi)
+
+    assert "свежесть отметки" not in _krasnye(proverit_snimok(porchenyj))
+
+
+def test_pustoy_snimok_krasneet_na_celostnosti(celyj_snimok, tmp_path):
+    """🔴 A zero-byte snapshot is RED, and red on the assertion named ``целостность``.
+
+    It used to be GREEN there, and that is the failure this whole position is about: the
+    backup "ran", copied nothing, and the one assertion whose job is to notice reported
+    ``ок``.  ``gzip`` yields an empty stream without complaining and ``sqlite3.connect``
+    builds a fresh empty database out of the nothing, so ``pragma integrity_check`` was
+    answering about a database it had just created itself.  Found by the §3 verifier.
+    """
+    pustoy = tmp_path / "pustoy.db.gz"
+    pustoy.write_bytes(b"")
+
+    proverki = proverit_snimok(pustoy)
+    assert "целостность" in _krasnye(proverki)
+    assert "0 байт" in proverki[0].znachenie
+    assert len(_krasnye(proverki)) == 3, "нечего восстанавливать — молчать нельзя ни по одному"
+
+
+def test_ne_baza_pod_gzipom_krasneet_na_celostnosti(celyj_snimok, tmp_path):
+    """Something that unpacks fine but is not a database is red on the same assertion."""
+    import gzip as _gzip
+
+    ne_baza = tmp_path / "ne-baza.db.gz"
+    with _gzip.open(ne_baza, "wb") as handle:
+        handle.write("это не база, это обычный текст".encode("utf-8") * 100)
+
+    proverki = proverit_snimok(ne_baza)
+    assert "целостность" in _krasnye(proverki)
+    assert "не в базу SQLite" in proverki[0].znachenie
 
 
 def _hirurgiya(istochnik: Path, cel: Path, *sql: str) -> Path:
@@ -226,4 +305,4 @@ def test_cli_na_porchennom_krasnyj(bolshoy_mir, svezhaya_otmetka, zakrytaya_baza
     kod = main(["--baza", str(zakrytaya_baza), "--snimki", str(tmp_path / "backups"),
                 "--na-porchennom"])
     assert kod != 0, "ЗЕЛЁНОЕ ЗДЕСЬ ЕСТЬ ПРОВАЛ ПОЗИЦИИ"
-    assert "порч 4, покраснело 4" in capsys.readouterr().out
+    assert "порч 6, покраснело 6" in capsys.readouterr().out
