@@ -15,17 +15,49 @@ import logging
 import pytest
 
 
-def _obnulit_koren():
+@pytest.fixture
+def koren_vozvrashchayetsya():
+    """Снять корневой логгер и ВЕРНУТЬ его как был.
+
+    🔴 ЦЕНА ОТСУТСТВИЯ ВОЗВРАТА, оплачено 02.09 19:0x, 115 ошибок в общем прогоне:
+    первая редакция этого файла чистила приёмники корня и не возвращала их. На
+    корне висит протоколирование САМОГО pytest, и все последующие тесты, трогающие
+    журнал, падали с ошибкой — по отдельности зелёные, вместе красные. Ровно тот
+    класс, что уже стоил волне ночи: `conftest` с общим именем модуля (урок 13).
+    Тест, портящий глобальное состояние, ломает не себя, а СОСЕДЕЙ.
+    """
     koren = logging.getLogger()
-    for h in list(koren.handlers):
+    byli, uroven = list(koren.handlers), koren.level
+    for h in byli:
         koren.removeHandler(h)
     koren.setLevel(logging.WARNING)
+    # 🔴 И ЦИКЛ СОБЫТИЙ ТОЖЕ ВОЗВРАЩАЕМ. `asyncio.run()` закрывает созданный им цикл
+    # и НЕ оставляет текущего в потоке; соседние фикстуры (`tests/photo/`) зовут
+    # `get_event_loop()` и падают с «There is no current event loop in thread
+    # MainThread» — 22 ошибки при 102 пройденных, все в ЧУЖИХ файлах. Замер
+    # 02.09 19:0x. Тест, портящий глобальное состояние, ломает не себя, а соседей;
+    # первый раз это стоило волне ночи на общем имени модуля `conftest` (урок 13).
+    try:
+        byl_cikl = asyncio.get_event_loop_policy().get_event_loop()
+    except RuntimeError:
+        byl_cikl = None
+    try:
+        yield koren
+    finally:
+        asyncio.set_event_loop(byl_cikl if byl_cikl and not byl_cikl.is_closed()
+                               else asyncio.new_event_loop())
+        for h in list(koren.handlers):
+            koren.removeHandler(h)
+        for h in byli:
+            koren.addHandler(h)
+        koren.setLevel(uroven)
 
 
-def test_the_entry_point_gives_the_logger_a_home_before_build_speaks(monkeypatch):
+def test_the_entry_point_gives_the_logger_a_home_before_build_speaks(
+    monkeypatch, koren_vozvrashchayetsya
+):
     import bot.__main__ as tochka_vhoda
 
-    _obnulit_koren()
     assert not logging.getLogger("bot.app").isEnabledFor(logging.INFO), (
         "корень уже настроен кем-то до теста — проверка недействительна"
     )
