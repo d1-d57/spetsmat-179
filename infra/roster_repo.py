@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from core.services.roster import (
+    CatalogueStudent,
     PendingRegistration,
     Role,
     RosterPort,
@@ -57,6 +58,16 @@ create table if not exists pending_registration (
 
 create unique index if not exists pending_registration_tg_id
   on pending_registration (tg_id);
+
+-- One заявка, one message to the owner.  The claim is a ROW, not a flag in memory:
+-- a restarted process, a retried send and a second caller all hit the primary key
+-- and lose.  The row is dropped together with the заявка in ``resolve_pending``,
+-- because ``pending_registration.id`` is a plain ``integer primary key`` and SQLite
+-- hands a recycled id to the next заявка -- a marker left behind would silence it.
+create table if not exists notified_registration (
+  registration_id integer primary key,
+  claimed_at      text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+) strict;
 """
 
 
@@ -150,6 +161,78 @@ class RosterRepo(RosterPort):
             raise TelegramIdAlreadyBound(
                 "tg_id %d is already bound to another student" % tg_id
             ) from exc
+
+    def catalogue_students(self) -> list:
+        """Every catalogue row the matcher may consider.
+
+        ``left`` rows are excluded and nothing else is: a row that already carries a
+        ``tg_id`` STAYS a candidate, so that a second заявка for the same child runs
+        into ``TelegramIdAlreadyBound`` instead of quietly missing the match and being
+        offered «завести нового» -- which is how the duplicate would come back in.
+        """
+        rows = self._journal.execute(
+            "select id, surname, name, tg_id from students "
+            "where status is null or status <> 'left' order by id"
+        ).fetchall()
+        return [
+            CatalogueStudent(
+                id=row["id"],
+                surname=row["surname"],
+                name=row["name"],
+                tg_id=row["tg_id"],
+            )
+            for row in rows
+        ]
+
+    def attach_student_to_row(self, *, student_id: int, tg_id: int) -> None:
+        """Bind a Telegram id to an existing row and activate it.
+
+        ``first_sheet_id`` is absent from the UPDATE on purpose and the omission is the
+        feature: the imported value is the child's real starting point and the debts of
+        a whole year are counted from it.
+
+        Two loud refusals, both of them BEFORE the write:
+          * the row already answers to a different Telegram id;
+          * this Telegram id already belongs to a different row (the schema's UNIQUE
+            would catch it too, but the message here names both rows).
+        """
+        row = self._journal.execute(
+            "select id, tg_id from students where id = ?", (student_id,)
+        ).fetchone()
+        if row is None:
+            raise TelegramIdAlreadyBound(
+                "no catalogue row with id %d to attach to" % student_id
+            )
+        if row["tg_id"] is not None and row["tg_id"] != tg_id:
+            raise TelegramIdAlreadyBound(
+                "catalogue row %d is already bound to tg_id %d"
+                % (student_id, row["tg_id"])
+            )
+        holder = self._student_by_tg_id(tg_id)
+        if holder is not None and holder != student_id:
+            raise TelegramIdAlreadyBound(
+                "tg_id %d is already bound to student %d" % (tg_id, holder)
+            )
+        try:
+            self._journal.execute(
+                "update students set tg_id = ?, status = 'active' where id = ?",
+                (tg_id, student_id),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise TelegramIdAlreadyBound(
+                "tg_id %d is already bound to another student" % tg_id
+            ) from exc
+
+    def claim_notification(self, registration_id: int) -> bool:
+        """``True`` the first time this заявка is claimed, ``False`` ever after."""
+        cursor = self._roster.execute(
+            "insert or ignore into notified_registration (registration_id) values (?)",
+            (registration_id,),
+        )
+        # Committed HERE and not left to the next write: «a restart does not send them
+        # again» is only true if the claim reached the disk before the message went out.
+        self._roster.commit()
+        return cursor.rowcount == 1
 
     def _student_by_tg_id(self, tg_id: int) -> Optional[int]:
         row = self._journal.execute(
@@ -271,6 +354,13 @@ class RosterRepo(RosterPort):
         # already been promoted by ``RosterRepo`` BEFORE this call.
         self._roster.execute(
             "delete from pending_registration where id = ?", (registration_id,)
+        )
+        # The notification claim goes with it.  SQLite reuses the id of a deleted row
+        # for the next заявка, and a claim left behind would swallow that заявка's
+        # message -- the owner would never hear about the next child.
+        self._roster.execute(
+            "delete from notified_registration where registration_id = ?",
+            (registration_id,),
         )
 
     def rename_pending(self, registration_id: int, *, surname: str, name: str) -> None:

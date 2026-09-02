@@ -10,9 +10,11 @@ explicit that the privacy boundary is the binding, not the message.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+import asyncio
+import logging
+from typing import Any, Dict, Optional
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
@@ -30,15 +32,23 @@ from core.services.roster import (
     Role,
     RosterService,
     RosterError,
+    StudentMatch,
     TelegramIdAlreadyBound,
 )
 from infra.repositories import SqliteCatalogue
 
 router = Router()
 
+log = logging.getLogger(__name__)
+
 # Only the owner sees the moderation screen.
 router.message.middleware(require_role("owner"))
 router.callback_query.middleware(require_role("owner"))
+
+#: Buttons that resolve a заявка into a NAMED catalogue row: ``bindstud:<reg>:<student>``.
+BIND_PREFIX = "bindstud:"
+#: The one button that is allowed to create a row: ``newstud:<reg>``.
+NEW_PREFIX = "newstud:"
 
 
 # ----------------------------------------------------------------- helpers
@@ -94,30 +104,148 @@ async def on_reject(callback: CallbackQuery, roster: RosterService) -> None:
     await _refresh_pending_list(callback.message, roster)
 
 
+def _find_pending(roster: RosterService, registration_id: int):
+    """The pending row by id, or None if the owner acted on a closed заявка."""
+    return next(
+        (p for p in roster.list_pending() if p.id == registration_id), None
+    )
+
+
+def _choice_keyboard(
+    registration: PendingRegistration, match: StudentMatch
+) -> InlineKeyboardMarkup:
+    """One button per catalogue row that fits, plus the create button.
+
+    🔴 The create button is drawn on EVERY one of these screens, and it is the only
+    door to creating a row.  On a tie the owner picks a child; on no match at all this
+    button is the whole screen.  What is never drawn is a guess.
+    """
+    buttons: list = []
+    for candidate in match.candidates:
+        student = candidate.student
+        buttons.append([
+            InlineKeyboardButton(
+                text="%s — %d%%" % (student.label, round(candidate.score * 100)),
+                callback_data="%s%d:%d" % (BIND_PREFIX, registration.id, student.id),
+            )
+        ])
+    buttons.append([
+        InlineKeyboardButton(
+            text="нет в списке — завести нового",
+            callback_data="%s%d" % (NEW_PREFIX, registration.id),
+        )
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _choice_text(registration: PendingRegistration, match: StudentMatch) -> str:
+    who = "%s %s" % (registration.surname, registration.name)
+    if match.kind == "ambiguous":
+        return (
+            "«%s» подходит сразу к нескольким в списке (%d). "
+            "Выберите, кто это, — угадывать бот не будет."
+            % (who, len(match.candidates))
+        )
+    return (
+        "«%s» в списке не найден. Завести нового? "
+        "Прошлогодних отметок у него не будет." % who
+    )
+
+
 @router.callback_query(F.data.startswith("accept:"))
 async def on_accept(
     callback: CallbackQuery,
     roster: RosterService,
     catalogue: SqliteCatalogue,
 ) -> None:
+    """«принять» — for a student this now BINDS, and only binds.
+
+    🔴 What this handler used to do, and why it was the most expensive line in the
+    project: it called ``confirm_student``, which INSERTED a row.  On the live base
+    accepting Пирогов Константин would have made a second Пирогов with an empty year,
+    bound the telegram to that one, and left the real two hundred and one marks on a
+    row nobody could reach -- cancelling the import of 15 847 marks that P2 loaded so
+    that a child would open the bot on the first of September and see his own year.
+    """
     registration_id = int(callback.data.split(":", 1)[1])
-    pending = roster.list_pending()  # cheap, no separate get_pending in service
-    target = next((p for p in pending if p.id == registration_id), None)
+    target = _find_pending(roster, registration_id)
+    if target is None:
+        await callback.answer("Заявка уже закрыта.", show_alert=True)
+        return
+
+    if target.intended_role is not Role.STUDENT:
+        try:
+            # Default role on accept: TEACHER.  Owner can promote later.
+            roster.confirm_teacher(target, role=Role.TEACHER, room=target.room)
+        except (RosterError, TelegramIdAlreadyBound) as exc:
+            await callback.answer("Не удалось: %s" % exc, show_alert=True)
+            return
+        await callback.answer("Преподаватель подтверждён как TEACHER.")
+        roster.accept(registration_id)
+        await _refresh_pending_list(callback.message, roster)
+        return
+
+    try:
+        match = roster.match_student(target)
+    except RosterError as exc:
+        await callback.answer("Не удалось: %s" % exc, show_alert=True)
+        return
+
+    if match.kind != "single":
+        # Two or more, or none at all: the owner decides, on buttons.  Nothing is
+        # written and the заявка stays open until they press one.
+        await callback.answer()
+        await callback.message.answer(
+            _choice_text(target, match),
+            reply_markup=_choice_keyboard(target, match),
+        )
+        return
+
+    student = match.one
+    try:
+        roster.bind_student(target, student.id)
+    except (RosterError, TelegramIdAlreadyBound) as exc:
+        await callback.answer("Не удалось: %s" % exc, show_alert=True)
+        return
+    await callback.answer("Привязан к «%s» из списка." % student.label)
+    roster.accept(registration_id)
+    await _refresh_pending_list(callback.message, roster)
+
+
+@router.callback_query(F.data.startswith(BIND_PREFIX))
+async def on_bind_chosen(callback: CallbackQuery, roster: RosterService) -> None:
+    """The owner picked which child a tied заявка is."""
+    payload = callback.data[len(BIND_PREFIX):]
+    registration_id, student_id = (int(part) for part in payload.split(":", 1))
+    target = _find_pending(roster, registration_id)
     if target is None:
         await callback.answer("Заявка уже закрыта.", show_alert=True)
         return
     try:
-        if target.intended_role is Role.STUDENT:
-            roster.confirm_student(target)
-            await callback.answer("Ученик подтверждён.")
-        else:
-            # Default role on accept: TEACHER.  Owner can promote later.
-            roster.confirm_teacher(target, role=Role.TEACHER, room=target.room)
-            await callback.answer("Преподаватель подтверждён как TEACHER.")
+        roster.bind_student(target, student_id)
     except (RosterError, TelegramIdAlreadyBound) as exc:
         await callback.answer("Не удалось: %s" % exc, show_alert=True)
         return
     roster.accept(registration_id)
+    await callback.answer("Привязано.")
+    await _refresh_pending_list(callback.message, roster)
+
+
+@router.callback_query(F.data.startswith(NEW_PREFIX))
+async def on_create_new(callback: CallbackQuery, roster: RosterService) -> None:
+    """The only door to a NEW catalogue row, and the owner is standing in it."""
+    registration_id = int(callback.data[len(NEW_PREFIX):])
+    target = _find_pending(roster, registration_id)
+    if target is None:
+        await callback.answer("Заявка уже закрыта.", show_alert=True)
+        return
+    try:
+        roster.create_new_student(target)
+    except (RosterError, TelegramIdAlreadyBound) as exc:
+        await callback.answer("Не удалось: %s" % exc, show_alert=True)
+        return
+    roster.accept(registration_id)
+    await callback.answer("Заведён новый ученик.")
     await _refresh_pending_list(callback.message, roster)
 
 
