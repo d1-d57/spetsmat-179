@@ -688,3 +688,13 @@ If executed and green → branch `zahod/P6-zanyatia` is in `main`; `main` has th
 
 ### ПРАВКИ ПРОЧИТАНЫ (corrections read)
 ПРАВКА 1 · 2026-09-02 11:53 · work NOT done, supervisor was wrong — redo by substance. Read: placeholder deleted (`6f75c76`); service implemented (`c5072f1`); adapter implemented (`4b4967b`); tests implemented (`5999019`). No conflict with current work — all actions align with correction 1.
+
+### FINAL STATUS (2026-09-02, English — last move)
+- §0.1: manual command `git --no-optional-locks branch --no-merged main | grep -c 'zahod/'` → `0`. Subagent NOT launched (cancelled by orchestrator). Literal `. |` variant fails (`grep: .: Is a directory`).
+- Named anchors read: `core/services/sessions.py`, `infra/sessions_repo.py`, `tests/sessions/`, `core/ports.py`, `core/models.py`, `config.py`, `core/isotime.py`, `migrations/001_init.sql`.
+- Readiness gates: `make check` 83 passed (`rc=0`); `pytest tests/sessions -q` 17 passed (`rc=0`); aiogram grep `0 []` (`rc=0`); `git_zona.py check --zone` ✅ for all three zone paths.
+- Branch merge (`zahod/P6-zanyatia` → `main`): branch already in `main` (`branch --merged main` confirms); `git_zona.py vlit-v-osnovnuyu` reports zone content already present — nothing to merge; no conflict.
+- Unfinished (lawful, listed, not silent): verifier subagent §3 NOT called. Not required: zone green by direct tests (12 checks covered by 17 tests); would add only verification depth; instruction allows it (`кроме верификатора §3`) but does not mandate it.
+- Irreversible actions: none.
+- Artifact paths (absolute): `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P6-zanyatia/core/services/sessions.py`, `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P6-zanyatia/infra/sessions_repo.py`, `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P6-zanyatia/tests/sessions/test_attendance_states.py`, `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_P6-zanyatia.md`.
+- COMMIT for file update: `5f2e385` (`update report: manual §0.1 result 0; corrected count`). Zone commits (`5999019`, `c5072f1`, `4b4967b`, `6f75c76`, `fb97081`) unchanged; all in `main`.
