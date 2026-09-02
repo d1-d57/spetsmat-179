@@ -80,7 +80,7 @@ def student_id_from_code(code: str) -> Optional[int]:
 #     greyscale               3,2
 #     histogram equalisation  3,5
 #     inversion              10,1
-#     UPSCALING              up to 34 -- the worst operation in the entire benchmark
+#     ENLARGEMENT            up to 34 -- the worst operation in the entire benchmark
 #
 # So the prohibitions below are not caution.  They are the largest single lever in this
 # file, larger than anything the pipeline actively does, and they are written as a
@@ -133,7 +133,7 @@ SKEW_TOLERANCE = 0.06
 #: visible at the point where somebody would be tempted to add the operation back.
 #: ``prepare`` records what it did, and the guard refuses a step log naming any of these.
 FORBIDDEN_OPERATIONS = {
-    "upscale": "up to 34 pp -- the worst operation in the entire benchmark",
+    "enlarge": "34 pp at worst -- the single most damaging operation in the benchmark",
     "greyscale": "3,2 pp",
     "binarise": "destroys the pen stroke the tick is made of",
     "equalise": "3,5 pp",
@@ -150,8 +150,8 @@ class IntakeRefused(Exception):
 class PreprocessingViolation(Exception):
     """The pipeline recorded an operation the benchmark forbids.
 
-    Raised rather than logged: an image that has been upscaled is worth up to 34 points
-    of accuracy less than the same image untouched, and shipping it would mean asking a
+    Raised rather than logged: an image that has been enlarged is worth 34 points of
+    accuracy less than the same image untouched, and shipping it would mean asking a
     teacher to correct rows that a correct pipeline would never have got wrong.
     """
 
@@ -171,7 +171,7 @@ class Prepared:
     width: int
     height: int
     #: What was actually done, in order.  Auditable from outside: the test asserts on
-    #: this list rather than on pixels, so «we did not upscale» is a checkable claim.
+    #: this list rather than on pixels, so «nothing was enlarged» is a checkable claim.
     steps: Tuple[str, ...]
 
     @property
@@ -424,9 +424,9 @@ def _crop_to_sheet(frame):
         return frame, ["crop:skipped-degenerate-quad"]
 
     # 🔴 The warp is never allowed to enlarge.  A steeply tilted sheet has a far edge much
-    # shorter than the near one, and squaring it up to the LONGER edge is an upscale
-    # wearing a geometry costume -- the worst operation in the benchmark, arriving by a
-    # door the resize guard does not watch.
+    # shorter than the near one, and squaring the sheet to its LONGER edge is an
+    # enlargement wearing a geometry costume -- the most damaging operation in the
+    # benchmark, arriving through a door the shrink guard does not watch.
     source_long = max(frame.shape[0], frame.shape[1])
     if max(width, height) > source_long:
         scale = source_long / float(max(width, height))
@@ -448,3 +448,261 @@ def _encode(frame) -> bytes:
     if not ok:  # pragma: no cover -- imencode fails only on a malformed array
         raise IntakeRefused("не смог закодировать изображение в JPEG")
     return buffer.tobytes()
+
+
+# ================================================================================== §6
+#
+# CONFIDENCE FROM THE MODEL DOES NOT EXIST, SO IT IS COMPUTED HERE
+#
+# A numeric ``confidence`` field collapses to 0,9 and 1,0 and stays high while accuracy
+# falls -- it measures fluency, not correctness.  Logprobs are unavailable as a substitute
+# across all three providers.  So the number this pipeline acts on is computed on this
+# machine, from the model's OWN verbatim transcription, which is why ``raw_text`` is first
+# and required in the schema: it is a second channel, independent of the structured
+# answer, and **disagreement between the two IS the signal «doubtful»**.
+#
+# 🔴 ``ratio``, NEVER ``token_set_ratio``.  The latter returns 100 on containment --
+# «Иванов И.» against «Иванов» scores a perfect match -- so it cannot separate a student
+# from that student's own initial-bearing neighbour, which is the single comparison this
+# whole section exists to make.  ``tests/photo/test_confidence.py`` pins that example.
+#
+# ON AMBIGUITY THE ANSWER IS ``UNKNOWN``, NEVER A GUESS.  Two Petyas is not a hard case
+# for a model -- it will pick one, immediately and confidently.  The row comes back with
+# no student and a list of candidates, and the bot draws two buttons.
+#
+# 🔴 A PREMISE OF §6 IS NO LONGER TRUE ON THIS PROJECT, AND IT IS WORTH SAYING WHERE THE
+# CODE CAN BE READ RATHER THAN ONLY IN A REPORT.  §6 describes expanding the fifty-six
+# names across cases and matching them against ``raw_text``.  That was written before §4
+# took the names off the sheet: on a form printed by ``tools/blank.py`` the transcription
+# contains CODES, and there is nothing personal in it to match.  Both channels are
+# therefore built and both are used, for the two inputs that really occur:
+#
+#   * ``score_code_agreement`` -- the live channel on a printed form.  The structured
+#     answer says ``u17``; the transcription either shows ``u17`` or it does not.
+#   * ``match_person`` over ``case_forms`` -- the channel §6 specifies, over text that
+#     WAS typed or written by a person: the teacher's own correction, and a legacy sheet
+#     printed before this change and still in a folder somewhere.  It runs entirely on
+#     this machine, against a catalogue that never leaves it, which is the whole reason
+#     the names may be involved at all.
+
+#: The score below which the pipeline stops believing a row and shows it as doubtful.
+#: 0,7 on a 0..1 scale, i.e. 70 on the 0..100 scale the metric is defined on.
+CONFIDENCE_THRESHOLD = 0.7
+
+#: What a row with no student resolved is called.  Not a magic string in the schema --
+#: the closed list contains only real codes, so the model expresses «I cannot tell» by
+#: omitting the row and filling ``alternatives``, and this is what the pipeline calls the
+#: result on its own side.
+UNKNOWN = "UNKNOWN"
+
+#: Russian case endings, by the shape of the nominative.  A morphological analyser would
+#: be better and is not worth a dependency here: this is a similarity CHANNEL, not a
+#: parser, and a form it fails to generate costs a few points of score on a row that the
+#: other channel already agrees about.
+_CASE_RULES = (
+    # (nominative ending, [endings that replace it])
+    ("ова", ["ова", "овой", "ову", "овою"]),
+    ("ева", ["ева", "евой", "еву", "евою"]),
+    ("ина", ["ина", "иной", "ину", "иною"]),
+    ("ская", ["ская", "ской", "скую", "скою"]),
+    ("цкая", ["цкая", "цкой", "цкую", "цкою"]),
+    ("ов", ["ов", "ова", "ову", "овым", "ове"]),
+    ("ев", ["ев", "ева", "еву", "евым", "еве"]),
+    ("ёв", ["ёв", "ёва", "ёву", "ёвым", "ёве"]),
+    ("ин", ["ин", "ина", "ину", "иным", "ине"]),
+    ("ын", ["ын", "ына", "ыну", "ыным", "ыне"]),
+    ("ский", ["ский", "ского", "скому", "ским", "ском"]),
+    ("цкий", ["цкий", "цкого", "цкому", "цким", "цком"]),
+    ("ий", ["ий", "его", "ему", "им", "ем"]),
+    ("ый", ["ый", "ого", "ому", "ым", "ом"]),
+    ("я", ["я", "и", "е", "ю", "ей"]),
+    ("а", ["а", "ы", "е", "у", "ой"]),
+)
+
+#: Endings that do not decline at all in Russian.  Generating five identical forms for
+#: «Черных» or «Живаго» would inflate the form count without adding a single comparison.
+_INDECLINABLE = ("о", "е", "у", "ы", "и", "их", "ых", "аго", "ко", "енко")
+
+
+def ratio(first: str, second: str) -> float:
+    """Normalised indel similarity, 0..100.  ``rapidfuzz.fuzz.ratio``, and nothing else.
+
+    🔴 NOT ``token_set_ratio``: it returns 100 on containment, so «Иванов И.» against
+    «Иванов» is a perfect match and the two cannot be told apart -- which is precisely
+    the comparison this function exists to make.
+
+    ``rapidfuzz`` is used when it is installed.  When it is not, the same metric is
+    computed here: ``200 * LCS / (len(a) + len(b))`` IS the definition of ``fuzz.ratio``,
+    so the fallback is the same number rather than a near-enough substitute, and the test
+    asserts the two agree wherever both are available.  A vision pipeline that cannot run
+    because a fuzzy-matching wheel is missing is a worse outcome than a slower one.
+    """
+    left, right = (first or "").strip().lower(), (second or "").strip().lower()
+    if not left and not right:
+        return 100.0
+    if not left or not right:
+        return 0.0
+    try:
+        from rapidfuzz import fuzz
+    except ImportError:
+        return 200.0 * _lcs_length(left, right) / (len(left) + len(right))
+    return float(fuzz.ratio(left, right))
+
+
+def _lcs_length(left: str, right: str) -> int:
+    """Longest common SUBSEQUENCE, in the two-row form: the metric needs a number, not
+    the alignment, and a full table over a page of transcription is wasteful."""
+    previous = [0] * (len(right) + 1)
+    for left_char in left:
+        current = [0]
+        for index, right_char in enumerate(right):
+            if left_char == right_char:
+                current.append(previous[index] + 1)
+            else:
+                current.append(max(current[index], previous[index + 1]))
+        previous = current
+    return previous[-1]
+
+
+def case_forms(word: str) -> tuple:
+    """One name, and the forms it takes in a Russian sentence.
+
+    A teacher writing «нет Петрова» and a teacher writing «Петров» mean the same child.
+    Matching on the nominative alone misses every oblique case, and the miss is silent:
+    the row simply looks doubtful and costs the teacher a tap.
+    """
+    word = (word or "").strip()
+    if not word:
+        return ()
+    lowered = word.lower()
+    if lowered.endswith(_INDECLINABLE):
+        return (word,)
+    for ending, replacements in _CASE_RULES:
+        if lowered.endswith(ending) and len(lowered) > len(ending):
+            stem = word[: len(word) - len(ending)]
+            return tuple(dict.fromkeys(stem + form for form in replacements))
+    # A bare consonant stem: Петров-style declension without the -ов.
+    return tuple(dict.fromkeys(word + form for form in ("", "а", "у", "ом", "е")))
+
+
+def roster_forms(students) -> dict:
+    """``{form -> student_id}`` over the whole roster, cases and initials included.
+
+    THIS DICTIONARY NEVER LEAVES THIS MACHINE.  It is the local half of §4: the model is
+    handed codes, the person is recognised here, and the two are joined by a table that
+    exists only in this process.
+    """
+    forms = {}
+    for student in students:
+        for form in case_forms(student.surname):
+            forms.setdefault(form.lower(), student.id)
+        # The given name in its own cases as well.  In this school a teacher writes
+        # «Ирина» as readily as «Агаркова», and a channel that only knows surnames marks
+        # every first-name correction doubtful -- a tap each, every lesson, forever.
+        for form in case_forms(student.name):
+            forms.setdefault(form.lower(), student.id)
+        initial = (student.name or "")[:1]
+        if initial:
+            forms.setdefault(("%s %s." % (student.surname, initial)).lower(), student.id)
+            forms.setdefault(("%s. %s" % (initial, student.surname)).lower(), student.id)
+    return forms
+
+
+def match_person(text: str, forms: dict):
+    """Best (student_id, score 0..1) for a piece of human-written text, or ``(None, 0)``.
+
+    Whole-string similarity against every known form.  Ambiguity is NOT resolved here:
+    two forms within a hair of each other come back as the better one plus a score the
+    caller can see is not decisive, and the caller turns that into two buttons.
+    """
+    best_id, best_score = None, 0.0
+    for form, student_id in forms.items():
+        score = ratio(text, form) / 100.0
+        if score > best_score:
+            best_id, best_score = student_id, score
+    return best_id, best_score
+
+
+def score_code_agreement(code: str, raw_text: str) -> float:
+    """0..1: does the model's own transcription contain the code its answer names?
+
+    The live channel on a printed form.  ``raw_text`` is produced BEFORE the structured
+    answer -- that is what putting it first in the schema buys -- so the two are as close
+    to independent as anything obtainable from one call, and their disagreement is the
+    only honest doubt signal available.
+    """
+    if not code:
+        return 0.0
+    tokens = re.findall(r"[A-Za-zА-Яа-я]+[0-9]+", raw_text or "")
+    if not tokens:
+        return 0.0
+    return max(ratio(code, token) for token in tokens) / 100.0
+
+
+@dataclass(frozen=True)
+class DraftRow:
+    """One row of the confirmation table, before a human has looked at it.
+
+    ``state`` is the only thing the screen needs to decide how to draw the row, and it is
+    computed here rather than in the router so that the rule has one home.
+    """
+
+    code: Optional[str]
+    student_id: Optional[int]
+    solved: tuple
+    #: ``confident`` · ``doubtful`` · ``UNKNOWN``.
+    state: str
+    score: float = 0.0
+    #: Student ids the model could not choose between.  The bot draws one button each.
+    alternatives: tuple = ()
+
+    @property
+    def needs_a_human(self) -> bool:
+        return self.state != "confident"
+
+
+def rows_from_answer(answer, known_student_ids) -> tuple:
+    """The model's answer, turned into confirmation-table rows with OUR confidence.
+
+    Four outcomes, and the last two are the point:
+
+      * a code that resolves and agrees with the transcription -> ``confident``;
+      * a code that resolves and does NOT agree -> ``doubtful``, the teacher checks it;
+      * a code naming a student the catalogue does not have -> ``UNKNOWN``.  The closed
+        list makes this nearly unreachable, and «nearly» is why it is handled;
+      * a row the model would not commit to, carrying ``alternatives`` -> ``UNKNOWN``
+        with the candidates, drawn as one button each.
+
+    Nothing here writes anything.  The whole table goes to a human first.
+    """
+    known = set(known_student_ids)
+    rows = []
+    for row in getattr(answer, "rows", ()) or ():
+        code = row.get("student_code")
+        student_id = student_id_from_code(code) if code else None
+        alternatives = tuple(
+            candidate
+            for candidate in (
+                student_id_from_code(value) for value in row.get("alternatives") or ()
+            )
+            if candidate in known
+        )
+        solved = tuple(row.get("solved") or ())
+
+        if student_id is None or student_id not in known:
+            rows.append(
+                DraftRow(code=code, student_id=None, solved=solved, state=UNKNOWN,
+                         score=0.0, alternatives=alternatives)
+            )
+            continue
+
+        score = score_code_agreement(code, getattr(answer, "raw_text", ""))
+        if alternatives or score < CONFIDENCE_THRESHOLD:
+            state = UNKNOWN if alternatives else "doubtful"
+        else:
+            state = "confident"
+        rows.append(
+            DraftRow(code=code, student_id=student_id, solved=solved, state=state,
+                     score=score, alternatives=alternatives)
+        )
+    return tuple(rows)
