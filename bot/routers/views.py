@@ -147,7 +147,10 @@ async def _refuse_foreign(query: CallbackQuery) -> None:
     The same sentence P3's ``/peek`` refusal uses, on purpose: a person who probes two
     different screens must not be able to tell from the wording which one has a hole.
     """
-    await query.answer("Вы видите только свои данные.", show_alert=True)
+    await query.answer(
+        "Вы видите только свои данные. Свой год — /god, свои долги — /dolgi.",
+        show_alert=True,
+    )
 
 
 async def _refuse_as_stale(query: CallbackQuery) -> None:
@@ -236,7 +239,9 @@ async def open_year(message: Message, identity, spiski, catalogue) -> None:
     """«/god» — the whole year, which is what P2 loaded fifteen thousand events for."""
     student_id = _own_student_id(identity)
     if student_id is None:
-        await message.answer("Вы видите только свои данные.")
+        await message.answer(
+            "Вы видите только свои данные. Свой год — /god, свои долги — /dolgi."
+        )
         return
     text, markup = _compose_year(spiski, catalogue, student_id)
     await message.answer(text, reply_markup=markup)
@@ -246,7 +251,9 @@ async def open_debts_command(message: Message, identity, spiski, catalogue) -> N
     """«/dolgi» — the short list, reachable without walking through the year first."""
     student_id = _own_student_id(identity)
     if student_id is None:
-        await message.answer("Вы видите только свои данные.")
+        await message.answer(
+            "Вы видите только свои данные. Свой год — /god, свои долги — /dolgi."
+        )
         return
     text, markup = _compose_debts(spiski, catalogue, student_id)
     await message.answer(text, reply_markup=markup)
@@ -281,7 +288,9 @@ async def open_own_sheet(
         await _refuse_foreign(query)
         return
     if catalogue.sheet(callback_data.sheet_id) is None:
-        await query.answer("Такого листка нет.", show_alert=True)
+        await query.answer(
+            "Такого листка нет. Откройте свой год заново: /god.", show_alert=True
+        )
         return
     await query.answer()
     message = _editable(query)
@@ -339,7 +348,9 @@ async def open_table(
         await _refuse_as_stale(query)
         return
     if catalogue.sheet(callback_data.sheet_id) is None:
-        await query.answer("Такого листка нет.", show_alert=True)
+        await query.answer(
+            "Такого листка нет. Откройте свой год заново: /god.", show_alert=True
+        )
         return
     await query.answer()
     message = _editable(query)

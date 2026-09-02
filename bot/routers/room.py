@@ -350,7 +350,8 @@ async def add_guest(
         # inventing one of his teachers would be the screen deciding something the head
         # did not.  Said out loud rather than failing silently on the tap.
         await query.answer(
-            "Гостя некому передать: за вами не закреплён преподавательский профиль.",
+            "Гостя некому передать: за вами самим не закреплена группа. "
+            "Попросите владельца завести вас преподавателем.",
             show_alert=True,
         )
         return

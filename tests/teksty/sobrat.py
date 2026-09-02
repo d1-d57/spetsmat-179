@@ -176,7 +176,11 @@ def _ne_tekst(derevo: ast.AST) -> set[int]:
                 najdeno.add(id(vnutri))
 
     for uzel in ast.walk(derevo):
-        if isinstance(uzel, ast.Subscript):
+        if isinstance(uzel, ast.Dict):
+            for klyuch in uzel.keys:
+                if klyuch is not None:
+                    pomet(klyuch)
+        elif isinstance(uzel, ast.Subscript):
             pomet(uzel.slice)
         elif isinstance(uzel, ast.Compare):
             pomet(uzel.left)
@@ -231,6 +235,26 @@ def _kanal_b_funkcii(
                             if vlozhennoe in imena and vlozhennoe not in pokazyvayushie:
                                 pokazyvayushie.add(vlozhennoe)
                                 rosli = True
+
+        # Эстафета вниз: показывающая функция возвращает не свои литералы, а
+        # результат ещё одной. Так собран год ученика — `open_year` показывает
+        # то, что вернул `_compose_year`, а тот возвращает `year_text`, и все
+        # слова экрана лежат в третьей функции.
+        for imya_f in sorted(pokazyvayushie & set(imena)):
+            for shag in ast.walk(imena[imya_f]):
+                if not isinstance(shag, ast.Return) or shag.value is None:
+                    continue
+                for vnutri in ast.walk(shag.value):
+                    if isinstance(vnutri, ast.Call):
+                        vlozhennye = {_imya_vyzova(vnutri)}
+                    elif isinstance(vnutri, ast.Name):
+                        vlozhennye = cherez_imya.get(vnutri.id, set())
+                    else:
+                        continue
+                    for vlozhennoe in vlozhennye:
+                        if vlozhennoe and vlozhennoe not in pokazyvayushie:
+                            pokazyvayushie.add(vlozhennoe)
+                            rosli = True
     return pokazyvayushie
 
 
@@ -265,9 +289,13 @@ def _cherez_imya(derevo: ast.AST) -> dict[str, set[str]]:
 
 
 def _fajly(koren: Path):
+    """Пары «путь ОТ КОРНЯ репозитория, разобранное дерево»."""
     for papka in PAPKI:
         for put in sorted((koren / papka).rglob("*.py")):
-            yield put, ast.parse(put.read_text(encoding="utf-8"), filename=str(put))
+            yield (
+                put.relative_to(koren),
+                ast.parse(put.read_text(encoding="utf-8"), filename=str(put)),
+            )
 
 
 def _pokazyvayushie_vsyudu(derevya: dict) -> set[str]:
@@ -284,7 +312,16 @@ def _pokazyvayushie_vsyudu(derevya: dict) -> set[str]:
     rosli = True
     while rosli:
         rosli = False
-        for derevo in derevya.values():
+        for put, derevo in derevya.items():
+            # 🔴 МОСТ ПО ИМЕНИ — ТОЛЬКО ВНУТРИ `bot/`. Экраны живут там, и там
+            # одноимённая функция почти всегда та самая. В `core/` он тащил
+            # ЧУЖОЕ: `reason` и `channels` разбора речи (`golos.py`) хранятся в
+            # черновике, но ни одна из двух `render` их не печатает, а тексты
+            # `RoomError` — это то, что читает журнал, тогда как человеку
+            # показывается отдельное поле `told`. Оба ловились как нарушения,
+            # которых нет.
+            if put.parts[0] != "bot":
+                continue
             imena = _funkcii(derevo)
             cherez = _cherez_imya(derevo)
             svoi = _kanal_b_funkcii(derevo, imena, cherez, obshie)
@@ -301,7 +338,7 @@ def sobrat(koren: Path = KOREN, *, tolko_kanal_a: bool = False) -> list[dict]:
     derevya = {put: derevo for put, derevo in _fajly(koren)}
     obshie = set() if tolko_kanal_a else _pokazyvayushie_vsyudu(derevya)
     for put, derevo in derevya.items():
-            adres = str(put.relative_to(koren))
+            adres = str(put)
             vidno: dict[tuple[int, str], dict] = {}
 
             # --- канал A: литерал прямо в текстовой позиции показа
@@ -324,8 +361,11 @@ def sobrat(koren: Path = KOREN, *, tolko_kanal_a: bool = False) -> list[dict]:
                 imena = _funkcii(derevo)
                 indeksy = _ne_tekst(derevo)
                 cherez_imya = _cherez_imya(derevo)
-                svoi = _kanal_b_funkcii(derevo, imena, cherez_imya, obshie)
-                for imya_f in sorted((svoi | obshie) & set(imena)):
+                # Мост по имени действует только внутри `bot/` — там, где
+                # живут экраны; см. `_pokazyvayushie_vsyudu`.
+                izvne = obshie if put.parts[0] == "bot" else frozenset()
+                svoi = _kanal_b_funkcii(derevo, imena, cherez_imya, izvne)
+                for imya_f in sorted((svoi | izvne) & set(imena)):
                     for uzel in _vse_literaly_tela(imena[imya_f]):
                         if id(uzel) in indeksy or not uzel.value.strip():
                             continue

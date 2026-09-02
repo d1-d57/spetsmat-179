@@ -14,6 +14,13 @@ from bot.middleware import require_role
 
 router = Router()
 
+#: Как роль НАЗЫВАЕТСЯ ЧЕЛОВЕКУ. `role.value` — это «teacher» и «head»,
+#: значения перечисления `Role`; преподаватель читает экран глазами.
+ROL_PO_RUSSKI = {
+    "teacher": "преподаватель",
+    "head": "старший аудитории",
+}
+
 # Both TEACHER and HEAD may pass the outer gate; HEAD-only is enforced
 # INSIDE the /upload_sheet handler where the rule is OBVIOUS to a reader.
 router.message.middleware(require_role("teacher", "head"))
@@ -21,10 +28,12 @@ router.message.middleware(require_role("teacher", "head"))
 
 @router.message(F.text == "/me")
 async def show_me(message: Message, identity) -> None:
+    # 🔴 БЫЛО `identity.teacher.role.value` — и преподаватель читал
+    # «Вы — teacher, аудитория 203.»: имя члена перечисления, по-английски.
     await message.answer(
         "Вы — %s%s."
         % (
-            identity.teacher.role.value,
+            ROL_PO_RUSSKI.get(identity.teacher.role.value, "преподаватель"),
             (", аудитория %s" % identity.teacher.room) if identity.teacher.room else "",
         )
     )
@@ -41,6 +50,12 @@ async def upload_sheet_stub(message: Message, identity) -> None:
     if identity.teacher is None or identity.teacher.role.value != "head":
         await message.answer("Загрузка листков — только для старшего аудитории.")
         return
+    # 🔴 БЫЛО «Загрузка листка для аудитории %s — P4.» — две беды в одной
+    # строке. «P4» — имя позиции волны, внутреннее состояние фабрики, а не
+    # бота. И строка ВРЁТ: она читается как подтверждение загрузки, а не
+    # загружается ничего — обработчик заглушка и сразу заканчивается.
     await message.answer(
-        "Загрузка листка для аудитории %s — P4." % identity.teacher.room
+        "Загрузка листков через бота пока не работает — листки заводит владелец. "
+        "Отметки за вашу аудиторию (%s) ставьте кнопками: /setka."
+        % identity.teacher.room
     )

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 from io import BytesIO
 from typing import Optional
 
@@ -69,6 +70,10 @@ from infra.asr import (
 #: Where a mark written by this screen came from.  One of ``config.MARK_SOURCES``, and
 #: the reason a mark can be traced back to the way it was made a year later.
 SOURCE = "голос"
+
+#: Куда уходит то, что человеку читать незачем: причина отказа распознавания —
+#: английская строка из `infra/asr.py`, адресованная разработчику.
+log = logging.getLogger(__name__)
 
 #: The key under which one draft waits for its confirmation, in THIS teacher's FSM store.
 #: Two teachers dictating side by side must not see each other's table, and the store is
@@ -379,7 +384,18 @@ async def on_voice(
     except TranscriptionUnavailable as refusal:
         # Said out loud, never turned into an empty draft: an empty table is
         # indistinguishable from a dictation the teacher meant to be empty.
-        await message.answer("Не разобрал запись: %s\nОтметьте кнопками." % refusal)
+        #
+        # 🔴 ТЕКСТ ОТКАЗА БОЛЬШЕ НЕ ПОДСТАВЛЯЕТ `refusal`. Все его формулировки
+        # живут в `infra/asr.py` и написаны ПО-АНГЛИЙСКИ для разработчика:
+        # «recogniser unreachable: <urlopen error …>», «empty audio: nothing was
+        # recorded», «recogniser answered 401: Unauthorized». Преподаватель,
+        # диктующий отметки на занятии, читал бы именно их. Диагностика не
+        # пропадает — она уходит в журнал бота, где её и читают.
+        log.warning("распознавание речи отказало: %s", refusal)
+        await message.answer(
+            "Не разобрал запись. Продиктуйте ещё раз — ближе к телефону и "
+            "покороче; если снова не выйдет, отметьте кнопками: /setka."
+        )
         return
 
     problems = _problems_in_view(catalogue)

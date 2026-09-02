@@ -294,7 +294,9 @@ async def open_list(message: Message, catalogue) -> None:
     """The entry: the list of students on the current sheet."""
     sheet = _current_sheet(catalogue)
     if sheet is None:
-        await message.answer("В каталоге ещё нет листков — сетку не на чем открыть.")
+        await message.answer(
+            "Листков пока нет — сетку не на чем открыть. Листки заводит владелец."
+        )
         return
     text, markup = _compose_list(catalogue, sheet.id)
     await message.answer(text, reply_markup=markup)
@@ -310,13 +312,19 @@ async def open_grid(
 ) -> None:
     """Draw one student's grid, in place of whatever the message showed before."""
     if not _may_open(identity):
-        await query.answer("Эта сетка не ваша.", show_alert=True)
+        await query.answer(
+            "Эта сетка не ваша. Свою откройте командой /setka.", show_alert=True
+        )
         return
     if not ids_are_storable(callback_data.student_id, callback_data.sheet_id):
         await _refuse_as_stale(query)
         return
     if catalogue.student(callback_data.student_id) is None:
-        await query.answer("Такого ученика нет.", show_alert=True)
+        await query.answer(
+            "Такого ученика нет. Список мог обновиться — откройте сетку заново: "
+            "/setka.",
+            show_alert=True,
+        )
         return
 
     await query.answer()
@@ -354,7 +362,9 @@ async def set_mark(
          last-action line are part of the TEXT and go stale if only the markup is redrawn.
     """
     if not _may_open(identity):
-        await query.answer("Эта сетка не ваша.", show_alert=True)
+        await query.answer(
+            "Эта сетка не ваша. Свою откройте командой /setka.", show_alert=True
+        )
         return
     # BEFORE any catalogue read, and before the toast: an unknown ``op`` must not be
     # folded into "clear" (that would let a forged payload ERASE a mark), and an id wider
@@ -368,11 +378,18 @@ async def set_mark(
 
     problem = _find_problem(catalogue, callback_data.task_id)
     if problem is None:
-        await query.answer("Экран устарел: такой задачи нет.", show_alert=True)
+        await query.answer(
+            "Экран устарел: такой задачи нет. Откройте сетку заново: /setka.",
+            show_alert=True,
+        )
         return
     student = catalogue.student(callback_data.student_id)
     if student is None:
-        await query.answer("Такого ученика нет.", show_alert=True)
+        await query.answer(
+            "Такого ученика нет. Список мог обновиться — откройте сетку заново: "
+            "/setka.",
+            show_alert=True,
+        )
         return
 
     target = CellState.SOLVED if callback_data.op == OP_SOLVE else CellState.EMPTY
@@ -435,7 +452,9 @@ async def pick_sheet(
     """«Другой листок» — the one place this screen has a second level, and it is one tap
     deep by design: an extra level of navigation costs a full cycle of the seam."""
     if not _may_open(identity):
-        await query.answer("Эта сетка не ваша.", show_alert=True)
+        await query.answer(
+            "Эта сетка не ваша. Свою откройте командой /setka.", show_alert=True
+        )
         return
     if not ids_are_storable(callback_data.student_id):
         await _refuse_as_stale(query)

@@ -58,7 +58,11 @@ def _pending_keyboard(rows: list) -> InlineKeyboardMarkup:
     buttons: list = []
     for row in rows:
         label = "%s %s" % (row.surname, row.name)
-        suffix = "(%s)" % row.intended_role.value if row.intended_role is not Role.STUDENT else ""
+        suffix = (
+            " — %s" % _rol_po_russki(row.intended_role)
+            if row.intended_role is not Role.STUDENT
+            else ""
+        )
         buttons.append(
             [InlineKeyboardButton(text="%s%s" % (label, suffix),
                                   callback_data="noop")]
@@ -105,6 +109,40 @@ def _current_sheet_id(catalogue: SqliteCatalogue) -> int:
 #: sent fire-and-forget can be garbage-collected mid-send; holding it here until it is
 #: done is the documented way to stop that.
 _in_flight: set = set()
+
+#: Как роль НАЗЫВАЕТСЯ ЧЕЛОВЕКУ. `Role.value` — это «teacher» и «head»: член
+#: перечисления, слово из кода. Владелец читает список заявок глазами, и там
+#: обязано стоять русское слово, а не значение поля.
+ROL_PO_RUSSKI = {
+    Role.STUDENT: "ученик",
+    Role.TEACHER: "преподаватель",
+    Role.HEAD: "старший аудитории",
+}
+
+
+def _rol_po_russki(role: Role) -> str:
+    """Русское имя роли; неизвестную роль называем нейтрально, а не её кодом."""
+    return ROL_PO_RUSSKI.get(role, "преподаватель")
+
+
+def _pochemu_ne_vyshlo(exc: Exception) -> str:
+    """Что владелец читает вместо текста исключения.
+
+    🔴 ЗДЕСЬ СТОЯЛО `"Не удалось: %s" % exc`, и `exc` — это внутренняя
+    диагностика по-английски: «no current sheet to anchor first_sheet_id:
+    refusing to register a student against NULL…». Тот же класс, что
+    английский отказ, который владелец увидел от бота в 14:3x. Диагностика не
+    теряется — она уходит в журнал бота, туда, где её читает разработчик.
+    """
+    if isinstance(exc, TelegramIdAlreadyBound):
+        return (
+            "Этот Telegram уже привязан к другому человеку из списка. "
+            "Отклоните заявку или снимите старую привязку и попробуйте снова."
+        )
+    return (
+        "Не получилось записать — заявка осталась открытой. "
+        "Причина записана в журнал бота."
+    )
 
 
 def _pending_announcement(registration: PendingRegistration) -> str:
@@ -258,7 +296,10 @@ async def on_accept(
     registration_id = int(callback.data.split(":", 1)[1])
     target = _find_pending(roster, registration_id)
     if target is None:
-        await callback.answer("Заявка уже закрыта.", show_alert=True)
+        await callback.answer(
+            "Эта заявка уже закрыта — список ниже обновится сам.",
+            show_alert=True,
+        )
         return
 
     if target.intended_role is not Role.STUDENT:
@@ -266,7 +307,8 @@ async def on_accept(
             # Default role on accept: TEACHER.  Owner can promote later.
             roster.confirm_teacher(target, role=Role.TEACHER, room=target.room)
         except (RosterError, TelegramIdAlreadyBound) as exc:
-            await callback.answer("Не удалось: %s" % exc, show_alert=True)
+            log.warning("confirm_teacher отказал: %s", exc)
+            await callback.answer(_pochemu_ne_vyshlo(exc), show_alert=True)
             return
         # 🔴 ВНУТРЕННЕЕ ИМЯ РОЛИ ЧЕЛОВЕКУ НЕ ПОКАЗЫВАЕМ. `TEACHER` — это член
         # перечисления Role, а читает строку живой человек. Тот же класс, что
@@ -279,7 +321,8 @@ async def on_accept(
     try:
         match = roster.match_student(target)
     except RosterError as exc:
-        await callback.answer("Не удалось: %s" % exc, show_alert=True)
+        log.warning("match_student отказал: %s", exc)
+        await callback.answer(_pochemu_ne_vyshlo(exc), show_alert=True)
         return
 
     if match.kind != "single":
@@ -296,7 +339,8 @@ async def on_accept(
     try:
         roster.bind_student(target, student.id)
     except (RosterError, TelegramIdAlreadyBound) as exc:
-        await callback.answer("Не удалось: %s" % exc, show_alert=True)
+        log.warning("bind_student отказал: %s", exc)
+        await callback.answer(_pochemu_ne_vyshlo(exc), show_alert=True)
         return
     await callback.answer("Привязан к «%s» из списка." % student.label)
     roster.accept(registration_id)
@@ -310,12 +354,16 @@ async def on_bind_chosen(callback: CallbackQuery, roster: RosterService) -> None
     registration_id, student_id = (int(part) for part in payload.split(":", 1))
     target = _find_pending(roster, registration_id)
     if target is None:
-        await callback.answer("Заявка уже закрыта.", show_alert=True)
+        await callback.answer(
+            "Эта заявка уже закрыта — список ниже обновится сам.",
+            show_alert=True,
+        )
         return
     try:
         roster.bind_student(target, student_id)
     except (RosterError, TelegramIdAlreadyBound) as exc:
-        await callback.answer("Не удалось: %s" % exc, show_alert=True)
+        log.warning("bind_student (выбор владельца) отказал: %s", exc)
+        await callback.answer(_pochemu_ne_vyshlo(exc), show_alert=True)
         return
     roster.accept(registration_id)
     await callback.answer("Привязано.")
@@ -328,12 +376,16 @@ async def on_create_new(callback: CallbackQuery, roster: RosterService) -> None:
     registration_id = int(callback.data[len(NEW_PREFIX):])
     target = _find_pending(roster, registration_id)
     if target is None:
-        await callback.answer("Заявка уже закрыта.", show_alert=True)
+        await callback.answer(
+            "Эта заявка уже закрыта — список ниже обновится сам.",
+            show_alert=True,
+        )
         return
     try:
         roster.create_new_student(target)
     except (RosterError, TelegramIdAlreadyBound) as exc:
-        await callback.answer("Не удалось: %s" % exc, show_alert=True)
+        log.warning("create_new_student отказал: %s", exc)
+        await callback.answer(_pochemu_ne_vyshlo(exc), show_alert=True)
         return
     roster.accept(registration_id)
     await callback.answer("Заведён новый ученик.")
@@ -404,8 +456,18 @@ async def _refresh_pending_list(message: Message, roster: RosterService) -> None
 
 
 def _render_pending(rows: list) -> str:
+    """Список заявок глазами владельца.
+
+    🔴 БЕЗ `id=`. Номер заявки — поле базы, и владельцу он не нужен: заявку он
+    закрывает КНОПКОЙ под этим же сообщением, а номер уезжает в её
+    `callback_data`, куда человек не смотрит.
+    """
     lines = ["Заявки (%d):" % len(rows)]
     for row in rows:
-        suffix = "(%s)" % row.intended_role.value if row.intended_role is not Role.STUDENT else ""
-        lines.append("- id=%d: %s %s%s" % (row.id, row.surname, row.name, suffix))
+        suffix = (
+            " — %s" % _rol_po_russki(row.intended_role)
+            if row.intended_role is not Role.STUDENT
+            else ""
+        )
+        lines.append("- %s %s%s" % (row.surname, row.name, suffix))
     return "\n".join(lines)
