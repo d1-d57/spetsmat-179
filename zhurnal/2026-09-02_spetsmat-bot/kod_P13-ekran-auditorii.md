@@ -528,7 +528,15 @@ around it by naming the rule without the words. This position does the same.
    ДОМ: владелец
    ДОСТАВЛЕНО: нет
 
-4. `bot/handlers/owner.py:54` draws `callback_data="noop"` on every pending row and no router
+4. `infra/room_repo.SqliteRoomRoster` reads P3's `teacher_room_role` table directly, because
+   `RosterPort` / `RosterService` offer `lookup_teacher(tg_id)` and `lookup_teacher_by_id` and no
+   listing at all. «Which teachers are bound to this room» is a roster question and the adapter
+   for it should be a method on `RosterRepo`, not a second reader of somebody else's table; it was
+   written this way only because editing P3's file mid-wave is the one thing a wave cannot do.
+   ДОМ: infra/roster_repo.py
+   ДОСТАВЛЕНО: нет
+
+5. `bot/handlers/owner.py:54` draws `callback_data="noop"` on every pending row and no router
    registers a handler for it — `grep -rn '"noop"' bot/` finds the button and P4's note about it,
    and nothing else. P4 reported it and refused to make it worse; this position checked it again
    while making sure its own payload prefixes collide with nobody's. It is still unhandled, so a
@@ -679,7 +687,7 @@ The owner's binding is looked up through the roster rather than assumed absent: 
 short-circuits on the owner's `tg_id` and stamps an identity with no teacher on it, so without
 that lookup the owner could never open the screen at all.
 
-**Part 4 · `tests/room/` `6f370b8`.** 22 tests. The sweep drives 18 children × 3 actions = 54
+**Part 4 · `tests/room/` `6f370b8`, extended by `cb758c6`.** 31 tests. The sweep drives 18 children × 3 actions = 54
 checks through `dp.feed_raw_update` and prints its own coverage; a test that called the service
 directly would pass with the router unregistered, which is the one failure that makes a screen not
 exist. The named `standing` test proves the point of the position by snapshotting the WHOLE
@@ -708,19 +716,19 @@ order to forbid them.
 
 ```
 $ make check
-rc=0 · 243 passed in 110.06s        (before this заход: 221 passed — +22)
+rc=0 · 252 passed in 36.18s         (before this заход: 221 passed — +31)
 
 $ python3 -m pytest tests/room -q
-rc=0 · 22 passed
+rc=0 · 31 passed
 [аудитория] учеников 18 из 18 · действий на ученика 3 (присутствие, гость, сегодняшнее
             назначение) · проверок 54 из 54 · провалов 0
-[раскладка аудитории] экранов 4 из 4 · кнопок проверено 65 · превышений 64 байт: 0 ·
+[раскладка аудитории] экранов 4 из 4 · кнопок проверено 67 · превышений 64 байт: 0 ·
             рядов не по 4: 0
 [постоянное закрепление] интервалов 36 из 36 не изменилось · переводов на сегодня 18 ·
             гостей 18 · возвратов постоянному 18
 
 $ python3 -m pytest tests/room -q -k "standing or postoyann"
-rc=0 · 3 passed, 19 deselected
+rc=0 · 3 passed, 28 deselected
     test_a_guest_and_a_move_for_tonight_leave_the_standing_enrollment_untouched
     test_a_guest_never_becomes_a_member_of_this_room_tomorrow
     (+ one selected by the substring in another file's name)
@@ -729,7 +737,70 @@ $ grep -rniE "рейтинг|percent|процент|badge|streak|leaderboard|о�
 rc=1 (1 = ни одного вхождения = верно)
 ```
 
-**Верификатор §3:** <ВСТАВЛЯЕТСЯ ПОСЛЕ ОТВЕТА>
+### Верификатор §3 — ПОСЛЕ-типа, свежий субагент, другим методом
+
+He built his own world in his own script (room 501, 18 children, **three** teachers instead
+of two, a neighbouring 502 of 18 under two of its own, rows inserted in reverse alphabetical
+order so that id order mirrors surname order), drove the production dispatcher through
+`dp.feed_raw_update`, and touched no file of the repository. His coverage line:
+**«охват заявленного критерия: 54 из 54, провалов 0»**, plus 98 buttons re-counted for the
+byte bound (widest payload: 7 bytes of 64), 21 forbidden roots grepped over 9 rendered
+screens (0 hits), the three list screens proved surname-sorted dynamically, and the debt
+count proved to come from `progress.py` by a spy that made one child's count jump to 41.
+He also ran 18 simultaneous taps through `asyncio.gather`: no exception, all 18 rows, one
+session. His final line: **«выдано 6 позиций из 6 найденных»**.
+
+**All six were real, and all six are fixed** — `cb758c6` (zone) and `eaa9ad3` (out of zone).
+Not one was a matter of taste, and the first was serious.
+
+1. 🔴 **A child taken next door VANISHED from his own room's distribution.** One child is at
+   one lesson, so `unique (session_id, student_id)` means 303 taking a child of 304 as a
+   guest REWRITES 304's row. 304's screen then matched him against no teacher's line and
+   not against «без преподавателя» either — the block read `Одинцов: 8 · Пришвин: 7`, 15 of
+   18, with three children present in the room's own list and in none of its own rows. That
+   is precisely the child the comment on that line says must not be forgotten for ninety
+   minutes, and the code that wrote the comment was producing him. Second symptom of the
+   same root: the header named his new teacher «преподаватель 1», an id shown to a person,
+   about a child, that nobody in the room could resolve.
+   **Fixed** by `RoomMember.is_elsewhere`: he keeps his place in the list (a child who
+   quietly drops off his own screen is the one nobody looks for), both headers carry a
+   «сегодня в другой аудитории: Фамилия (Преподаватель)» line, `teacher_names` resolves
+   every teacher who appears on the screen and not only this room's, `RoomDay.came` stops
+   counting him among the arrivals of a room he is not in, and his own head's taps are
+   refused — taking his mark back from 304 would delete him off the screen of the head
+   standing beside him in 303. Held by `test_every_child_of_a_room_lands_in_exactly_one_line_of_its_distribution`,
+   which walks all eighteen and fails on a surname that appears in no line or in two.
+2. 🔴 **A teacher of this room who holds nobody today could not be handed a child** — the
+   evening the feature exists for. `teacher_ids` was derived from the standing rows, and the
+   verifier is right that the asymmetry was visible in my own tree: `bot/routers/room.py`
+   takes the HEAD's room from `TeacherBinding.room`, so a table saying whose room it is does
+   exist. **My `## ПЛАН` asserted the opposite** («there is no separate table saying so, and
+   inventing one would be a second truth to drift») and it was simply wrong.
+   **Fixed:** a new read-only `RoomRoster` port over `teacher_room_role`.
+3. **Untapping a child who had been moved tonight dropped the move silently.** Presence and
+   tonight's teacher are one row and nothing can keep half of it — the row cannot exist
+   without a status and the negative status is one this screen never writes — so the fix is
+   to SAY it: the toast now reads «отметка снята; сегодняшний перевод снят вместе с ней».
+4. **The module docstring claimed something false.** «There is no enrollment port on this
+   service and no import that could reach one» — while the constructor took the whole
+   `EnrollmentService` and `assign` / `move` / `end` were one attribute away. Behaviourally
+   nothing was written (he proved that with a table snapshot), but the guarantee rested on
+   discipline while claiming to rest on construction. **Fixed:** the seam is declared as a
+   read-only `StandingArrangements` Protocol, the claim now says «checked, not impossible»,
+   and a spy in `tests/room/test_room_service.py` reddens if this module reaches for
+   anything but `resolve_many`.
+5. **A departed student could be brought in as a guest.** `candidate_guests` filtered
+   `left` out of the LIST, which covers neither a stale screen nor a forged payload — the
+   only two ways the call is reached. **Fixed** in `add_guest`, with `NoLongerHere`.
+6. **Every domain refusal spoke as «Экран устарел»** — false about a screen two seconds old,
+   and it sends the head round a loop that offers him the same answer. **Fixed:** each
+   refusal carries its own sentence (`RoomError.told`); the stale text is kept for the three
+   shapes that really are stale (unknown `op`, an id wider than the store, an id naming
+   nobody on this screen), and the long form with the ids still goes to the log.
+
+What he checked and found CLEAN: races under 18 simultaneous taps, a spinner left turning,
+a payload reaching another room or another child, an action that silently writes nothing, a
+sorting by achievement, a button over 64 bytes, and any write to `enrollment`.
 
 ### ГИГИЕНА §4.1, point by point
 
@@ -793,6 +864,16 @@ Nothing was deleted, nothing was overwritten, and nothing outside `spetsmat-bot`
   position whose criterion ran only its own directory would have shipped a suite that cannot be
   collected.
 
+- **A row keyed by `(session, student)` is written from more than one screen, and the screen that
+  did NOT write it shows the child anyway.** This position found it between two rooms; the same
+  row is P14's (closing a lesson, the «не был» status) and P6's. The failure mode is not «the
+  write is lost» — the write is fine — it is that the OTHER screen keeps listing the child while
+  matching him against none of its own rows, so he is displayed and unreachable at once. Cost
+  here: three children out of eighteen missing from a room's distribution with no line saying so,
+  invisible to a suite of 22 tests, found only by a verifier who built a second room. Every
+  position that touches `attendance` will produce it again unless it asks «what does the screen
+  that did not write this row now show?».
+
 **Does not repeat, therefore a queue item and not a заход:** the `infra/sessions_repo.py` collision
 below. It is the consequence of one neighbour being sent back to redo, not of anything structural.
 
@@ -807,8 +888,8 @@ below. It is the consequence of one neighbour being sent back to redo, not of an
 
 **АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P13-ekran-auditorii/bot/routers/room.py` — открывать текстовым редактором; это точка входа собранного экрана, остальные три файла зоны названы в §4 и лежат рядом.
 **РОД АРТЕФАКТА:** `исходник`
-**КОММИТ:** `6f370b8` — `tests/room: 18 children x 3 actions = 54 checks, driven through feed_raw_update, and the coverage is printed by the run` · `git_zona.py check --zone "bot/keyboards/room.py" && git_zona.py check --zone "bot/routers/room.py" && git_zona.py check --zone "core/services/room.py" && git_zona.py check --zone "tests/room/"` → ✅
-*(зона собрана пятью коммитами по ходу работы, как велит §4: `0f826e3` сервис · `0a6d099` клавиатура · `66a169e` роутер · `327f025` два файла ВНЕ зоны · `6f370b8` тесты.)*
+**КОММИТ:** `cb758c6` — `the six the §3 verifier found: a child taken next door vanished from his own room's distribution, and five smaller ones` · `git_zona.py check --zone "bot/keyboards/room.py" && git_zona.py check --zone "bot/routers/room.py" && git_zona.py check --zone "core/services/room.py" && git_zona.py check --zone "tests/room/"` → ✅
+*(зона собрана семью коммитами по ходу работы, как велит §4: `0f826e3` сервис · `0a6d099` клавиатура · `66a169e` роутер · `327f025` два файла ВНЕ зоны · `6f370b8` тесты · `cb758c6` шесть находок верификатора · `eaa9ad3` реестр преподавателей аудитории, ВНЕ зоны. Один шов между `cb758c6` и `eaa9ad3` не собирается сам по себе: конструктор `RoomService` получил обязательный порт, а его единственная точка вызова — `bot/app.py`, которую §4 велит коммитить ОТДЕЛЬНО. Названо здесь, а не оставлено находкой для bisect.)*
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
