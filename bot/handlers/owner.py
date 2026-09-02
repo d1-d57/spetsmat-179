@@ -85,6 +85,94 @@ def _current_sheet_id(catalogue: SqliteCatalogue) -> int:
     return max(sheets, key=lambda s: s.ord).id
 
 
+# ------------------------------------------------- the owner hears about a заявка
+#
+# 🔴 WHY THIS LIVES IN owner.py AND NOT WHERE THE ЗАЯВКА IS CREATED.  The заявка is
+# written by ``bot/handlers/registration.py`` and the service is built by
+# ``bot/app.py``; both are outside this position's zone and neither may be edited.  The
+# seam that stays inside it is aiogram's own ``startup`` event: ``dp.start_polling``
+# emits it with ``bot``, ``roster`` and ``owner_tg_id`` already in ``workflow_data``, so
+# the notifier can be installed on the live service without a line changing anywhere
+# else.  What ``registration.py`` calls is unchanged -- ``roster.submit_student`` -- and
+# the service fires the callback it was handed.
+#
+# ⚠ Idempotency is NOT in this file and deliberately so: the claim is a row in the
+# roster database (``RosterRepo.claim_notification``), taken before the message is
+# built.  A retry, a second caller and a restarted process all lose to the primary key,
+# and one заявка produces exactly one message.
+
+#: Tasks in flight.  ``asyncio`` keeps only a weak reference to a task, so a message
+#: sent fire-and-forget can be garbage-collected mid-send; holding it here until it is
+#: done is the documented way to stop that.
+_in_flight: set = set()
+
+
+def _pending_announcement(registration: PendingRegistration) -> str:
+    role = "ученик" if registration.intended_role is Role.STUDENT else "преподаватель"
+    line = "Новая заявка: %s %s — %s" % (
+        registration.surname, registration.name, role,
+    )
+    if registration.room:
+        line += ", кабинет %s" % registration.room
+    return line
+
+
+def pending_notifier(bot: Bot, owner_tg_id: int) -> Any:
+    """A callback the roster service fires once per new заявка.
+
+    Synchronous, because ``core/`` may not know what a coroutine of the bot framework
+    is.  The send is scheduled on the loop the handler is already running on; a failure
+    to deliver is logged and never propagated, because the заявка is the thing that
+    matters and a Telegram hiccup must not roll back a registration that is already
+    written.
+    """
+
+    def notify(registration: PendingRegistration) -> None:
+        coroutine = bot.send_message(
+            chat_id=owner_tg_id,
+            text=_pending_announcement(registration),
+            reply_markup=_pending_keyboard([registration]),
+        )
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No loop: nothing can be sent from here.  Close the coroutine rather than
+            # leaving it un-awaited, and say so -- a warning in the log is the honest
+            # outcome, a silent drop is not.
+            coroutine.close()
+            log.warning(
+                "no running loop: заявка %d was not announced to the owner",
+                registration.id,
+            )
+            return
+        task = loop.create_task(coroutine)
+        _in_flight.add(task)
+
+        def _done(finished) -> None:
+            _in_flight.discard(finished)
+            error = finished.exception() if not finished.cancelled() else None
+            if error is not None:
+                log.warning(
+                    "could not announce заявка %d to the owner: %s",
+                    registration.id, error,
+                )
+
+        task.add_done_callback(_done)
+
+    return notify
+
+
+@router.startup()
+async def install_pending_notifier(
+    roster: RosterService,
+    bot: Bot,
+    owner_tg_id: int,
+    **_: Any,
+) -> None:
+    """Hand the live service the notifier, once, when the bot comes up."""
+    roster.set_pending_notifier(pending_notifier(bot, owner_tg_id))
+
+
 # ----------------------------------------------------------------- commands
 
 @router.message(F.text == "/pending")
