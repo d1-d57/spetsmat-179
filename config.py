@@ -10,6 +10,7 @@ string that decides behaviour, it belongs in this file first and is imported fro
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # --------------------------------------------------------------------------- paths
@@ -22,6 +23,24 @@ DB_PATH = ROOT / "data" / "spetsmat.db"
 
 #: Where ``001_init.sql`` and its successors live.  Plain SQL under yoyo-migrations.
 MIGRATIONS_DIR = ROOT / "migrations"
+
+#: Last year's conduit, the workbook the importer reads.  It lives OUTSIDE the repository
+#: and is never copied into it: it carries the names of fifty-six children, and only the
+#: anonymised derived seed under ``seed/`` is allowed into git.
+#:
+#: The path that stood in ``tools/import_konduit.py`` before this position was
+#: ``/sessions/funny-eager-bell/mnt/uploads/...`` -- a sandbox path that does not exist on
+#: any machine this project runs on, so the importer could not have been run by anyone who
+#: read the report that claimed it had been.  Overridable by the environment for a machine
+#: that keeps the book elsewhere; the importer refuses in plain words when the file is
+#: absent rather than raising a traceback about ``openpyxl``.
+KONDUIT_XLSX = Path(
+    os.environ.get("KONDUIT_XLSX", Path.home() / "Downloads" / "Кондуит 8КЛ.xlsx")
+).expanduser()
+
+#: The seed the importer loads before it reads a single mark: the anonymised catalogue
+#: that DOES live in git.
+SEED_DIR = ROOT / "seed"
 
 
 # ------------------------------------------------------------------- sqlite runtime
