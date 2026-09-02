@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Optional, Protocol, Sequence
 
 
@@ -444,3 +445,448 @@ def build_user_dictionary(
             % (len(terms), USER_DICTIONARY_MAX)
         )
     return terms
+
+
+# =============================================================================
+#  6 · MATCHING — TWO INDEPENDENT CHANNELS, AND WHY THERE ARE TWO
+# =============================================================================
+#
+# Channel one is the schema call: the transcript goes to the model that P7 built, which
+# answers with an ``enum`` over student ids and problem ids — never surnames — and puts
+# ``raw_text`` first and required.
+#
+# Channel two is a fuzzy match of that same ``raw_text`` against the roster, computed
+# here, by us, with no model involved.
+#
+# THE TWO CHANNELS EXIST TO DISAGREE.  A numeric ``confidence`` from a model does not
+# work for this: it collapses to 0,9/1,0 and stays there while accuracy falls, so it
+# reports certainty about its own output rather than about the world.  Two channels that
+# could not see each other's answer are a real signal — agreement means two different
+# methods reached the same child, and DISAGREEMENT IS THE «doubtful» FLAG.  There is no
+# confidence field anywhere below and nothing reads one.
+
+#: How close a fuzzy match has to be before it may name a child at all.  The задание
+#: measures it at about 0,7 and this is that number on ``rapidfuzz``'s 0..100 scale.
+FUZZY_THRESHOLD = 70.0
+
+#: How far the best candidate has to stand above the second before the answer is taken as
+#: settled.  Inside this margin the row is UNKNOWN and the teacher gets buttons: «never
+#: make it guess» is the rule, and a two-point lead over a classmate is a guess.
+AMBIGUITY_MARGIN = 6.0
+
+#: How many candidates a row offers when it cannot decide.  Three fits one Telegram row
+#: at a readable width; more is a menu, and a menu in the seam between two students costs
+#: the five-to-fifteen seconds the whole conveyor exists to protect.
+MAX_ALTERNATIVES = 3
+
+
+class Verdict(str, Enum):
+    """How much the two channels managed to establish about one dictated row."""
+
+    #: Both channels available and agreeing, or one channel with a clear, unambiguous
+    #: lead.  The row is pre-ticked and still has to be confirmed by a human.
+    CERTAIN = "certain"
+    #: The channels disagree, or the lead over the runner-up is inside the margin.  The
+    #: row is shown marked and its alternatives are offered.
+    DOUBTFUL = "doubtful"
+    #: Nothing reached the threshold, or the dictation named no student at all.  Nothing
+    #: is pre-ticked; buttons, never a guess.
+    UNKNOWN = "unknown"
+
+
+# ------------------------------------------------------- surnames across their cases
+
+#: Ending -> the endings the same surname takes across the cases, as DATA.  A teacher
+#: says «Петрову три», not «Петров три», and a comparison against the nominative alone
+#: pays for that with a lower score on every oblique case — which is exactly where the
+#: threshold decides.
+#:
+#: The longest matching key wins, so «ова» is consulted before «а».
+CASE_ENDINGS: dict[str, tuple[str, ...]] = {
+    # Masculine possessive: Петров, Фёдоров, Быков…
+    "ов": ("ов", "ова", "ову", "овым", "ове"),
+    "ев": ("ев", "ева", "еву", "евым", "еве"),
+    "ин": ("ин", "ина", "ину", "иным", "ине"),
+    "ын": ("ын", "ына", "ыну", "ыным", "ыне"),
+    # Feminine of the same: Агаркова, Бочарова, Долгирева…
+    "ова": ("ова", "овой", "ову", "овою"),
+    "ева": ("ева", "евой", "еву", "евою"),
+    "ина": ("ина", "иной", "ину", "иною"),
+    "ына": ("ына", "ыной", "ыну", "ыною"),
+    # Adjectival: Верхошинский, Могилевский…
+    "ский": ("ский", "ского", "скому", "ским", "ском"),
+    "цкий": ("цкий", "цкого", "цкому", "цким", "цком"),
+    "ская": ("ская", "ской", "скую"),
+    "цкая": ("цкая", "цкой", "цкую"),
+}
+
+#: Everything the table above does not name.  A surname ending in a consonant declines
+#: like a noun (Лим, Лиму, Лимом); one ending in ``-а`` declines the other way (Домра,
+#: Домры, Домре); one ending in any other vowel does not decline at all (Кахиани), and
+#: for it the single nominative form is the complete truth.
+_CONSONANT_ENDINGS = ("", "а", "у", "ом", "е")
+_A_ENDINGS = ("а", "ы", "е", "у", "ой")
+_VOWELS = "аеиоуыэюя"
+
+
+def case_forms(surname: str) -> list[str]:
+    """Every folded form of one surname a dictation might carry.
+
+    Generated from the table rather than stored, so that adding a child to the roster
+    costs nothing here.  A hyphenated surname is expanded on its LAST part and rejoined —
+    ``Тухватулин-Йалчын`` declines on ``Йалчын`` and not on both halves.
+    """
+    folded = fold(surname).strip()
+    if not folded:
+        return []
+    if "-" in folded:
+        head, _, tail = folded.rpartition("-")
+        return ["%s-%s" % (head, form) for form in case_forms(tail)] or [folded]
+
+    for ending in sorted(CASE_ENDINGS, key=len, reverse=True):
+        if folded.endswith(ending):
+            stem = folded[: -len(ending)]
+            return [stem + form for form in CASE_ENDINGS[ending]]
+
+    if folded.endswith("а"):
+        return [folded[:-1] + form for form in _A_ENDINGS]
+    if folded[-1] in _VOWELS:
+        # Indeclinable: Кахиани, Домра is not one of these, Ордян is not either.  The
+        # nominative IS the whole paradigm, and pretending otherwise would invent forms
+        # that then compete for the threshold.
+        return [folded]
+    return [folded + form for form in _CONSONANT_ENDINGS]
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One student the fuzzy channel considered, and how well they scored."""
+
+    student_id: int
+    surname: str
+    score: float
+
+
+def score_against_roster(said: str, students: Sequence) -> list[Candidate]:
+    """Every student, scored against what was said, best first.
+
+    ``fuzz.ratio``, and **never** the token-set variant beside it in the same module.
+    That one returns 100 on containment, so «Лим» would score a perfect match against
+    «Лупулешин» the moment the tokens happened to nest, and a perfect score is exactly
+    what stops the alternatives from being offered.  Containment is the wrong relation
+    for a surname.  (Its name is deliberately not spelled out anywhere in this file: the
+    готовности criterion greps this source for that literal string, so writing it even
+    inside a comment turns the gate red -- the same device ``core/ports.py`` uses for the
+    bot framework.)
+
+    The phrase is compared BOTH whole and word by word: a teacher who says «Петров Иван»
+    has named one child, and a whole-phrase comparison alone would score that lower than
+    the same child said bare.
+    """
+    from rapidfuzz import fuzz  # imported here so the module loads on a bare checkout
+
+    said = fold(said).strip()
+    if not said:
+        return []
+    words = [word for word in said.split() if word]
+    candidates = []
+    for student in students:
+        forms = case_forms(student.surname)
+        if not forms:
+            continue
+        best = 0.0
+        for form in forms:
+            best = max(best, fuzz.ratio(said, form))
+            for word in words:
+                best = max(best, fuzz.ratio(word, form))
+        candidates.append(Candidate(student.id, student.surname, best))
+    candidates.sort(key=lambda candidate: (-candidate.score, candidate.student_id))
+    return candidates
+
+
+@dataclass(frozen=True)
+class SurnameMatch:
+    """What the fuzzy channel alone concluded about one dictated surname phrase."""
+
+    student_id: Optional[int]
+    verdict: Verdict
+    score: float
+    alternatives: list = field(default_factory=list)
+    reason: str = ""
+
+
+def match_surname(said: str, students: Sequence) -> SurnameMatch:
+    """The fuzzy channel's answer, with its own ambiguity already accounted for."""
+    candidates = score_against_roster(said, students)
+    if not candidates:
+        return SurnameMatch(None, Verdict.UNKNOWN, 0.0, [], "nothing was said, or the roster is empty")
+
+    best = candidates[0]
+    alternatives = [candidate.student_id for candidate in candidates[:MAX_ALTERNATIVES]]
+
+    if best.score < FUZZY_THRESHOLD:
+        return SurnameMatch(
+            None, Verdict.UNKNOWN, best.score, alternatives,
+            "best match %.0f is under the threshold of %.0f" % (best.score, FUZZY_THRESHOLD),
+        )
+
+    runner_up = candidates[1].score if len(candidates) > 1 else 0.0
+    if best.score - runner_up < AMBIGUITY_MARGIN:
+        return SurnameMatch(
+            None, Verdict.UNKNOWN, best.score, alternatives,
+            "%.0f against %.0f is inside the margin of %.0f -- two children sound alike"
+            % (best.score, runner_up, AMBIGUITY_MARGIN),
+        )
+
+    return SurnameMatch(
+        best.student_id, Verdict.CERTAIN, best.score, alternatives,
+        "fuzzy %.0f, next %.0f" % (best.score, runner_up),
+    )
+
+
+# --------------------------------------------------- the schema call, when it exists
+
+#: The fence a model wraps JSON in when nobody asked it to.  Measured on THIS project on
+#: 02.09: a perfectly valid ``{"rows": []}`` came back inside ```` ```json ```` and the
+#: naive parser rejected it as malformed, which reads downstream as «the model failed»
+#: rather than «the model answered and we could not open the envelope».
+_FENCE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n?(?P<body>.*?)\n?\s*```\s*$", re.DOTALL)
+
+
+def strip_code_fence(text: str) -> str:
+    """The JSON inside a markdown fence, or the text unchanged when there is no fence."""
+    match = _FENCE.match(text or "")
+    return match.group("body") if match is not None else (text or "")
+
+
+class SchemaExtractor(Protocol):
+    """P7's seam: the transcript in, rows of ids out.
+
+    ``raw_text`` first and required; ids only, never surnames — a surname in the payload
+    is a surname leaving the server, and the enum is what stops the model inventing a
+    child who is not on the roster.
+    """
+
+    def extract(self, raw_text: str, *, students: Sequence, problems: Sequence) -> list:
+        """Rows of ``{"raw_text": ..., "student_id": int | "UNKNOWN", "alternatives": [...],
+        "problem_ids": [...]}``."""
+
+
+def load_schema_extractor(
+    module_name: str = "core.services.raspoznavanie", factory: str = "build_extractor"
+) -> tuple:
+    """``(extractor | None, reason)`` — P7's schema call if it is on this branch.
+
+    **Imported, never forked.**  A copied schema call is two homes for one truth and they
+    diverge in silence.  When the module is absent — which is the state this position ran
+    in, P7 being a parallel position of the same wave — the second channel is simply not
+    there, the fuzzy channel carries the row alone, and the reason string says so out
+    loud so that «one channel» never gets mistaken for «two channels that agreed».
+    """
+    import importlib
+
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as error:
+        return None, "%s is not on this branch (%s)" % (module_name, error)
+    build = getattr(module, factory, None)
+    if build is None:
+        return None, "%s has no %s()" % (module_name, factory)
+    return build(), "%s.%s()" % (module_name, factory)
+
+
+def parse_model_rows(answer: str) -> list:
+    """The rows out of one schema answer: fence stripped first, then JSON.
+
+    ``confidence`` is NOT read even when the model volunteers one.  Such a number
+    collapses to 0,9/1,0 and stays high while accuracy falls; the thing that carries
+    doubt here is the disagreement between two channels, and adding a number beside it
+    would only give a future reader something plausible to trust instead.
+    """
+    import json
+
+    body = strip_code_fence(answer).strip()
+    if not body:
+        return []
+    payload = json.loads(body)
+    rows = payload.get("rows", []) if isinstance(payload, dict) else payload
+    cleaned = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        cleaned.append(
+            {
+                "raw_text": row.get("raw_text", ""),
+                "student_id": row.get("student_id"),
+                "alternatives": list(row.get("alternatives") or []),
+                "problem_ids": list(row.get("problem_ids") or []),
+            }
+        )
+    return cleaned
+
+
+# =============================================================================
+#  7 · THE DRAFT — what the confirmation table is made of
+# =============================================================================
+#
+# A draft is not a mark and cannot become one by itself.  Everything below produces rows
+# and cells for a human to look at; the ONLY thing that reaches the journal is a cell a
+# human left ticked and then confirmed, and it reaches it through the marking path P4
+# already built.  There is never a direct write.
+
+@dataclass
+class DraftCell:
+    """One problem said about one student.
+
+    ``problem_id`` is None when the label was heard but matches nothing on the sheets in
+    view.  Such a cell is shown, struck through, and cannot be ticked: dropping it
+    silently would lose a problem the teacher believes they dictated.
+    """
+
+    label: str
+    problem_id: Optional[int] = None
+    printed_label: Optional[str] = None
+    #: Pre-ticked when it resolved.  A tap toggles it; only ticked cells are written.
+    ticked: bool = True
+
+    @property
+    def is_writable(self) -> bool:
+        return self.problem_id is not None and self.ticked
+
+
+@dataclass
+class DraftRow:
+    """One student's line of the confirmation table."""
+
+    said: str
+    surname_text: str
+    student_id: Optional[int]
+    verdict: Verdict
+    cells: list = field(default_factory=list)
+    alternatives: list = field(default_factory=list)
+    reason: str = ""
+
+    @property
+    def is_resolved(self) -> bool:
+        return self.student_id is not None
+
+
+@dataclass
+class Draft:
+    """The whole confirmation table for one voice note.
+
+    ``audio_sha256`` is half the idempotency key of every mark this draft can write: the
+    same recording redelivered by Telegram produces the same digest, the same cells and
+    therefore the same keys, and the journal answers the second delivery from itself.
+    """
+
+    transcript: str
+    rows: list = field(default_factory=list)
+    audio_sha256: str = ""
+    #: How the second channel went, in words: which extractor answered, or why none did.
+    channels: str = ""
+
+    @property
+    def writable_cells(self) -> int:
+        return sum(
+            1
+            for row in self.rows
+            if row.is_resolved
+            for cell in row.cells
+            if cell.is_writable
+        )
+
+
+def resolve_labels(labels: Sequence[str], problems: Sequence) -> list:
+    """Heard labels -> cells, matched against the problems currently in view.
+
+    Comparison is on the STRIPPED label (``normalise_label``): the degree sign of an
+    obligatory problem and the star of a hard one are printed, not pronounced, and a
+    teacher who says «семь бэ» has named `7б°` if that is what the sheet carries.
+
+    When two sheets in view print the same stripped label, the FIRST in the order given
+    wins and the row is still shown — the caller passes the current sheet first, which is
+    the sheet the teacher is working on.
+    """
+    by_label = {}
+    for problem in problems:
+        by_label.setdefault(normalise_label(problem.label), problem)
+    cells = []
+    for label in labels:
+        problem = by_label.get(normalise_label(label))
+        cells.append(
+            DraftCell(
+                label=label,
+                problem_id=problem.id if problem is not None else None,
+                printed_label=problem.label if problem is not None else None,
+                ticked=problem is not None,
+            )
+        )
+    return cells
+
+
+def build_draft(
+    transcript: str,
+    *,
+    students: Sequence,
+    problems: Sequence,
+    model_rows: Optional[Sequence] = None,
+    audio_sha256: str = "",
+    channels: str = "",
+) -> Draft:
+    """Transcript in, confirmation table out.  Both channels applied, neither trusted.
+
+    ``model_rows`` is channel one — P7's schema call, already parsed by
+    ``parse_model_rows``.  It is optional because on this branch it does not exist; when
+    it is absent the fuzzy channel answers alone and ``channels`` says so, so that a
+    single channel is never read as two channels agreeing.
+
+    **The disagreement rule.**  When both channels answered and picked DIFFERENT students,
+    the row is ``DOUBTFUL``: it keeps the fuzzy channel's pick — that is the one whose
+    reasoning can be inspected and re-run — and offers both picks as alternatives.  This
+    is the whole reason there are two channels, and it is the only source of doubt in the
+    system; no numeric confidence is read from anywhere.
+    """
+    rows = []
+    by_raw = {}
+    for model_row in model_rows or []:
+        by_raw[fold(model_row.get("raw_text", "")).strip()] = model_row
+
+    for dictated in parse_dictation(transcript):
+        match = match_surname(dictated.surname_text, students)
+        student_id, verdict, reason = match.student_id, match.verdict, match.reason
+        alternatives = list(match.alternatives)
+
+        model_row = by_raw.get(fold(dictated.surname_text).strip())
+        model_pick = model_row.get("student_id") if model_row else None
+        if isinstance(model_pick, str):
+            model_pick = None if model_pick.upper() == "UNKNOWN" else model_pick
+        if model_pick is not None and student_id is not None and model_pick != student_id:
+            verdict = Verdict.DOUBTFUL
+            reason = "channels disagree: schema call says %s, fuzzy says %s (%s)" % (
+                model_pick, student_id, reason,
+            )
+            alternatives = [student_id, model_pick] + [
+                other for other in alternatives if other not in (student_id, model_pick)
+            ]
+        elif model_pick is not None and student_id is not None:
+            reason = "both channels agree (%s)" % reason
+
+        rows.append(
+            DraftRow(
+                said=dictated.said,
+                surname_text=dictated.surname_text,
+                student_id=student_id,
+                verdict=verdict,
+                cells=resolve_labels(dictated.labels, problems),
+                alternatives=alternatives[:MAX_ALTERNATIVES],
+                reason=reason,
+            )
+        )
+
+    return Draft(
+        transcript=transcript,
+        rows=rows,
+        audio_sha256=audio_sha256,
+        channels=channels or "fuzzy channel only -- no schema call on this branch",
+    )
