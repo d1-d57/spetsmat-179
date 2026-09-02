@@ -12,7 +12,7 @@ even inside a comment turns the gate red.)
 
 from __future__ import annotations
 
-from typing import Optional, Protocol, Sequence
+from typing import ContextManager, Optional, Protocol, Sequence
 
 from core.models import Cell, Mark, MarkDraft, Problem, Sheet, Student
 
@@ -31,6 +31,22 @@ class MarkJournal(Protocol):
     oversight: the schema refuses both with a trigger, so offering them here would be
     offering a method that always raises.
     """
+
+    def transaction(self) -> ContextManager[None]:
+        """Serialise a read-then-write of this journal against other writers.
+
+        ``set_state`` decides what to write by reading what already stands, and between
+        the read and the write another teacher's tap can land.  Without this seam the two
+        taps both see an empty cell and both write an ``assert``: the projected state is
+        still right, but the journal has two rows where the service promises one, and
+        "a double tap is harmless by construction" stops being true.
+
+        It is a PORT and not a bare SQL statement on purpose -- ``core/`` must not know
+        that the store is SQLite.  The SQLite adapter spells it ``begin immediate``, which
+        takes the write lock at the start rather than on first write, so the loser waits
+        out ``config.BUSY_TIMEOUT_MS`` instead of failing.  A store that does not need it
+        may implement it as a no-op.
+        """
 
     def append(self, draft: MarkDraft) -> Mark:
         """Write one event and return it with the id the journal assigned."""

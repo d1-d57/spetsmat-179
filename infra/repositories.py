@@ -10,6 +10,7 @@ paths rather than a tautology.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from typing import Optional, Sequence
 
 from core.models import (
@@ -66,6 +67,35 @@ class SqliteMarkJournal:
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
+
+    @contextmanager
+    def transaction(self):
+        """``begin immediate`` around a read-then-write, so two taps cannot interleave.
+
+        IMMEDIATE and not DEFERRED: a deferred transaction takes only a read lock at
+        ``begin`` and upgrades on the first write, so two writers both read, both try to
+        upgrade, and one gets SQLITE_BUSY that ``busy_timeout`` cannot wait out -- the
+        other transaction is still open, so waiting cannot help and SQLite says so
+        immediately.  IMMEDIATE takes the write lock up front, which turns the same race
+        into a queue: the loser blocks for ``config.BUSY_TIMEOUT_MS`` and then reads the
+        winner's row.
+
+        Connections are opened with ``isolation_level=None``, so nothing is implicitly
+        open and the BEGIN here is the only one.  A transaction already in progress is
+        joined rather than nested -- SQLite refuses a nested BEGIN, and the caller that
+        opened the outer one owns the commit.
+        """
+        if self._connection.in_transaction:
+            yield
+            return
+        self._connection.execute("begin immediate")
+        try:
+            yield
+        except BaseException:
+            self._connection.execute("rollback")
+            raise
+        else:
+            self._connection.execute("commit")
 
     def append(self, draft: MarkDraft) -> Mark:
         cursor = self._connection.execute(
