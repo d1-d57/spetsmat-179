@@ -161,21 +161,46 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 Не рефакторить логику. Не переименовывать константы. Не трогать `bot/app.py`, роутеры, `core/`,
 `infra/`, `migrations/`, тесты. Не удалять `bot/config_local.py`. Не заводить новых констант.
 
-**КРИТЕРИЙ ГОТОВНОСТИ (может ПРОВАЛИТЬСЯ), каждая команда печатает ЧИСЛО:**
+**КРИТЕРИЙ ГОТОВНОСТИ (может ПРОВАЛИТЬСЯ) — ПЕРЕПИСАН ОРКЕСТРАТОРОМ 02.09 14:10.**
+
+🔴 **ЭТА ПОЗИЦИЯ ПЕРЕСТАЛА БЫТЬ КОСМЕТИКОЙ. Она — ЕДИНСТВЕННЫЙ БЛОКЕР ЗАПУСКА БОТА,
+и это измерено, а не предположено:**
+
+    python3 -m bot   →  rc=2,  "BOT_TOKEN is empty. Set the environment variable and try again."
+
+Причина — `bot/config_local.py` строка 18: `BOT_TOKEN = ""`, и окружение НЕ ЧИТАЕТСЯ
+вовсе. Подставить токен переменной среды невозможно: константа жёстко пустая. За всю
+ночь бот не стартовал ни разу, базы `data/` не существует. При этом токен ЖИВОЙ —
+прямой `getMe` отвечает `ok: True · @conduit179_bot · id 8420265757 · «Кондуиты 179»`.
+Между 486 зелёными тестами и работающим ботом стоит ровно это.
+
+**Значит задача шире переноса констант: сделать так, чтобы бот ПОДНЯЛСЯ.**
 
     cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P17-konstanty
     make check
-        # rc=0; «N passed» — N РОВНО ТАКОЕ ЖЕ, как до тебя. Больше или меньше —
-        # значит ты тронул не то
-    python3 -c "import config; print('в config.py констант:', len([k for k in dir(config) if k.isupper()]))"
-        # rc=0; число выросло ровно на столько, сколько ты перенёс
-    python3 -c "import bot.config_local as c, config; import sys; bad=[k for k in dir(c) if k.isupper() and getattr(c,k) is not getattr(config,k,object())]; print('разошедшихся значений:', len(bad), bad); sys.exit(1 if bad else 0)"
-        # rc=0 и «разошедшихся значений: 0 []» — ре-экспорт, а не копия
-    git check-ignore -v secrets/ ; echo "rc=$? (0 = секреты игнорируются)"
+        # rc=0; «N passed» РОВНО ТАКОЕ ЖЕ, как до тебя (486). Больше или меньше —
+        # значит тронул не то
+    BOT_TOKEN=$(grep '^BOT_TOKEN=' ~/Documents/GitHub/spetsmat-bot/secrets/bot.env | cut -d= -f2-) \
+    OWNER_ID=$(grep '^OWNER_ID=' ~/Documents/GitHub/spetsmat-bot/secrets/bot.env | cut -d= -f2-) \
+    timeout 25 python3 -m bot ; echo "rc=$?"
+        # 🔴 rc=124 (таймаут) — ЭТО УСПЕХ: бот поднялся и опрашивает Telegram.
+        # rc=2 с «BOT_TOKEN is empty» — ПРОВАЛ ПОЗИЦИИ.
+        # Любая другая ошибка — тоже провал, назови её дословно в отчёте.
+    python3 -c "import config; print('констант в config.py:', len([k for k in dir(config) if k.isupper()]))"
+        # число выросло ровно на столько, сколько перенёс
+    cd ~/Documents/GitHub/spetsmat-bot && git check-ignore -v secrets/ ; echo "rc=$? (0 = секреты игнорируются)"
+    grep -rn "8420265757\|AAH\|AAG" config.py bot/ ; echo "rc=$? (1 = НИ ОДНОГО секрета в коде = верно)"
 
-🔴 Копия вместо ре-экспорта — это два дома одной правды, ровно то, что позиция закрывает.
-Третья команда обязана падать, если ты скопировал значения, а не переиспользовал.
-**Отрицательный вердикт несёт ОХВАТ В СЕБЕ:** не «дыр не найдено», а «дыр не найдено, проверено X из Y». Без охвата вердикт не принимается — «проверено 2 из 9» и «проверено 9 из 9» выглядят одинаково.
+🔴 **СЕКРЕТ В GIT НЕ ЕДЕТ НИКОГДА.** В `config.py` уезжает только ИМЯ переменной
+окружения и пустое значение по умолчанию — `BOT_TOKEN = os.environ.get("BOT_TOKEN", "")`.
+Само значение живёт в `secrets/bot.env`, который уже в `.gitignore`. Пустое умолчание
+нужно, чтобы отсутствие переменной роняло бота на старте, а не отключало его молча.
+
+⚠ `OWNER_TG_ID` тоже из окружения (`OWNER_ID`), а не константой: это телеграм-id
+живого человека.
+
+⚠ Читать `secrets/bot.env` САМ код не должен — это дело развёртывания (systemd
+`EnvironmentFile=`, позиция P10). Твоё дело — чтобы код брал из окружения.
 
 ## 3. ВЕРИФИКАТОР (если двигаем/теряем/жмём)
 
