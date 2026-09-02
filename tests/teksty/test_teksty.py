@@ -33,6 +33,7 @@ from sobrat import (  # noqa: E402
     BELYJ_SPISOK,
     BELYJ_SPISOK_ZHIVOJ,
     KOREN,
+    POKAZYVAYUT,
     sobrat,
 )
 
@@ -211,5 +212,90 @@ def test_imya_roli_ne_podstavlyaetsya_v_tekst():
     assert not najdeno, (
         "значение роли подставляется прямо в текст для человека: %s — "
         "это «teacher» и «head», имена членов перечисления `Role`"
+        % ", ".join(sorted(set(najdeno)))
+    )
+
+def test_tekst_isklyucheniya_ne_uhodit_na_ekran():
+    """Класс, который дал три худших находки этого захода, и его не ловит НИ ОДНА
+    проверка литералов: текст пойманного исключения, подставленный в отказ.
+
+    Сами тексты живут в чужих домах и написаны для того, кто чинит код:
+    `infra/asr.py` — «recogniser unreachable: <urlopen error …>»; `infra/llm.py` —
+    «ответ не разобрался как JSON: Extra data: line 7 column 1»;
+    `core/services/roster.py` — «no current sheet to anchor first_sheet_id…».
+    Литерал в самом отказе при этом русский и чистый, поэтому гейт литералов
+    зелен, а преподаватель на занятии читает английскую диагностику.
+
+    Правило и его дом: решение о том, ЧТО читает человек, принимает слой `bot/`,
+    и он не имеет права переложить это решение на исключение. Диагностику
+    положено класть в журнал бота — `log.warning`, а не в `answer`.
+    """
+    import ast
+
+    POKAZ = (
+        "answer",
+        "reply",
+        "edit_text",
+        "send_message",
+        "_deny",
+        "_redraw",
+        "_redraw_message",
+        "_replace",
+    )
+
+    def _imya(uzel):
+        f = getattr(uzel, "func", uzel)
+        return f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
+
+    def _tipy(handler) -> set:
+        if handler.type is None:
+            return set()
+        chasti = (
+            handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+        )
+        return {_imya(ch) for ch in chasti}
+
+    najdeno: list[str] = []
+    for put in sorted((KOREN / "bot").rglob("*.py")):
+        derevo = ast.parse(put.read_text(encoding="utf-8"), filename=str(put))
+        for uzel in ast.walk(derevo):
+            if not isinstance(uzel, ast.ExceptHandler) or not uzel.name:
+                continue
+            # Исключение, ОБЪЯВЛЕННОЕ человеческим, показывать дословно можно:
+            # его собственные литералы стоят под тем же гейтом, что и все
+            # остальные (`POKAZYVAYUT` в `sobrat.py`). Так устроен `IntakeRefused`.
+            if _tipy(uzel) and _tipy(uzel) <= set(POKAZYVAYUT):
+                continue
+            pojmannoe = uzel.name
+            for shag in ast.walk(uzel):
+                if not isinstance(shag, ast.Call) or _imya(shag) not in POKAZ:
+                    continue
+                for dovod in list(shag.args) + [k.value for k in shag.keywords]:
+                    # Значение, ушедшее внутрь ЕЩЁ ОДНОГО вызова, — перевод:
+                    # `_pochemu_ne_vyshlo(exc)` возвращает русский текст, а не
+                    # диагностику. `str()` и `repr()` переводом не являются.
+                    v_vyzove: set[int] = set()
+                    for gde in ast.walk(dovod):
+                        if isinstance(gde, ast.Call) and _imya(gde) not in (
+                            "str",
+                            "repr",
+                            "format",
+                        ):
+                            for kusok in ast.walk(gde):
+                                if kusok is not gde:
+                                    v_vyzove.add(id(kusok))
+                    for vnutri in ast.walk(dovod):
+                        if (
+                            isinstance(vnutri, ast.Name)
+                            and vnutri.id == pojmannoe
+                            and id(vnutri) not in v_vyzove
+                        ):
+                            najdeno.append(
+                                "%s:%d (`%s`)"
+                                % (put.relative_to(KOREN), shag.lineno, pojmannoe)
+                            )
+    assert not najdeno, (
+        "текст пойманного исключения уходит человеку на экран: %s — "
+        "положите его в `log.warning`, а человеку скажите, что делать"
         % ", ".join(sorted(set(najdeno)))
     )

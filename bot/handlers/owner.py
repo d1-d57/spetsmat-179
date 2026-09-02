@@ -137,7 +137,8 @@ def _pochemu_ne_vyshlo(exc: Exception) -> str:
     if isinstance(exc, TelegramIdAlreadyBound):
         return (
             "Этот Telegram уже привязан к другому человеку из списка. "
-            "Отклоните заявку или снимите старую привязку и попробуйте снова."
+            "Снять старую привязку бот пока не умеет — отклоните заявку "
+            "и разберитесь с человеком лично."
         )
     return (
         "Не получилось записать — заявка осталась открытой. "
@@ -297,7 +298,7 @@ async def on_accept(
     target = _find_pending(roster, registration_id)
     if target is None:
         await callback.answer(
-            "Эта заявка уже закрыта — список ниже обновится сам.",
+            "Эта заявка уже закрыта. Откройте список заново: /pending.",
             show_alert=True,
         )
         return
@@ -355,7 +356,7 @@ async def on_bind_chosen(callback: CallbackQuery, roster: RosterService) -> None
     target = _find_pending(roster, registration_id)
     if target is None:
         await callback.answer(
-            "Эта заявка уже закрыта — список ниже обновится сам.",
+            "Эта заявка уже закрыта. Откройте список заново: /pending.",
             show_alert=True,
         )
         return
@@ -377,7 +378,7 @@ async def on_create_new(callback: CallbackQuery, roster: RosterService) -> None:
     target = _find_pending(roster, registration_id)
     if target is None:
         await callback.answer(
-            "Эта заявка уже закрыта — список ниже обновится сам.",
+            "Эта заявка уже закрыта. Откройте список заново: /pending.",
             show_alert=True,
         )
         return

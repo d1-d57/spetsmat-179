@@ -56,6 +56,5 @@ async def upload_sheet_stub(message: Message, identity) -> None:
     # загружается ничего — обработчик заглушка и сразу заканчивается.
     await message.answer(
         "Загрузка листков через бота пока не работает — листки заводит владелец. "
-        "Отметки за вашу аудиторию (%s) ставьте кнопками: /setka."
-        % identity.teacher.room
+        "Отметки ставьте кнопками: /setka."
     )

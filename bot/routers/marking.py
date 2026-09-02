@@ -139,7 +139,9 @@ async def _refuse_as_stale(query: CallbackQuery) -> None:
     screen was built to fix -- one silently STRUCK a mark, the other raised inside a
     query before anything had answered, leaving the spinner turning.
     """
-    await query.answer("Экран устарел — откройте сетку заново.", show_alert=True)
+    await query.answer(
+        "Экран устарел — откройте сетку заново: /setka.", show_alert=True
+    )
 
 
 def _editable(query: CallbackQuery) -> Optional[Message]:
@@ -510,7 +512,9 @@ async def stale_screen(query: CallbackQuery, identity, catalogue) -> None:
       moderation list.  (That button having no handler at all is P3's defect and is
       reported rather than fixed from here; this handler only refuses to make it worse.)
     """
-    await query.answer("Экран устарел — открыт заново.", show_alert=True)
+    await query.answer(
+        "Экран устарел — открыт заново.", show_alert=True
+    )
     message = _editable(query)
     if not _may_open(identity) or message is None:
         return
