@@ -398,6 +398,71 @@ grep -c 'upscale\|resize.*up' core/services/raspoznavanie.py   # должно б
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Entry state, measured first move.** `git rev-parse --abbrev-ref HEAD` -> `zahod/P7-foto`;
+`git status --porcelain | wc -l` -> 0; `git branch --no-merged main | grep -c zahod/` -> 0.
+The branch was **29 commits behind `main`**: P4's grid (`bot/routers/marking.py`,
+`bot/keyboards/grid.py`, `bot/callbacks.py`), P12's enrollment and P13 were all merged into
+`main` AFTER this worktree's branch was cut, so §8's "P4's existing marking path" did not
+exist on this disk.  First move was therefore `git merge --ff-only main` (a strict
+fast-forward, `main..HEAD` = 0, no merge commit, nothing to conflict).  Baseline after the
+fast-forward: `make check` rc=0, **221 passed**.
+
+**Objection to nothing in the criterion.**  The КРИТЕРИЙ ГОТОВНОСТИ is falsifiable as
+written and I take it as it stands.  One correction to a premise, stated before the work
+rather than discovered in the report: the зона names `bot/routers/photo.py`, and a router
+in `bot/routers/` is dead until `bot/app.build` includes it — but `bot/app.py` is OUTSIDE
+the зона and the контракт зоны forbids touching it.  I keep the зона: `photo.py` ships
+P4's `build_routers()` factory shape, `tests/photo/` proves it end-to-end through a REAL
+`Dispatcher` built by `bot.app.build` plus the two include lines applied in the fixture,
+and the exact two-line diff `bot/app.py` needs is filed as a queue item in `## ВОПРОСЫ`
+rather than applied from here.
+
+**Assumptions stated before writing code, not guessed silently.**
+1. *No new table, and therefore no migration.*  §8 asks for "a confirmed-drafts table";
+   `migrations/` is outside the зона, and a schema change cannot be smuggled in.  It is
+   not needed: `migrations/001_init.sql:133` already carries
+   `create unique index marks_idempotency on marks (idempotency_key)`, and
+   `MarkingService.set_state` already answers a repeated key from the journal instead of
+   writing.  A per-cell key `foto:<sha256-of-bytes>:<student_id>:<problem_id>` therefore
+   IS the confirmed-drafts table, with the same "zero rows affected -> already recorded,
+   exit" semantics, surviving both a process restart and a re-delivered update.
+2. *`rapidfuzz` is not installed on this machine* (checked, `ModuleNotFoundError`), and
+   `make check` must not grow a dependency it cannot import.  §6 asks for
+   `rapidfuzz.fuzz.ratio` and explicitly NOT `token_set_ratio`.  `fuzz.ratio` is the
+   normalised indel similarity `200*LCS/(len(a)+len(b))`; the code uses `rapidfuzz` when
+   importable and otherwise computes that exact metric locally.  A test pins the two
+   against the §6 example «Иванов И.» vs «Иванов» — the containment case that
+   `token_set_ratio` returns 100 on and `ratio` must not.
+3. *`cv2` is imported lazily.*  It is installed here, but a hard import at module scope
+   would make `pytest` fail to COLLECT on a machine without it.
+
+**Parts, in order, each its own commit.**
+1. **§1 · `tools/blank.py`** — the form carries CODES (`u17`), never surnames; `--proba`
+   prints how many codes and tasks fit and that surnames on it are 0.
+2. **§2–§3 · `core/services/raspoznavanie.py`, intake and preprocessing** — the 20 MB
+   `getFile` ceiling; EXIF orientation honoured; downscale to 1568 with `INTER_AREA`;
+   JPEG q90; geometry and tone AFTER the resize.  What the benchmark forbids —
+   binarise, greyscale, denoise, equalise and above all UPSCALE (up to 34 pp) — is
+   refused by a named guard, not by an absence.  No per-row slicing (CER 64 vs 1,21).
+3. **§4–§5, §7 · `infra/llm.py`** — the closed list as TWO enums (student codes, task
+   labels) because ~120 is Gemini's practical ceiling and 56+45 = 101; `raw_text` FIRST
+   and REQUIRED; `temperature=0`, `thinking_level=minimum`, resolution high; timeout
+   30–60 s; the markdown fence stripped BEFORE parsing; the stop reason checked BEFORE
+   the JSON is touched; 429 without `retry-after` distinguished by error text and NOT
+   retried forever.
+4. **§6 · own confidence, in `core/services/raspoznavanie.py`** — surnames expanded over
+   Russian cases, indel ratio against `raw_text`, threshold 0,7; disagreement between the
+   model's pick and the fuzzy match IS the signal «doubtful»; ambiguity returns `UNKNOWN`
+   with `alternatives`.
+5. **§8 · `bot/routers/photo.py`** — the WHOLE parsed table as «ученик × галочки», a tap
+   toggles one cell, and NOTHING reaches the journal until «Подтвердить».  The write goes
+   through P4's `MarkingService`, with `source="фото"`.
+6. **`tests/photo/`** — the six failure checks (3 classes × 2 repeats), the named fence
+   test, idempotency by byte hash, and the negative control that the failure tests can
+   actually go red.
+
+**Verifier §3** runs last, fresh subagent, by the other method.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

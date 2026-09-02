@@ -354,6 +354,113 @@ grep -rn 'enrollment' core/services/room.py | head -3   # сегодняшнее
 
 ## ПЛАН — (заполняет исполнитель)
 
+### 0 · Two premises of this заход are false on disk. Named here, before any code.
+
+**(a) The worktree was 26 commits BEHIND `main`.** `bot/keyboards/`, `bot/routers/`,
+`bot/callbacks.py`, `core/services/enrollment.py` — everything section 0 says to stand
+on — did not exist in it. §0.1 promises a branch budded off a fresh `main` ("инструмент
+оказывается на диске сам"); it was not, because the worktree was created before P4/P12/P6
+were merged. Repaired first move by `git merge --ff-only main` (0 commits ahead, so a pure
+fast-forward, nothing of mine could be lost). Without it every anchor read would have been
+a read of a file that is not there.
+
+**(b) `core/services/sessions.py` does not exist.** Section 0 names it as P6's attendance
+service to stand on. What P6 actually left is `infra/sessions_repo.py`, five lines:
+`class SqliteSessionsRepo: pass`, with the comment "Full implementation deferred; listed
+in ## REPORT as unfinished". So attendance is NOT a thing this position reuses — it is a
+thing this position must build. Reported as a УРОК ФАБРИКЕ with its price.
+
+### 1 · Two files outside the zone that this position must touch, and why
+
+The zone is `bot/keyboards/room.py` `bot/routers/room.py` `core/services/room.py`
+`tests/room/`. Two things the задание itself demands are not reachable from inside it.
+
+1. **`bot/app.py`** — §3 of the WARNING block runs
+   `grep -rn 'include_router' bot/app.py   # роутер аудитории реально подключён`.
+   A router nobody includes is a screen that does not exist for the head. The заход names
+   this file by path and asks for exactly this fact, so the ЗАПРЕТ and the пост-проверка
+   disagree and the пост-проверка is the more specific of the two. Three lines, committed
+   separately so приёмка sees it alone.
+2. **`infra/sessions_repo.py`** — the today-only row has to reach SQLite, and `core/` is
+   forbidden to import the driver (`core/ports.py` says so, and the готовности grep of a
+   neighbouring position checks it). Filling a placeholder that declares itself deferred
+   is not refactoring somebody's working code "заодно". Same separate commit.
+
+Both are named again in `## ОТЧЁТ`. If the analyst disagrees, reverting either is one
+`git revert` of one small commit; nothing in the zone depends on their content, only on
+their existence.
+
+### 2 · The domain decision this position turns on: WHERE a today-only row lives
+
+`enrollment` cannot hold it. A today-only interval `[today, tomorrow)` overlaps the
+standing open row, and `enrollment_no_overlap_insert` aborts — correctly. So the задание's
+"today-only row, never an UPDATE of the standing interval" has to be a row in another
+table, and the schema already has the right one:
+
+    attendance (session_id, student_id, teacher_id, status)  unique (session_id, student_id)
+
+`attendance.teacher_id` is *who this student worked with at THIS session*. That is the
+today-only assignment, exactly. Two features fall out of one mechanism:
+
+* **today's assignment** — the attendance row's `teacher_id` overrides the standing
+  `enrollment.teacher_id` for this session and for nothing else;
+* **a guest from another room** — a student whose standing room is not this one, given an
+  attendance row whose `teacher_id` belongs to a teacher of this room. He appears here for
+  this lesson; `enrollment` is never written, so his standing row is untouched by
+  construction rather than by care.
+
+Room membership on a day therefore reads: standing members = students whose P12 assignment
+for that day names this room; guests = attendees of this session whose today-teacher is one
+of this room's teachers. A guest defaults to the head's own teacher_id, so he is never a
+row with a NULL room, and reassigning him afterwards is the same «назначения» tap as for
+anybody else.
+
+**Attendance states are two, not three.** Untouched and «был». A repeat tap DELETES the
+row rather than writing «не был»: untapping is "I tapped the wrong person", which is P4's
+erratum semantics, not a claim that the child is absent. «пришли N из M» counts the rows.
+A «не был» row written later by P14 reads here as not-present and a tap on it sets «был»,
+so the third state is handled without a third tap.
+
+**The session of a day is get-or-create, inside a transaction, and reads take `min(id)`.**
+`sessions.held_on` has no unique index and three heads open their screens in the same
+minute; two sessions for one day would split attendance in half.
+
+### 3 · What is NOT in a payload, and why that is the privacy boundary
+
+The room is not in any payload — it comes from the head's own `identity.teacher.room`.
+The day is not in any payload — it comes from the clock. So a forged `callback_data`
+cannot reach another room or another day: there is nothing in it to forge, which is P4's
+rule ("the decision never consults the id") applied to the two fields that matter here.
+Only `student_id` and `teacher_id` travel, and both are validated against what this room
+actually contains before anything is written.
+
+Payload classes live in `bot/keyboards/room.py` because `bot/callbacks.py` is READ-ONLY.
+They are the SAME idiom — `CallbackData` factory, numbers only, target state never a
+toggle — built through P4's own `bot.keyboards.grid.button`, which is where the 64-byte
+law has its carrier. Not a second idiom: the same one, from the module that owns it.
+
+### 4 · Order of work, one commit per part
+
+1. `core/services/room.py` — ports, `RoomService`, the roster/attendance/guest/assignment
+   domain. Debts come from `ProgressService.debts`, never recomputed.
+2. `bot/keyboards/room.py` — payloads, `room_keyboard`, `room_header`, the two second
+   screens. Surname order is enforced HERE as well as in the service: the keyboard is the
+   place where the temptation to sort by debts lives, so that is where the rule needs a
+   carrier.
+3. `bot/routers/room.py` — handlers, `answer()` before every redraw, role gate `head` +
+   `owner`.
+4. `tests/room/` — the 18 x 3 coverage the criterion asks for, printed by the tests
+   themselves, plus the named `standing` test.
+5. `infra/sessions_repo.py` + `bot/app.py` — the two out-of-zone lines, separate commit.
+
+### 5 · The готовности criterion is accepted as written, with one note
+
+`grep -rniE "рейтинг|percent|процент|badge|streak|leaderboard|очк[иов]|молодец|отлично"
+bot/ core/` prints `rc=1` only if the tree contains none of those substrings. The forbidden
+words therefore cannot be written even to FORBID them in a comment — P4 hit this and worked
+around it by naming the rule without the words. This position does the same.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
