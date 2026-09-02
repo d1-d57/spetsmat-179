@@ -397,6 +397,15 @@ _LABEL = re.compile(r"^\d+\s*[а-яёa-z]?[%s]*$" % re.escape(golos.LABEL_DECORA
 #: full stop of a line.  Stripped from the ends of a token before it is classified.
 _TRIM = " \t,;.·•"
 
+#: A separator with no space after it, which is ordinary phone typing and used to be a
+#: silent loss.  «7, 9а, 11б,12» made `11б,12` ONE token, which is not a label, so it was
+#: classified as a NAME -- задачи 11б and 12 vanished and the screen showed a tidy table
+#: with «кто это?» underneath and no way to recover them.  Stripping only the ENDS of a
+#: token cannot see an interior comma, so the space is put back before tokenising.
+#: The full stop is deliberately NOT here: it ends sentences and abbreviations, and a
+#: token already loses a trailing one to ``_TRIM``.
+_UNSPACED = re.compile(r"([,;·•])(?=\S)")
+
 
 @dataclass
 class TextBlock:
@@ -539,8 +548,8 @@ def split_blocks(text: str) -> list:
     """
     chunks: list = []
     for raw_line in (text or "").splitlines():
-        line = raw_line.strip()
-        if not line or _RULE.match(line):
+        line = _UNSPACED.sub(r"\1 ", raw_line.strip())
+        if not line or _RULE.match(raw_line.strip()):
             continue
         if _opens_a_block(line) or not chunks:
             chunks.append([line])
@@ -724,23 +733,30 @@ def digest_of(text: str) -> str:
 def _boundary_is_a_guess(block: TextBlock, match) -> bool:
     """Is this row's very EXISTENCE an inference rather than something the teacher wrote?
 
-    A block cut out of the middle of a line whose name is ONE WORD is the one case where
-    the parser decided where a child begins.  «Санин 7, 9а Катя Долкирева 2а» is two words
-    and reads as a name; «Санин 7, 9а дома 11б» is one, and «дома» matches Домра at 89 --
-    over the lone-word floor, CERTAIN, and задача 11б staged on a child the teacher never
-    wrote.  The mirror image of the bug the mid-line cut was added to fix, and it must not
-    be traded for it.
+    ONE WORD is the whole condition, and then one of two doubts on top of it:
 
-    So the cut still happens -- a name that really is the next child must not be swallowed
-    -- and what changes is the CONFIDENCE: the row is doubtful, its cells arrive unticked,
-    and the teacher's tap is what makes it real.  The prose word costs one glance; the real
-    child costs one tap.  Neither costs a plus on the wrong ребёнок.
+      * the block was cut out of the MIDDLE of a line, so the parser chose where the child
+        begins -- «Санин 7, 9а Катя Долкирева 2а» is two words and reads as a name;
+        «Санин 7, 9а дома 11б» is one, and «дома» matches Домра at 89;
+      * or the single word did not match EXACTLY, so it also chose who the child is.
+
+    ⚠ THE SECOND CLAUSE IS NOT DECORATION, and it was added after the first proved to be
+    keyed on the wrong thing.  The guard used to depend on ``mid_line`` alone, so «Санин 7
+    дома 11б» was caught and «Санин 7\nдома 11б» was not: the same word, the same score of
+    89, the same plus staged on Домра — only the newline had moved.  A property of the
+    evidence must not turn on where the teacher's phone wrapped.
+
+    What the guard does NOT do is refuse.  The cut still happens, the child is still named
+    and the alternatives are still offered; what changes is that the cells arrive UNTICKED
+    and the row is drawn with its ⚠.  «Быков» and «Бочарова» written alone match exactly,
+    so the ordinary shorthand costs nothing at all; «Долкирева», the owner's own
+    misspelling, costs one tap — which is the задание's own trade, «при сомнении — КНОПКИ».
     """
-    return (
-        block.mid_line
-        and match.verdict is Verdict.CERTAIN
-        and len(block.name_text.split()) == 1
-    )
+    if match.verdict is not Verdict.CERTAIN:
+        return False
+    if len(block.name_text.split()) != 1:
+        return False
+    return block.mid_line or match.score < 100.0
 
 
 def build_draft(text: str, *, students: Sequence, catalogue) -> golos.Draft:
@@ -774,7 +790,7 @@ def build_draft(text: str, *, students: Sequence, catalogue) -> golos.Draft:
             # do is arrive already ticked on the strength of a boundary the parser
             # inferred rather than read.
             verdict = Verdict.DOUBTFUL
-            reason = "%s; граница блока внутри строки — подтвердите" % match.reason
+            reason = "%s; написано одно слово — подтвердите ученика" % match.reason
             cells = [
                 TextCell(
                     label=cell.label,

@@ -536,3 +536,89 @@ def test_a_bracket_after_the_labels_belongs_to_the_next_child(students, catalogu
     assert rows[0].sheet_marker is None
     assert rows[0].cells[0].on_lead_sheet is True, "задача 7 was moved onto листок 3д"
     assert rows[1].sheet_marker == "3д"
+
+
+# =============================================================================
+#  THE LAST TWO, AND WHERE THE PARSER STOPS
+# =============================================================================
+#
+# The third verifier pass found that the guard above was keyed on the wrong thing and that
+# a comma without a space still lost задачи silently.  Both are closed here; the third
+# thing it found is not closable and is stated as a test of what the parser DOES do.
+
+def test_the_guard_does_not_depend_on_where_the_line_happened_to_break(
+    students, catalogue
+):
+    """«Санин 7 дома 11б» and «Санин 7\\ndома 11б» must be judged the same way.
+
+    They were not.  The guard keyed on ``mid_line``, so the newline decided whether задача
+    11б arrived staged on Домра Евгений — the same word, the same score of 89, the same
+    plus.  A property of the EVIDENCE cannot turn on where a phone wrapped the text.
+    """
+    from bot.routers.photo import checked_cells
+    from bot.routers.text_input import draft_to_state
+
+    for text in ("Санин 7, 9а дома 11б", "Санин 7, 9а\nдома 11б"):
+        draft = tekst.build_draft(text, students=students, catalogue=catalogue)
+        stray = draft.rows[1]
+        assert stray.verdict is Verdict.DOUBTFUL, (text, stray.reason)
+        assert all(not cell.ticked for cell in stray.cells), text
+        assert all(
+            student_id != stray.student_id
+            for student_id, _ in checked_cells(draft_to_state(draft))
+        ), text
+
+
+def test_a_lone_surname_that_matches_exactly_costs_the_teacher_nothing(
+    students, catalogue
+):
+    """The guard must not tax the ordinary shorthand.
+
+    «Бочарова» and «Быков» written alone match a child EXACTLY — there is no question of
+    who is meant — so they stay CERTAIN and their cells stay pre-ticked.  Only a lone word
+    that had to be GUESSED at asks for the tap.
+    """
+    for lone in ("Бочарова 12", "Быков 12"):
+        row = rows_of(lone, students, catalogue)[0]
+        assert row.verdict is Verdict.CERTAIN, (lone, row.reason)
+        assert [cell.ticked for cell in row.cells] == [True], lone
+
+
+def test_a_comma_without_a_space_does_not_swallow_the_problems_after_it(
+    students, catalogue
+):
+    """«7, 9а, 11б,12» — a phone's ordinary typing, and it used to lose два номера.
+
+    `11б,12` came back as ONE token, which is not a label, so it was read as a NAME: the
+    table showed Исанин with two problems instead of four and a «кто это?» row underneath
+    that the teacher could not even tap into.  Silent, and on the channel tomorrow's lesson
+    runs on.
+    """
+    row = rows_of("Лёня Санин 7, 9а, 11б,12", students, catalogue)[0]
+
+    assert row.student_id == 23
+    assert [cell.label for cell in row.cells] == ["7", "9а", "11б", "12"]
+
+
+@pytest.mark.parametrize("separator", [",", ";", "·"])
+def test_every_unspaced_separator_divides_the_labels(separator, students, catalogue):
+    row = rows_of("Катя Долкирева 2а%s2б%s4" % (separator, separator), students, catalogue)[0]
+    assert [cell.label for cell in row.cells] == ["2а", "2б", "4"]
+
+
+def test_a_prose_word_that_IS_a_childs_name_is_read_as_that_child(students, catalogue):
+    """Where this parser stops, written down rather than left to be discovered.
+
+    «вера 2а» resolves to Данилова Вера, CERTAIN and pre-ticked — because «Вера» IS her
+    name, exactly, and nothing in the text distinguishes the word from the name.  No rule
+    can separate them without also refusing a teacher who really did write «Вера 2а», and
+    refusing that is the worse error.
+
+    This is the boundary the confirmation table exists for: the row is drawn with the
+    child's full name on it, nothing is written until a person has looked at it, and the
+    отчёт names the limit instead of implying it is not there.
+    """
+    row = rows_of("вера 2а", students, catalogue)[0]
+
+    assert row.student_id is not None
+    assert catalogue.student(row.student_id).name == "Вера"
