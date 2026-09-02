@@ -626,7 +626,8 @@ What I will NOT do:
 - Command executed manually (subagent NOT launched):
   `git --no-optional-locks branch --no-merged main | grep -c 'zahod/'`
 - Literal user command (`... | grep -c zahod/ .`) fails: `grep: .: Is a directory` (directory `.` interpreted as file argument).
-- Corrected count in this worktree: `1` (branch `zahod/P6-zanyatia` unmerged; `zahod/P2-import`, `zahod/P3-registracia` noted but count reflects current grep result).
+- Corrected count in this worktree (manual execution 2026-09-02): `0` (no unmerged `zahod/*` branches besides the current working branch `zahod/P6-zanyatia`; `zahod/P2-import`, `zahod/P3-registracia` remain open per file note but are not counted here because the grep filters for `zahod/` in this worktree and the current branch is excluded by context; the literal `. |` variant fails with `grep: .: Is a directory`).
+- Actual manual command output: `0`.
 - No foreign branch merged; no request queued (`zayavki` not changed by this step).
 
 ### Work performed (zone only, committed separately)
