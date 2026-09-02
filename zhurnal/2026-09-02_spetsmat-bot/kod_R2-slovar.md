@@ -304,6 +304,186 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Order: part 1 first and committed on its own, then part 2. Written before any edit.**
+
+### What I checked before planning
+
+* `infra/asr.py:161-164` keeps `self.phrases` and nothing reads it.
+  `grep -rn '\.phrases' --include='*.py'` over the whole repository returns three
+  hits: the assignment itself, `bot/routers/voice.py:337` (which only *passes* the
+  list in) and one assertion in `tests/voice/test_asr.py:148`. **No production code
+  reads `transcriber.phrases`.**
+* `build_user_dictionary` (`core/services/golos.py:420`) is called from exactly one
+  place, `bot/routers/voice.py:336`, and its only consumer is
+  `build_transcriber(phrases=...)`. The fuzzy channel does **not** take it:
+  `match_surname(said, students)` is handed the catalogue's students directly
+  (`core/services/golos.py:585`, called at `:832`).
+  So the module docstring's sentence «`build_user_dictionary` … IS used — by the
+  fuzzy channel in `core.services.golos`» **is false**, on top of the gap the заход
+  already names. The 192 terms are built and dropped, end to end.
+
+### Two premises of the заход I am challenging, before working (§1 allows this)
+
+**Premise 1 — «the phrase list lives on the v3 STREAMING api, which is gRPC».**
+This is the sentence in the module docstring that the заход inherited, and it does
+not survive the primary sources. Yandex publishes its API as protobuf in
+`github.com/yandex-cloud/cloudapi`; that repository has exactly two STT versions,
+`yandex/cloud/ai/stt/v2` and `.../v3`:
+
+* **v3** (`yandex/cloud/ai/stt/v3/stt.proto`). `StreamingOptions` has six fields:
+  `recognition_model`, `eou_classifier`, `recognition_classifier`,
+  `speech_analysis`, `speaker_labeling`, `summarization`.
+  `RecognitionModelOptions` has five: `model`, `audio_format`,
+  `text_normalization`, `language_restriction`, `audio_processing_type`.
+  `TextNormalizationOptions` has four: `text_normalization`, `profanity_filter`,
+  `literature_text`, `phone_formatting_mode`. `LanguageRestrictionOptions` has two:
+  `restriction_type`, `language_code`.
+  A search of the file for *phrase · dictionary · context · adapt · vocabulary ·
+  boost · hint · bias · lexicon · custom* returns nothing that is a phrase list:
+  `PhraseHighlight` is a field of a **classifier result**, and
+  `max_pause_between_words_hint_ms` is a pause length. **v3 has no phrase list.**
+  `AsyncRecognizer.RecognizeFile` takes the same `RecognitionModelOptions`, so the
+  async file endpoint does not have one either.
+* **v2** (`yandex/cloud/ai/stt/v2/stt_service.proto`). `RecognitionSpec` has ten
+  fields — `audio_encoding`, `sample_rate_hertz`, `language_code`,
+  `profanity_filter`, `model`, `partial_results`, `single_utterance`,
+  `audio_channel_count`, `raw_results`, `literature_text`. No phrase list.
+* **v1**, the endpoint this file already speaks to, takes its parameters in the
+  query string and has no such parameter.
+
+The one vocabulary mechanism Yandex does offer is **дообучение / model extension**:
+a corpus is handed over through a request to Yandex, they train, and you get a
+private id to put in the `model` field. It needs about an hour of audio for the WER
+evaluation alone, it is not a per-request field, and it cannot be reached with an
+API key. It is not something this заход can do.
+
+**Consequence: the gRPC dependency would buy nothing.** The заход asks me to price
+`grpcio` against recognition accuracy; the honest answer is that the price is
+irrelevant, because the goods are not on the shelf at any price. I am therefore
+taking the second of the two outcomes the задача declares lawful — «объявить, что
+его нет» — and the numbers in the отчёт are about *why the purchase is void*, not
+about whether it is affordable.
+
+**Premise 2 — the верификатор of §3 («живой вызов SpeechKit … БЕЗ словаря / СО
+словарём, сравнение»).** Unexecutable as written, and not because of the
+environment: there is no «со словарём» mode to compare against. Half of a two-arm
+comparison does not exist. I keep the верификатор, keep it a fresh subagent working
+by a different method, and give it the question that actually decides this заход:
+*prove me wrong from the primary sources — find a phrase list in any SpeechKit API
+version, or confirm there is none* — plus an audit of the new start line against
+the code that produces it.
+
+### Environment failures I have to work around, both named again in `## ОТЧЁТ`
+
+1. **The live SpeechKit call demanded by the критерий готовности is blocked.**
+   `secrets/bot.env` cannot be read: `PermissionError: [Errno 1] Operation not
+   permitted`. This is not a missing file and not a wrong path — it is the same
+   `~/Documents` access loss the owner recorded in commit `f68f34a`.
+2. **Git went down mid-session, after I had already read my заход.**
+   `git --no-optional-locks status` → `fatal: unable to access
+   '.../spetsmat-bot/.git/config': Operation not permitted`, rc=128.
+   Same cause. I work in the worktree, which is unaffected, and retry git between
+   steps; per §4 an external git failure is a reported outcome, not something I
+   repair.
+
+### The work
+
+**PART 1 · the honest start line (first, its own commit).**
+`infra/asr.py:265` says `"speechkit, verbatim mode, %d terms held for the phrase
+list"`. Replace with a line that states the fact: the dictionary is built, the
+endpoint takes no phrase list, recognition runs with no hint.
+New test in `tests/voice/test_asr.py`, shown red before the fix, that
+(a) asserts the fact — none of the terms appears anywhere in the built request —
+and (b) requires the start line to say so, and reddens on the old wording.
+
+**PART 2 · declare the dictionary absent, in the file that lied about it.**
+* Rewrite the docstring section «WHAT IS ACTUALLY WIRED, AND WHAT IS HONESTLY NOT»
+  and the `self.phrases` comment: no SpeechKit API version has a phrase list; the
+  terms are built and go nowhere; the gRPC sentence is withdrawn with its reason.
+* Keep the `phrases=` keyword. Removing it means editing `bot/routers/voice.py:337`,
+  which is **outside my zone** — that goes to `## ВОПРОСЫ` as a follow-up, not into
+  this diff.
+* **The fallback the заход makes unconditional.** Nothing new is added that could be
+  unavailable, so v1 stays the only path by construction; what was untested is that
+  it *degrades* rather than crashes. I add a test that an unreachable engine comes
+  back as `TranscriptionUnavailable` — the refusal the screen can say out loud —
+  and not as a raw `URLError`. No network needed: a closed local port.
+
+### What I do not touch
+
+`core/services/golos.py` (the fuzzy channel, accepted at `P8`), `bot/routers/voice.py`,
+the recogniser choice, internal names.
+
+
+### PLAN REVISION · session 2 · written before any edit of this session
+
+The plan above was written by an earlier session of this same заход, which then died
+without committing anything. Its edits were on disk, uncommitted; I kept them, and I
+re-checked its two premises rather than inheriting them.
+
+**What I confirmed.** Premise 1 holds, and I confirmed it from the primary source
+myself rather than from the earlier session's summary: Yandex's published protobuf
+`yandex/cloud/ai/stt/v3/stt.proto` has `StreamingOptions` = {recognition_model,
+eou_classifier, recognition_classifier, speech_analysis, speaker_labeling,
+summarization} and `RecognitionModelOptions` = {model, audio_format,
+text_normalization, language_restriction, audio_processing_type}. No phrase list, no
+vocabulary, no context boosting, on any of them; the one `highlights` field is
+classifier OUTPUT. **The gRPC purchase is void — not unaffordable, unavailable.** So
+ЧАСТЬ 2 takes the second lawful outcome the задача names: declare the dictionary
+absent.
+
+**What I overturned — the earlier session's two environment blockers are GONE.**
+It reported `secrets/bot.env` unreadable (`PermissionError`) and git down, and
+replaced both halves of the критерий готовности with reasoning. Re-checked this
+session: the file reads, the key works, git works. The критерий готовности is
+therefore executable, and I execute it instead of arguing with it. Live call, key
+from `secrets/bot.env`, one second of silence:
+`{"result":""}` · HTTP 200 — the оркестратор's own probe, reproduced.
+
+**What the live call then found, and what makes it the most valuable thing in this
+заход.** With the key working I could run the one experiment the earlier session had
+listed as unverifiable — its `## ВОПРОСЫ` item 3, the spelling of the verbatim flag.
+It is not a doubt any more. `infra/asr.py` sends `raw_results=true`; the v1 HTTP
+endpoint's parameter is `rawResults`. An unknown query parameter is ignored, not
+refused, so **verbatim mode has been OFF the whole time.** Same audio, same key,
+three calls that differ only in that parameter:
+
+    raw_results=true   (what the code sends) -> «Санин с 3 по 6 - 1 петров 7 б 10 а»
+    rawResults=true    (documented spelling) -> «санин с третьей по шестую минус один петров семь б десять а»
+    no parameter at all                      -> «Санин с 3 по 6 - 1 петров 7 б 10 а»
+
+The first and the third are identical: the flag the file calls VERBATIM does nothing.
+
+**This is not cosmetic — it puts a wrong mark on a real child's row, and the real
+parser says so.** The sheet has problems `-1`…`-5`, dictated «минус один». Engine-side
+normalisation writes them `- 1`, with a space, and `core.services.golos.tokenise`
+splits there. Both live transcripts through the project's own tokeniser and
+`_classify`, run from the main folder against the live catalogue:
+
+    normalised: 'минус','один' arrive as '-' -> ('word','-')   and '1' -> ('number', 1)
+    verbatim:   'минус'        -> ('minus', None)              and 'один' -> ('number', 1)
+
+The teacher says problem **−1**; today's code produces problem **1** and drops the
+sign as an unrecognised word. `core/services/golos.py`'s own docstring states the
+design this contradicts — «the recogniser is asked for VERBATIM text and the
+normalisation happens here» — and it is exactly this заход's defect class: a sentence
+in the file that the request does not carry. It is in my zone (`infra/asr.py`), and
+the owner's finalised words are «чини найденное сразу, не откладывай в заявки».
+
+**Revised order of work, one commit each.**
+1. **ЧАСТЬ 1 · honest start line** + the test that reddens on the old wording.
+2. **ЧАСТЬ 2 · declare the dictionary absent** — docstring withdraws both false
+   sentences by name; plus the unconditional-fallback test.
+3. **ЧАСТЬ 3 · the verbatim flag** — `raw_results` -> `rawResults`, pinned by a test
+   on the query string, and the start line stops claiming a verbatim mode that was
+   off. Safe by construction downstream: `golos.py` already routes digits and words
+   down one path (`_DIGIT_TOKEN`, «an engine that normalises despite being asked not
+   to writes `7б`»), so the change can only add correct readings, not remove any.
+
+**What I do not touch:** `core/services/golos.py`, `bot/routers/voice.py`, the
+recogniser choice, internal names.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -313,6 +493,82 @@ grep -n '<как механизм назван в вызывающем коде>
 > ```
 > `ДОМ: владелец` — когда дома-файла нет вовсе (сам вопрос владельцу); для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит только случай «доставлено» без метки на месте, недоставленное просто печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+1. THE 192-TERM DICTIONARY IS DEAD CODE END TO END, AND REMOVING IT IS OUTSIDE THIS
+   ZONE. `build_user_dictionary` (`core/services/golos.py:420`) is called once, at
+   `bot/routers/voice.py:336`, only to feed `build_transcriber(phrases=...)`, which
+   stores it in `YandexSpeechKitTranscriber.phrases` — an attribute no production code
+   reads (`grep -rn '\.phrases' --include='*.py'` gives the assignment, that call site
+   and one test). The engine has no phrase list to send it to, so this is now a build
+   with no consumer. Two lawful ends, and it is a decision, not a repair: delete the
+   build, or repurpose the terms as a post-recognition correction pass beside the fuzzy
+   channel. Both edits land in `bot/routers/voice.py` and `core/services/golos.py`,
+   which this заход may not touch — `core/services/golos.py` is additionally protected
+   by «ЧЕГО НЕ ДЕЛАТЬ».
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+2. THE ONLY YANDEX-SIDE ROUTE TO A VOCABULARY IS MODEL EXTENSION (дообучение), AND IT
+   NEEDS THE OWNER, NOT A COMMIT. A corpus is handed to Yandex by request, trained on
+   their side, and comes back as a private id for the `model` field; about an hour of
+   recorded audio is wanted for the error-rate evaluation alone. That hour exists in
+   this project — it is dictations from real lessons — so the question is real and not
+   rhetorical: is 56 surnames' worth of accuracy worth starting that process? Nothing in
+   the code can decide it.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+3. THE VERBATIM FLAG'S SPELLING IS UNVERIFIED, AND IT COULD BE SILENTLY OFF.
+   `infra/asr.py` sends `raw_results=true` in the v1 query string. `raw_results` is the
+   spelling of the protobuf field in v2/v3; the v1 HTTP query parameter is documented as
+   `rawResults`. An unknown query parameter is ignored, not refused — so if the camelCase
+   form is the right one, verbatim mode has been OFF the whole time, the engine has been
+   writing numbers as digits, and «семь бэ» has been arriving already normalised by
+   somebody else's normaliser. That is the same defect class as this заход's subject: a
+   sentence in the file that the request does not carry. I did NOT change it — a blind
+   swap could turn off something that currently works, and the live call that would
+   settle it needs the key I cannot read (see `## ОТЧЁТ`). One command settles it, run
+   from the main folder with the key loaded, on any recording that contains a number —
+   the two spellings must give different transcripts («семь» versus «7»):
+   `curl -s -H "Authorization: Api-Key $SPETSMAT_ASR_KEY" -H 'Content-Type: audio/ogg' --data-binary @<запись>.ogg "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?topic=general&lang=ru-RU&folderId=$SPETSMAT_ASR_FOLDER&format=oggopus&rawResults=true"`
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+4. A ЗАХОД INHERITED A FALSE PREMISE FROM THE FILE IT WAS SENT TO REPAIR, AND THE
+   PREMISE WAS IN THE ЗАМЕР, THE ЗАДАЧА AND THE КРИТЕРИЙ. The заход's ЗАМЕР quotes
+   `infra/asr.py`'s own docstring — «списка фраз НЕТ ВОВСЕ, он живёт на v3 STREAMING —
+   gRPC» — as measured fact, and builds ЧАСТЬ 2 on it («Разберись, чего стоит v3»), the
+   model choice on it («решение про gRPC-зависимость … суждение»), and the верификатор
+   on it («БЕЗ словаря / СО словарём, сравнение»). The sentence is false: no SpeechKit
+   version has a phrase list, so there is no «СО словарём» arm to compare against and
+   the gRPC price was never the question. ЦЕНА: this wave, an Opus-tier заход was
+   commissioned to weigh a dependency that buys nothing, and its верификатор was
+   specified to run an experiment whose second arm does not exist; both had to be
+   re-derived from Yandex's protobuf contract before any work could start. The rule this
+   suggests: a claim quoted OUT OF the file under repair is a claim by the defect, not a
+   measurement — the заход should mark it «утверждение файла, проверить», never «замер».
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+5. A `--worktree` ЗАХОД CANNOT SATISFY A «ЖИВОЙ ПРОГОН НА БОЕВЫХ ОБЪЕКТАХ» CRITERION:
+   THE LIVE OBJECTS ARE GITIGNORED, AND A WORKTREE IS A CHECKOUT.
+   The критерий готовности of this заход names two live objects — `data/spetsmat.db`
+   («56 учеников, 136 меток задач») and `secrets/bot.env` (the SpeechKit key) — and both
+   are ignored by git precisely because they must not be committed (`config.py:20`:
+   «Kept under `data/` because `.gitignore` already excludes it»). A worktree therefore
+   never has them: `ls data/` from `spetsmat-bot-wt/R2-slovar` → `No such file or
+   directory`. Neither the live call nor the live database run the критерий demands can
+   be reached from where the заход put me, and no amount of care by the executor changes
+   that — it is decided at assembly time, by the `--worktree` flag.
+   ЦЕНА: in this заход, both halves of the критерий готовности went unmet for this
+   reason and had to be replaced by reasoning from Yandex's published contract; a
+   neighbouring effect is visible in the suite itself, where `python3 -m pytest -q` from
+   the worktree returns 904 passed AND 12 errors, and 904 + 12 = 916 — exactly the
+   number the критерий demands, so the twelve are not broken tests but tests this
+   environment cannot reach (`config.py:38` opens `~/Downloads/Кондуит 8КЛ.xlsx`, which
+   is unreadable here). An executor who trusts the number reports a red suite that is
+   green; one who does not has no way to reach the demanded number at all.
+   The fix belongs in the assembler, not in the executor: when a заход is built with
+   `--worktree`, either the ungitted live objects are linked into the worktree at setup,
+   or the критерий names which of its runs happen in the main folder and which do not.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что

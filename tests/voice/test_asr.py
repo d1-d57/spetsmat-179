@@ -35,9 +35,18 @@ def client():
 
 def test_the_request_asks_for_verbatim_mode(client):
     """«Smart» normalisation turns dictated digits into a lottery, and the digits are the
-    whole payload.  ``raw_results=true`` is the switch that leaves them as words."""
+    whole payload.  ``rawResults=true`` is the switch that leaves them as words.
+
+    THIS TEST WAS GREEN FOR THE WHOLE TIME THE SWITCH WAS OFF, and that is worth a
+    sentence, because it is how the defect survived: it asserted the same misspelling
+    the code made — ``raw_results``, the protobuf field name — so it compared the file
+    to itself and never to the endpoint.  A test that copies its expectation out of the
+    implementation cannot fail on a wrong implementation.  What settled it was a live
+    call, not a green suite; the measurement is in
+    ``test_the_verbatim_flag_is_spelled_the_way_the_http_endpoint_reads_it``.
+    """
     url, _headers, _body = client.build_request(b"ogg-bytes")
-    assert "raw_results=true" in url
+    assert "rawResults=true" in url
 
 
 def test_the_request_names_the_container_and_no_sample_rate(client):
@@ -147,6 +156,92 @@ def test_with_a_key_the_door_hands_back_the_real_client_carrying_the_terms():
     assert isinstance(transcriber, YandexSpeechKitTranscriber)
     assert transcriber.phrases == ["Петров", "Кахиани"]
     assert "verbatim" in how
+
+
+#: Wordings a teacher reads on a lesson as «the dictionary works».  The first of them
+#: is the line this file shipped with: «held» is literally true — the terms ARE held, in
+#: an attribute nobody reads — and false by implication, which is the class ``P18`` was
+#: written for.  The owner read it as «словарь работает» and was wrong.
+READS_AS_A_WORKING_DICTIONARY = (
+    "terms held for the phrase list",
+    "held for the phrase list",
+    "with the phrase list",
+    "dictionary sent",
+)
+
+
+def test_the_start_line_says_the_dictionary_never_leaves_this_process():
+    """The fact and the sentence about the fact, asserted together in one test.
+
+    Apart they rot apart: a line that describes a request is only honest while the
+    request stays what it describes, and the request is one edit away at all times.
+    """
+    transcriber, how = build_transcriber(
+        phrases=["Петров", "Кахиани", "7б"],
+        environ={"SPETSMAT_ASR_KEY": "k", "SPETSMAT_ASR_FOLDER": "f"},
+    )
+    url, headers, body = transcriber.build_request(b"ogg-bytes")
+
+    # THE FACT.  Nowhere in the request — not the query, not a header, not the body.
+    carried = [
+        term
+        for term in transcriber.phrases
+        if term in url or any(term in value for value in headers.values())
+    ]
+    assert carried == [], "terms reached the request after all: %s" % carried
+    assert transcriber.phrases and b"".join(t.encode() for t in transcriber.phrases) not in body
+
+    # THE SENTENCE.  It has to carry the fact, and it must not read as its opposite.
+    assert "NO DICTIONARY IN THE REQUEST" in how, how
+    for misleading in READS_AS_A_WORKING_DICTIONARY:
+        assert misleading not in how, "the start line reads as a working dictionary: %s" % how
+    assert str(len(transcriber.phrases)) in how, "the line does not say how many terms: %s" % how
+
+
+def test_an_unreachable_engine_becomes_a_refusal_the_screen_can_say_out_loud():
+    """The fallback the задача makes unconditional: a lesson outlives a recogniser.
+
+    Port 1 on the loopback is closed on every machine, so this needs no network and no
+    key.  What it pins is that the failure arrives as ``TranscriptionUnavailable`` —
+    the one exception ``bot/routers/voice.py`` knows how to turn into «не расслышал,
+    повторите» — and never as a raw ``URLError`` that reaches the teacher as a crash.
+    """
+    client = YandexSpeechKitTranscriber(
+        "k", "f", endpoint="http://127.0.0.1:1/speech/v1/stt:recognize", timeout=2
+    )
+
+    with pytest.raises(TranscriptionUnavailable) as refusal:
+        client.transcribe(b"ogg-bytes")
+    assert "unreachable" in str(refusal.value)
+
+
+def test_the_verbatim_flag_is_spelled_the_way_the_http_endpoint_reads_it():
+    """The one word that decides whether «минус один» becomes -1 or 1.
+
+    ``raw_results`` is the PROTOBUF field name — it is real, it is field 10 of v2's
+    ``RecognitionSpec``, and it is why this spelling looks right.  The v1 HTTP endpoint
+    this file talks to takes ``rawResults``, and an unknown query parameter is IGNORED,
+    not refused: the wrong spelling returns 200 with a normalised transcript and no
+    complaint anywhere.  Measured live on 02.09 with the owner's key, same audio,
+    three calls differing only here:
+
+        raw_results=true  -> «Санин с 3 по 6 - 1 петров 7 б 10 а»
+        rawResults=true   -> «санин с третьей по шестую минус один петров семь б десять а»
+        no parameter      -> «Санин с 3 по 6 - 1 петров 7 б 10 а»
+
+    The first and the third are the same string: the flag was doing nothing.  The cost
+    is a wrong mark — the sheet has problems -1..-5, dictated «минус один», and
+    engine-side normalisation writes them «- 1» with a space, which
+    ``core.services.golos.tokenise`` splits into an unrecognised «-» and the number 1.
+    The teacher says problem -1 and the draft offers problem 1.
+    """
+    client = YandexSpeechKitTranscriber("k", "f")
+    url, _, _ = client.build_request(b"ogg-bytes")
+
+    assert "rawResults=true" in url, url
+    # The protobuf spelling must not come back: it is silently ignored, so nothing
+    # else in this suite would ever notice its return.
+    assert "raw_results" not in url, "the ignored protobuf spelling is back: %s" % url
 
 
 def test_the_fake_refuses_an_unscripted_recording_instead_of_inventing_one():

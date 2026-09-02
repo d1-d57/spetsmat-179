@@ -24,12 +24,66 @@ WHAT IS ACTUALLY WIRED, AND WHAT IS HONESTLY NOT
 ------------------------------------------------
 ``YandexSpeechKitTranscriber`` is real and its request is asserted by tests that need no
 key and no network: verbatim mode on, ``oggopus`` as the format, and NO sample rate in
-the request at all.  What it does NOT carry is the user dictionary: on this project's own
-reading, the phrase list lives on the v3 STREAMING api, which is gRPC and would cost a
-dependency this repository does not have.  ``build_user_dictionary`` therefore exists,
-is built from the catalogue and IS used — by the fuzzy channel in
-``core.services.golos``, which is the same compensation applied one layer later and under
-test.  The gap is named in the report rather than papered over.
+the request at all.
+
+What it does NOT carry is a user dictionary — **and neither would any other client of
+this engine, because SpeechKit has no such parameter to carry.**  Two sentences that
+stood here until 02.09 were wrong, and both are withdrawn by name, because a file that
+misdescribes itself sends the next reader shopping for the wrong thing:
+
+* «the phrase list lives on the v3 STREAMING api, which is gRPC».  It does not.  Yandex
+  publishes the contract as protobuf, in two versions — v2 and v3; v1, the one used
+  here, is plain HTTP and takes its parameters in the query string.  In v3
+  ``StreamingOptions`` carries ``recognition_model``, ``eou_classifier``,
+  ``recognition_classifier``, ``speech_analysis``, ``speaker_labeling``,
+  ``summarization``; ``RecognitionModelOptions`` carries ``model``, ``audio_format``,
+  ``text_normalization``, ``language_restriction``, ``audio_processing_type``; and the
+  two option messages under those carry a normalisation enum, a profanity flag, a
+  literature flag, a phone-formatting enum, a restriction type and a language code.  In
+  v2 ``RecognitionSpec`` carries ten fields, all of them about the audio or the shape of
+  the output.  There is no phrase list, no vocabulary, no context, no boosting, in
+  either — nor on the async file endpoint, which takes the same options message, nor in
+  the v1 query string this file already uses.  **For a dictionary, the gRPC dependency
+  would buy NOTHING: the price was never the obstacle, the goods do not exist.**  Said
+  precisely, because a flat «v3 buys nothing» would be false and would mislead the next
+  reader in the other direction: v3 does buy the streaming and async paths, and those
+  are worth naming, because THIS file already refuses long dictations at the sync ceiling
+  a few lines below («a longer dictation needs the streaming api»).  What v3 does not
+  buy, at any price, is a phrase list.
+* «``build_user_dictionary`` … IS used — by the fuzzy channel».  It is not.  It is
+  called once, in ``bot.routers.voice.voice_dependencies``, and its only consumer is the
+  ``phrases`` argument below.  The fuzzy channel is handed the catalogue's students
+  directly by ``core.services.golos.match_surname`` and never sees this list.  So the
+  terms are built on every start and read by nobody, and that is what the start line now
+  says out loud.
+
+What Yandex does offer instead is not one mechanism but two, and neither is a phrase
+list:
+
+* **Автотюнинг**, switched on per request by the header ``x-data-logging-enabled: true``.
+  This one IS reachable with the api key we already have — and it biases nothing in the
+  request that carries it.  It consents to the audio being KEPT for future training.
+  Turning it on is a decision about fifty-six children's recorded voices, which is the
+  owner's to make and not a line to add quietly here.
+* **Дообучение модели.**  What is handed over is TEXT, not audio — a глоссарий (TSV, one
+  term per line, numerals spelled out, Latin transliterated, and a separate file per
+  grammatical case) plus text templates; recordings appear only as test material.  It
+  wants on the order of a thousand utterances and several phrases per term, it is not a
+  per-request field, and the result does not come back as a private model id: the
+  changes land in the SHARED ``general:rc`` model, within about four weeks, on Yandex's
+  release cycle.  A decision for the owner, named in the report, not papered over.
+
+⚠ The two paragraphs above are the ONE claim in this docstring that rests on
+documentation rather than on the protobuf contract or on a live call, and SpeechKit's
+docs have moved off ``github.com/yandex-cloud/docs`` to a host that refuses non-browser
+clients — so the freshest text a machine could reach is an archived snapshot.  Read them
+as «this is the shape of it, check before acting», not as a specification.  Everything
+else here is either in the .proto or was measured against the live endpoint.
+
+Recognition therefore runs with no hint, the compensation is entirely downstream in
+``core.services.golos``, and there is exactly one recognition path, so there is nothing
+to fall back FROM: an engine that cannot be reached comes back as
+``TranscriptionUnavailable`` and the lesson goes on with the buttons.
 
 ⚠ A local alternative worth naming: **GigaAM-v3** measures 7,19 % WER on Russian against
 Whisper large-v3's 15,44 %, and runs on four cores in five to eight seconds where Whisper
@@ -129,11 +183,16 @@ class YandexSpeechKitTranscriber:
 
     THE THREE THINGS THE REQUEST MUST GET RIGHT, each with a test:
 
-    * ``raw_results=true`` — the engine writes numbers AS WORDS and leaves them alone.
+    * ``rawResults=true`` — the engine writes numbers AS WORDS and leaves them alone.
       This is the verbatim mode the interview finalised.  With it off the engine returns
       digits it decided on, and «семь бэ» comes back as whatever its normaliser preferred;
       our own normaliser then has nothing to normalise and no way to tell that it was
-      overruled.
+      overruled.  **It WAS off until 02.09**, because this parameter was spelled
+      ``raw_results`` — the protobuf field name, which this HTTP endpoint does not know
+      and therefore ignores in silence.  What it cost is not academic: «минус один», the
+      way problems ``-1``…``-5`` are dictated, came back normalised as «- 1», and
+      ``core.services.golos.tokenise`` splits that into an unrecognised «-» and the
+      number ``1`` — the teacher says problem -1 and the draft offers problem 1.
     * ``format=oggopus`` and **NO sample rate at all.**  Android moved voice notes from
       16 to 48 kHz in March 2024 and older cached messages still exist in the wild, so a
       hardcoded rate is wrong for a message whose age nobody controls.  An ogg container
@@ -158,9 +217,12 @@ class YandexSpeechKitTranscriber:
         self._api_key = api_key
         self._folder_id = folder_id
         self._language = language
-        #: Kept, not sent.  See the module docstring: this endpoint has no phrase list,
-        #: and holding the terms here is what lets the seam stay unchanged when the
-        #: streaming client that CAN send them replaces this one.
+        #: Kept, and NOT sent, and there is no version of this engine that would send
+        #: them — see the module docstring.  The attribute stays because the caller in
+        #: ``bot/routers/voice.py`` passes the list and counting it is what makes the
+        #: start line able to say «%d terms built and going nowhere»; it is not a seam
+        #: waiting for a streaming client, and describing it as one is what kept this
+        #: gap alive for a wave.
         self.phrases = list(phrases)
         self._endpoint = endpoint or self.ENDPOINT
         self._timeout = timeout
@@ -191,7 +253,17 @@ class YandexSpeechKitTranscriber:
                 # ``sampleRateHertz``: see the class docstring.
                 "format=oggopus",
                 # VERBATIM.  Numbers stay words and our own normaliser does the work.
-                "raw_results=true",
+                # THE SPELLING IS THE WHOLE FEATURE, and it is camelCase.  Until 02.09
+                # this read ``raw_results`` — the name of field 10 of v2's protobuf
+                # ``RecognitionSpec``, which is why it looked right and survived review.
+                # The v1 HTTP endpoint reads ``rawResults``, and it IGNORES a parameter
+                # it does not know instead of refusing it: the request came back 200,
+                # normalised, with no complaint, and verbatim mode had never once been
+                # on.  Measured live, same audio, same key: ``raw_results=true`` and no
+                # parameter at all returned the identical string, ``rawResults=true``
+                # returned the words.  Pinned by
+                # ``test_the_verbatim_flag_is_spelled_the_way_the_http_endpoint_reads_it``.
+                "rawResults=true",
             ]
         )
         headers = {
@@ -262,7 +334,13 @@ def build_transcriber(
     if key and folder:
         return (
             YandexSpeechKitTranscriber(key, folder, phrases=phrases),
-            "speechkit, verbatim mode, %d terms held for the phrase list" % len(phrases),
+            # THE LINE A TEACHER READS ON A LESSON.  It says what happens, not what was
+            # intended: «held» was literally true and read as «the dictionary works»,
+            # which is how this gap survived unnoticed.  Pinned by
+            # ``test_the_start_line_says_the_dictionary_never_leaves_this_process``.
+            "speechkit, verbatim mode; NO DICTIONARY IN THE REQUEST: %d terms built, "
+            "this engine takes no phrase list, recognition runs with no hint"
+            % len(phrases),
         )
     missing = [
         name
