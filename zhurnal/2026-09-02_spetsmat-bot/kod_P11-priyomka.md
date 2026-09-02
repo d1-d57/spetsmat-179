@@ -202,7 +202,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 ```
 git --no-optional-locks add -- zhurnal/2026-09-02_spetsmat-bot/kod_P11-priyomka.md                     # вводит НОВЫЕ пути в индекс
 git --no-optional-locks commit -m "<зона>: <что сделано>" -- zhurnal/2026-09-02_spetsmat-bot/kod_P11-priyomka.md   # отсекает всё чужое
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone "zhurnal/2026-09-02_spetsmat-bot/kod_P11-priyomka.md"   # из корня репо; должен быть ✅
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone zhurnal/2026-09-02_spetsmat-bot/kod_P11-priyomka.md   # из корня репо; должен быть ✅
 git --no-optional-locks show --stat                        # обязаны быть ТОЛЬКО твои пути
 ```
 🔴 **КОММИТЬ ПО ХОДУ — РЕШЕНИЕ ВЛАДЕЛЬЦА 25.08 (В11), ПЕРЕВЕРНУВШЕЕ прежний канон «одним последним ходом».** Цена прежнего канона: за сутки ДВА обрыва — канал `opencode run --auto` односторонний и умирает вместе с сессией (владелец закрыл ноутбук), и незакоммиченная работа пропадала целиком. Закончил кусок — закоммитил его; последний ход только ПРОВЕРЯЕТ, что коммитить нечего (`git status --porcelain` пуст, `git_zona.py check --zone` ✅).
@@ -213,7 +213,7 @@ git --no-optional-locks show --stat                        # обязаны бы
 - Красное на ТВОИХ путях (новый `.md` не зарегистрирован в `../../docs/KARTA.md §6`, битая ссылка) — **чини, не обходи**: там только твоё, обходить нечего.
 - Красное на ЧУЖОМ, унаследованном долге (ворота дают сотни ❌ старых нарушений) — законный обход, но ТОЛЬКО с причиной; голый `--no-verify` инструмент отклонит, а причина сама уедет в `INCIDENTY.md`:
 ```
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py commit --zone "zhurnal/2026-09-02_spetsmat-bot/kod_P11-priyomka.md" \
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py commit --zone zhurnal/2026-09-02_spetsmat-bot/kod_P11-priyomka.md \
     --no-verify "чужой долг: <что именно покраснело>" -m "<что и зачем>" --push
 ```
 Ту же причину назови отдельной строкой отчёта долгом. *Урок 9: обход был законен по канону и не существовал в инструменте — первый же коммит владельца встал на чужом долге.*
@@ -367,7 +367,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
 *(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "zhurnal/2026-09-02_spetsmat-bot/kod_P11-priyomka.md"` → ✅
+**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone zhurnal/2026-09-02_spetsmat-bot/kod_P11-priyomka.md` → ✅
 *(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)

@@ -221,7 +221,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 ```
 git --no-optional-locks add -- bot/handlers/ bot/routers/ bot/keyboards/ bot/middleware.py core/services/ tests/teksty/ zhurnal/2026-09-02_spetsmat-bot/kod_P18-teksty.md                     # вводит НОВЫЕ пути в индекс
 git --no-optional-locks commit -m "тексты: <что сделано>" -- bot/handlers/ bot/routers/ bot/keyboards/ bot/middleware.py core/services/ tests/teksty/ zhurnal/2026-09-02_spetsmat-bot/kod_P18-teksty.md   # отсекает всё чужое
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone "bot/handlers/" --zone "bot/routers/" --zone "bot/keyboards/" --zone "bot/middleware.py" --zone "core/services/" --zone "tests/teksty/"   # из корня репо; должен быть ✅
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone bot/handlers/ --zone bot/routers/ --zone bot/keyboards/ --zone bot/middleware.py --zone core/services/ --zone tests/teksty/   # из корня репо; должен быть ✅
 git --no-optional-locks show --stat                        # обязаны быть ТОЛЬКО твои пути
 ```
 🔴 **КОММИТЬ ПО ХОДУ — РЕШЕНИЕ ВЛАДЕЛЬЦА 25.08 (В11), ПЕРЕВЕРНУВШЕЕ прежний канон «одним последним ходом».** Цена прежнего канона: за сутки ДВА обрыва — канал `opencode run --auto` односторонний и умирает вместе с сессией (владелец закрыл ноутбук), и незакоммиченная работа пропадала целиком. Закончил кусок — закоммитил его; последний ход только ПРОВЕРЯЕТ, что коммитить нечего (`git status --porcelain` пуст, `git_zona.py check --zone` ✅).
@@ -232,7 +232,7 @@ git --no-optional-locks show --stat                        # обязаны бы
 - Красное на ТВОИХ путях (новый `.md` не зарегистрирован в `../../docs/KARTA.md §6`, битая ссылка) — **чини, не обходи**: там только твоё, обходить нечего.
 - Красное на ЧУЖОМ, унаследованном долге (ворота дают сотни ❌ старых нарушений) — законный обход, но ТОЛЬКО с причиной; голый `--no-verify` инструмент отклонит, а причина сама уедет в `INCIDENTY.md`:
 ```
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py commit --zone "bot/handlers/" --zone "bot/routers/" --zone "bot/keyboards/" --zone "bot/middleware.py" --zone "core/services/" --zone "tests/teksty/" \
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py commit --zone bot/handlers/ --zone bot/routers/ --zone bot/keyboards/ --zone bot/middleware.py --zone core/services/ --zone tests/teksty/ \
     --no-verify "чужой долг: <что именно покраснело>" -m "<что и зачем>" --push
 ```
 Ту же причину назови отдельной строкой отчёта долгом. *Урок 9: обход был законен по канону и не существовал в инструменте — первый же коммит владельца встал на чужом долге.*
@@ -483,7 +483,7 @@ $ git --no-optional-locks branch --no-merged main | grep -c zahod/
 ## ОТЧЁТ — (заполняет исполнитель)
 **АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tests/teksty/sobrat.py` — запустить `python3 tests/teksty/sobrat.py` из корня репозитория; печатает КАЖДУЮ строку, доезжающую до живого человека, с адресом `файл:строка`, каналом и текстом. Это тот самый «прочитать все тексты одним заходом», который просил владелец, и он повторяем: следующий заход не начинает с нуля.
 **РОД АРТЕФАКТА:** `исходник`
-**КОММИТ:** `d049e2f` — `тексты, разбор верификатора: починены семь его находок, из них ЧЕТЫРЕ — ложь, которую внесла моя же правка…` (последний в цепочке из девяти; работа коммитилась по ходу, часть за частью) · `git_zona.py check --zone "bot/handlers/" --zone "bot/routers/" --zone "bot/keyboards/" --zone "bot/middleware.py" --zone "core/services/" --zone "tests/teksty/"` → ✅
+**КОММИТ:** `d049e2f` — `тексты, разбор верификатора: починены семь его находок, из них ЧЕТЫРЕ — ложь, которую внесла моя же правка…` (последний в цепочке из девяти; работа коммитилась по ходу, часть за частью) · `git_zona.py check --zone bot/handlers/ --zone bot/routers/ --zone bot/keyboards/ --zone bot/middleware.py --zone core/services/ --zone tests/teksty/` → ✅
 **ПРАВКИ ПРОЧИТАНЫ:** блок пуст, правок не было.
 
 ---
@@ -991,7 +991,7 @@ text and the expression-level test, so the class cannot come back green.
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — сделала больше, чем я ей отдал, и в двух местах поправила МЕНЯ. (1) МОЙ ЗАМЕР ОХВАТА БЫЛ ЗАНИЖЕН ВТРОЕ: я насчитал 91 строку в 12 файлах, её сторож считает **257 в 16** — она нашла второй канал доставки текста человеку, который мой сканер не видел. Число в её пользу, и я его принимаю. (2) Она поймала СОБСТВЕННУЮ ложь: коммит «в отчёт — собственная правка врала про /auditor». (3) Верификатор нашёл у неё 17 находок, семь починены. Сторож `tests/teksty/` печатает охват сам: «строк проверено 257 из 257, в 16 файлах, нарушений 0». 🔴 ЕЁ ВЛИТИЕ СДЕЛАЛО main КРАСНЫМ (3 failed) — и это оказалось находкой, а не браком: ДВА из трёх упавших тестов СТОРОЖИЛИ ровно тот мусор, который владелец просил убрать. `test_confirmed_student_sees_only_own` требовал, чтобы бот НАПЕЧАТАЛ УЧЕНИКУ ЕГО ID; `test_head_can_upload_sheet` требовал слова «P4» — внутреннего имени позиции — в сообщении человеку. Третий сравнивал строку целиком и потому запрещал отказу подсказывать, что делать дальше. Все три лежали ВНЕ её зоны, трогать их ей было нельзя. Починены приёмкой ПО СМЫСЛУ и усилены: ученику запрещён голый числовой идентификатор, старший обязан не получить отказ по роли. main 914 passed.
 
 **ВЕТКА РАБОТЫ:** `zahod/P18-teksty`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -1001,6 +1001,10 @@ text and the expression-level test, so the class cannot come back green.
 > Читается командой (из любой папки, в том числе из worktree): `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki`
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
+
+- 2026-09-02T1802-callback-voiceconfirm-bot-routers-voice-py — pravka-koda, blokiruet — столкновение префиксов `vy`, снято с блокировки влитием P18; чиню следующим ходом, сторож написан и уже доказал красноту.
+- 2026-09-02T1827-solved-02-09-18-4x-p7 — pravka-koda, blokiruet — прочерк уезжает в `solved`: снятая задача приедет как сданная.
+- 2026-09-02T1827-rows-02-09-18-3x-tools — pravka-koda, blokiruet — обрезка отрезает коды и подписи, когда лист занимает весь кадр.
 
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 
