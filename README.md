@@ -8,6 +8,9 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-03.md`** (Хэндофф в сессию 2026-09-03)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-04.md`** (Хэндофф в сессию 2026-09-04)
+
 **`zhurnal/2026-09-02_spetsmat-bot/NAVIGATOR.md`** (навигатор арки 2026-09-02_spetsmat-bot (ориентация, читается первым): Кондуит спецмата в телеграме)
 
 **`zhurnal/2026-09-02_spetsmat-bot/PLAN.md`** (план арки 2026-09-02_spetsmat-bot)
@@ -25,6 +28,15 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-02.md`** (Выгрузка сессии 2026-09-02 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
+
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-03-2.md`** (Выгрузка сессии 2026-09-03 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-03-3.md`** (Выгрузка сессии 2026-09-03 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-03.md`** (Выгрузка сессии 2026-09-03 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_P1-yadro.md`** (P1 волны sborka-bota: ядро — схема, миграции, журнал отметок append-only)
 
