@@ -19,9 +19,11 @@ STRICT, NEVER SKIP.  ``core/services/seeding.py`` paid, in P2, for the lesson
 that a silent ``None`` on an unknown label is indistinguishable from a clean
 load.  This module therefore starts by enumerating every label-token shape it
 has been TAUGHT to accept, and a token that does not match any taught shape
-raises ``UnknownLabelShape`` with the offending line.  The taught shapes are
-declared once, in ``KNOWN_LABEL_SHAPES`` below, and grow only when a new shape
-is found and named -- never by a silent widening of the regex.
+raises ``UnknownLabelShape`` with the offending line.  The shapes are
+handed in by the caller through ``register_known_label_shapes`` --
+``tests/sheets/`` walks the seed for them -- and grow only when a new shape is
+found and named, never by a silent widening of the regex.  A parser that was
+never taught anything refuses every label rather than accepting every label.
 
 WHO MAY UPLOAD.  Only the senior of a room may upload a listok; a teacher
 cannot.  P3 already built the roles and the middleware; this module exposes
@@ -117,7 +119,15 @@ class SheetDraft:
 #: seed's hint -- the hint has to be supplied by the caller (or taken from the
 #: seed when the parser is used to REPRODUCE last year's data, which is what
 #: ``tests/sheets/`` does).
-NO_HEADER_SHEETS: frozenset = frozenset({"1д", "2д", "4д"})
+#:
+#: 🔴 ``4д`` used to be listed here and is NOT header-less.  The задание's
+#: measured fact is that ``1д`` and ``2д`` between them carry the 50 problems
+#: with no type, and 18 + 32 = 50 exactly; ``4д`` has 26 and is not part of
+#: that number.  Nobody noticed, because ``has_header`` did nothing: it never
+#: skipped a row and only ever fed the consistency check below, which fired in
+#: one direction only.  It fires in both now, so a wrong entry in this set is
+#: a red test rather than a comment nobody rereads.
+NO_HEADER_SHEETS: frozenset = frozenset({"1д", "2д"})
 
 #: Modifiers the parser recognises, in canonical order.  ``°`` and ``●`` are
 #: both "obligatory": the task says so, and the two signs are
@@ -150,7 +160,10 @@ _LABEL_RE = re.compile(
     r"^(?P<number>-?\d+)"  # -4, 0, 12 -- the minus is rare but real (sheet 9)
     r"(?P<inf>°)?"  # obligatory infix: ``1°а``
     r"(?P<letter>[абвгдежзиa])?"  # а..и plus the one Latin ``a``
-    r"(?P<mods>[°●*✘:)]*)$"  # trailing modifiers; ``:)`` is one token
+    # The character class is BUILT from ``KNOWN_MODIFIERS`` rather than
+    # spelled out again: the two used to be separate lists, and a glyph added
+    # to the documented one would not have been accepted by the regex.
+    r"(?P<mods>[" + "".join(sorted(set("".join(KNOWN_MODIFIERS)))) + r"]*)$"
 )
 
 #: ``°`` always raises the kind to ``обязательная`` whether it sat before or
@@ -183,6 +196,16 @@ class UnknownLabelShape(Exception):
 #: list covers, which is the "trust the regex only" mode.
 _KNOWN_BASE_RE: re.Pattern | None = None
 
+#: Has ``register_known_label_shapes`` been called at all?  Distinguishes
+#: "taught nothing on purpose" from "never taught", which used to look the
+#: same and both meant "accept any base the regex lets through".  A freshly
+#: imported module therefore had ZERO strictness: the §3 verifier fed it
+#: ``999999ж**`` and got ``двойная`` back, out of a parser that had been
+#: taught nothing.  That is the silent-widening failure this module's own
+#: "STRICT, NEVER SKIP" paragraph exists to refuse, and it was reachable by
+#: doing nothing at all.  Now the loose mode has to be ASKED for, by name.
+_SHAPES_REGISTERED: bool = False
+
 
 def register_known_label_shapes(shapes: Iterable[tuple]) -> None:
     """Teach the parser the label BASES it is allowed to accept.
@@ -203,10 +226,14 @@ def register_known_label_shapes(shapes: Iterable[tuple]) -> None:
     oracle.
 
     Empty shapes: the parser falls back to ``_LABEL_RE`` alone, which is what
-    callers who do not know last year's data yet will want.
+    callers who do not know last year's data yet will want -- but they have to
+    SAY so, by calling this function with an empty sequence.  Never calling it
+    is a different thing and the parser refuses every label until it is taught
+    (see ``_SHAPES_REGISTERED``).
     """
-    global _KNOWN_BASE_RE
+    global _KNOWN_BASE_RE, _SHAPES_REGISTERED
     compiled = [re.compile("^" + pattern + "$") for pattern, _kind in shapes]
+    _SHAPES_REGISTERED = True
     if not compiled:
         _KNOWN_BASE_RE = None
         return
@@ -240,20 +267,17 @@ def _parse_modifiers(mods: str, line: str = "") -> tuple:
     promises the offending line at its own docstring, and used to raise with it
     empty.
     """
-    if "**" in mods:
-        kind_override = "двойная"
-        mods = mods.replace("**", "")
-    elif "*" in mods:
-        kind_override = "звезда"
-        mods = mods.replace("*", "")
-    elif "●" in mods:
-        kind_override = "обязательная"
-        mods = mods.replace("●", "")
-    elif "°" in mods:
-        kind_override = "обязательная"
-        mods = mods.replace("°", "")
-    else:
-        kind_override = None
+    # The table is read from ``_KIND_BY_MOD``, not spelled out again here.
+    # It used to be spelled out twice, and the copy in this function was the
+    # live one while ``_KIND_BY_MOD`` sat unread -- two tables that agreed
+    # only because nobody had edited either.  Order matters: ``**`` must be
+    # tried before ``*``, or a double star reads as a single one.
+    kind_override = None
+    for glyph in ("**", "*", "●", "°"):
+        if glyph in mods:
+            kind_override = _KIND_BY_MOD[glyph]
+            mods = mods.replace(glyph, "")
+            break
 
     is_graveyard = "✘" in mods
     mods = mods.replace("✘", "")
@@ -346,6 +370,16 @@ def _parse_label(raw: str, kind_hint: str = "") -> tuple:
     # actually took: the verifier got ``99*``, ``777°`` and ``12345ж**``
     # accepted out of a parser taught only last year's 136 bases.  A gate that
     # any ordinary input switches off is not a gate.
+    if not _SHAPES_REGISTERED:
+        raise UnknownLabelShape(
+            line=raw,
+            reason=(
+                "парсер ещё ничему не научен: позовите "
+                "register_known_label_shapes(shapes) со списком форм, либо "
+                "register_known_label_shapes([]) — если вы СОЗНАТЕЛЬНО хотите "
+                "принимать всё, что пропускает грамматика"
+            ),
+        )
     if _KNOWN_BASE_RE is not None and not _KNOWN_BASE_RE.match(base):
         raise UnknownLabelShape(
             line=raw,
@@ -360,7 +394,7 @@ def _parse_label(raw: str, kind_hint: str = "") -> tuple:
     if kind_override is not None:
         kind = kind_override
     elif infix:
-        kind = "обязательная"
+        kind = _INFIX_KIND[infix]
     else:
         kind = "обычная"
 
@@ -386,11 +420,6 @@ def _parse_label(raw: str, kind_hint: str = "") -> tuple:
     normalised_from = unfolded if unfolded != stored else ""
 
     return stored, kind, is_graveyard, normalised_from
-
-
-def kind_from_infix(infix: str) -> str | None:
-    """The kind an infix ``°`` (or future analogues) would impose, or None."""
-    return _INFIX_KIND.get(infix)
 
 
 #: Repair table for duplicate labels.  Mirrors the pattern in
@@ -431,9 +460,10 @@ class UnknownActorRole(Exception):
 #: One line of a listok as the parser sees it.  ``text`` is the cell value
 #: (the label and its glyphs); ``kind_hint`` is what the layout tells the
 #: parser this line ought to be -- "обязательная" if the column was headed
-#: ``°`` or ``●``, "обычная" otherwise.  An empty hint means "the senior did
-#: not mark a kind for this line": the parser will use the modifier or fall
-#: back to the taught list.
+#: ``°`` or ``●``, "обычная" otherwise.  It is a CROSS-CHECK and never a
+#: source: the kind is read off the label's glyphs, and a hint disagreeing
+#: with them raises.  An empty hint means "the layout has nothing to say about
+#: this line", which is always allowed.
 @dataclass(frozen=True)
 class ListokLine:
     text: str
@@ -465,7 +495,11 @@ def parse_sheet(
     from the line itself, the way the senior wrote it.
 
     ``has_header`` defaults to True; pass False for the small set of listki
-    whose first row is data (``NO_HEADER_SHEETS``).  An empty listok with
+    whose first row is data (``NO_HEADER_SHEETS``).  It does NOT skip a row --
+    the caller hands this parser the cells, not the spreadsheet -- it is a
+    consistency check between what the caller believes about a listok and what
+    this module knows, and it fires in BOTH directions: declaring a shape-less
+    listok with a header is as wrong as the reverse.  An empty listok with
     ``has_header=True`` is not an error -- the parser does not know whether the
     senior is going to fill the header in later.
 
@@ -482,6 +516,12 @@ def parse_sheet(
     if not has_header and number not in NO_HEADER_SHEETS:
         raise ValueError(
             "listok %r объявлен без шапки, но не входит в NO_HEADER_SHEETS=%s"
+            % (number, sorted(NO_HEADER_SHEETS))
+        )
+    if has_header and number in NO_HEADER_SHEETS:
+        raise ValueError(
+            "listok %r числится в NO_HEADER_SHEETS=%s, а объявлен с шапкой; "
+            "одна из двух сторон врёт, и парсер не выбирает, какая"
             % (number, sorted(NO_HEADER_SHEETS))
         )
 
@@ -510,9 +550,11 @@ def parse_sheet(
         # it.  So: occurrences are tracked by base.
         match_obj = _LABEL_RE.match(full_label)
         number_part = match_obj.group("number") if match_obj else full_label
+        # No Latin-``a`` fold here: ``_parse_label`` already folded it, and
+        # ``full_label`` is its OUTPUT.  The fold used to be repeated at this
+        # line; the verifier traced all 544 rows plus a ``2°a`` label and the
+        # branch executed zero times.
         letter_part = match_obj.group("letter") or "" if match_obj else ""
-        if letter_part == "a":
-            letter_part = "а"
         base = number_part + letter_part
 
         occurrence = occurrences.get(base, 0)
@@ -528,6 +570,15 @@ def parse_sheet(
             # the taught list, the parser raises ``UnknownLabelShape`` so the
             # senior sees the missing repair before confirmation.
             _, kind, is_graveyard, _ = _parse_label(new_label, line.kind_hint)
+            # Two rewrites can land on the same row: the Latin-``a`` fold and
+            # then the duplicate repair.  ``repaired_from`` must show what the
+            # SENIOR typed, so the fold wins when both happened -- it is the
+            # earlier of the two.  Setting it to the folded form (which is what
+            # this line used to do) reports a label she never wrote.  Not
+            # reachable in the seed, because sheet 7's ``2°a`` is not a
+            # duplicate; reachable on a real listok, which is what this parser
+            # is for.
+            repaired_from = normalised_from or repaired_from
         else:
             # No duplicate repair -- but the Latin-``a`` fold is a rewrite too,
             # and a rewrite the caller is not told about is a silent rewrite.
@@ -622,10 +673,17 @@ def confirm_and_write(
     Returns ``(sheet_id, [problem_id, ...])``.  The caller -- the screen on
     top of this service -- has the ids it needs to render the confirmation.
     """
-    if not confirmed:
+    # ``is not True``, not ``not confirmed``: the parameter is typed ``bool``
+    # and was tested for truthiness, so the strings ``"no"`` and ``"false"``,
+    # the number ``-1`` and a bare ``object()`` all WROTE.  A screen that
+    # forwards a form field or a JSON value verbatim would hand this gate the
+    # string ``"false"`` and get a listok written into the journal that nobody
+    # confirmed.  The §3 verifier wrote nine such listki in one probe.
+    if confirmed is not True:
         raise NotConfirmed(
-            "черновик листка %r не подтверждён человеком; confirm_and_write "
-            "не пишет в журнал по умолчанию" % draft.number
+            "черновик листка %r не подтверждён человеком: confirmed=%r, а "
+            "нужно ровно True; confirm_and_write не пишет в журнал по "
+            "умолчанию" % (draft.number, confirmed)
         )
     if actor_role not in KNOWN_ROLES:
         raise UnknownActorRole(actor_role)

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from core.services import sheets as parser
 from core.services.sheets import (
     ListokLine,
     NotConfirmed,
@@ -132,7 +133,12 @@ def test_4d_carries_graveyard_marks_as_meta():
             # hint is allowed to do.
             ListokLine(text="3°✘", kind_hint="обязательная"),
         ],
-        has_header=False,
+        # ``4д`` HAS a header.  It used to be listed in ``NO_HEADER_SHEETS``
+        # and declared here without one; nobody noticed because the flag did
+        # nothing.  The задание's measured fact is that ``1д`` and ``2д``
+        # carry the 50 header-less problems between them -- 18 + 32 = 50 --
+        # and ``4д``'s 26 are not part of that number.
+        has_header=True,
     )
     assert len(draft.problems) == 4
     for problem in draft.problems:
@@ -246,6 +252,109 @@ def test_nothing_is_written_without_an_explicit_confirm(in_memory_writer):
 
     assert in_memory_writer.sheets == [], "неподтверждённый черновик записал листок"
     assert in_memory_writer.problems == [], "неподтверждённый черновик записал задачи"
+
+
+def test_only_literal_true_confirms(in_memory_writer):
+    """``confirmed`` is a bool, and truthy is not the same thing as ``True``.
+
+    The gate used to read ``if not confirmed``, so the strings ``"no"`` and
+    ``"false"``, the number ``-1``, a non-empty list and a bare ``object()``
+    all counted as a human saying yes -- the §3 verifier wrote nine listki
+    that way in a single probe.  A screen that forwards a form field or a JSON
+    value verbatim hands this gate a string, and the string ``"false"`` is
+    truthy.  This is the project's single most important rule; it does not get
+    to be decided by Python's truth table.
+    """
+    seed_sheet = next(s for s in _seed_sheets() if s["number"] == "1")
+    draft = parse_sheet(
+        number=seed_sheet["number"],
+        title=seed_sheet["title"],
+        ord=seed_sheet["ord"],
+        layout=seed_sheet.get("layout", "old"),
+        lines=_lines_for_seed_sheet(seed_sheet),
+        has_header=True,
+    )
+
+    for truthy in ("yes", "no", "false", "False", -1, 0.1, [0], {"a": 1}, object(), 1):
+        with pytest.raises(NotConfirmed):
+            confirm_and_write(
+                draft, actor_role="senior", writer=in_memory_writer,
+                confirmed=truthy,
+            )
+    assert in_memory_writer.sheets == [], (
+        "нечто похожее на True записало листок: %r" % (in_memory_writer.sheets,)
+    )
+    assert in_memory_writer.problems == []
+
+    # And the one value that IS the human's yes.
+    sheet_id, problem_ids = confirm_and_write(
+        draft, actor_role="senior", writer=in_memory_writer, confirmed=True,
+    )
+    assert sheet_id == 1 and len(problem_ids) == 23
+
+
+def test_a_parser_that_was_never_taught_refuses_everything():
+    """Never taught and taught-nothing-on-purpose are different states.
+
+    They used to be the same one, and both meant "accept whatever the grammar
+    lets through": a freshly imported module had ZERO strictness, and the
+    verifier got ``999999ж**`` back as ``двойная`` out of a parser that had
+    been taught nothing at all.  The loose mode is legitimate -- a caller who
+    does not know last year's data yet wants it -- but it has to be asked for
+    by name, not arrived at by doing nothing.
+    """
+    saved_registered = parser._SHAPES_REGISTERED
+    saved_base_re = parser._KNOWN_BASE_RE
+    try:
+        parser._SHAPES_REGISTERED = False
+        parser._KNOWN_BASE_RE = None
+        with pytest.raises(UnknownLabelShape) as info:
+            parse_sheet(
+                number="test", title="тест", ord=1, layout="old",
+                lines=[ListokLine(text="999999ж**")],
+            )
+        assert "register_known_label_shapes" in str(info.value), (
+            "отказ обязан сказать, ЧТО позвать; получено %s" % info.value
+        )
+
+        # Asked for by name: the grammar-only mode, and it accepts.
+        parser.register_known_label_shapes([])
+        draft = parse_sheet(
+            number="test", title="тест", ord=1, layout="old",
+            lines=[ListokLine(text="999999ж**")],
+        )
+        assert draft.problems[0].kind == "двойная"
+    finally:
+        parser._SHAPES_REGISTERED = saved_registered
+        parser._KNOWN_BASE_RE = saved_base_re
+
+
+def test_a_repair_landing_on_a_folded_label_still_names_what_she_typed():
+    """Two rewrites on one row must report the EARLIER one, not the later.
+
+    The Latin-``a`` fold happens first, the duplicate repair second, and
+    ``repaired_from`` used to be overwritten by the repair with the already
+    folded form -- reporting back a label the senior never wrote.  Not
+    reachable through the seed (sheet 7's ``2°a`` is not a duplicate);
+    reachable on a real listok, which is what this parser is for.
+    """
+    # The repair registry is keyed on the BASE -- number plus letter, with the
+    # infix ``°`` and the modifier run stripped -- so ``2°a`` is keyed ``2а``.
+    key = ("складка", "2а", 0)
+    parser.DUPLICATE_LABEL_REPAIRS[key] = "3"
+    try:
+        draft = parse_sheet(
+            number="складка", title="тест", ord=1, layout="old",
+            lines=[ListokLine(text="2°a")],
+        )
+    finally:
+        del parser.DUPLICATE_LABEL_REPAIRS[key]
+
+    assert draft.problems[0].label == "3"
+    assert draft.problems[0].repaired_from == "2°a", (
+        "названо %r — это форма ПОСЛЕ свёртки, старший писал '2°a'"
+        % draft.problems[0].repaired_from
+    )
 
 
 def test_duplicate_label_without_repair_raises():
@@ -436,6 +545,19 @@ def test_no_header_sheet_refused_unless_listed(in_memory_writer):
             layout="old",
             lines=[ListokLine(text="1", kind_hint="")],
             has_header=False,
+        )
+
+    # And the other direction, which used not to be checked at all: a listok
+    # this module KNOWS is header-less, declared with a header.  One of the
+    # two sides is wrong and the parser refuses to pick which.
+    with pytest.raises(ValueError):
+        parse_sheet(
+            number="1д",  # in NO_HEADER_SHEETS
+            title="тест",
+            ord=1,
+            layout="old",
+            lines=[ListokLine(text="1", kind_hint="")],
+            has_header=True,
         )
 
 
