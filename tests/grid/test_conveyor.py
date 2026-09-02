@@ -597,3 +597,41 @@ def test_a_decoration_button_is_answered_but_not_redrawn_over(
     feed_callback(dispatcher, bot=bot_instance, from_id=owner_tg_id,
                   data="zz:1:2:3", update_id=182, query_id="q182")
     assert "EditMessageText" in recorder.methods()
+
+
+def test_two_teachers_on_the_same_student_do_not_share_a_last_action_line(
+    dispatcher, bot_instance, recorder, seeded_catalogue, teacher_tg_id
+):
+    """«последнее: …» is a property of ONE teacher's screen, not of the cell.
+
+    Three teachers share a room and a student can be sent to whoever is free.  If the
+    line were read out of the journal, the second teacher would see the first one's tap
+    described as their own — and the undo it offers would undo somebody else's work.  It
+    lives in the FSM store, which is keyed by chat and user, so this is a property of
+    WHERE the line is kept rather than of how it is worded.
+    """
+    from core.services.roster import Role
+
+    roster = dispatcher.workflow_data["roster"]
+    second_tg = 100600
+    roster.confirm_teacher(
+        roster.submit_teacher(tg_id=second_tg, surname="Учитель", name="Второй",
+                              room="каб-1"),
+        role=Role.TEACHER,
+    )
+
+    student, sheet, problem = _first_cell(seeded_catalogue)
+    _tap(dispatcher, bot=bot_instance, tg_id=teacher_tg_id, student_id=student.id,
+         problem_id=problem.id, op=OP_SOLVE, update_id=191, query_id="q191")
+    assert "последнее:" in recorder.texts()[-1]
+
+    recorder.records.clear()
+    feed_callback(dispatcher, bot=bot_instance, from_id=second_tg,
+                  data=OpenGrid(student_id=student.id, sheet_id=sheet.id).pack(),
+                  update_id=192, query_id="q192")
+    text = recorder.texts()[-1]
+    assert "последнее:" not in text, (
+        "the second teacher was shown the first one's tap as their own: %r" % text
+    )
+    # The MARK itself is shared, of course -- it is a fact about the student.
+    assert "сдано 1 из" in text, text
