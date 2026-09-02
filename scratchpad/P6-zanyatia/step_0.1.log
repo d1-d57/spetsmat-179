@@ -1,0 +1,5 @@
+§0.1 cancelled per orchestrator (subagent not launched — four starts died at this call).
+Command executed manually: git --no-optional-locks branch --no-merged main | grep -c 'zahod/'
+Literal command with '.' failed (directory); corrected count = 1.
+Report appended to kod_P6-zanyatia.md (main repo, not committed by executor).
+Plan, questions, report written in ENGLISH at bottom of file.
