@@ -1008,15 +1008,20 @@ def oracle_debts(connection, workbook) -> OracleResult:
             if expected is None:
                 continue
             student_id = student_ids[key]
-            # Whoever arrived later is not charged the older sheets.
+            # Whoever arrived later is not charged the older sheets.  Those cells are
+            # CHECKED and not skipped: the book carries '✓' for them (Пирогов, sheets
+            # 1-4), so comparing them TESTS the rule instead of excusing the oracle from
+            # it -- a wrong first_sheet_id would produce debts here against the book's
+            # '✓' and turn this check red, which is exactly what should happen.
             if first_ord.get(student_id) is not None and \
                     sheet_ord[sheet_number] < first_ord[student_id]:
-                continue
-            got = sum(
-                1
-                for problem_id in obligatory[sheet_number]
-                if states.get((student_id, problem_id), CellState.EMPTY).is_debt_candidate
-            )
+                got = 0
+            else:
+                got = sum(
+                    1
+                    for problem_id in obligatory[sheet_number]
+                    if states.get((student_id, problem_id), CellState.EMPTY).is_debt_candidate
+                )
             checked += 1
             if got != expected:
                 divergences.append(

@@ -110,7 +110,7 @@ def test_every_oracle_is_green_over_its_full_coverage(connection, real_import,
     assert by_name["тридцать клеток вручную"].checked == 30
     assert by_name["гробарий (имена от руки)"].checked == 20
     assert by_name["лист «зачёт» (имена)"].checked == 55
-    assert by_name["лист «долги»"].checked > 700
+    assert by_name["лист «долги»"].checked == 770
     for result in results:
         assert result.checked > 0
 

@@ -89,3 +89,20 @@ def test_zero_checked_against_a_non_empty_source_is_red_not_green(connection, im
     assert result.is_red, "нулевое покрытие при непустом источнике обязано быть КРАСНЫМ"
     assert "сверено 0 из" in result.line()
     assert "КРАСНЫЙ" in result.line()
+
+
+def test_a_wrong_first_sheet_id_is_caught_by_the_debts_oracle(connection, imported,
+                                                              workbook, checked):
+    """A fourth corruption, beyond the three §5 names, aimed at the rule §3 exists for.
+
+    Clearing ``first_sheet_id`` makes the late arrival owe the sheets they were never
+    there for.  The book carries '✓' for exactly those cells, so the debts oracle has to
+    notice -- which is also why those cells are checked rather than skipped.
+    """
+    connection.execute(
+        "update students set first_sheet_id = ("
+        "  select id from sheets order by ord limit 1) where surname = 'Позднев'"
+    )
+    connection.commit()
+
+    assert oracle_debts(connection, workbook).is_red
