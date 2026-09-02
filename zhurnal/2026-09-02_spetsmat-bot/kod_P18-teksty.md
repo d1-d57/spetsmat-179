@@ -340,6 +340,37 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Зона захода, чья тема — ТЕКСТ, не содержала тестов, которые этот текст закрепляют
+
+Заходу отдали `bot/` и `core/services/`, а `tests/` — только собственную новую
+папку. Но текст, который заход обязан был починить, стоял ДОСЛОВНОЙ ПРОВЕРКОЙ в
+трёх чужих тестах: один требовал, чтобы `/me` печатал ребёнку его `student_id`,
+второй — чтобы в тексте преподавателю стояло `P4`, третий сверял отказ на
+равенство. То есть контракт зоны и критерий готовности («910 passed, ни одного
+упавшего») противоречат друг другу по построению, и заход обязан выбрать, какое
+из двух правил нарушить. Выбирал не аналитик, а исполнитель, молча.
+
+ЦЕНА: 3 красных теста в `main` после влития и две заявки, которые кто-то должен
+разобрать до завтрашнего занятия; плюс один круг рассуждения исполнителя на
+развилке, которой не должно было быть. Общий вид правила: если предмет захода —
+СТРОКИ, зона обязана включать файлы, где эти строки закреплены (`grep -rl
+"<строка>" tests/` при сборке захода даёт список за секунду).
+
+### Признак «доезжает до человека», записанный в задание, пропускал целые экраны
+
+Задание задало признак «литерал внутри `answer`/`reply`/…» и число 91 как
+ориентир. По этому признаку `bot/keyboards/views.py` — год ученика, список
+долгов, таблица преподавателя — даёт РОВНО НОЛЬ строк, потому что экран
+собирается функцией, а показывается её результат (`text, markup = render(...)`;
+`await _redraw(message, text, markup)`). Живых строк там 43.
+
+ЦЕНА: если бы исполнитель принял признак как полный и подогнал охват под 91,
+из-под проверки вышли бы ВСЕ экраны, которые ученики открывают завтра, — и отчёт
+был бы зелёным. Спасло только то, что задание прямо разрешило разойтись в числе.
+Общий вид: признак «литерал в вызове показа» неполон для любого проекта, где
+экран собирают функцией; в заходе его надо давать как НИЖНЮЮ границу, а не как
+определение.
+
 ## ПЛАН — (заполняет исполнитель)
 
 Four parts, one commit each, in the order the задание gives them.
@@ -378,6 +409,28 @@ the number is stated honestly», which is what the задание itself says to
 the count diverges.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. Three tests OUTSIDE this заход's zone pin texts this заход judged defective and
+   fixed. They are red now and I did not touch them: the zone is `tests/teksty/`
+   only, and the contract says so in the words that fit this exact case («даже
+   если чинится в одну строку»). Two заявки are filed with the one-line edit each
+   test needs; the list is in `## ОТЧЁТ` under ЧТО НЕ ТРОГАЛ.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/_INFRA-git/zayavki
+   ДОСТАВЛЕНО: нет
+2. Two texts lied because the CODE behaves otherwise. The texts are now honest;
+   the code is untouched, per ЧАСТЬ 3. Both are заявки: no message reaches an
+   applicant when the owner confirms them, and `/upload_sheet` is a live command
+   that uploads nothing.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/_INFRA-git/zayavki
+   ДОСТАВЛЕНО: нет
+3. The whitelist the задание names contains two words (`Excel`, `spetsmat`) that
+   appear in NO live human-facing string. They are kept, but moved into a second
+   tuple exempt from the freshness check, so the guard does not demand liveness
+   from them. A future export screen that prints «Excel» will not go red on a
+   correct text. Worth a decision: keep them or drop them at the next pass.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -411,18 +464,308 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 **ЧТО СДЕЛАНО** *(с хэшами)*
 <влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
+
+*(Субагент §0.1 НЕ ЗАПУСКАЛСЯ: пункт отменён оркестратором при запуске — четыре
+захода соседней волны из десяти умерли ровно на этом вызове. Вместо всего блока
+исполнитель сам выполнил одну названную команду.)*
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+
+Невлитых `zahod/*`-веток на входе — **0**, снимок при сборке (тоже 0) не устарел.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "bot/handlers/" --zone "bot/routers/" --zone "bot/keyboards/" --zone "bot/middleware.py" --zone "core/services/" --zone "tests/teksty/"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tests/teksty/sobrat.py` — запустить `python3 tests/teksty/sobrat.py` из корня репозитория; печатает КАЖДУЮ строку, доезжающую до живого человека, с адресом `файл:строка`, каналом и текстом. Это тот самый «прочитать все тексты одним заходом», который просил владелец, и он повторяем: следующий заход не начинает с нуля.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `b451c6f` — `тексты, часть 4: сторож tests/teksty — 256 строк из 256 в 16 файлах, нарушений 0…` · `git_zona.py check --zone "bot/handlers/" --zone "bot/routers/" --zone "bot/keyboards/" --zone "bot/middleware.py" --zone "core/services/" --zone "tests/teksty/"` → ✅
+**ПРАВКИ ПРОЧИТАНЫ:** блок пуст, правок не было.
+
+---
+
+### THE NUMBERS THE ЗАДАНИЕ ASKS FOR
+
+* **Lines read: 256**, in 16 files (113 by the задание's own predicate, 143 through
+  a helper the predicate does not see — see COVERAGE below).
+* **Lines changed: 49 occurrences of 35 distinct texts, in 15 files.** Counted
+  mechanically, not by hand: the collector was run against `1fe4422` (the tree I
+  started from, extracted with `git archive`) and against `HEAD`, and the two sets
+  of `(file, text)` pairs were differenced.
+* **Texts that LIED (question 4): 4**, listed in their own section below.
+* Guard coverage, printed by the test itself on GREEN: `строк проверено 256 из
+  256, в 16 файлах, нарушений 0`.
+
+### COVERAGE — WHY 256 AND NOT 91, AND WHY THIS IS THE FINDING, NOT A DISCREPANCY
+
+The задание measured 91 and told me to say so honestly if I diverged. I diverge,
+and the reason is not a tuning difference — **the predicate as written misses whole
+screens.**
+
+The predicate counts a literal only when it stands directly in a showing call.
+But the two screens 18 teachers use tomorrow are not written that way:
+
+```python
+text, markup = render(stored, catalogue)      # every word of the screen is in here
+await _redraw(message, text, markup)          # the predicate sees this line only
+```
+
+`render()` in `bot/routers/voice.py` and `bot/routers/text_input.py`, `draft_text()`
+in `photo.py`, and **the whole of `bot/keyboards/views.py`** — the child's year, the
+debt list, the teacher's table — contain **no literal the predicate can see**.
+`bot/keyboards/views.py` alone holds 43 human-facing strings and scored zero.
+
+So `sobrat.py` has two channels, both named in its docstring:
+
+* **channel A — the задание's predicate**, made stricter in one place: only the TEXT
+  argument counts. `callback_data="accept:%d"` is not read by a human and inflated
+  the первый прогон by six lines. `python3 tests/teksty/sobrat.py --kanal a` prints
+  channel A alone: **113 lines in 13 files.**
+* **channel B — text a helper builds and its caller shows.** A function joins the
+  showing set when its call stands in a text position, when its result is assigned
+  to a name later shown, or when a showing function returns it. Iterated to a fixed
+  point; names bridge across files inside `bot/` only. **143 lines.**
+
+Both numbers are printed by the tool; neither was tuned to hit a target.
+
+**The honest limit of the scan, stated rather than hidden.** Channel B resolves
+names, not imports — that is why the bridge stops at `bot/`. Inside `core/` it was
+dragging in text that is NOT shown: `reason` and `channels` of the voice draft are
+stored in the FSM and printed by neither `render`, and the messages of `RoomError`
+are read by the log while the human reads a separate `told` field. Both were
+reported as violations that do not exist. Narrowing the bridge removed six false
+findings and cost nothing real: text in `core/` reaches a human through
+`IntakeRefused`, which channel A already covers.
+
+### WHAT WAS BROKEN, AND WHY EACH ONE MATTERS
+
+**Class 1 — the bot printed its own insides to a person (question 3).** Ten sites.
+
+1. `bot/handlers/teacher.py` — `"Вы — %s%s." % identity.teacher.role.value` put
+   **«Вы — teacher, аудитория 203.»** on a teacher's screen. Same failure as the
+   14:3x string the owner saw: a member of the `Role` enum, in English, read by a
+   person. **No literal-based check could ever have caught this** — the mud arrives
+   through `%s`. There is now a separate test for exactly this shape.
+2. `bot/handlers/owner.py` — the pending list printed `- id=7: Иванов Пётр`. `id=`
+   is banned by name in the задание, and rightly: the owner closes a заявка with the
+   BUTTON under that message; the number is in the button's `callback_data`, where
+   nobody looks.
+3. `bot/handlers/owner.py`, same list and the button above it — `"(%s)" %
+   row.intended_role.value` → **«(teacher)»**, **«(head)»**.
+4. `bot/handlers/owner.py` × 5 — `await callback.answer("Не удалось: %s" % exc)`.
+   `exc` is the domain's own diagnostic and it is English: *«no current sheet to
+   anchor first_sheet_id: refusing to register a student against NULL (NULL is the
+   imported-row fallback, not the registration path)»*. That is what the owner would
+   read while confirming a child at the door. Replaced by two sentences that name
+   what he can actually do; the diagnostic goes to `log.warning`, not to nowhere.
+5. `bot/middleware.py` — `"this bot only speaks to people, not channels."` English.
+6. `bot/middleware.py` — `"auth not initialised"` English, and it says nothing a
+   person can act on.
+7. `bot/routers/voice.py` — `"Не разобрал запись: %s" % refusal`. **This one is on
+   tomorrow's main path.** Every wording of `TranscriptionUnavailable` lives in
+   `infra/asr.py` and is written for a developer: *«recogniser unreachable: <urlopen
+   error …>»*, *«empty audio: nothing was recorded»*, *«recogniser answered 401»*. A
+   teacher dictating marks mid-lesson would have read those. The refusal no longer
+   interpolates it; `log.warning` keeps it.
+8. `core/services/raspoznavanie.py` — `"не смог прочитать изображение (%s)" %
+   type(error).__name__` showed a **Python exception class name**
+   («UnidentifiedImageError») to a teacher, verbatim: `photo.py` prints
+   `str(refusal)` unchanged.
+9. `core/services/raspoznavanie.py` — the refusal for a missing library showed
+   **`python3 -m pip install --user opencv-python-headless`** to a teacher standing
+   in a classroom.
+10. `bot/routers/{photo,voice,text_input}.py` and `bot/keyboards/room.py` —
+    `"ученик %d" % student_id` and `"преподаватель %d" % teacher_id`. Primary keys
+    dressed as names, on the draft screens.
+
+**Class 2 — the text LIED about what the code does (question 4). Four texts.**
+This is the question one line cannot answer, so the code around each was read.
+
+11. `bot/handlers/registration.py` — *«Он подтвердит её — и тогда вы сможете открыть
+    бот»* — the case the owner found himself. **Verified in code: nothing is ever
+    sent to the applicant.** `pending_notifier` messages the OWNER, about a NEW
+    заявка; `on_accept`, `on_bind_chosen` and `on_create_new` send the applicant
+    nothing. A child who believes this line waits for a message that does not exist.
+    Now the text says so and names `/god`.
+12. `bot/handlers/registration.py`, teacher branch — same silence, same fix, naming
+    `/setka`.
+13. `bot/handlers/teacher.py` — *«Загрузка листка для аудитории 203 — P4.»* reads as
+    a confirmation of an upload. `upload_sheet_stub` answers and returns; **nothing
+    is uploaded**. And `P4` is the name of a wave position — the factory's internal
+    state, on a teacher's screen.
+14. `bot/handlers/student.py` — *«Ваш номер в журнале: %d»* with
+    `identity.student_id`. It is a database primary key, and calling it a journal
+    number is the lie: there is no such thing in the journal.
+
+**Class 3 — a refusal that does not say what to do next (question 2).** Thirteen
+occurrences across `middleware.py`, `marking.py`, `views.py`, `uvedomlenia.py`,
+`photo.py`, `room.py`. Every one keeps its original sentence and gains the step:
+«Эта сетка не ваша.» → «Эта сетка не ваша. Свою откройте командой /setka.» The
+existing sentence was kept deliberately — `views._refuse_foreign` documents that two
+screens must answer a prober with the SAME words, and they still do.
+
+**Class 4 — unreadable (question 1).** One: `bot/keyboards/views.py` printed the
+table legend as `+ принята · сдана, не защищена: - · не сдана: ·` — three
+sign→meaning pairs glued so that the sign lands before the meaning in one and after
+it in the next; which mark means «сдана, не защищена» cannot be recovered. A teacher
+reads this while checking a table by eye.
+
+**One more, small and real:** `bot/routers/text_input.py` refused a stale draft with
+«пришлите **запись** заново» on the screen that parses a TYPED message. It sent the
+teacher to do something other than what they were doing.
+
+### THE GUARD, AND THE PROOF THAT IT CAN GO RED
+
+`tests/teksty/test_teksty.py`, three tests, taking its lines from `sobrat.py` — one
+source for reading and for checking, so the two cannot drift apart.
+
+Coverage prints **on green**, not only on failure, through
+`tests/teksty/conftest.py` (`pytest` swallows `print` in a passing test, and
+«нарушений 0» without the count is indistinguishable from «checked nothing»).
+
+```
+$ python3 -m pytest tests/teksty -q
+...                                                                      [100%]
+строк проверено 256 из 256, в 16 файлах, нарушений 0
+3 passed in 0.66s
+```
+
+**REDNESS PROVED BY EXPERIMENT, as required.** `TEACHER` put back into
+`bot/handlers/owner.py`:
+
+```
+$ python3 -m pytest tests/teksty -q
+E       Failed: внутреннее состояние доехало до человека в 1 строках из 256:
+E         bot/handlers/owner.py:316 [A] 'Преподаватель подтверждён как TEACHER.' — внутреннее имя «teacher»; латиница «TEACHER»
+строк проверено 256 из 256, в 16 файлах, нарушений 1
+1 failed, 2 passed in 0.67s
+```
+
+Reverted; back to `3 passed`, `нарушений 0`. The file is byte-identical to before
+the experiment (`git diff` on it is empty).
+
+**The guard does one thing the задание did not ask for, because the live defect
+demanded it.** `test_imya_roli_ne_podstavlyaetsya_v_tekst` checks the EXPRESSION,
+not the literal: `role.value` / `intended_role.value` / `kind.value` may not stand in
+an argument of `answer`/`reply`/`edit_text`/`send_message`. Without it the worst
+finding of this заход — «Вы — teacher, аудитория 203.» — could come back tomorrow
+under a green literal check. A `.value` that goes INTO another call is allowed,
+because that is a translation (`ROL_PO_RUSSKI.get(role.value, …)`); `str()` and
+`repr()` are not treated as translations.
+
+**The whitelist is checked for rot.** `test_belyj_spisok_ne_protuh` fails if a word
+allowed by the whitelist appears in no live string — a permission nobody uses is a
+hole a real internal name will fall into later. The задание's four words are kept,
+but split: `Telegram` and `setka` are live and checked; `Excel` and `spetsmat` are
+in no human-facing string today and sit in a second tuple exempt from the freshness
+check on purpose — a red gate on a CORRECT text on the day of the lesson is worse
+than one spare word. Added and live: the bot's own commands `god`, `dolgi`,
+`auditoria`. A command is Latin by nature and a person has to READ AND TYPE it; a
+refusal that must say «what to do next» cannot say it without one.
+
+### HOW IT WAS CHECKED
+
+```
+$ python3 tests/teksty/sobrat.py | tail -2
+строк, доезжающих до человека: 256, в 16 файлах (прямых A: 113, через посредника B: 143)
+
+$ python3 tests/teksty/sobrat.py --kanal a | tail -2
+строк, доезжающих до человека: 113, в 13 файлах (прямых A: 113, через посредника B: 0)
+
+$ python3 -m pytest tests/teksty -q
+строк проверено 256 из 256, в 16 файлах, нарушений 0
+3 passed in 0.66s
+
+$ python3 -m pytest -q
+3 failed, 907 passed in 67.14s
+```
+
+Both runs are against the LIVE tree — `sobrat.py` reads `bot/` and `core/` from
+disk, and its module fixture asserts it found something, so a scan that reads
+nothing cannot pass quietly.
+
+### 🔴 THE FULL RUN IS NOT GREEN, AND THIS IS THE ONE THING TO READ BEFORE ACCEPTING
+
+`python3 -m pytest -q` gives **907 passed, 3 failed**, against 910 passed at
+`1fe4422`. **Not one of the three is a broken screen. All three are tests OUTSIDE
+this заход's zone that pin the OLD text as their assertion**, and one of them pins
+the very defect this position exists to remove:
+
+| test | what it demands | why it now fails |
+|---|---|---|
+| `tests/bot/test_registration.py::test_confirmed_student_sees_only_own` | `assert str(student_id) in t` | it requires `/me` to **echo the child their database id** |
+| `tests/bot/test_registration.py::test_head_can_upload_sheet` | `assert "P4" in t` | it requires the wave position's name in a teacher's text |
+| `tests/views/test_screens.py:175` | `"Такого листка нет." in recorder.alerts()` | membership in a list = exact equality; the refusal gained its next step |
+
+**I did not touch them.** The zone is `tests/teksty/` and the contract names this
+exact temptation — «даже если „мешает“ или „чинится в одну строку“». Two заявки are
+filed with the one-line edit each test needs, quoted verbatim:
+
+* `2026-09-02T1821-p18-teksty-test-confirmed-student-sees` → `tests/bot/test_registration.py`
+* `2026-09-02T1821-p18-teksty-test-a-button-naming` → `tests/views/test_screens.py`
+
+If the owner would rather have the tests green than these three texts fixed, the
+reverse is three one-line reverts and the заявки say which.
+
+### WHAT I DID NOT TOUCH
+
+* **`tests/bot/`, `tests/views/`** — out of zone; the three red tests above.
+* **`infra/asr.py`** — out of zone, and it holds nine English `TranscriptionUnavailable`
+  messages. They no longer reach a person (fixed on the `bot/` side, which is where
+  the decision about what a human reads belongs), so no заявка was filed for the
+  wording itself.
+* **Logic, everywhere.** Where a text lied because the CODE behaves otherwise, the
+  text was made honest and the code left alone, per ЧАСТЬ 3. Two заявки:
+  `…-bot-handlers-registration-py` (confirmation notifies nobody) and
+  `…-upload-sheet-upload-sheet` (`/upload_sheet` uploads nothing).
+* **🔴 The blocking заявка `2026-09-02T1802-callback-voiceconfirm…` is UNTOUCHED and
+  my zone is now free.** It says in its own text «НЕ ЧИНИТЬ, ПОКА ИДЁТ P18-teksty»
+  because its files (`bot/routers/voice.py`, `bot/keyboards/views.py`) were mine. It
+  is not a text defect — `VoiceConfirm` and `ViewYear` share the callback prefix
+  `vy`, so the voice draft's «Записать» reaches nobody — and it is marked
+  `blokiruet` for tomorrow. I left it alone («ничего сверх задачи») and say so here
+  so the release is not held waiting on me.
+* **`core/services/{golos,room,sheets,seeding}.py` English strings** — read and
+  cleared, not changed. `reason`/`channels` are stored in the draft and printed by
+  neither `render`; `RoomError`'s message is the log's, while the human reads the
+  separate `told` field. They looked like violations and are not.
+
+### НЕОБРАТИМОЕ
+
+Необратимого нет. Every change is a committed text edit; the only file written
+outside the working tree is the collector's scratch copy of the old tree in the
+session scratchpad. The `TEACHER` experiment was reverted from a byte copy made
+before it (`scratchpad/owner.py.bak`) and `git diff` on that file is empty.
+
+One git operation worth naming, since it moved my branch: the worktree started at
+`402a412`, **behind** `main` (`1fe4422`), and the заход file itself did not exist in
+it. `git merge --ff-only main` — a pure fast-forward, no content decision, and
+`main` untouched. Recoverable by `git reset --hard 402a412`; the code was identical
+either way (the three commits between were journal files only).
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+**Repeats on the next unit of work — so it is a заход, not a queue item:**
+
+* **A text-carrying screen built by a helper is invisible to the задание's own
+  predicate.** Every screen in this bot is written that way, and the next screen
+  will be too. It is closed already — `sobrat.py` channel B and the guard that
+  consumes it are on disk — which is why it is named here rather than filed.
+* **A test that pins a defective text blocks its own fix, and the fixer usually has
+  no right to the test file.** This cost three red tests here and will cost them
+  again on the next text pass. The generalisable form: a заход whose subject is
+  TEXT must be given the test files that assert on that text.
+
+**Does not repeat — legitimately a queue item:** the four individual lies. Each is a
+property of one handler, not of the way handlers are written.
+
+**Found by a trial run, therefore fixed before the next one:** the `role.value`
+class. The trial was reading `bot/handlers/teacher.py` aloud; the fix is both the
+text and the expression-level test, so the class cannot come back green.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
