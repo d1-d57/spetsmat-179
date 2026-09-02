@@ -132,10 +132,10 @@ while :; do
   if [ "$SVERENO" -eq 0 ] && [ "$PROSHLO" -ge "$SVERKA" ]; then
     K1=$(krugov); M1=$(metka)
     if [ "$K1" -gt "$K0" ] && [ "$M1" -gt "$M0" ]; then
-      echo "$(date '+%H:%M:%S') · ✅ ПУЛЬС РАСТЁТ: кругов $K0→$K1 за ${PROSHLO}с — часовой ЕСТЬ" >> "$LOG"
+      echo "$(date '+%H:%M:%S') · ✅ ПУЛЬС РАСТЁТ: кругов ${K0}→$K1 за ${PROSHLO}с — часовой ЕСТЬ" >> "$LOG"
       SVERENO=1
     else
-      echo "$(date '+%H:%M:%S') · 🔴 ПУЛЬС НЕ РАСТЁТ за ${PROSHLO}с: кругов $K0→$K1, метка $M0→$M1 — ЧАСОВОГО НЕТ" >> "$LOG"
+      echo "$(date '+%H:%M:%S') · 🔴 ПУЛЬС НЕ РАСТЁТ за ${PROSHLO}с: кругов ${K0}→$K1, метка ${M0}→$M1 — ЧАСОВОГО НЕТ" >> "$LOG"
       exit 1
     fi
   fi
