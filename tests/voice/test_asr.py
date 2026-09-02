@@ -218,7 +218,7 @@ def test_an_unreachable_engine_becomes_a_refusal_the_screen_can_say_out_loud():
 def test_the_verbatim_flag_is_spelled_the_way_the_http_endpoint_reads_it():
     """The one word that decides whether «минус один» becomes -1 or 1.
 
-    ``raw_results`` is the PROTOBUF field name — it is real, it is field 9 of v2's
+    ``raw_results`` is the PROTOBUF field name — it is real, it is field 10 of v2's
     ``RecognitionSpec``, and it is why this spelling looks right.  The v1 HTTP endpoint
     this file talks to takes ``rawResults``, and an unknown query parameter is IGNORED,
     not refused: the wrong spelling returns 200 with a normalised transcript and no

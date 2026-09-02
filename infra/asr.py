@@ -43,8 +43,13 @@ misdescribes itself sends the next reader shopping for the wrong thing:
   v2 ``RecognitionSpec`` carries ten fields, all of them about the audio or the shape of
   the output.  There is no phrase list, no vocabulary, no context, no boosting, in
   either — nor on the async file endpoint, which takes the same options message, nor in
-  the v1 query string this file already uses.  **The gRPC dependency would buy nothing:
-  the price was never the obstacle, the goods do not exist.**
+  the v1 query string this file already uses.  **For a dictionary, the gRPC dependency
+  would buy NOTHING: the price was never the obstacle, the goods do not exist.**  Said
+  precisely, because a flat «v3 buys nothing» would be false and would mislead the next
+  reader in the other direction: v3 does buy the streaming and async paths, and those
+  are worth naming, because THIS file already refuses long dictations at the sync ceiling
+  a few lines below («a longer dictation needs the streaming api»).  What v3 does not
+  buy, at any price, is a phrase list.
 * «``build_user_dictionary`` … IS used — by the fuzzy channel».  It is not.  It is
   called once, in ``bot.routers.voice.voice_dependencies``, and its only consumer is the
   ``phrases`` argument below.  The fuzzy channel is handed the catalogue's students
@@ -52,11 +57,28 @@ misdescribes itself sends the next reader shopping for the wrong thing:
   terms are built on every start and read by nobody, and that is what the start line now
   says out loud.
 
-What Yandex does offer for a vocabulary is model EXTENSION: a corpus handed over by
-request, trained on their side, returned as a private id for the ``model`` field.  It
-wants about an hour of audio for the error-rate evaluation alone, it is not a
-per-request field, and an api key does not reach it.  It is a decision for the owner,
-not a change to this file — named in the report, not papered over.
+What Yandex does offer instead is not one mechanism but two, and neither is a phrase
+list:
+
+* **Автотюнинг**, switched on per request by the header ``x-data-logging-enabled: true``.
+  This one IS reachable with the api key we already have — and it biases nothing in the
+  request that carries it.  It consents to the audio being KEPT for future training.
+  Turning it on is a decision about fifty-six children's recorded voices, which is the
+  owner's to make and not a line to add quietly here.
+* **Дообучение модели.**  What is handed over is TEXT, not audio — a глоссарий (TSV, one
+  term per line, numerals spelled out, Latin transliterated, and a separate file per
+  grammatical case) plus text templates; recordings appear only as test material.  It
+  wants on the order of a thousand utterances and several phrases per term, it is not a
+  per-request field, and the result does not come back as a private model id: the
+  changes land in the SHARED ``general:rc`` model, within about four weeks, on Yandex's
+  release cycle.  A decision for the owner, named in the report, not papered over.
+
+⚠ The two paragraphs above are the ONE claim in this docstring that rests on
+documentation rather than on the protobuf contract or on a live call, and SpeechKit's
+docs have moved off ``github.com/yandex-cloud/docs`` to a host that refuses non-browser
+clients — so the freshest text a machine could reach is an archived snapshot.  Read them
+as «this is the shape of it, check before acting», not as a specification.  Everything
+else here is either in the .proto or was measured against the live endpoint.
 
 Recognition therefore runs with no hint, the compensation is entirely downstream in
 ``core.services.golos``, and there is exactly one recognition path, so there is nothing
@@ -232,7 +254,7 @@ class YandexSpeechKitTranscriber:
                 "format=oggopus",
                 # VERBATIM.  Numbers stay words and our own normaliser does the work.
                 # THE SPELLING IS THE WHOLE FEATURE, and it is camelCase.  Until 02.09
-                # this read ``raw_results`` — the name of field 9 of v2's protobuf
+                # this read ``raw_results`` — the name of field 10 of v2's protobuf
                 # ``RecognitionSpec``, which is why it looked right and survived review.
                 # The v1 HTTP endpoint reads ``rawResults``, and it IGNORES a parameter
                 # it does not know instead of refusing it: the request came back 200,
