@@ -1,0 +1,16 @@
+# секреты — никогда в git
+secrets/
+*.env
+!*.env.example
+
+# база и бэкапы
+data/
+backups/
+*.db
+*.db-wal
+*.db-shm
+
+# питон
+__pycache__/
+.venv/
+*.pyc
