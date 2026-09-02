@@ -407,3 +407,132 @@ def test_a_bracket_is_never_mistaken_for_the_next_childs_name(students, catalogu
     assert [row.student_id for row in rows] == [9, 11]
     assert rows[0].sheet_marker == "3д"
     assert rows[1].present_no_marks is True
+
+
+# =============================================================================
+#  THE MIRROR IMAGE -- what the mid-line cut cost, and what pays for it
+# =============================================================================
+#
+# The §3 verifier came back a second time and found that the fix above had bought a new
+# way to stage a plus on the wrong child: a trailing prose word that happens to resemble a
+# roster name now OPENS a block and takes the labels after it, PRE-TICKED.  Measured on
+# the live roster: «дома» matches Домра at 89 and «верно» matches Данилова Вера at exactly
+# 80.0 — which the strict `<` comparison let through the lone-word floor.
+#
+# Both errors are the same error, so both are refused the same way: the cut still happens
+# (a real next child must never be swallowed), and what it produces is a DOUBTFUL row with
+# nothing ticked.
+
+def test_a_prose_word_mid_line_does_not_arrive_pre_ticked(students, catalogue):
+    """«Санин 7, 9а дома 11б» — «дома» is Домра at 89, and задача 11б must not be staged.
+
+    The row is still SHOWN: swallowing the word is how the first bug worked, and a parser
+    that hides what it did not understand is the thing this whole position exists against.
+    What it may not do is arrive ready to write.
+    """
+    from bot.routers.photo import checked_cells
+    from bot.routers.text_input import draft_to_state
+
+    draft = tekst.build_draft("Санин 7, 9а дома 11б", students=students, catalogue=catalogue)
+    rows = draft.rows
+
+    assert len(rows) == 2, [row.said for row in rows]
+    assert rows[1].verdict is Verdict.DOUBTFUL, rows[1].reason
+    assert all(not cell.ticked for cell in rows[1].cells)
+    assert all(
+        student_id == rows[0].student_id
+        for student_id, _ in checked_cells(draft_to_state(draft))
+    ), "a plus was staged on a child the teacher never wrote"
+
+
+def test_a_two_word_name_mid_line_is_trusted_as_written(students, catalogue):
+    """«Катя Долкирева» after Санин's labels is a NAME and is treated as one.
+
+    Two words is the owner's format and is strong evidence; one word mid-line is the
+    parser choosing where a child begins.  The distinction is what keeps the guard from
+    costing the ordinary case its pre-ticks.
+    """
+    rows = rows_of("Лёня Санин 7, 9а Катя Долкирева 2а, 2б", students, catalogue)
+
+    assert rows[1].student_id == 18
+    assert rows[1].verdict is Verdict.CERTAIN
+    assert all(cell.ticked for cell in rows[1].cells)
+
+
+def test_a_one_word_child_mid_line_is_shown_but_asks_for_the_tap(students, catalogue):
+    """The cost of the guard, stated as a test rather than left to be discovered.
+
+    «Санин 7, 9а; Долкирева 2а, 2б» resolves both children correctly and marks the second
+    doubtful, so the teacher taps twice.  That is a real cost on a real input, and it is
+    the price of «дома» not arriving ticked — the owner writes one child per line, so it
+    is paid on the recovery path and not on his own.
+    """
+    rows = rows_of("Санин 7, 9а; Долкирева 2а, 2б", students, catalogue)
+
+    assert [row.student_id for row in rows] == [23, 18]
+    assert rows[1].verdict is Verdict.DOUBTFUL
+    assert [cell.ticked for cell in rows[1].cells] == [False, False]
+
+
+def test_a_score_exactly_on_the_lone_word_floor_is_not_above_it(students, catalogue):
+    """«верно» scores exactly 80.0 against Данилова Вера — the floor's own value.
+
+    An off-by-one in a comparison is not a rounding question here: it is the difference
+    between a prose word naming a child and not naming one.
+    """
+    match = tekst.match_student("верно", students)
+    assert match.score == pytest.approx(tekst.LONE_WORD_FLOOR)
+    assert match.student_id is None, "a score ON the floor was treated as clear of it"
+
+
+# =============================================================================
+#  THE DASHES A REAL KEYBOARD PRODUCES
+# =============================================================================
+
+@pytest.mark.parametrize("dash", ["—", "-", "–", "--", "---", "−", "––"])
+def test_every_dash_a_keyboard_makes_is_read_as_the_procherk(dash, students, catalogue):
+    """`--` is what a laptop gives most often, and it used to be read as part of the NAME.
+
+    The damage was worse than a failed match: «Быков --» went unresolved AND
+    ``present_no_marks`` stayed False, so even after the teacher tapped the right child
+    the явка was never recorded — the fact was gone, not merely unattributed.
+
+    ⚠ A whole LINE of three or more dashes is a different thing — the paper's own divider —
+    and it is removed before tokenising.  The test below holds that half.
+    """
+    draft = tekst.build_draft("Влад Быков %s" % dash, students=students, catalogue=catalogue)
+    row = draft.rows[0]
+
+    assert row.student_id == 11, row.reason
+    assert row.present_no_marks is True
+    assert row.cells == []
+    assert tekst.attendance_intents(draft) == [11]
+
+
+def test_a_line_of_dashes_is_still_a_divider_and_not_a_procherk(students, catalogue):
+    """The two readings of `---` stay apart: alone on its line it divides, after a name it
+    is the прочерк.  Collapsing them would either invent a явка or lose one."""
+    rows = rows_of("Катя Долкирева 2а\n---\nВлад Быков —", students, catalogue)
+
+    assert [row.student_id for row in rows] == [18, 11]
+    assert [row.present_no_marks for row in rows] == [False, True]
+
+
+# =============================================================================
+#  THE BRACKET BELONGS TO THE NAME IT STANDS BEFORE
+# =============================================================================
+
+def test_a_bracket_after_the_labels_belongs_to_the_next_child(students, catalogue):
+    """`Санин 7 [3д]Бочарова 5` — the bracket is Бочарова's, and it used to be Санин's.
+
+    §1 rule 3 puts the marker after the NAME and before the LABELS, so a bracket that turns
+    up after the labels cannot be about the block being read.  Attached to the wrong block
+    it moved Санин's задача 7 off the current листок and onto 3д — a real problem id on a
+    real child, from another month.
+    """
+    rows = rows_of("Санин 7 [3д]Бочарова 5", students, catalogue)
+
+    assert [row.student_id for row in rows] == [23, 9]
+    assert rows[0].sheet_marker is None
+    assert rows[0].cells[0].on_lead_sheet is True, "задача 7 was moved onto листок 3д"
+    assert rows[1].sheet_marker == "3д"

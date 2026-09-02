@@ -325,7 +325,10 @@ def match_student(said: str, students: Sequence):
     lone_word = len(re.split(r"\s+", said.strip())) == 1
     floor = max(golos.FUZZY_THRESHOLD, LONE_WORD_FLOOR) if lone_word else golos.FUZZY_THRESHOLD
 
-    if best.score < floor:
+    # ``<=``, not ``<``: a score sitting exactly ON the floor is not clear of it, and the
+    # case is real rather than theoretical -- «верно» scored exactly 80.0 against Данилова
+    # Вера and was let through by the strict comparison.
+    if best.score <= floor if lone_word else best.score < floor:
         return golos.SurnameMatch(
             None, Verdict.UNKNOWN, best.score, alternatives,
             "лучшее совпадение %.0f ниже порога %.0f%s"
@@ -415,14 +418,29 @@ class TextBlock:
     #: The block's own text, shown beside the row so a wrong parse is diagnosable
     #: without asking the teacher to remember what they typed.
     said: str = ""
+    #: True when this block did not START a line -- it was cut out of the middle of one
+    #: because a name turned up after the labels.  A fact about HOW SURE the boundary is,
+    #: and the only thing that tells «Санин 7, 9а Долкирева 2а» from «Санин 7, 9а дома 11б».
+    mid_line: bool = False
 
 
 def _classify_token(token: str) -> str:
-    """``name`` · ``label`` · ``dash`` · ``empty`` for one whitespace-separated token."""
+    """``name`` · ``label`` · ``dash`` · ``marker`` · ``empty`` for one token.
+
+    ⚠ A token made ENTIRELY of dashes is a прочерк whatever its length.  `--` is what a
+    laptop keyboard gives most often, and it used to fall through to «name»: «Быков --»
+    became a child whose name was «Быков --», so the row went unresolved AND
+    ``present_no_marks`` stayed False -- the teacher could tap the right child and the
+    явка still would not be recorded.  A whole LINE of three or more dashes is a different
+    thing, the paper's own divider, and ``_RULE`` has already removed it before we get
+    here.
+    """
+    if token.startswith("[") and token.endswith("]"):
+        return "marker"
     stripped = token.strip(_TRIM)
     if not stripped:
         return "empty"
-    if stripped in DASHES:
+    if all(character in DASHES for character in stripped):
         return "dash"
     if _LABEL.match(stripped):
         return "label"
@@ -467,12 +485,16 @@ def _cuts_a_block(token: str, value_seen: bool) -> bool:
     the failure the задание forbids by name: «плюс, поставленный чужому ребёнку», and
     «заметит её только тот, у кого он пропал».
     """
-    return (
-        value_seen
-        and _classify_token(token) == "name"
-        and not token.startswith("[")
-        and len(token.strip(_TRIM)) >= _NAME_MIN
-    )
+    if not value_seen:
+        return False
+    kind = _classify_token(token)
+    # §1 rule 3 puts the bracket AFTER the name and BEFORE the labels, so a bracket that
+    # turns up after the labels cannot belong to the block being read -- it belongs to the
+    # child written next to it.  Measured: «Санин 7 [3д]Бочарова 5» attached `[3д]` to
+    # Санин and moved his задача 7 onto листок 3д.
+    if kind == "marker":
+        return True
+    return kind == "name" and len(token.strip(_TRIM)) >= _NAME_MIN
 
 
 def _split_at_names(text: str) -> list:
@@ -496,7 +518,7 @@ def _split_at_names(text: str) -> list:
             current = []
             value_seen = False
         current.append(token)
-        if _classify_token(token) in ("label", "dash") and not token.startswith("["):
+        if _classify_token(token) in ("label", "dash"):
             value_seen = True
 
     if current:
@@ -525,14 +547,14 @@ def split_blocks(text: str) -> list:
         else:
             chunks[-1].append(line)
 
-    return [
-        _parse_block(segment)
-        for chunk in chunks
-        for segment in _split_at_names(" ".join(chunk))
-    ]
+    blocks: list = []
+    for chunk in chunks:
+        for position, segment in enumerate(_split_at_names(" ".join(chunk))):
+            blocks.append(_parse_block(segment, mid_line=position > 0))
+    return blocks
 
 
-def _parse_block(text: str) -> TextBlock:
+def _parse_block(text: str, *, mid_line: bool = False) -> TextBlock:
     """One block's text -> its name, its sheet marker, its labels and its прочерк."""
     said = text.strip()
 
@@ -571,6 +593,7 @@ def _parse_block(text: str) -> TextBlock:
         # it as «не сдал ничего» would contradict the three problems on the same line.
         present_no_marks=bool(dashes) and not labels,
         said=said,
+        mid_line=mid_line,
     )
 
 
@@ -698,6 +721,28 @@ def digest_of(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
+def _boundary_is_a_guess(block: TextBlock, match) -> bool:
+    """Is this row's very EXISTENCE an inference rather than something the teacher wrote?
+
+    A block cut out of the middle of a line whose name is ONE WORD is the one case where
+    the parser decided where a child begins.  «Санин 7, 9а Катя Долкирева 2а» is two words
+    and reads as a name; «Санин 7, 9а дома 11б» is one, and «дома» matches Домра at 89 --
+    over the lone-word floor, CERTAIN, and задача 11б staged on a child the teacher never
+    wrote.  The mirror image of the bug the mid-line cut was added to fix, and it must not
+    be traded for it.
+
+    So the cut still happens -- a name that really is the next child must not be swallowed
+    -- and what changes is the CONFIDENCE: the row is doubtful, its cells arrive unticked,
+    and the teacher's tap is what makes it real.  The prose word costs one glance; the real
+    child costs one tap.  Neither costs a plus on the wrong ребёнок.
+    """
+    return (
+        block.mid_line
+        and match.verdict is Verdict.CERTAIN
+        and len(block.name_text.split()) == 1
+    )
+
+
 def build_draft(text: str, *, students: Sequence, catalogue) -> golos.Draft:
     """A typed message -> the confirmation table, with nothing written and nothing guessed.
 
@@ -716,20 +761,42 @@ def build_draft(text: str, *, students: Sequence, catalogue) -> golos.Draft:
         problems = default_problems if sheet is None else problems_for(catalogue, sheet)
         lead = sheet if sheet is not None else current
 
+        cells = _annotate_cells(
+            golos.resolve_labels(block.labels, problems),
+            problems,
+            sheets,
+            lead.id if lead is not None else None,
+        )
+        verdict, reason = match.verdict, match.reason
+        if _boundary_is_a_guess(block, match):
+            # Shown, named and offered -- but NOT pre-ticked, and marked so the screen
+            # draws its ⚠.  The row still resolves and one tap writes it; what it may not
+            # do is arrive already ticked on the strength of a boundary the parser
+            # inferred rather than read.
+            verdict = Verdict.DOUBTFUL
+            reason = "%s; граница блока внутри строки — подтвердите" % match.reason
+            cells = [
+                TextCell(
+                    label=cell.label,
+                    problem_id=cell.problem_id,
+                    printed_label=cell.printed_label,
+                    ticked=False,
+                    sheet_id=cell.sheet_id,
+                    sheet_number=cell.sheet_number,
+                    on_lead_sheet=cell.on_lead_sheet,
+                )
+                for cell in cells
+            ]
+
         rows.append(
             TextRow(
                 said=block.said,
                 surname_text=block.name_text,
                 student_id=match.student_id,
-                verdict=match.verdict,
-                cells=_annotate_cells(
-                    golos.resolve_labels(block.labels, problems),
-                    problems,
-                    sheets,
-                    lead.id if lead is not None else None,
-                ),
+                verdict=verdict,
+                cells=cells,
                 alternatives=list(match.alternatives),
-                reason=match.reason,
+                reason=reason,
                 present_no_marks=block.present_no_marks,
                 sheet_id=sheet.id if sheet is not None else None,
                 sheet_marker=block.sheet_marker,
