@@ -13,8 +13,17 @@ WHAT IT ASSERTS -- ALL THREE, EVERY TIME
 1. ``pragma integrity_check`` on the unpacked snapshot says ``ok``;
 2. at least fifty students who have not left are in the roster (the cohort is fifty-six --
     a snapshot with twenty is a snapshot of something else);
-3. the newest mark is not older than a week (a file that opens and restores but stopped
-    receiving marks a month ago is a backup of a dead bot).
+3. the newest mark is neither older than a week nor in the future (a file that opens and
+    restores but stopped receiving marks a month ago is a backup of a dead bot; and a single
+    future-dated mark would otherwise satisfy "not older than a week" forever).
+
+WHAT THIS CHECK DELIBERATELY CANNOT DO
+--------------------------------------
+It cannot tell OUR database from a different one of the same shape and size.  A snapshot of
+another school's conduit with fifty-six students and a fresh mark passes all three.  Nothing
+here anchors on an installation identity, and adding one would mean writing to the schema,
+which is read-only to the position that wrote this.  Named as a limit rather than left to be
+discovered: this check answers "is the backup usable?", not "is it ours?".
 
 All three must pass before a ping goes out, and SILENCE MEANS ALARM: the alerting watches
 for the heartbeat, so a check that dies before it can report is as loud as one that fails.
@@ -58,6 +67,12 @@ MIN_STUDENTS = 50
 #: How stale the newest mark may be before the snapshot is considered a backup of a bot
 #: that has stopped working.  Lessons are twice a week, so a week is two missed lessons.
 MAX_MARK_AGE_DAYS = 7
+
+#: How far into the future a mark may legitimately sit.  Not zero: the snapshot is taken at
+#: one instant and checked at another, clocks between machines differ by seconds, and a mark
+#: recorded during the snapshot may carry a timestamp a hair ahead of the checker's clock.
+#: A day is generous for that and still nowhere near a wrong-year date.
+FUTURE_TOLERANCE = timedelta(days=1)
 
 #: The three names, used in the output and in the tests.  Order is the order they run in.
 CHECK_NAMES = ("integrity", "roster", "freshness")
@@ -179,6 +194,18 @@ def _check_freshness(connection: sqlite3.Connection, now: datetime) -> OneCheck:
     except ValueError:
         return OneCheck("freshness", False, "newest valid_at %r is not an ISO instant" % newest)
     age = now - moment
+    # BOTH ENDS.  An upper bound alone is a check that any single future-dated mark disarms
+    # FOREVER: `max(valid_at)` then stays in the future, the age stays negative, and
+    # "not older than a week" is satisfied by a journal that stopped months ago.  One
+    # teacher's phone with a wrong clock, or one import with a bad date, is enough -- and the
+    # schema cannot stop it, since the CHECK on `valid_at` is a glob over the ISO shape and
+    # a well-formed 2027 passes it.  Found by the §3 verifier on a snapshot whose real
+    # activity ended 45 days ago and which was reported GREEN, age -400 days.
+    if age < -FUTURE_TOLERANCE:
+        return OneCheck("freshness", False,
+                        "newest mark %s is %d day(s) in the FUTURE -- a clock is wrong somewhere, "
+                        "and until it is fixed this check cannot see a journal that stopped"
+                        % (newest, -age.days))
     return OneCheck("freshness", age <= timedelta(days=MAX_MARK_AGE_DAYS),
                     "newest mark %s, age %d day(s), limit %d" % (newest, age.days, MAX_MARK_AGE_DAYS))
 
@@ -215,6 +242,30 @@ def corrupt_roster(plain: Path) -> str:
     return "students reduced to %d" % left
 
 
+def corrupt_future(plain: Path) -> str:
+    """One mark dated far in the future -- the corruption that USED TO disarm the check.
+
+    Added after the §3 verifier built exactly this snapshot and got GREEN out of it.  The
+    fix without this corruption in the self-test would be a hope: nothing would go red if
+    somebody restored the old comparison.
+    """
+    connection = sqlite3.connect(str(plain))
+    try:
+        connection.execute("drop trigger if exists marks_append_only_update")
+        stale = (datetime.now(tz=timezone.utc) - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        connection.execute("update marks set valid_at = ?", (stale,))
+        ahead = (datetime.now(tz=timezone.utc) + timedelta(days=400)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        connection.execute(
+            "insert into marks (student_id, problem_id, event, teacher_id, valid_at, "
+            "recorded_at, source) values (1, 1, 'assert', 1, ?, ?, 'импорт')",
+            (ahead, ahead),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return "activity stopped 45 days ago, one mark dated 400 days ahead"
+
+
 def corrupt_freshness(plain: Path) -> str:
     """A journal that stopped -- the file restores, and the bot behind it died a month ago.
 
@@ -239,6 +290,7 @@ DAMAGE = (
     ("page rot", corrupt_pages, "integrity"),
     ("truncated roster", corrupt_roster, "roster"),
     ("stale journal", corrupt_freshness, "freshness"),
+    ("journal stopped, one mark dated in the future", corrupt_future, "freshness"),
 )
 
 

@@ -111,7 +111,8 @@ def test_self_test_returns_one_when_every_corruption_is_caught(capsys):
     """The готовности criterion's own command, run as a test: rc must be 1, never 0."""
     assert proverka.run_self_test() == 1
     printed = capsys.readouterr().out
-    assert "3 of 3 corruptions went red" in printed
+    total = len(proverka.DAMAGE)
+    assert "%d of %d corruptions went red" % (total, total) in printed
     assert "false greens 0" in printed
 
 
@@ -154,3 +155,59 @@ def test_cli_with_no_snapshot_at_all_is_red(tmp_path, capsys):
 def test_cli_on_the_latest_snapshot_is_green(zdorovyj_snimok, papka_kopij, capsys):
     assert proverka.main(["--kuda", str(papka_kopij)]) == 0
     assert "GREEN" in capsys.readouterr().out
+
+
+def test_a_single_future_dated_mark_does_not_disarm_the_freshness_check(zhivaya_baza,
+                                                                       papka_kopij, tmp_path):
+    """The false green the §3 verifier found, kept red by a test of its own.
+
+    An upper bound alone is a check that ANY future-dated mark disables forever: ``max(valid_at)``
+    stays ahead of now, the age stays negative, and "not older than a week" is satisfied by a
+    journal that stopped months ago.  One phone with a wrong clock is enough, and the schema
+    cannot stop it -- its CHECK on ``valid_at`` is a glob over the ISO shape, which a
+    well-formed 2027 passes.
+    """
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
+
+    def stop_then_jump(plain: Path) -> None:
+        connection = sqlite3.connect(str(plain))
+        try:
+            connection.execute("drop trigger if exists marks_append_only_update")
+            now = datetime.now(tz=timezone.utc)
+            connection.execute("update marks set valid_at = ?",
+                               ((now - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%SZ"),))
+            ahead = (now + timedelta(days=400)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            connection.execute(
+                "insert into marks (student_id, problem_id, event, teacher_id, valid_at, "
+                "recorded_at, source) values (1, 1, 'assert', 1, ?, ?, 'импорт')",
+                (ahead, ahead),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    healthy = rezervnaya_kopia.make_backup(zhivaya_baza, papka_kopij, label="sutochnyj")
+    workspace = tmp_path / "future"
+    workspace.mkdir()
+    verdict = proverka.check_snapshot(_broken_snapshot(healthy, workspace, stop_then_jump))
+
+    assert not verdict.passed, "a journal that stopped 45 days ago passed because one mark is dated ahead"
+    assert "freshness" in verdict.failed_names
+    assert "FUTURE" in verdict.report()
+
+
+def test_a_mark_a_few_seconds_ahead_of_the_checker_is_still_fine(zdorovyj_snimok):
+    """The tolerance is not zero: the snapshot is taken at one instant and checked at another."""
+    from datetime import timedelta
+
+    import datetime as datetime_module
+
+    slightly_behind = datetime_module.datetime.now(tz=datetime_module.timezone.utc) - timedelta(minutes=5)
+    assert proverka.check_snapshot(zdorovyj_snimok, now=slightly_behind).passed
+
+
+def test_the_check_is_honest_that_it_cannot_tell_our_database_from_another_of_the_same_shape():
+    """A limit named rather than left to be discovered, after the §3 verifier demonstrated it."""
+    source = Path(proverka.__file__).read_text(encoding="utf-8")
+    assert "WHAT THIS CHECK DELIBERATELY CANNOT DO" in source
