@@ -35,6 +35,7 @@ from infra.uvedomlenia_repo import (
     SqliteNotifiableTeachers,
     SqliteSentLog,
     SqliteTeacherAttendance,
+    SqliteWorkingTeachers,
 )
 from core.services.enrollment import EnrollmentService
 from core.services.marking import MarkingService
@@ -149,6 +150,11 @@ def build(
         sent_log=SqliteSentLog(repo._journal),  # noqa: SLF001
         teacher_attendance=SqliteTeacherAttendance(repo._journal),  # noqa: SLF001
         clock=SystemClock(),
+        # Who teaches on a given lesson day, read out of ``enrollment``.  Without it the
+        # after-lesson question goes to every row of the ``teachers`` table; with it, only
+        # to the people who work that weekday.  An unpopulated table falls back to the
+        # wider set rather than to nobody.
+        roll=SqliteWorkingTeachers(repo._journal),  # noqa: SLF001
     )
 
     # Stash the service so handlers that need it get it through DI -- the
