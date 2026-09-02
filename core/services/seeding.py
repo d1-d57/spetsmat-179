@@ -51,6 +51,12 @@ class SeedError(Exception):
 # empty over all 55 students, so no mark can be misattributed by this repair.  That was
 # measured, not assumed.
 #
+# What the repair does NOT do is reorder anything.  After it the run reads ``12а 12б 12в
+# 12г 12е 12д 12ж``: every letter present and distinct, with ``12д`` and ``12е`` still
+# transposed as the book has them.  Sorting them would be this file quietly editing the
+# source over a matter of appearance, and the transposition costs nothing -- both columns
+# it concerns are among the empty ones.
+#
 # The registry is explicit for the same reason the importer's value registry is: a
 # duplicate that is NOT listed here raises.  A silent "keep the first one" would drop a
 # problem out of the 544 and would look exactly like a clean load.

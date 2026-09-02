@@ -65,10 +65,20 @@ from infra.repositories import SqliteCatalogue, SqliteMarkJournal
 # why they are here and not in ``config.py``: config.py holds the constants that decide
 # what the bot does, and nothing in this block survives the import.
 
-#: The eighteen sheets of last season, in issue order.  The workbook holds 33 sheets; the
-#: other fifteen are tests, marks and the three summary sheets used below as oracles.
-WORKBOOK_SHEETS = ("1", "2", "3", "4", "6", "7", "8", "9", "10", "11",
-                   "12", "13", "14", "15", "1д", "2д", "3д", "4д")
+#: The sheets to import, in issue order, TAKEN FROM THE SEED rather than written out here.
+#:
+#: The seed is the catalogue and the book supplies events for the sheets the catalogue
+#: names, so a hard-coded tuple beside ``seed/sheets.json`` would be a second copy of the
+#: same list, free to drift from it -- and it would also pin this file to one particular
+#: workbook, which is exactly what made the previous version impossible to test against
+#: anything but a book nobody is allowed to commit.  Last season's seed yields the
+#: eighteen sheets ('1' .. '15', '1д' .. '4д'); the workbook holds 33, the other fifteen
+#: being tests, marks and the three summary sheets the oracles read.
+def sheets_to_import(seed_dir=None) -> tuple:
+    return tuple(
+        sheet["number"]
+        for sheet in sorted(read_sheets(seed_dir), key=lambda sheet: sheet["ord"])
+    )
 
 #: When the imported check-offs are recorded as having HAPPENED.  The book records no
 #: dates at all -- not per mark, not per sheet -- so one honest placeholder for the whole
@@ -290,7 +300,7 @@ def read_cells(workbook) -> list:
     can open the book at that cell rather than search 29 920 of them.
     """
     readings = []
-    for sheet_number in WORKBOOK_SHEETS:
+    for sheet_number in sheets_to_import():
         worksheet = workbook[sheet_number]
         layout = layout_of(worksheet)
         labels = problem_columns(worksheet, layout)
@@ -559,7 +569,7 @@ def _student_key(surname, name, student_ids):
 
 def _receivers_of(workbook) -> set:
     receivers = set()
-    for sheet_number in WORKBOOK_SHEETS:
+    for sheet_number in sheets_to_import():
         worksheet = workbook[sheet_number]
         layout = layout_of(worksheet)
         if layout.receiver_column is None:
@@ -574,7 +584,7 @@ def _receivers_of(workbook) -> set:
 def _receiver_by_row(workbook) -> dict:
     """``(sheet, surname, name) -> receiver string``."""
     by_row = {}
-    for sheet_number in WORKBOOK_SHEETS:
+    for sheet_number in sheets_to_import():
         worksheet = workbook[sheet_number]
         layout = layout_of(worksheet)
         if layout.receiver_column is None:
@@ -609,7 +619,7 @@ def _receiver_by_row(workbook) -> dict:
 
 def _set_first_sheets(connection, workbook, sheet_ids, student_ids, counts) -> None:
     present = defaultdict(set)
-    for sheet_number in WORKBOOK_SHEETS:
+    for sheet_number in sheets_to_import():
         worksheet = workbook[sheet_number]
         layout = layout_of(worksheet)
         for _row, surname, name in student_rows(worksheet, layout):
@@ -868,6 +878,7 @@ def oracle_hand_cells(connection, workbook) -> OracleResult:
     for reading in read_cells(workbook):
         by_meaning[reading.meaning].append(reading)
 
+    order = sheets_to_import()
     picked = []
     seen = set()
     for meaning in sorted(by_meaning):
@@ -888,14 +899,14 @@ def oracle_hand_cells(connection, workbook) -> OracleResult:
     step = 0
     index = 0
     while len(picked) < HAND_CHECKED_CELLS and index < HAND_CHECKED_CELLS * 4:
-        cell = cell_at(WORKBOOK_SHEETS[index % len(WORKBOOK_SHEETS)],
+        cell = cell_at(order[index % len(order)],
                        index * 7 + step, index * 5 + step)
         step += 3
         index += 1
         if cell is not None and cell[:4] not in seen:
             seen.add(cell[:4])
             picked.append(cell)
-    picked.sort(key=lambda cell: (WORKBOOK_SHEETS.index(cell[0]), cell[1]))
+    picked.sort(key=lambda cell: (order.index(cell[0]), cell[1]))
 
     checked = 0
     divergences = []
