@@ -396,6 +396,18 @@ grep -c 'upscale\|resize.*up' core/services/raspoznavanie.py   # должно б
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Гейт-греп на ЗАПРЕТ наказывает код, который этот запрет называет
+`grep -c 'upscale\|resize.*up' core/services/raspoznavanie.py   # должно быть 0` — пост-проверка §WARNING шаг 3. Запрет на апскейл я закрыл НОСИТЕЛЕМ: словарём запрещённых операций с их ценой в процентных пунктах и стражем, который краснеет на шаге с таким именем. От этого у грепа стало 4 совпадения, и пост-проверка покраснела бы на коде, который запрет ИСПОЛНЯЕТ строже, чем требовалось. Пришлось переименовать операцию (`upscale` → `enlarge`), чтобы гейт позеленел. Сам гейт при этом остался слеп к настоящему нарушению: `cv2.resize` вверх с `INTER_CUBIC` слова `upscale` тоже не содержит. Греп-на-отсутствие-слова поощряет МОЛЧАНИЕ о запрете и не ловит нарушение.
+ЦЕНА: здесь — одно переименование и один ход на диагностику. В общем случае: исполнитель, у которого выбор «назвать запрет и покраснеть» против «промолчать и позеленеть», выбирает второе, и запрет остаётся без носителя вообще. Правильная форма такой проверки — не греп по имени, а прогон, который краснеет на порче: у P7 это `_guard` с семью негативными контролями плюс свойство «пикселей на выходе не больше, чем на входе» на 200 случайных четырёхугольниках — и именно оно поймало настоящий апскейл, которого греп не видел.
+
+### Ветка захода отпочкована ДО влитий, на которые заход опирается
+§0.1 объясняет: ветку заводят ПОСЛЕ влития чужих веток, чтобы инструмент уже был на диске. У P7 вышло наоборот — ветка `zahod/P7-foto` стояла на 31ab856, а `main` был на 29 коммитов впереди, и в рабочей папке НЕ БЫЛО ни `bot/routers/`, ни `bot/keyboards/grid.py`, ни `bot/callbacks.py`, то есть всей P4, на «существующий путь отметки» которой §8 ссылается прямо. Первым ходом пришлось делать `git merge --ff-only main`. Заметить удалось только потому, что зона называла `bot/routers/photo.py`, а папки `bot/routers/` не существовало.
+ЦЕНА: здесь — один ход (ff-merge был чистый, `main..HEAD` = 0). Если бы не заметил: P7 написала бы собственный путь записи отметок вместо переиспользования P4 — ровно тот дубль, который §8 запрещает фразой «you do not write a second one». Цена такого дубля — переделка захода целиком плюс два расходящихся пути записи в append-only журнал. Заход, чья зона состоит ТОЛЬКО из новых файлов, этого сигнала не получит вовсе.
+
+### Отмена §0.1 целиком снимает и проверку предпосылки, а не только субагента
+Оркестратор отменил субагента гит-контура и велел вместо всего блока §0.1 выполнить одну команду. Но §0.1 — не только субагент: его пункт 2 несёт ПРЕДПОСЫЛКУ («её ветка отпочкована от свежей основной, поэтому инструмент, которым ты работаешь, уже на диске»), на которую опирается вся дальнейшая работа, и здесь она была ложной. Отмена блока целиком снимает и субагента, и проверку предпосылки — а проверка стоит один `git rev-list --count main..HEAD`.
+ЦЕНА: у P7 — ход на обнаружение плюс ход на починку, потому что предпосылка сломалась заметно. Цена в общем случае — цена предыдущего урока: полная переделка у захода, который сигнала не получит.
+
 ## ПЛАН — (заполняет исполнитель)
 
 **Entry state, measured first move.** `git rev-parse --abbrev-ref HEAD` -> `zahod/P7-foto`;
@@ -472,6 +484,47 @@ rather than applied from here.
 > ```
 > `ДОМ: владелец` — когда дома-файла нет вовсе (сам вопрос владельцу); для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит только случай «доставлено» без метки на месте, недоставленное просто печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+1. `bot/routers/photo.py` is merged into `main` and NOT WIRED: `bot/app.build` never includes it, so the screen is dead in production. `bot/app.py` is outside this position's zone (КОНТРАКТ ЗОНЫ), so the two lines were not applied from here. 🔴 THE ORDER IS LOAD-BEARING: the router must be included BEFORE `stale_router`, which `build` includes LAST and which claims every callback nobody above it matched — included after it, every button of this screen is answered «экран устарел» while every line of the screen is correct. The exact patch:
+       from bot.routers import marking, photo          # line 19
+       ...
+       grid_router, stale_router = marking.build_routers()
+       dp.include_router(grid_router)
+       photo_router, = photo.build_routers()           # <-- ADD, BEFORE stale_router
+       dp.include_router(photo_router)                 # <-- ADD
+       dp.include_router(stale_router)                 # unchanged, stays LAST
+   Plus one entry in `dp.workflow_data`: `"vision": VisionModel(api_key=<LLM_API_KEY>)`. The handler already degrades to «Разбор фото не настроен: нет ключа модели. Отметьте кнопками — /setka.» when it is absent, so wiring the router without the key is safe.
+   `tests/photo/conftest.py` performs exactly this ordering against a real dispatcher built by `bot.app.build`, so the patch is proven before it is applied.
+   ДОМ: bot/app.py
+   ДОСТАВЛЕНО: нет
+
+2. A photograph of a sheet OTHER than the current one is REFUSED, not read. The sheet number is now asked for and compared, but the closed list of task labels sent with the request is built for the CURRENT sheet, so an answer about another sheet was produced against the wrong vocabulary and cannot be trusted at any confidence. Reading an older sheet needs the label list of the sheet the paper names — a second round trip, or a union of the labels of the last N sheets. Named rather than half-built.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. `core/ports.Catalogue` has `problems_of_sheet` and `problems_between` but no `problem(problem_id)`. P4 already named this seam as missing (`bot/routers/marking._find_problem` walks the whole ord range and filters); P7 needed the inverse — label to problem WITHIN one sheet — and built its own dict in `build_draft`. Two positions have now worked around the same absent port method.
+   ДОМ: core/ports.py
+   ДОСТАВЛЕНО: нет
+
+4. `rapidfuzz` is NOT installed on this machine, so `tests/photo/test_confidence.py::test_the_local_metric_agrees_with_rapidfuzz_where_rapidfuzz_exists` SKIPS — the only skipped test in the suite. The local fallback computes `200*LCS/(len+len)`, which IS the definition of `fuzz.ratio`, and the containment case «Иванов И.» vs «Иванов» is pinned at the exact value 80.0, so the metric itself is checked; what is NOT checked on this machine is that the two implementations agree across the board. Either add `rapidfuzz` to `make check`'s `deps` target, or accept the skip knowingly.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. `seed/students.csv` carries 55 non-technical students, not the 56 that §5 and the контекст both state (56 + 45 = 101 against Gemini's ~120 ceiling). The arithmetic is unaffected — one field is far inside the ceiling either way — but a number quoted as measured is off by one in three places.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+6. `bot/handlers/owner.py` draws `callback_data="noop"` on every pending row and has no handler for it. P4 reported this and refused to make it worse; P7 confirms it is still there. It is P3's defect and neither position's zone.
+   ДОМ: bot/handlers/owner.py
+   ДОСТАВЛЕНО: нет
+
+7. The four payload classes of the photo screen (`FotoCell`, `FotoPick`, `FotoNote`, `FotoFinish`) live in `bot/routers/photo.py` and not in `bot/callbacks.py`, whose docstring calls it «every callback_data payload of the bot, and nothing else». `bot/callbacks.py` is P4's file and outside this zone; moving them is a one-commit tidy for whoever owns that file next.
+   ДОМ: bot/callbacks.py
+   ДОСТАВЛЕНО: нет
+
+8. `tests/photo/conftest.py` duplicates the recording-session fixture of `tests/grid/conftest.py`, itself a deliberate sibling of `tests/bot/conftest.py`. Three copies now. The duplication is legitimate under «two writers in one file is the single thing a wave cannot do», but three is where a shared `tests/_telegram.py` costs less than the drift — and P7's copy already had to DIVERGE, returning a real `Message` instead of a bare dict, because this screen edits the message it sent.
+   ДОМ: tests/conftest.py
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что

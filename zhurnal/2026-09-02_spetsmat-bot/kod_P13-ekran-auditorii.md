@@ -352,6 +352,39 @@ grep -rn 'enrollment' core/services/room.py | head -3   # сегодняшнее
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### §0 «What you stand on» named a file that is not on disk, and the position was scheduled on it
+
+`## 2. ЗАДАЧА §0` tells the executor to stand on «P6's `core/services/sessions.py` — attendance
+`был` / `не был`, and it is SEPARATE from marks», in the same list as three files that really do
+exist and really were reused. It does not exist. What P6 left is `infra/sessions_repo.py`, five
+lines: `class SqliteSessionsRepo: pass`, with a comment saying the implementation is deferred. The
+заход was written on the assumption that the dependency had landed, and the entry gate of the
+заход checks branches and заявки — not whether a named anchor file contains anything.
+
+ЦЕНА: attendance stopped being a thing this position REUSES and became a thing it must BUILD —
+the port, the domain, the SQLite adapter, and the storage decision «where does a today-only row
+live» that §0 implied was already answered by somebody else. Measured on this run: one extra
+file (`infra/room_repo.py`, 204 lines) and the whole of `core/services/room.py`'s attendance
+half, on a position whose §0 said «read it, do not rebuild it». It also produced a second cost
+that has not been paid yet: `infra/room_repo.py` now duplicates what P6's own store will be, and
+`main` records at `0f87e1b` that P6 has been sent back to redo — so one of the two will have to
+be deleted by hand later.
+
+### A готовности criterion that runs only the position's own test directory is green on a suite that cannot be collected
+
+`python3 -m pytest tests/room -q` passed with 22 tests while `make check` failed to collect at
+all: pytest without `__init__.py` names test modules by BASENAME, and `tests/grid/test_layout.py`
+and `tests/enrollment/test_service.py` already held the two names this position reached for.
+Directory-scoped and suite-scoped runs disagree, and only the suite-scoped one is the truth.
+
+ЦЕНА: one collection failure and a rename of three files here, caught only because `make check`
+happens to stand FIRST in this position's criterion. A position whose criterion listed only its
+own directory — which is the shape a criterion naturally takes when it is written to prove one
+position's work — would have committed a suite that no later заход could run, and the next
+position would have inherited a red `make check` it did not cause. Every remaining position of
+this wave will want a `test_service.py` and a `test_layout.py`.
+
+
 ## ПЛАН — (заполняет исполнитель)
 
 ### 0 · Two premises of this заход are false on disk. Named here, before any code.
@@ -471,6 +504,39 @@ around it by naming the rule without the words. This position does the same.
 > `ДОМ: владелец` — когда дома-файла нет вовсе (сам вопрос владельцу); для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит только случай «доставлено» без метки на месте, недоставленное просто печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
+1. `core.ports.Catalogue` offers students, sheets and problems and NO teachers, so a screen that
+   has to put a teacher's name above a column has nowhere to ask. This position added
+   `infra.room_repo.SqliteTeachers` and a narrow `TeacherDirectory` Protocol of its own rather than
+   edit somebody else's `core/ports.py` mid-wave. The seam belongs in `core/ports.py`, and the
+   next screen that shows a teacher's name will invent a second one.
+   ДОМ: core/ports.py
+   ДОСТАВЛЕНО: нет
+
+2. `infra/sessions_repo.py` (P6's zone, a five-line placeholder) and `infra/room_repo.py` (this
+   position's) will both be stores over `sessions` and `attendance` once P6 lands. One of them has
+   to be deleted, and the decision is whose port survives — not something either position can make
+   alone. The docstring of `infra/room_repo.py` says which one this position expects to go.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. `AuthMiddleware` short-circuits on the owner's `tg_id` and stamps an identity carrying no
+   teacher binding, so the `owner` half of every role gate in the bot is an identity that knows
+   nothing about rooms. This screen looks the binding up through the roster to work around it,
+   which means the owner can open the room screen only if he is separately registered as a teacher
+   of a room. Whether the owner should see every room, or one, or none, is the owner's call and
+   not a position's.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+4. `bot/handlers/owner.py:54` draws `callback_data="noop"` on every pending row and no router
+   registers a handler for it — `grep -rn '"noop"' bot/` finds the button and P4's note about it,
+   and nothing else. P4 reported it and refused to make it worse; this position checked it again
+   while making sure its own payload prefixes collide with nobody's. It is still unhandled, so a
+   tap on a pending student's name spins until Telegram gives up.
+   ДОМ: bot/handlers/owner.py
+   ДОСТАВЛЕНО: нет
+
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
@@ -490,26 +556,259 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+🔴 **§0.1 WAS CANCELLED BY THE ORCHESTRATOR** in the launch message of this restart, in
+these words: «СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ … Вместо всего блока §0.1 выполни САМ
+одну команду и вставь её вывод». So no git-contour subagent was run, the contour was not
+disassembled by one, and the single command it named was run by hand as the FIRST move of
+this session, before anything else. The reason given was measured next door: four заходы out
+of ten died on that very call.
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/     # the ONE command §0.1 was replaced by
+1
+```
+
+Three more of the four snapshot commands were taken on the same first move; the fourth
+(«не вывезено») is answered by the repository having no remote at all.
+
+```
+$ git --no-optional-locks status --porcelain          # не закоммичено (first move, verbatim)
+?? core/services/room.py
+
+$ git --no-optional-locks log --oneline -3            # where the interrupted run stopped
+96f296d Merge branch 'zahod/P6-zanyatia'
+946e9f8 zone: tests/sessions placeholder started
+d81721f step report: appended #REPORT with command count 0; unfinished listed
+
+$ git --no-optional-locks log --oneline @{u}..        # не вывезено
+fatal: no upstream configured for branch 'zahod/P13-ekran-auditorii'
+$ git --no-optional-locks remote -v
+(empty — this repository has no remote, so «вывезено» has nowhere to mean anything)
+
+$ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki
+Открытых заявок: 1
+   · 2026-09-02T0944-disciplina-2026-09-02t0942-9-budilnik  (2 ч, obychnaya, род: git-operaciya)
+     ЗЕРКАЛО заявки disciplina/2026-09-02T0942-9-budilnik-volny-9-sh-61 …
+     (a defect in the OTHER repository's BUDILNIK-VOLNY-9.sh; the mirror itself says the
+      foreign file was not edited because wave 9's live заходы sit in it)
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+- **Merged `main` into this worktree, fast-forward only** — `96f296d..0f87e1b`, 0 commits ahead,
+  so nothing of the interrupted run could be lost. Without it the worktree was one commit
+  behind and the файл-заход in it did not carry its own ## ПЛАН.
+- **The zone was committed in five parts, by hand, as §4 requires** — `0f826e3` (service),
+  `0a6d099` (keyboard), `66a169e` (router), `327f025` (the two out-of-zone files),
+  `6f370b8` (tests). Working tree clean: `git status --porcelain` → 0 lines.
+- **Merged nothing of anybody else's**, because there was nothing to merge: at the entry
+  snapshot the only unmerged `zahod/*` branch was this position's own, and its own merge is
+  the last move of this session by the owner's decision of 25.08.
+- **Closed no заявка**, for the reason in the list below.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+- **The one open заявка `2026-09-02T0944-disciplina-…-budilnik` is not closeable with my
+  rights.** It is a MIRROR of a defect in the `disciplina` repository — an `awk` bracket class
+  containing a two-byte `Ё`, in `BUDILNIK-VOLNY-9.sh` — and the заявка's own text records that
+  the foreign file was deliberately not edited because wave 9's live заходы are running out of
+  it. Another repository, somebody else's live working folder: outside this position's zone and
+  outside its rights.
+- **The git contour of §0.1 was not disassembled at all**, because §0.1 was cancelled by the
+  orchestrator (quoted above). This is named here rather than left silent: the cancellation, not
+  the work, is why this line is `нет` for the contour.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "bot/keyboards/room.py" && \
-    git_zona.py check --zone "bot/routers/room.py" && \
-    git_zona.py check --zone "core/services/room.py" && \
-    git_zona.py check --zone "tests/room/"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**WHERE THE PREVIOUS RUN STOPPED, AND WHERE THIS ONE PICKED IT UP.** The interrupted run died
+of a «Server error mid-response» (main records it in `0f87e1b`) after it had done exactly two
+things: it had written the whole `## ПЛАН` into this file, and it had drafted
+`core/services/room.py` — 668 lines, left UNCOMMITTED and standing as `?? core/services/room.py`
+in the working tree. Nothing else of the five parts existed: `git log main..HEAD` was empty, and
+`bot/keyboards/room.py`, `bot/routers/room.py`, `tests/room/` were absent from the disk. This run
+therefore started at part 1 of the ПЛАН's own order — it read the draft, checked it against the
+anchors, and committed it — and then built parts 2 through 5 in order, committing each one
+separately. Nothing already done was redone: the draft was kept as it stood, and the ПЛАН was not
+rewritten.
+
+**ПРАВКИ ПРОЧИТАНЫ:** the block is empty («правок нет»), so there is no number to name.
+
+---
+
+### What was made, and why each part is what it is
+
+**Part 1 · `core/services/room.py` `0f826e3`.** The one decision the position turns on is WHERE a
+today-only row lives. It cannot live in `enrollment`: an interval `[today, tomorrow)` overlaps the
+standing open row and `enrollment_no_overlap_insert` aborts, correctly. The table that already has
+the right shape is `attendance` — `unique (session_id, student_id)` with a nullable `teacher_id` —
+so «who this child worked with at THIS session» IS the today-only assignment, and both of the
+head's non-attendance actions fall out of one mechanism: a move for tonight is the row's
+`teacher_id`, and a guest is an attendance row whose today-teacher belongs to a teacher of this
+room. The service holds no enrollment port and imports nothing that could reach one, so the
+standing arrangement is untouched by CONSTRUCTION rather than by care.
+Two attendance states on this screen and not three: a repeat tap DELETES the row instead of
+writing the negative status, because untapping is «I tapped the wrong child» — the journal's
+erratum semantics — and not a claim that a child is absent. A row carrying the negative status,
+written later by whoever closes the lesson, still reads here as not-present and is turned into
+«came» by one tap, so the third state is handled without a third tap.
+The session of a day is get-or-create inside the store's transaction and every read takes
+`min(id)`: `sessions.held_on` carries no unique index and three heads open their screens in the
+same minute.
+
+**Part 2 · `bot/keyboards/room.py` `0a6d099`.** The payload classes live here because
+`bot/callbacks.py` is P4's and read-only. They are the same idiom and not a second one — a
+`CallbackData` factory, numbers only, a target state and never a toggle, every button built
+through `bot.keyboards.grid.button`, which is where the 64-byte law has its carrier.
+NEITHER THE ROOM NOR THE DAY IS IN ANY PAYLOAD, and that is the privacy boundary: the room comes
+from the head's own teacher binding and the day from the clock, so a forged `callback_data` has
+nothing in it with which to reach another room or another evening.
+Guests and tonight's moves are stated in the TEXT above the grid rather than as a second glyph on
+eighteen four-across buttons; the buttons carry a mark, a surname and the debt count, and nothing
+stands beside the number. Surname order is enforced here as well as in the service, deliberately:
+this is the module where somebody will one day think the ones who owe most should come first.
+
+**Part 3 · `bot/routers/room.py` `66a169e`.** Every handler ends by asking the service for the day
+AGAIN and drawing what came back, so the screen is redrawn from the database and never from
+remembered state — which is what lets six teachers and two heads hold one room without either of
+them having a way to notice they disagree. `answer()` runs before every redraw. No confirmation
+dialog anywhere: a confirmation is dismissed by the same reflex that produced the slip, and the
+undo is a repeat tap. The gate admits `head` and `owner` and nobody else — not a plain teacher,
+whose version of this screen does not exist in this position, and never a student.
+The owner's binding is looked up through the roster rather than assumed absent: `AuthMiddleware`
+short-circuits on the owner's `tg_id` and stamps an identity with no teacher on it, so without
+that lookup the owner could never open the screen at all.
+
+**Part 4 · `tests/room/` `6f370b8`.** 22 tests. The sweep drives 18 children × 3 actions = 54
+checks through `dp.feed_raw_update` and prints its own coverage; a test that called the service
+directly would pass with the router unregistered, which is the one failure that makes a screen not
+exist. The named `standing` test proves the point of the position by snapshotting the WHOLE
+`enrollment` table before and after 18 moves and 18 guests and comparing it row for row — a
+per-child assertion would pass while a neighbour's interval was rewritten, and «his teacher is
+still the same» would pass while his interval was closed and an identical one opened, which is a
+rewrite of history wearing the right answer.
+«Nothing stands beside the count» is checked as a SHAPE (a regular expression over the finished
+label) and not as a list of forbidden words: a list forbids the words somebody thought of, and the
+готовности gate greps this tree for that vocabulary, so a test could not spell the words even in
+order to forbid them.
+
+**Part 5 · OUT OF ZONE, separately · `327f025`.** Named in `## ПЛАН` before any of it was written.
+- `bot/app.py` — one `include_router` and the construction of `RoomService`. A router nobody
+  includes is a screen that does not exist for the head, and §3 of the WARNING block greps this
+  file for exactly that fact. **The ПЛАН said «three lines»; it is 24.** The service takes seven
+  collaborators and each one is a line.
+- `infra/room_repo.py` — **a NEW file, and NOT the fill of `infra/sessions_repo.py` that the ПЛАН
+  announced.** That placeholder is P6's zone, and `main` records at `0f87e1b` that P6 was sent back
+  to redo its work; writing into it now would put two positions in one file in the middle of a
+  wave. When P6 lands its own store, the sessions adapter here is the one that goes and
+  `RoomService` keeps its port unchanged, which is what the port is for. This is a deliberate
+  departure from my own ПЛАН and is named here because the ПЛАН is what приёмка reads.
+
+### How it was checked — the готовности criterion, all four commands, return code first
+
+```
+$ make check
+rc=0 · 243 passed in 110.06s        (before this заход: 221 passed — +22)
+
+$ python3 -m pytest tests/room -q
+rc=0 · 22 passed
+[аудитория] учеников 18 из 18 · действий на ученика 3 (присутствие, гость, сегодняшнее
+            назначение) · проверок 54 из 54 · провалов 0
+[раскладка аудитории] экранов 4 из 4 · кнопок проверено 65 · превышений 64 байт: 0 ·
+            рядов не по 4: 0
+[постоянное закрепление] интервалов 36 из 36 не изменилось · переводов на сегодня 18 ·
+            гостей 18 · возвратов постоянному 18
+
+$ python3 -m pytest tests/room -q -k "standing or postoyann"
+rc=0 · 3 passed, 19 deselected
+    test_a_guest_and_a_move_for_tonight_leave_the_standing_enrollment_untouched
+    test_a_guest_never_becomes_a_member_of_this_room_tomorrow
+    (+ one selected by the substring in another file's name)
+
+$ grep -rniE "рейтинг|percent|процент|badge|streak|leaderboard|очк[иов]|молодец|отлично" bot/ core/
+rc=1 (1 = ни одного вхождения = верно)
+```
+
+**Верификатор §3:** <ВСТАВЛЯЕТСЯ ПОСЛЕ ОТВЕТА>
+
+### ГИГИЕНА §4.1, point by point
+
+- **Г1. Зона доехала в git.** All four green:
+  `git_zona.py check --zone bot/keyboards/room.py` → ✅ · `--zone bot/routers/room.py` → ✅ ·
+  `--zone core/services/room.py` → ✅ · `--zone tests/room/` → ✅.
+  `git status --porcelain` → 0 lines.
+- **Г2. Второй репозиторий.** Неприменимо: every path of the zone lies inside `spetsmat-bot`, and
+  the zone did not grow outside it. Nothing was written into any other repository.
+- **Г3. Невлитых веток не прибавилось.** It DID grow, from 1 to 3, and here is whose:
+  ```
+  $ git --no-optional-locks branch --no-merged main
+  * zahod/P13-ekran-auditorii
+  + zahod/P6-zanyatia
+  + zahod/P7-foto
+  ```
+  `zahod/P13-ekran-auditorii` is mine and was inside the entry count already — it counted as
+  merged then only because it held zero commits of its own; it is merged by me as the last move of
+  this session, per the owner's decision of 25.08. `zahod/P6-zanyatia` and `zahod/P7-foto` are
+  live parallel заходы of this wave, working right now; P6 in particular was sent back to redo at
+  `0f87e1b`. Neither is mine to merge, and §0.1 — which is where merging somebody else's branch
+  would have been authorised — was cancelled by the orchestrator.
+- **Г4. Новый инструмент имеет живую точку вызова.** Неприменимо: no `.py` was created anywhere
+  under `_generator/**`. Every new file is application code inside `spetsmat-bot`.
+- **Г5. Новый `.md` зарегистрирован.** Неприменимо: this заход created no `.md` at all.
+- **Г6. В коммите нет чужих путей.** `git show --stat` on each of the five commits lists only the
+  files named for that commit: `core/services/room.py` · `bot/keyboards/room.py` ·
+  `bot/routers/room.py` · (`bot/app.py`, `infra/room_repo.py`) · `tests/room/*`. Every commit was
+  made with an explicit `-- <paths>`, so nothing of a neighbour's index could be swept in.
+
+### What was NOT touched
+
+`bot/callbacks.py`, `bot/keyboards/grid.py`, `bot/routers/marking.py`, `bot/handlers/**`,
+`bot/middleware.py`, `core/ports.py`, `core/models.py`, `core/services/{enrollment,progress,
+marking,roster,seeding}.py`, `config.py`, `migrations/**`, `infra/{db,repositories,roster_repo,
+enrollment_repo}.py`, `tests/{bot,grid,enrollment,import}/**`, `infra/sessions_repo.py`. The debt
+count is ASKED of `core/services/progress.py` and is not recomputed anywhere in this position; the
+port the service is handed offers no way to recompute it.
+
+### НЕОБРАТИМОЕ
+
+Три штуки, все объявляемые:
+1. **`git merge --ff-only main`** in the worktree, `96f296d → 0f87e1b` · restored by
+   `git reset --hard 96f296d` · it was a pure fast-forward (0 commits ahead), so nothing of the
+   interrupted run could be lost, and the untracked draft was untouched by it.
+2. **`bot/app.py` was edited** (24 lines added, 1 changed) · restored by `git revert 327f025`.
+3. **Five test files were renamed** before their first commit — `test_layout.py` →
+   `test_room_layout.py`, `test_service.py` → `test_room_service.py`, `test_refusals.py` →
+   `test_room_refusals.py` — inside my own uncommitted work, nothing of anybody else's moved.
+Nothing was deleted, nothing was overwritten, and nothing outside `spetsmat-bot` was written to.
+
+### ПОВТОРЯЕМОСТЬ находок
+
+**Repeats on the next unit of work, therefore a заход and not a queue item:**
+- **A test basename that already exists in another `tests/` subdirectory breaks the FULL run and
+  not the directory run.** `pytest tests/room -q` was green while `make check` failed to collect,
+  because without `__init__.py` pytest names modules by basename and `tests/grid/test_layout.py`
+  and `tests/enrollment/test_service.py` already held the two obvious names. Every remaining
+  position of this wave will want `test_service.py` and `test_layout.py`. Cost here: one collection
+  failure and a rename of three files, caught only because `make check` is in the criterion — a
+  position whose criterion ran only its own directory would have shipped a suite that cannot be
+  collected.
+
+**Does not repeat, therefore a queue item and not a заход:** the `infra/sessions_repo.py` collision
+below. It is the consequence of one neighbour being sent back to redo, not of anything structural.
+
+### Открытое «возвращаться»
+
+- `infra/room_repo.py` carries a sessions adapter that duplicates what P6's `infra/sessions_repo.py`
+  is meant to become. When P6 lands, the adapter here should go and `RoomService.SessionPort` should
+  be pointed at P6's. Written down in the file's own docstring so whoever lands P6 reads it there.
+- The owner can only open this screen if he is separately bound as a teacher of a room. That is
+  honest rather than a guess, but it means the `owner` half of the role gate is unreachable on a
+  deployment where the owner teaches nobody. Named in `## ВОПРОСЫ`.
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P13-ekran-auditorii/bot/routers/room.py` — открывать текстовым редактором; это точка входа собранного экрана, остальные три файла зоны названы в §4 и лежат рядом.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `6f370b8` — `tests/room: 18 children x 3 actions = 54 checks, driven through feed_raw_update, and the coverage is printed by the run` · `git_zona.py check --zone "bot/keyboards/room.py" && git_zona.py check --zone "bot/routers/room.py" && git_zona.py check --zone "core/services/room.py" && git_zona.py check --zone "tests/room/"` → ✅
+*(зона собрана пятью коммитами по ходу работы, как велит §4: `0f826e3` сервис · `0a6d099` клавиатура · `66a169e` роутер · `327f025` два файла ВНЕ зоны · `6f370b8` тесты.)*
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
