@@ -268,7 +268,10 @@ async def on_accept(
         except (RosterError, TelegramIdAlreadyBound) as exc:
             await callback.answer("Не удалось: %s" % exc, show_alert=True)
             return
-        await callback.answer("Преподаватель подтверждён как TEACHER.")
+        # 🔴 ВНУТРЕННЕЕ ИМЯ РОЛИ ЧЕЛОВЕКУ НЕ ПОКАЗЫВАЕМ. `TEACHER` — это член
+        # перечисления Role, а читает строку живой человек. Тот же класс, что
+        # английская диагностика, которую владелец увидел от бота в 14:3x.
+        await callback.answer("Преподаватель подтверждён.")
         roster.accept(registration_id)
         await _refresh_pending_list(callback.message, roster)
         return
