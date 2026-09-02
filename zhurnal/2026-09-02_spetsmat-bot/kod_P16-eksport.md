@@ -318,6 +318,31 @@ grep -c "cp " tools/proverka_vosstanovlenia.py   # должно быть 0
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Критерий готовности назвал команду над данными, которых в рабочей папке нет по построению
+Пункт критерия `python3 tools/proverka_vosstanovlenia.py` → `rc=0 на ЦЕЛОМ снимке` предполагает
+живую базу. Живая база лежит в `data/`, а `data/` стоит в `.gitignore` — значит её нет ни в
+одной рабочей папке и ни в одном свежем клоне, и не по случайности, а по устройству. Критерий,
+как он написан, в рабочей папке мог быть только красным.
+ЦЕНА: развилка, которую исполнитель разрешал в одиночку и мог разрешить неверно в обе стороны —
+объявить позицию проваленной по критерию (работа есть, отчёт красный) или молча выдумать зелёное
+над базой, которой не видел. Здесь выбран третий путь (проба из миграций и засева с громким
+баннером на каждой строке вывода), но он не был назван в заходе, и следующий исполнитель на
+таком же критерии выберет один из первых двух. Правило, закрывающее класс: если критерий трогает
+данные вне git, заход обязан назвать, чем их подменяют в рабочей папке.
+
+### Верификатор §3 требует сценарий, который §2 того же файла прямо запрещает строить
+Раздел §3 задаёт долю сплошной выборки как «3 порчи × 2 сценария времени = 6 проверок», где
+второй сценарий — «выкатить в час занятия, скрипт обязан отказать». Раздел §2 того же файла
+говорит: «You write the TOOLS; the SCHEDULE is P10's. Do not write a systemd unit, a timer or a
+cron line», а §0.1 — «деплоя в этом заходе нет». Скрипта выкатки в зоне нет и по заданию быть не
+может, поэтому ось, по которой считается охват верификатора, не существует.
+ЦЕНА: заявленная §3 доля выборки (6 проверок) недостижима буквально; исполнитель обязан либо
+отдать верификатор с охватом 3 из 6 и объяснением, либо подменить ось самостоятельно — то есть
+сам решить, чем меряется его собственная проверка. Здесь ось заменена на честно существующую
+временную ось тех же инструментов (свежая отметка / состаренная отметка), сетка 3 × 2 = 6
+сохранена, и замена объявлена. Класс: пункты интервью попадают в §3 генератором механически, без
+сверки с зоной §2, и противоречие живёт внутри одного файла.
+
 ## ПЛАН — (заполняет исполнитель)
 
 Read: `core/services/progress.py`, `core/models.py`, `core/ports.py`, `infra/db.py`,
@@ -402,6 +427,74 @@ Baseline measured before any edit: `make check` → rc=0, **148 passed**.
 > ```
 > `ДОМ: владелец` — когда дома-файла нет вовсе (сам вопрос владельцу); для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит только случай «доставлено» без метки на месте, недоставленное просто печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+1. WHAT P10 SHOULD SCHEDULE, AND HOW OFTEN — the answer §2 asks for, in one line.
+   Weekly, and it is ONE command, because the snapshot and the check must not be able to
+   drift apart into "the backup ran" and "nobody checked it":
+       cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && python3 tools/proverka_vosstanovlenia.py
+   It takes a snapshot (`VACUUM INTO` + gzip), rotates 14 days, restores it and runs the
+   three assertions; rc=0 only if all three pass, and every failure names itself on stdout.
+   P10 must treat a NON-ZERO exit as an alarm that reaches a person — a timer that mails
+   its output nowhere turns this back into a backup nobody has restored.
+   Not weekly and not scheduled at all: `--na-porchennom`. It is the self-test of the
+   check and returns non-zero BY CONSTRUCTION (rc=1 = every corruption was caught, rc=2 =
+   one came back green). A timer would report it as a permanent failure.
+   Lesson hours are NOT a reason to skip a run: the snapshot is a read over a read-only
+   connection and cannot disturb a lesson. The refusal the interview asks for belongs to
+   the roll-out, which is P10's and not in this зона.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. SIX CONSTANTS THAT BELONG IN `config.py` AND ARE NOT THERE, because the зона of this
+   position declares `config.py` read-only. Each is a named module constant with a
+   docstring pointing at this debt, so the move is one edit and not a search:
+       tools/export_xlsx.py             EXPORT_DIR       (= config.DB_PATH.parent)
+       tools/proverka_vosstanovlenia.py BACKUP_DIR       (= config.ROOT / "backups")
+       tools/proverka_vosstanovlenia.py ROTATION_DAYS    = 14
+       tools/proverka_vosstanovlenia.py MIN_STUDENTS     = 50
+       tools/proverka_vosstanovlenia.py FRESH_DAYS       = 7
+       tools/proverka_vosstanovlenia.py FUTURE_TOLERANCE = 5 минут
+   The last four decide behaviour, which is exactly what `config.py`'s own rule reserves
+   for itself. Check after the move: `make check` stays green and all five grep in
+   `config.py`. This is the same class as the open заявка 2026-09-02T1509 (P5's two
+   constants) — a third position now, so it is a pattern of the wave, not an accident.
+   ДОМ: config.py
+   ДОСТАВЛЕНО: нет
+
+3. ON THE OWNER'S MACHINE, ASSERTION 3 WILL BE RED UNTIL THE NEW SEASON STARTS, and that
+   needs a decision rather than a patch. The imported season carries
+   `IMPORT_VALID_AT = "2026-06-30T00:00:00Z"` for every one of its 15 847 events, so the
+   newest `valid_at` in the live database today is over two months old and "the latest mark
+   is not older than a week" fails by design. Two readings, and the owner picks:
+   (a) it is the correct alarm — nobody has marked in a week, and in September that is
+       true and worth knowing; the check goes green by itself on the first real tap;
+   (b) it should be silent out of season, in which case the rule needs a second clause
+       (e.g. green if the newest mark is fresh OR the database holds no non-import marks),
+       and that clause is a decision about what a backup is FOR, not a bug fix.
+   Nothing was invented here: the assertion is implemented exactly as the задание states it.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+4. FOUND OUTSIDE THE ЗОНА, NOT TOUCHED: `seed/students.csv` is in git and carries what
+   read as real surnames and names of the fifty-six children (Агаркова Ирина, Аникина
+   Анастасия, …), while `config.py` states the rule as "only the anonymised derived seed
+   under `seed/` is allowed into git" and the reason as "it carries the names of fifty-six
+   children". Either the file is not anonymised and the rule is broken by the repository
+   itself, or "anonymised" means something narrower than the sentence says and the sentence
+   should say it. This position exports those same surnames into a workbook and was careful
+   to keep the workbook out of git; the seed makes that care partly moot. `seed/` is outside
+   the зона, so it is named here and left alone.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. `data/` AND `backups/` ARE NOT CREATED BY ANYTHING, and both tools create them on
+   demand (`mkdir(parents=True, exist_ok=True)`), which is right for a tool and wrong as
+   the project's only answer: on a fresh machine the first thing that runs decides the
+   permissions of a directory that ends up holding every surname in the school. A deploy
+   position (P10) creating both with explicit modes would close it. Not done here — it is
+   the roll-out, not the tools.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что

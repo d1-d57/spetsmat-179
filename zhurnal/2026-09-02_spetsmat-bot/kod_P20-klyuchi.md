@@ -358,6 +358,103 @@ grep -c 'LLM_API_KEY\|SPETSMAT_ASR' bot/app.py infra/asr.py   # имена из 
 
 ## ПЛАН — (заполняет исполнитель)
 
+### 🔴 FALSE PREMISE IN THE TASK, NAMED BEFORE WORK (§1 "оспорить ложную предпосылку")
+
+The заход says: «любое присланное фото сегодня получает "не настроен"». It does not.
+A photo sent today gets **nothing at all** — no answer, no line in the log:
+
+    grep -n 'include_router' bot/app.py     # registration, owner, student, teacher,
+                                            # marking(grid), room, views, stale — 8 lines
+    grep -n 'photo\|voice' bot/app.py       # rc=1, EMPTY
+
+**Neither `bot/routers/photo.py` nor `bot/routers/voice.py` is included in the
+dispatcher.** The missing `vision` key is the SECOND lock on that door; the first is
+that the door is not hung. `tests/voice/conftest.py:78-82` says so in writing: «``bot/app.py``
+is outside its zone, so the voice router is not included there … when the include lands
+in ``bot/app.py`` this fixture should be replaced by ``build()``». `tests/photo/conftest.py:249`
+substitutes the router AND the dependency in the same fixture.
+
+Putting `vision` into `workflow_data` and stopping there would deliver a key to a screen
+that is not reachable. So the plan below hangs the two routers as well — same file, same
+zone, and by ADDITION (`include_router` lines + `workflow_data` keys), never by rewriting
+the build, as §4 of the task requires.
+
+### PARTS, IN ORDER, ONE COMMIT EACH
+
+**Part 1 — `vision` reaches the bot (task §1).**
+- `bot/app.py`: build the recogniser from the environment through P7's own constructor
+  (`infra.llm.VisionModel`), reading `LLM_API_KEY` / `LLM_MODEL` — the names already in
+  `bot.env.example`. No key → `vision` is `None` and the bot still starts: `VisionModel`
+  raises `ValueError` on an empty key, so the build is guarded, not wrapped in a bare
+  `except`.
+- Only the env var NAME and an empty default live in the code; no secret in git.
+- `infra/llm.py` is P7's accepted zone and is NOT edited.
+- Include `photo.build_routers()` BEFORE the catch-all `stale_router`, for the reason
+  `tests/photo/conftest.py:245-247` states: after the catch-all every photo button would
+  answer «экран устарел».
+
+**Part 2 — one home for the speech variable names (task §2).**
+- Decision: keep the `SPETSMAT_` prefix in the code (the task's own advice; it protects
+  against collision on a shared machine) and fix `bot.env.example`. `ASR_PROVIDER` /
+  `ASR_API_KEY` in the template become `SPETSMAT_ASR_KEY` / `SPETSMAT_ASR_FOLDER` — the
+  two names `infra/asr.py:245-246` actually reads. Yandex SpeechKit needs BOTH a key and
+  a folder id, and the old template had no line for the folder at all, so the owner could
+  not have configured voice from it even with the names matching.
+- Wire `voice.voice_dependencies(catalogue)` into `workflow_data` and include the voice
+  router — otherwise the key the owner is fetching right now still reaches nothing, since
+  `on_voice` declares `transcriber` / `download` / `schema_extractor` and aiogram resolves
+  them from `workflow_data`.
+- Report the exact variable names as an explicit list, which is what the owner is waiting for.
+
+**Part 3 — the gate on the CLASS (task §3), `tests/klyuchi/`.**
+- An AST walk over `bot/**/*.py`. For every function that declares `**data`, collect every
+  key read from that name via `data[...]` / `data.get(...)`. FSM reads are excluded by
+  construction, not by a name list: they go through `await state.get_data()`, which binds a
+  different value — the test refuses to count a `data` name that is reassigned inside the
+  function body.
+- Subtract what `bot/app.py` puts into `workflow_data` (read from the AST of the file, not
+  from a hand-written list, so the gate cannot drift from the code) and what aiogram and
+  the middleware supply (`bot`, `event_from_user`, … and `identity`, which
+  `bot/middleware.py` stamps).
+- Fail on a non-empty remainder, printing the names. Print the counts either way:
+  «потребляется N, кладётся N, НЕ ПОДСТАВЛЕНО 0».
+- Second gate, same file, same class: every handler registered on a router that `build()`
+  includes must have every non-aiogram NAMED parameter present in `workflow_data` too —
+  that is how `transcriber` hides, and a gate that only watched `data.get()` would have
+  let Part 2 rot the same way.
+
+### 🔴 SECOND FALSE PREMISE: THE FOURTH CRITERION COMMAND CANNOT RETURN 0
+
+The task's fourth criterion is
+
+    diff <(grep -oE "^[A-Z_]*ASR[A-Z_]*" bot.env.example | sort -u) \
+         <(grep -ohE "SPETSMAT_ASR_[A-Z]+|ASR_[A-Z_]+" infra/asr.py | sort -u) ; echo "rc=$?"
+
+The right-hand side does not list environment variables. It lists every ASR-ish IDENTIFIER
+in the file, and three of them are not environment variables at all:
+
+    ASR_KEY_ENV          # the Python constant that HOLDS the name
+    ASR_FOLDER_ENV       # likewise
+    ASR_TIMEOUT_SECONDS  # a plain module constant, no environment variable behind it
+
+So `rc=0` is reachable only by writing `ASR_KEY_ENV=`, `ASR_FOLDER_ENV=` and
+`ASR_TIMEOUT_SECONDS=` into `bot.env.example` — three variables nothing reads, handed to
+the owner as though he had to fill them in — or by renaming working constants to dodge a
+regex. Both make the code worse to make a grep green. Neither is done.
+
+**Corrected command, one token different in shape: compare only the QUOTED STRING
+LITERALS, which is what an environment variable name actually is in that file.**
+
+    diff <(grep -oE "^[A-Z_]*ASR[A-Z_]*" bot.env.example | sort -u) \
+         <(grep -ohE '"SPETSMAT_ASR_[A-Z_]+"|"ASR_[A-Z_]+"' infra/asr.py | tr -d '"' | sort -u) ; echo "rc=$?"
+
+Both forms are run and both outputs are quoted in `## ОТЧЁТ`; the literal one is red for
+the reason above and NOT because the names diverge — the two env names match exactly, and
+the diff shows nothing removed, only the three non-variables added. The check is also
+carried machine-side, where it can go red properly, by `tests/klyuchi/`.
+
+### CRITERION — as written in the task, all four commands, rc first
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

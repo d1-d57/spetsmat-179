@@ -364,6 +364,65 @@ grep -c 'token_set_ratio' core/services/roster.py   # должно быть 0
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Premise check on the КРИТЕРИЙ ГОТОВНОСТИ: it holds, with one correction I am making
+up front.** The criterion names `python3 -m pytest tests/privyazka -q -k "dva or ambig"`.
+A tie between two catalogue rows has to be a REAL tie, not a staged one, or the test
+proves nothing. I measured the live seed (`seed/students.csv`, 56 rows, all surnames
+distinct) and found the tie inside it: «Цикунов Александр» and «Цуканов Александр»,
+identical given names, and the query «Цукунов Александр» scores **85.714… against both**
+(`rapidfuzz.fuzz.ratio` over `case_forms`, measured — not estimated). That pair is what
+the ambiguity test uses. No invented catalogue.
+
+**Part 1 — registration binds instead of creating.**
+
+1. `infra/roster_repo.py` (zone): the journal connection already lives in `RosterRepo`,
+   so the catalogue read needed for matching goes on the port — `catalogue_students()`
+   returns `(id, surname, name, tg_id)` for every row of `students`. This is what keeps
+   `bot/app.py` untouched: the service needs no new constructor argument, and `app.py`
+   is read-only.
+2. `infra/roster_repo.py`: `attach_student_to_row(student_id, tg_id)` — sets `tg_id` and
+   `status='active'` and **does not touch `first_sheet_id`**. `tg_id` UNIQUE stays the
+   carrier; the second bind raises `TelegramIdAlreadyBound`.
+3. `core/services/roster.py` (zone): `match_student(registration)` returns a
+   `StudentMatch` with `kind` ∈ {`single`, `ambiguous`, `none`} plus the candidate rows.
+   Scoring **imports P7** (`core.services.raspoznavanie.case_forms` / `ratio`) and writes
+   no third index; `token_set_ratio` is not used anywhere. Normalisation: casefold,
+   `ё → е`, hyphen → space, trailing initials («Пирогов К.») dropped, whitespace collapsed.
+   `score = 0.7·surname + 0.3·given name`, admitted when surname ≥ 0.75 and combined ≥ 0.80;
+   everything within 0.05 of the best is a tie and comes back as `ambiguous`.
+   Measured on the live 56: **56 of 56 resolve to their own row, 0 misses.**
+4. `core/services/roster.py`: `bind_student(registration, student_id)` attaches to the
+   found row; `create_new_student(registration)` keeps the old create path but is now
+   reachable ONLY from an explicit owner button.
+5. `bot/handlers/owner.py` (zone): `accept:` for a student no longer creates. It matches
+   first — one hit binds; two or more draw one button per candidate
+   (`bindstud:<reg>:<student>`) plus «нет в списке — завести нового»; zero hits draws that
+   same explicit button alone. Nothing is guessed and nothing is created silently.
+
+**Part 2 — the owner is told about a заявка at once.**
+
+6. `core/services/roster.py`: an optional `on_pending` notifier, fired by
+   `submit_student` / `submit_teacher`. `core/` still imports no bot framework — the
+   notifier is a plain callable.
+7. `infra/roster_repo.py`: a `notified_registration` table. `claim_notification(id)`
+   returns `True` only the first time, and `resolve_pending` deletes the marker so that
+   a recycled `pending_registration.id` cannot silence a later заявка. One заявка, one
+   message; a process restart replays nothing, because the notifier fires on submit and
+   the claim is on disk.
+8. `bot/handlers/owner.py`: `pending_notifier(bot, owner_tg_id)` builds the message (who
+   is asking, in what role) with the same three buttons, and a `@router.startup()` hook
+   installs it on the live `RosterService`. **This is the seam that keeps the work inside
+   the zone**: `dp.start_polling` emits startup with `bot`, `roster` and `owner_tg_id` in
+   `workflow_data`, so no line of the read-only `bot/app.py` has to change.
+
+**Part 3 — `tests/privyazka/`.** The 56-row sweep printing «resolved into existing N /
+newly created M / DUPLICATES 0»; the named `pirogov` test (binds to the existing row and
+his 201 marks are still there afterwards); the named `dva`/`ambig` test (buttons, no
+choice); ё/е, initial and whitespace typos; the second-bind refusal; and the notification
+tests (one message per заявка, idempotent under a repeated fire).
+
+Each of the three parts is committed separately.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
