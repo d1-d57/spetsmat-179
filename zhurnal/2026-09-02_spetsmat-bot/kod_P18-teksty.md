@@ -342,6 +342,41 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+Four parts, one commit each, in the order the задание gives them.
+
+1. **Collect (`tests/teksty/sobrat.py`).** AST walker over the live `bot/` and
+   `core/` trees. A literal counts as human-facing when it sits inside a call
+   whose (last) name is one of `answer`, `reply`, `edit_text`, `send_message`,
+   `answer_callback_query`, `InlineKeyboardButton`, `KeyboardButton`, `_deny`.
+   f-string fragments count too — the child reads them as text. Nested calls are
+   not descended into, so a button label inside `answer(...)` is counted once.
+   Prints `file:line · call() · text` and a coverage number at the end.
+2. **Judge.** Read every collected line aloud against the four questions. For
+   question 4 (does the text lie about what the code does) open the code around
+   the line — one line read alone cannot answer it.
+3. **Fix.** Only strings addressed to a human. No logic changes. If a text lies
+   because the CODE is wrong, the text is not silently made true — the case goes
+   into `## ОТЧЁТ` as a separate list plus a заявка.
+4. **Guard (`tests/teksty/test_teksty.py`).** Reuses `sobrat.py` as its source
+   of lines, so the guard and the collector can never disagree. Bans internal
+   role names, field names, `id=`, `None`, Latin runs longer than three letters
+   outside a whitelist. Prints its own coverage. Redness proved by putting
+   `TEACHER` back into `bot/handlers/owner.py`, running, showing red, reverting.
+
+**ASSUMPTION STATED BEFORE WORK, because the criterion may read as failed
+otherwise.** The заход expects 91 lines; my collector prints **114**. I did not
+tune the predicate to reach 91. The gap is a definition difference, not a
+disagreement about which files matter (12 files, same as the orchestrator's
+measurement): I count each literal fragment of an f-string separately, because
+`f"Записано: {n}"` puts two independently-authored pieces of Russian in front of
+the child and both must be judged. The exact numbers are reported in `## ОТЧЁТ`.
+
+**CRITERION OBJECTION (§1 invites it).** «91» is a snapshot of another scanner,
+not a property of the repository, so a mismatch cannot by itself mean the work is
+wrong. I treat the criterion as «every human-facing line is read and judged, and
+the number is stated honestly», which is what the задание itself says to do when
+the count diverges.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
