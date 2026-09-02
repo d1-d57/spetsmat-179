@@ -173,6 +173,36 @@ def test_a_failed_move_leaves_the_standing_interval_open(enrollment, enrollment_
     assert enrollment.teacher_on(student, "2025-12-08").teacher_id == vanya
 
 
+def test_the_open_sentinel_is_refused_on_the_real_store_too(
+    enrollment, enrollment_repo, world, third_teacher
+):
+    """The same three refusals, against the database that would otherwise show the damage.
+
+    Two of them leaked a raw ``sqlite3.IntegrityError`` across the seam ``core/`` exists
+    to keep sqlite3 behind; the third — ``end`` — succeeded and left the row open.  This
+    pins that none of the three reaches the store at all.
+    """
+    student = world.student_ids[0]
+    vanya = world.teacher_ids[0]
+    enrollment.assign(student, vanya, room="303", weekday=MON, valid_from="2025-09-01")
+
+    with pytest.raises(EnrollmentError):
+        enrollment.assign(world.student_ids[1], vanya, room="303", weekday=MON,
+                          valid_from=config.OPEN_END_DATE)
+    with pytest.raises(EnrollmentError):
+        enrollment.move(student, weekday=MON, to_teacher_id=third_teacher,
+                        effective_from=config.OPEN_END_DATE, room="302")
+    with pytest.raises(EnrollmentError):
+        enrollment.end(student, weekday=MON, effective_from=config.OPEN_END_DATE)
+
+    standing = enrollment_repo.open_row(student, MON)
+    assert (standing.teacher_id, standing.valid_from, standing.valid_to) == (
+        vanya, "2025-09-01", config.OPEN_END_DATE
+    )
+    assert len(enrollment_repo.history(student, MON)) == 1
+    assert enrollment.teacher_on(student, "2026-05-04").teacher_id == vanya
+
+
 def test_closing_a_row_that_does_not_exist_is_loud(enrollment_repo):
     """Silence here would leave a caller opening a successor to a still-open interval."""
     with pytest.raises(EnrollmentError, match="nothing was closed"):

@@ -210,6 +210,32 @@ def test_a_date_that_is_not_a_padded_iso_day_is_refused(fake_enrollment):
             fake_enrollment.teacher_on(KAKHIANI, bad)
 
 
+def test_the_open_sentinel_cannot_open_or_close_an_interval(fake_enrollment):
+    """``9999-12-31`` supplied as a start day, on all three write paths.
+
+    Found by this position's verifier, not by the author.  It fails three different ways
+    and the worst of them is silent: ``end`` at the sentinel sets ``valid_to`` to the
+    value that MEANS still open, so a student reported as having left stays enrolled and
+    the call returns a row that reads as closed.
+    """
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+
+    with pytest.raises(EnrollmentError, match="sentinel"):
+        fake_enrollment.assign(2, VANYA, room="303", weekday=MON,
+                               valid_from=config.OPEN_END_DATE)
+    with pytest.raises(EnrollmentError, match="sentinel"):
+        fake_enrollment.move(KAKHIANI, weekday=MON, to_teacher_id=DANYA,
+                             effective_from=config.OPEN_END_DATE, room="302")
+    with pytest.raises(EnrollmentError, match="sentinel"):
+        fake_enrollment.end(KAKHIANI, weekday=MON, effective_from=config.OPEN_END_DATE)
+
+    # And the refusal changed nothing: the student is still with the teacher he had.
+    standing = fake_enrollment.history_of(KAKHIANI, MON)
+    assert len(standing) == 1
+    assert standing[0].valid_to == config.OPEN_END_DATE
+    assert fake_enrollment.lesson_days_of(KAKHIANI) == [MON]
+
+
 def test_a_row_without_a_room_is_refused(fake_enrollment):
     with pytest.raises(EnrollmentError, match="room"):
         fake_enrollment.assign(KAKHIANI, VANYA, room="  ", weekday=MON,

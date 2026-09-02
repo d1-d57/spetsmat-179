@@ -126,6 +126,35 @@ def as_day(value: str) -> str:
     return value
 
 
+def as_start_day(value: str) -> str:
+    """A caller-supplied day that OPENS an interval or closes one.
+
+    The same shape check as ``as_day``, plus one refusal: the open sentinel.
+    ``config.OPEN_END_DATE`` is a perfectly good ``valid_to`` and is never a good
+    ``valid_from`` or effective day, and the two ways it gets in fail differently and
+    both badly.
+
+      * ``assign(valid_from=OPEN_END_DATE)`` and ``move(effective_from=OPEN_END_DATE)``
+        build an interval with ``valid_from == valid_to``, which the schema's
+        ``check (valid_from < valid_to)`` refuses — as a driver exception crossing the
+        seam that ``core/`` exists to keep sqlite3 behind.
+      * ``end(effective_from=OPEN_END_DATE)`` is worse, because it succeeds: it sets
+        ``valid_to`` to exactly the value that MEANS still open, so a report that a
+        student left leaves him enrolled and returns a row that looks closed.
+
+    Found by the verifier of this position, on a probe no test had made.
+    """
+    day = as_day(value)
+    if day >= config.OPEN_END_DATE:
+        raise EnrollmentError(
+            "%r is the open-end sentinel (or past it) and cannot open or close an "
+            "interval: as a start it makes valid_from == valid_to, which the schema "
+            "refuses, and as an end it sets valid_to to the value that means STILL OPEN"
+            % (value,)
+        )
+    return day
+
+
 def weekday_of(day: str) -> int:
     """The ISO weekday of a calendar day, Monday = 1.
 
@@ -367,7 +396,7 @@ class EnrollmentService:
         checks that the new interval does not reach back into the old one.
         """
         check_weekday(weekday)
-        valid_from = as_day(valid_from)
+        valid_from = as_start_day(valid_from)
         with self._rows.transaction():
             standing = self._rows.open_row(student_id, weekday)
             if standing is not None:
@@ -412,7 +441,7 @@ class EnrollmentService:
         correcting the room passes it with the same teacher.
         """
         check_weekday(weekday)
-        effective_from = as_day(effective_from)
+        effective_from = as_start_day(effective_from)
         with self._rows.transaction():
             standing = self._rows.open_row(student_id, weekday)
             if standing is None:
@@ -453,7 +482,7 @@ class EnrollmentService:
         not removed.
         """
         check_weekday(weekday)
-        effective_from = as_day(effective_from)
+        effective_from = as_start_day(effective_from)
         with self._rows.transaction():
             standing = self._rows.open_row(student_id, weekday)
             if standing is None:
