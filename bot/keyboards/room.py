@@ -216,7 +216,8 @@ def _name_of(student: Optional[Student]) -> str:
 def _teacher_name(teacher_names: dict, teacher_id: Optional[int]) -> str:
     if teacher_id is None:
         return "без преподавателя"
-    return teacher_names.get(teacher_id) or ("преподаватель %d" % teacher_id)
+    # 🔴 БЫЛО «преподаватель %d» с `teacher_id` — ключом строки базы.
+    return teacher_names.get(teacher_id) or "преподаватель не из списка"
 
 
 # ---------------------------------------------------------------------- the room

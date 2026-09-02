@@ -474,7 +474,12 @@ def _encode(frame) -> bytes:
     cv2 = _cv2()
     ok, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
     if not ok:  # pragma: no cover -- imencode fails only on a malformed array
-        raise IntakeRefused("не смог закодировать изображение в JPEG")
+        # Показывается человеку дословно, поэтому говорит про снимок, а не
+        # про кодек: «JPEG» преподавателю на занятии ничего не даёт.
+        log.error("imencode отказал: кадр %r", getattr(frame, "shape", None))
+        raise IntakeRefused(
+            "не смог подготовить этот снимок — пришлите фото заново"
+        )
     return buffer.tobytes()
 
 

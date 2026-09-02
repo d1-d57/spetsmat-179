@@ -65,8 +65,29 @@ POKAZYVAYUT: dict[str, tuple[tuple[int, ...], tuple[str, ...]]] = {
     "IntakeRefused": ((0,), ()),
 }
 
-#: Latinица в этих словах законна: их читает человек и они не внутренние.
-BELYJ_SPISOK = ("Telegram", "Excel", "setka", "spetsmat")
+#: Латиница в этих словах законна: их читает человек и они не внутренние.
+#:
+#: Первые четыре названы в задании. Остальные — СОБСТВЕННЫЕ КОМАНДЫ БОТА:
+#: команда пишется латиницей всегда, человек её ЧИТАЕТ И НАБИРАЕТ, и отказ,
+#: который обязан сказать «что делать дальше», без неё сказать этого не может.
+#: Список закрытый и сверяется с живым кодом: `test_teksty.py` краснеет, если
+#: здесь стоит команда, которую бот не регистрирует.
+BELYJ_SPISOK_ZHIVOJ = (
+    "Telegram",
+    "setka",
+    "god",
+    "dolgi",
+    "auditoria",
+)
+
+#: Названы в задании, но НИ В ОДНОЙ живой строке сейчас не стоят. Разрешены —
+#: и вынесены отдельно, чтобы сторож не требовал от них живости: экспорт в
+#: Excel и имя проекта появятся в тексте раньше, чем кто-нибудь вспомнит про
+#: этот список, и красное на верной строке в день занятия хуже, чем лишнее
+#: слово в разрешении.
+BELYJ_SPISOK_PRO_ZAPAS = ("Excel", "spetsmat")
+
+BELYJ_SPISOK = BELYJ_SPISOK_ZHIVOJ + BELYJ_SPISOK_PRO_ZAPAS
 
 
 def _imya_vyzova(uzel: ast.Call) -> str | None:
@@ -176,7 +197,15 @@ def _ne_tekst(derevo: ast.AST) -> set[int]:
                 najdeno.add(id(vnutri))
 
     for uzel in ast.walk(derevo):
-        if isinstance(uzel, ast.Dict):
+        if isinstance(uzel, ast.Raise):
+            # `raise ValueError("callback_data %r is %d bytes…")` — текст для
+            # того, кто чинит код. Исключение, которое ПОКАЗЫВАЮТ дословно,
+            # объявлено в `POKAZYVAYUT` и через этот отсев не проходит.
+            vinovnik = uzel.exc
+            imya = _imya_vyzova(vinovnik) if isinstance(vinovnik, ast.Call) else None
+            if imya not in POKAZYVAYUT:
+                pomet(uzel)
+        elif isinstance(uzel, ast.Dict):
             for klyuch in uzel.keys:
                 if klyuch is not None:
                     pomet(klyuch)

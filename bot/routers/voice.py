@@ -197,7 +197,10 @@ def _name_of(catalogue, student_id: Optional[int]) -> str:
         return "?"
     student = catalogue.student(student_id)
     if student is None:
-        return "ученик %d" % student_id
+        # 🔴 БЫЛО «ученик %d» с `student_id` — первичным ключом строки базы.
+        # Сюда попадают, когда ученика между черновиком и перерисовкой убрали
+        # из списка; число преподавателю не говорит ничего и выглядит как имя.
+        return "ученика больше нет в списке"
     return ("%s %s" % (student.surname, student.name)).strip()
 
 
