@@ -9,5 +9,16 @@ testpaths = ["tests"]
 # `.` on the path so that `import config` and `import core...` work from a bare checkout
 # without an install step.
 pythonpath = ["."]
-addopts = "-q --strict-markers"
-filterwarnings = ["error"]
+# NOT `-q` here: `make check` and the готовности criterion both call `pytest -q`, and a
+# `-q` in addopts on top of that one makes `-qq`, which suppresses the very "N passed"
+# line the criterion reads.  Verbosity belongs to the caller; strictness belongs here.
+addopts = "--strict-markers"
+# A warning our own code raises must fail the run, so `error` is the default.  The one
+# exception is narrowed to its exact message: yoyo-migrations writes its bookkeeping
+# timestamps through sqlite3's default datetime adapter, deprecated in Python 3.12.  It
+# is third-party code this project does not own, and silencing DeprecationWarning as a
+# whole would silence ours along with it.
+filterwarnings = [
+    "error",
+    "ignore:The default datetime adapter is deprecated:DeprecationWarning",
+]
