@@ -253,15 +253,15 @@ async def answer_attendance(
         # into one of the two -- ``answer`` is typed ``int`` and an int field accepts 7
         # as readily as 0.
         await query.answer(
-            "Кнопка из другой версии бота — она больше не работает. Явку можно "
-            "отметить на экране аудитории: /auditoria.",
+            "Кнопка из старой версии бота — она больше не работает. Отметить "
+            "эту явку самому больше нечем: скажите о ней владельцу.",
             show_alert=True,
         )
         return
     if not ids_are_storable(callback_data.session_id, teacher_id):
         await query.answer(
-            "Кнопка из другой версии бота — она больше не работает. Явку можно "
-            "отметить на экране аудитории: /auditoria.",
+            "Кнопка из старой версии бота — она больше не работает. Отметить "
+            "эту явку самому больше нечем: скажите о ней владельцу.",
             show_alert=True,
         )
         return
@@ -271,8 +271,8 @@ async def answer_attendance(
         svodka.record_presence(callback_data.session_id, teacher_id, status)
     except SvodkaError:
         await query.answer(
-            "Это занятие уже не найти — вопрос устарел. Явку отметьте на экране "
-            "аудитории: /auditoria.",
+            "Это занятие уже не найти — записи о нём в журнале нет. Отметить "
+            "явку по нему нельзя: скажите о ней владельцу.",
             show_alert=True,
         )
         return

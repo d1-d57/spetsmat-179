@@ -313,7 +313,8 @@ async def open_grid(
     """Draw one student's grid, in place of whatever the message showed before."""
     if not _may_open(identity):
         await query.answer(
-            "Эта сетка не ваша. Свою откройте командой /setka.", show_alert=True
+            "Эта сетка не ваша: экран отметок открыт только преподавателям.",
+            show_alert=True,
         )
         return
     if not ids_are_storable(callback_data.student_id, callback_data.sheet_id):
@@ -363,7 +364,8 @@ async def set_mark(
     """
     if not _may_open(identity):
         await query.answer(
-            "Эта сетка не ваша. Свою откройте командой /setka.", show_alert=True
+            "Эта сетка не ваша: экран отметок открыт только преподавателям.",
+            show_alert=True,
         )
         return
     # BEFORE any catalogue read, and before the toast: an unknown ``op`` must not be
@@ -453,7 +455,8 @@ async def pick_sheet(
     deep by design: an extra level of navigation costs a full cycle of the seam."""
     if not _may_open(identity):
         await query.answer(
-            "Эта сетка не ваша. Свою откройте командой /setka.", show_alert=True
+            "Эта сетка не ваша: экран отметок открыт только преподавателям.",
+            show_alert=True,
         )
         return
     if not ids_are_storable(callback_data.student_id):
