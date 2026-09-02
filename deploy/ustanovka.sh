@@ -69,6 +69,28 @@ say "service user: $SERVICE_USER"
 # a confusing way to say "the install script has a typo"; ops/proverka_ustanovki.py checks
 # that every placeholder present in the unit files is one this script replaces.
 
+# IS THE WATCHDOG WIRED YET?
+#
+# The unit declares Type=notify and WatchdogSec, and the ping has to come from inside the
+# polling loop -- which lives in bot/, read-only to the position that wrote this harness.
+# Installing a Type=notify unit against a bot that never notifies gives a unit that never
+# finishes starting and is then killed at every interval: a harness that breaks the very
+# thing it was built to keep alive.  So the state is ASKED, not assumed, and the watchdog
+# is neutralised in the installed copy until bot/ has caught up.  deploy/README.md names
+# the exact line; ops/proverka_ustanovki.py --storozh reports the debt.
+
+WATCHDOG_SED=()
+if python3 "$CHECKOUT/ops/proverka_ustanovki.py" --storozh >/dev/null 2>&1; then
+  say "watchdog: bot/ sends READY=1 and WATCHDOG=1 -- installing the unit as written"
+else
+  say "watchdog: NOT WIRED in bot/ -- installing with Type=notify and WatchdogSec disabled"
+  echo "  the bot will still run, restart and alert; it will NOT be watched for a dead poll."
+  echo "  wire the hook named in deploy/README.md, then re-run this script."
+  WATCHDOG_SED=(-e "s|^Type=notify|Type=simple|" \
+                -e "s|^NotifyAccess=|#NotifyAccess=|" \
+                -e "s|^WatchdogSec=|#WatchdogSec=|")
+fi
+
 say "installing units into $UNIT_DIR"
 for unit in "${ENABLE_UNITS[@]}" "${TEMPLATE_UNITS[@]}"; do
   source_file="$CHECKOUT/deploy/$unit"
@@ -77,7 +99,7 @@ for unit in "${ENABLE_UNITS[@]}" "${TEMPLATE_UNITS[@]}"; do
     echo "  would install: $source_file -> $UNIT_DIR/$unit (with @CHECKOUT@ and @USER@ substituted)"
   else
     sed -e "s|@CHECKOUT@|$CHECKOUT|g" -e "s|@USER@|$SERVICE_USER|g" \
-      "$source_file" > "$UNIT_DIR/$unit"
+      "${WATCHDOG_SED[@]}" "$source_file" > "$UNIT_DIR/$unit"
     chmod 0644 "$UNIT_DIR/$unit"
   fi
 done

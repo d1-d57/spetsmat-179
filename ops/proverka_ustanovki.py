@@ -235,6 +235,42 @@ def check_placeholders(units: dict[str, str], script_text: str) -> OneCheck:
                     "%d placeholder(s) in the units, all substituted by ustanovka.sh" % len(used))
 
 
+#: What the bot must contain for ``Type=notify`` plus ``WatchdogSec`` to mean anything.
+#: ``READY=1`` is what systemd waits for at start; ``WATCHDOG=1`` is the periodic proof of
+#: life.  Either one alone is not enough: without READY the unit never finishes starting,
+#: without WATCHDOG it is killed at the first interval.
+NOTIFY_MARKERS = ("READY=1", "WATCHDOG=1")
+
+
+def watchdog_is_wired(root: Path | str | None = None) -> tuple[bool, str]:
+    """Does ``bot/`` actually send the notifications the unit declares it expects?
+
+    THE UNIT IS AHEAD OF THE CODE ON PURPOSE.  The ping must come from inside the polling
+    loop, which lives in ``bot/`` -- read-only to the position that wrote this harness -- so
+    the declaration is here and the hook is a named debt (``deploy/README.md``).  Shipping a
+    ``Type=notify`` unit against a bot that never notifies would give a unit that never
+    finishes starting and is then killed every interval, so ``ustanovka.sh`` asks this
+    function first and installs the watchdog only once the answer is yes.
+    """
+    bot_dir = (Path(root) if root is not None else ROOT) / "bot"
+    if not bot_dir.exists():
+        return False, "no bot/ directory at %s" % bot_dir
+    text = "\n".join(path.read_text(encoding="utf-8", errors="replace")
+                     for path in sorted(bot_dir.rglob("*.py")))
+    missing = [marker for marker in NOTIFY_MARKERS if marker not in text]
+    if missing:
+        return False, ("bot/ never sends %s -- the watchdog is declared and NOT wired; "
+                       "deploy/README.md names the exact line, and ustanovka.sh installs the "
+                       "unit with WatchdogSec and Type=notify neutralised until it is there"
+                       % " or ".join(missing))
+    return True, "bot/ sends %s" % " and ".join(NOTIFY_MARKERS)
+
+
+def check_watchdog_wired(root: Path | str | None = None) -> OneCheck:
+    wired, detail = watchdog_is_wired(root)
+    return OneCheck("watchdog wired", wired, detail)
+
+
 def check_live(units: dict[str, str]) -> OneCheck:
     """Ask systemd.  Absent systemd is reported as SKIPPED and never as green."""
     if shutil.which("systemctl") is None:
@@ -253,7 +289,14 @@ def check_live(units: dict[str, str]) -> OneCheck:
     return OneCheck("live systemd", True, "%d unit(s) reported enabled by systemd" % len(wanted))
 
 
-def check_all(deploy_dir: Path | str | None = None, live: bool = False) -> Verdict:
+def check_all(deploy_dir: Path | str | None = None, live: bool = False,
+              wiring: bool = False, root: Path | str | None = None) -> Verdict:
+    """The declaration checks.  ``wiring`` adds the one check that is RED today by design.
+
+    It is off by default so that ``check_all`` answers "is deploy/ sound?", which is a
+    question about this position's own work.  Whether ``bot/`` has caught up is a different
+    question with a different owner, asked by ``--storozh`` and by ``ustanovka.sh``.
+    """
     units = read_units(deploy_dir)
     script_path = (Path(deploy_dir) / "ustanovka.sh") if deploy_dir is not None else INSTALL_SCRIPT
     script_text = script_path.read_text(encoding="utf-8") if script_path.exists() else ""
@@ -266,6 +309,8 @@ def check_all(deploy_dir: Path | str | None = None, live: bool = False) -> Verdi
         check_graceful_stop(units),
         check_placeholders(units, script_text),
     ]
+    if wiring:
+        checks.append(check_watchdog_wired(root))
     if live:
         checks.append(check_live(units))
     return Verdict(checks=tuple(checks))
@@ -277,9 +322,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--zhivaya", action="store_true",
                         help="additionally ask systemd whether the units are really enabled")
+    parser.add_argument("--storozh", action="store_true",
+                        help="additionally check that bot/ actually sends READY=1 and WATCHDOG=1")
     parser.add_argument("--deploy", default=None, help="directory of unit files")
     args = parser.parse_args(argv)
-    verdict = check_all(args.deploy, live=args.zhivaya)
+    verdict = check_all(args.deploy, live=args.zhivaya, wiring=args.storozh)
     print(verdict.report())
     return 0 if verdict.passed else 1
 

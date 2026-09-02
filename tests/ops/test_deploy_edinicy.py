@@ -283,3 +283,42 @@ def test_the_install_script_refuses_an_argument_it_does_not_know():
     )
     assert finished.returncode != 0
     assert "unknown argument" in finished.stderr
+
+
+# ------------------------------------------------- the watchdog debt, made machine-visible
+
+
+def test_the_watchdog_is_declared_but_honestly_reported_as_not_wired_yet():
+    """The unit is ahead of the code on purpose, and the gap is a check rather than a comment.
+
+    The ping must come from inside the polling loop, which is in ``bot/`` -- read-only to
+    this position.  So the declaration lives here and the hook is a named debt.  This test
+    passes in BOTH states: it demands that the checker's answer match the code, not that the
+    answer be "no".  The day ``bot/`` sends ``READY=1`` and ``WATCHDOG=1``, it keeps passing.
+    """
+    wired, detail = ustanovka.watchdog_is_wired()
+    bot_source = "\n".join(path.read_text(encoding="utf-8")
+                           for path in sorted((DEPLOY.parent / "bot").rglob("*.py")))
+    really_wired = all(marker in bot_source for marker in ustanovka.NOTIFY_MARKERS)
+    assert wired == really_wired, detail
+    if not wired:
+        assert "deploy/README.md" in detail, "the debt must say where the hook is written down"
+
+
+def test_the_install_script_refuses_to_ship_a_watchdog_that_nothing_pings():
+    """A Type=notify unit against a bot that never notifies never finishes starting.
+
+    That would be a harness breaking the thing it exists to keep alive, so the script asks
+    and neutralises rather than assuming.
+    """
+    script = (DEPLOY / "ustanovka.sh").read_text(encoding="utf-8")
+    assert "proverka_ustanovki.py --storozh" in script
+    assert "s|^Type=notify|Type=simple|" in script
+    assert "s|^WatchdogSec=|#WatchdogSec=|" in script
+
+
+def test_the_readme_names_the_exact_line_the_next_position_must_add():
+    readme = (DEPLOY / "README.md").read_text(encoding="utf-8")
+    for marker in ustanovka.NOTIFY_MARKERS:
+        assert marker in readme, "deploy/README.md does not name %s" % marker
+    assert "start_polling" in readme, "the README must say WHERE the hook goes, not only what it is"
