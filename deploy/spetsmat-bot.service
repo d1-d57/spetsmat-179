@@ -1,0 +1,78 @@
+# The bot itself.  Installed by deploy/ustanovka.sh, which substitutes @CHECKOUT@ and
+# @USER@ and then -- above all -- runs `systemctl enable`.
+#
+# THE MOST FREQUENT REAL FAILURE ON THE OWNER'S OWN LIST IS A FORGOTTEN `systemctl enable`.
+# The bot then runs perfectly until the first reboot and is gone afterwards, with nothing
+# in any log to say why.  ops/proverka_ustanovki.py exists for that one line.
+
+[Unit]
+Description=spetsmat conduit bot (179 school)
+Documentation=file://@CHECKOUT@/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+# FIVE CRASHES IN FIVE MINUTES IS BROKEN CODE, NOT A BROKEN NETWORK.
+# A broken network is what Restart=always is for, and the bot recovers from it by itself.
+# Code that raises on every start would otherwise be restarted forever, hammering Telegram
+# and filling the journal, so the unit gives up instead -- and the giving up is the signal.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# A STOP NOBODY HEARS IS THE SAME AS NO STOP.  When the unit gives up, this fires the
+# second bot.  The alerter has no code of its own, so it has nothing to crash with; it is
+# also a DIFFERENT token, because two processes polling with one token get
+# TelegramConflictError -- which would turn one dead bot into two.
+OnFailure=spetsmat-alert@%n.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+
+# THE SYSTEM CLOCK IS UTC.  Moscow is obtained in code through ZoneInfo(TZ_DISPLAY), never
+# through timedelta(hours=3): Russia does not shift its clocks and half of Europe does, so
+# a local system zone moves the whole timetable by an hour twice a year.
+Environment=TZ=UTC
+Environment=PYTHONUNBUFFERED=1
+
+User=@USER@
+Group=@USER@
+WorkingDirectory=@CHECKOUT@
+EnvironmentFile=@CHECKOUT@/secrets/bot.env
+ExecStart=/usr/bin/python3 -m bot
+
+# THE WATCHDOG.  The nastiest failure this bot has is not a crash: the connection dies at
+# TCP level, no timeout fires, getUpdates never returns, the process is alive and systemd
+# is perfectly happy.  WatchdogSec catches that ONLY if the "I am alive" comes from a place
+# that PROVES getUpdates is answering -- see deploy/README.md, "the one line bot/ must
+# call".  A ping from an independent timer would keep pinging beside a dead poll and is
+# worse than no watchdog at all, because it also removes the suspicion.
+WatchdogSec=120
+Restart=always
+RestartSec=5
+
+# GRACEFUL STOP, NEVER A KILL.  Telegram keeps undelivered updates for a day and
+# re-delivers them, so a restart loses nothing by itself.  There are exactly two ways to
+# lose updates, and both are acts of ours: dropping pending updates at startup, and killing
+# the process instead of letting it finish the update in its hands.  This is the second one.
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=30
+
+# A DISK FILLED BY LOGS LEFT AT DEBUG LEVEL IS ON THE OWNER'S MEASURED LIST.  The global
+# journal cap lives in deploy/journald-spetsmat.conf; this is the per-unit one.
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+# The database and the snapshots are the only things this service may write.
+StateDirectory=spetsmat
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=@CHECKOUT@/data
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

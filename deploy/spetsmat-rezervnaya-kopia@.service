@@ -1,0 +1,20 @@
+# One snapshot.  %i is the label: pered-zanyatiem, posle-zanyatia or sutochnyj.
+#
+# VACUUM INTO, never cp: cp takes the file mid-transaction, and in WAL mode the committed
+# data is partly in the side files, so the copy restores "almost".  See ops/rezervnaya_kopia.py.
+
+[Unit]
+Description=spetsmat database snapshot (%i)
+OnFailure=spetsmat-alert@%n.service
+
+[Service]
+Type=oneshot
+Environment=TZ=UTC
+User=@USER@
+WorkingDirectory=@CHECKOUT@
+ExecStart=/usr/bin/python3 @CHECKOUT@/ops/rezervnaya_kopia.py --metka %i
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=@CHECKOUT@/data

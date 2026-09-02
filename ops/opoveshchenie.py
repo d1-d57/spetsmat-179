@@ -27,9 +27,10 @@ it cannot live here, because a machine cannot notice its own absence.
 
 CONFIGURATION
 -------------
-``ALERT_BOT_TOKEN`` and ``ALERT_CHAT_ID`` in the environment, never in a file in git.  The
-unit reads them from ``/etc/spetsmat/alert.env``, mode 0600, which ``deploy/ustanovka.sh``
-creates and does not overwrite.
+``ALERT_TOKEN`` and ``ALERT_CHAT_ID`` (or ``OWNER_ID``) in the environment, never in a file
+in git -- the same names ``bot.env.example`` already uses.  The unit reads them from
+``secrets/bot.env``, mode 0600, which ``deploy/ustanovka.sh`` creates from the example and
+never overwrites.
 """
 
 from __future__ import annotations
@@ -50,8 +51,12 @@ MAX_TEXT = 4000
 
 KINDS = ("trevoga", "puls")
 
-TOKEN_VARIABLE = "ALERT_BOT_TOKEN"
+#: The names are the ones ``bot.env.example`` already declares -- ``ALERT_TOKEN`` for the
+#: second bot and ``OWNER_ID`` for the person who reads the alarms.  Inventing a third
+#: spelling here would mean the owner fills in one file and the alerter reads another.
+TOKEN_VARIABLE = "ALERT_TOKEN"
 CHAT_VARIABLE = "ALERT_CHAT_ID"
+CHAT_FALLBACK_VARIABLE = "OWNER_ID"
 
 #: Substrings that mean somebody is about to put a snapshot into a message.
 FORBIDDEN_IN_TEXT = (".db.gz", ".sqlite", ".db\n", ".db ")
@@ -113,12 +118,12 @@ def send(text: str, kind: str = "trevoga", unit: str | None = None, journal_line
         return message
 
     token = token or os.environ.get(TOKEN_VARIABLE, "")
-    chat_id = chat_id or os.environ.get(CHAT_VARIABLE, "")
+    chat_id = chat_id or os.environ.get(CHAT_VARIABLE, "") or os.environ.get(CHAT_FALLBACK_VARIABLE, "")
     if not token or not chat_id:
         raise RefusedToSend(
-            "%s and %s must both be set; the alerter is deliberately unable to fall back to "
-            "the main bot's token -- two pollers on one token is TelegramConflictError"
-            % (TOKEN_VARIABLE, CHAT_VARIABLE)
+            "%s and one of %s/%s must be set; the alerter is deliberately unable to fall back "
+            "to the main bot's token -- two pollers on one token is TelegramConflictError"
+            % (TOKEN_VARIABLE, CHAT_VARIABLE, CHAT_FALLBACK_VARIABLE)
         )
 
     payload = json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8")

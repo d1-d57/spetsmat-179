@@ -56,8 +56,9 @@ def test_a_dry_run_needs_no_token_and_sends_nothing():
 
 def test_without_a_token_it_refuses_rather_than_falling_back(monkeypatch):
     """Falling back to the main bot's token would be two pollers on one token."""
-    monkeypatch.delenv(opoveshchenie.TOKEN_VARIABLE, raising=False)
-    monkeypatch.delenv(opoveshchenie.CHAT_VARIABLE, raising=False)
+    for variable in (opoveshchenie.TOKEN_VARIABLE, opoveshchenie.CHAT_VARIABLE,
+                     opoveshchenie.CHAT_FALLBACK_VARIABLE):
+        monkeypatch.delenv(variable, raising=False)
     with pytest.raises(opoveshchenie.RefusedToSend):
         opoveshchenie.send("something failed")
 
@@ -117,3 +118,15 @@ def test_journal_tail_is_optional_and_never_raises(monkeypatch):
     monkeypatch.setattr(opoveshchenie.shutil, "which", lambda name: None)
     message = opoveshchenie.compose("trevoga", "died", unit="spetsmat-bot.service", journal_lines=20)
     assert "no journalctl" in message
+
+
+def test_the_env_names_are_the_ones_the_owner_already_fills_in():
+    """A third spelling of the token variable means the owner fills in the wrong file.
+
+    ``bot.env.example`` is the file the owner copies to ``secrets/bot.env``; the alerter
+    must read the names that are actually in it.
+    """
+    example = (Path(opoveshchenie.__file__).resolve().parent.parent / "bot.env.example")
+    declared = example.read_text(encoding="utf-8")
+    assert opoveshchenie.TOKEN_VARIABLE + "=" in declared
+    assert opoveshchenie.CHAT_FALLBACK_VARIABLE + "=" in declared

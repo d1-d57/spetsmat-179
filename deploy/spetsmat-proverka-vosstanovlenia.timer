@@ -1,0 +1,12 @@
+# Weekly, on a Sunday morning, so that a red result is found with a whole week of lessons
+# still ahead of it and not on the evening it is needed.
+
+[Unit]
+Description=weekly restore check
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
