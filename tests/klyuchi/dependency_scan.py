@@ -355,3 +355,106 @@ def template_names(path: Path) -> Dict[str, int]:
         if name and name.replace("_", "").isalnum():
             found.setdefault(name, number)
     return found
+
+
+# =============================================================================
+#  THE THIRD CLASS: REGISTERED, AND STILL UNREACHABLE
+# =============================================================================
+#
+# The dependency gates above answer «can this handler be SERVED».  They cannot answer
+# «can this handler be REACHED», and the two are different failures with one symptom: a
+# screen that was written, tested and accepted, and that does nothing in the field.
+#
+# aiogram walks the routers in include order and stops at the FIRST handler whose filters
+# match.  Two screens that claim the same trigger therefore do not both work and do not
+# raise: the earlier one wins in silence, and if its role gate refuses the caller, the
+# later screen is simply dead.  ``voice.confirm`` -- the «Записать» of a dictation -- is
+# dead exactly this way behind ``views-student.open_year_callback``.
+
+def routers_in_resolution_order(root) -> List[object]:
+    """Every router, depth-first, in the order aiogram will try them."""
+    return _routers(root)
+
+
+def _filter_parts(wrapper) -> List[object]:
+    """A registered filter, unwrapped.  A magic filter hides on ``.magic``, not ``.callback``."""
+    parts = []
+    magic = getattr(wrapper, "magic", None)
+    if magic is not None:
+        parts.append(magic)
+    callback = getattr(wrapper, "callback", None)
+    if callback is not None:
+        parts.append(callback)
+    return parts or [wrapper]
+
+
+def _text_literal(magic):
+    """``"/me"`` out of ``F.text == "/me"``, or ``None`` if this is not that shape."""
+    from aiogram.utils.magic_filter import MagicFilter
+
+    if not isinstance(magic, MagicFilter):
+        return None
+    attribute = None
+    for operation in magic._operations:  # noqa: SLF001 -- the only way to read a magic filter
+        kind = type(operation).__name__
+        if kind == "GetAttributeOperation":
+            attribute = getattr(operation, "name", None)
+        elif kind == "ComparatorOperation" and attribute == "text":
+            right = getattr(operation, "right", None)
+            return right if isinstance(right, str) else None
+    return None
+
+
+def _site(router, handler) -> str:
+    callback = getattr(handler.callback, "callback", handler.callback)
+    return "%s.%s" % (
+        getattr(callback, "__module__", "?"),
+        getattr(callback, "__name__", callback),
+    )
+
+
+def trigger_claims(dispatcher) -> Dict[str, List[str]]:
+    """``trigger -> [who claims it]``, for the triggers that can be read exactly.
+
+    🔴 **COVERAGE, STATED RATHER THAN IMPLIED.**  Two shapes are read here and no others:
+    a callback payload PREFIX, and a message filtered by an exact ``F.text == "литерал"``.
+    A handler distinguished only by an FSM STATE is NOT covered -- aiogram stores a state
+    passed to the decorator in a form this walk cannot read back, and guessing would give
+    a gate that is confidently wrong.  A known live defect of exactly that kind
+    (``owner.rename_surname`` shadowed by ``registration.student_surname`` on
+    ``StudentRegistration.waiting_for_surname``) is therefore INVISIBLE here and is named
+    in ``## ОТЧЁТ`` instead.  «Дыр не найдено» from this function means «none of the
+    covered shape».
+    """
+    from aiogram.filters.state import StateFilter  # noqa: F401 -- documents the uncovered shape
+
+    claims: Dict[str, List[str]] = {}
+    for router in routers_in_resolution_order(dispatcher):
+        for handler in router.callback_query.handlers:
+            for wrapper in handler.filters or []:
+                for part in _filter_parts(wrapper):
+                    payload = getattr(part, "callback_data", None)
+                    prefix = getattr(payload, "__prefix__", None)
+                    if prefix:
+                        claims.setdefault("callback:%s" % prefix, []).append(
+                            _site(router, handler)
+                        )
+        for handler in router.message.handlers:
+            for wrapper in handler.filters or []:
+                for part in _filter_parts(wrapper):
+                    literal = _text_literal(part)
+                    if literal:
+                        claims.setdefault("text:%s" % literal, []).append(
+                            _site(router, handler)
+                        )
+    return claims
+
+
+def collisions(dispatcher) -> Dict[str, List[str]]:
+    """The triggers claimed by more than one distinct handler.  Only the FIRST is reached."""
+    found = {}
+    for trigger, who in trigger_claims(dispatcher).items():
+        unique = sorted(set(who))
+        if len(unique) > 1:
+            found[trigger] = unique
+    return found
