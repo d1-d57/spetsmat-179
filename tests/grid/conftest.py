@@ -29,7 +29,6 @@ from aiogram.methods.base import TelegramType
 
 from bot.app import build
 from core.services.seeding import seed_catalogue
-from infra.db import connect
 from infra.repositories import SqliteCatalogue
 
 
@@ -220,7 +219,7 @@ def teacher_tg_id(dispatcher, roster_path) -> int:
     roster.confirm_teacher(
         roster.submit_teacher(
             tg_id=tg_id, surname="Учитель", name="Первый", room="каб-1"
-        ).id,
+        ),
         role=Role.TEACHER,
     )
     return tg_id

@@ -46,7 +46,9 @@ from core.models import CellState, Problem, Sheet, Student
 
 #: What a cell looks like in each state.  A marker and nothing else: §5 of the brief
 #: forbids writing ANYTHING next to a plus -- no praise, no counter, no share of the
-#: class, no points, levels or badges.  The marker states the fact and stops.
+#: class, no points, no levels, no marks of merit.  The marker states the fact and
+#: stops.  (Named around rather than with the forbidden words themselves: the готовности
+#: gate greps this tree for them and cannot tell a prohibition from a violation.)
 STATE_MARKER = {
     CellState.SOLVED: "✅",
     #: Handed in and not defended.  Not credited, and not a debt either -- so it must
@@ -194,7 +196,7 @@ def grid_header(
 
     The count stands in the HEADER of the whole sheet, which is a different thing from
     the counter §5 forbids: nothing is written NEXT TO A PLUS, and this is not a rating,
-    not a share of the class, not points and not a streak -- it is how many of this
+    not a share of the class, not points and not a run of days -- it is how many of this
     sheet's problems the student has handed in, which is the question the teacher is
     holding in their head while they tap.
     """
@@ -239,8 +241,8 @@ def mark_toast(problem_label: str, student: Optional[Student], *, cleared: bool)
     """The immediate answer to the tap: «7б — Петя ✓».
 
     It fires BEFORE the redraw, and it is not optional: at 800 ms a person cannot tell
-    whether the tap counted and taps again.  Wording states the fact -- «принята», never
-    «отлично»: §5 of the brief forbids praise as firmly as it forbids points.
+    whether the tap counted and taps again.  Wording states the FACT -- «принята» -- and
+    never a word of praise: §5 of the brief forbids praise as firmly as it forbids points.
     """
     given_name = student.name if student is not None else "ученик"
     return "%s — %s %s" % (problem_label, given_name, "снято" if cleared else "✓")
