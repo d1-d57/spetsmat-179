@@ -215,13 +215,11 @@ def test_debts_within_the_horizon_are_enumerated_and_older_ones_are_collapsed(
     rule exists for -- a person must not be handed eighteen sheets' worth of what they owe.
     """
     student = seeded_catalogue.students()[0]
-    current = spiski.current_sheet()
     result = spiski.debts(student.id)
 
     assert result.total > 0
-    assert len(result.near) <= DEBT_HORIZON_SHEETS
+    assert len(result.near) == DEBT_HORIZON_SHEETS
     for group in result.near:
-        assert current.ord - group.sheet.ord <= DEBT_HORIZON_SHEETS
         assert group.problems, "an enumerated group with nothing in it is not a group"
         assert all(problem.is_obligatory for problem in group.problems)
     assert result.older_problems > 0, "the seed has more history than the horizon"
@@ -229,6 +227,32 @@ def test_debts_within_the_horizon_are_enumerated_and_older_ones_are_collapsed(
     assert [group.sheet.ord for group in result.near] == sorted(
         [group.sheet.ord for group in result.near], reverse=True
     ), "the nearest boundary is read first"
+
+
+def test_the_nearest_boundary_skips_sheets_that_owe_nothing(
+    spiski, seeded_catalogue, seeded_progress
+):
+    """«Ближайшая граница» is the nearest sheet where something is in fact owed.
+
+    The last four sheets of the seed (``1д``-``4д``) carry no obligatory problems at all.
+    A window counted as "the two sheets before the current one" is therefore empty on the
+    real data, and the student would be shown a collapsed line and no boundary -- the one
+    thing the screen is asked to show.  So the window counts sheets that carry a debt.
+    """
+    student = seeded_catalogue.students()[0]
+    current = spiski.current_sheet()
+    result = spiski.debts(student.id)
+
+    assert result.near, "the real seed must still name a boundary"
+    assert current.ord - result.near[0].sheet.ord > DEBT_HORIZON_SHEETS, (
+        "this seed's nearest sheet with a debt is further back than the raw window"
+    )
+    named = {group.sheet.ord for group in result.near}
+    owed_ords = {
+        seeded_catalogue.sheet(problem.sheet_id).ord
+        for problem in seeded_progress.debts(student.id, current.ord)
+    }
+    assert named == set(sorted(owed_ords, reverse=True)[:DEBT_HORIZON_SHEETS])
 
 
 def test_a_student_who_owes_nothing_gets_a_clear_debt_list(spiski, seeded_catalogue, mark_on):

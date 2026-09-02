@@ -56,10 +56,17 @@ from core.services.progress import ProgressService
 #: than a literal so that moving it is one edit and not a search.
 RECENT_SHEETS = 2
 
-#: How far back a debt is still shown problem by problem.  Beyond it the debts collapse
-#: into a single line with no enumeration: a long list of what you owe is a message about
-#: the PERSON, and the door stays open either way -- it is Konstantinov's own rule, you
-#: fall out if you do not hand it in and you may come back the moment you do.
+#: How many sheets of debt are shown problem by problem.  Everything older collapses into
+#: a single line with no enumeration: a long list of what you owe is a message about the
+#: PERSON, and the door stays open either way -- it is Konstantinov's own rule, you fall
+#: out if you do not hand it in and you may come back the moment you do.
+#:
+#: COUNTED OVER SHEETS THAT ACTUALLY CARRY A DEBT, not over the sheets behind the current
+#: one, and that is a measurement rather than a preference: the last four sheets of the
+#: seed (``1д``-``4д``) carry no obligatory problems at all, so a window of "the two sheets
+#: before the current one" is empty on the real data and the screen would never name a
+#: boundary -- which is the one thing the task asks it to do.  «Ближайшая граница» is the
+#: nearest sheet where something is in fact owed.
 #:
 #: Same home as ``RECENT_SHEETS``, same reason, same queue item.
 DEBT_HORIZON_SHEETS = 2
@@ -135,7 +142,7 @@ class DebtGroup:
 class DebtList:
     """The short debt list: the nearest boundary enumerated, everything older collapsed."""
 
-    #: Sheets within ``DEBT_HORIZON_SHEETS`` of the current one, newest first.
+    #: The ``DEBT_HORIZON_SHEETS`` most recent sheets that carry a debt, newest first.
     near: list = field(default_factory=list)
     #: How many obligatory problems stand on sheets older than the horizon.
     older_problems: int = 0
@@ -336,29 +343,26 @@ class SpiskiService:
         for problem in owed:
             by_sheet.setdefault(problem.sheet_id, []).append(problem)
 
-        near = []
+        groups = []
         older_problems = 0
         older_sheets = 0
         for sheet_id, problems in by_sheet.items():
             sheet = self._catalogue.sheet(sheet_id)
             if sheet is None:
-                # A debt on a sheet the catalogue does not have is not something to
-                # silently drop: it still counts, it just cannot be named.
+                # A debt on a sheet the catalogue does not have is not something to drop
+                # in silence: it still counts, it just cannot be named.
                 older_problems += len(problems)
                 older_sheets += 1
                 continue
-            if current.ord - sheet.ord <= DEBT_HORIZON_SHEETS:
-                near.append(
-                    DebtGroup(
-                        sheet=sheet,
-                        problems=sorted(problems, key=lambda p: (p.ord, p.id)),
-                    )
-                )
-            else:
-                older_problems += len(problems)
-                older_sheets += 1
+            groups.append(
+                DebtGroup(sheet=sheet, problems=sorted(problems, key=lambda p: (p.ord, p.id)))
+            )
 
-        near.sort(key=lambda group: group.sheet.ord, reverse=True)
+        groups.sort(key=lambda group: group.sheet.ord, reverse=True)
+        near, older = groups[:DEBT_HORIZON_SHEETS], groups[DEBT_HORIZON_SHEETS:]
+        for group in older:
+            older_problems += len(group.problems)
+            older_sheets += 1
         return DebtList(
             near=near,
             older_problems=older_problems,
