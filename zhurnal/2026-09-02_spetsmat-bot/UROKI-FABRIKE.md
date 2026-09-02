@@ -54,3 +54,28 @@ grep -cE '^\*{0,2}ВЕРДИКТ:' UROKI-FABRIKE.md   # разошлось ⇒ �
 ### 4. Первый коммит репозитория был нечитаем из-за прав на loose-объекты
 ЦЕНА: три объекта `.git/objects/**` имели режим `--w-------` (write-only). `git status` падал `error: unable to open loose object be04710…: Permission denied` → `fatal: bad object HEAD`, и `git_zona.py plan` вместе с ним. Это весь первый коммит — commit, tree, blob. Диагноз «bad object HEAD» читается как порча репозитория, а не как права доступа, и без `chmod 444` P0 не состоялся бы вовсе. Объекты создал процесс с испорченным umask (песочница Cowork).
 ВЕРДИКТ:
+
+---
+
+## Пункты очереди заходов, доставленные `dostavit_urok.py`
+
+> Дословные находки из секций `## ВОПРОСЫ` файлов-заходов — голос исполнителя, который об это споткнулся, не редактора. Разбирает их человек: находка описывает, что мешало, но задачей сама не становится.
+> Строка `ДОСТАВЛЕНО: <заход>#<N>` внизу каждой записи — та же метка, что стоит в источнике; по ней Г7 `priyomka.py` проверяет, что доставка не объявлена ложно.
+
+#### P1-yadro#1
+
+1. `git_zona.py vlit-v-osnovnuyu --zone` is documented and pasted as one quoted
+   multi-path string, but the flag is `action="append"` and `in_zone()` matches one
+   prefix per value — the pasted form matches nothing and refuses the merge while
+   printing the zone's own files as foreign. Full account with its price in
+   `## УРОКИ ФАБРИКЕ` above.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+ДОСТАВЛЕНО: P1-yadro#1 · 2026-09-02
+
+#### P1-yadro#2
+
+2. The готовности criterion runs bare `python3`, which here is 3.9.6 with no pytest and
+   no yoyo; a заход that builds only a `.venv` fails the criterion on correct code.
+   Full account with its price in `## УРОКИ ФАБРИКЕ` above.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+ДОСТАВЛЕНО: P1-yadro#2 · 2026-09-02
