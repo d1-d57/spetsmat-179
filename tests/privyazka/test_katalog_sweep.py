@@ -143,3 +143,34 @@ def test_second_binding_of_the_same_row_is_refused_loudly(
     with pytest.raises(TelegramIdAlreadyBound):
         roster.bind_student(second, match.one.id)
     assert len(_all_students(connection)) == 56
+
+
+def test_confirm_student_binds_and_does_not_insert(connection, roster, full_catalogue, names):
+    """``confirm_student`` -- the one-call path -- resolves rather than creates.
+
+    The owner's screen calls ``match_student`` and then ``bind_student``, so this
+    method has its own test: it is public, it is what P3's own tests call, and a
+    version of it that fell back to inserting would leave every other test green while
+    putting the duplicate straight back on the live base.
+    """
+    before = connection.execute("select count(*) c from students").fetchone()["c"]
+    surname, name = names[10]
+    pending = roster.submit_student(tg_id=tg_for(810), surname=surname, name=name)
+    bound = roster.confirm_student(pending)
+    assert bound == full_catalogue["student_ids"][(surname, name)], (
+        "confirm_student created a row instead of binding to the catalogue"
+    )
+    assert connection.execute("select count(*) c from students").fetchone()["c"] == before
+
+
+def test_confirm_student_creates_only_when_nobody_matches(connection, roster, full_catalogue):
+    """The fallback is real, and it is reached ONLY by a name nobody in the list has."""
+    before = connection.execute("select count(*) c from students").fetchone()["c"]
+    pending = roster.submit_student(tg_id=tg_for(811), surname="Иванов", name="Иван")
+    new_id = roster.confirm_student(pending)
+    assert connection.execute("select count(*) c from students").fetchone()["c"] == before + 1
+    row = connection.execute(
+        "select surname, first_sheet_id from students where id = ?", (new_id,)
+    ).fetchone()
+    assert row["surname"] == "Иванов"
+    assert row["first_sheet_id"] == full_catalogue["sheet_ids"][-1]
