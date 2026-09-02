@@ -17,6 +17,7 @@ import bot.config_local as cfg
 from bot.handlers import owner, registration, student, teacher
 from bot.middleware import AuthMiddleware
 from bot.routers import marking, room
+from bot.routers import views
 from infra.db import SystemClock
 from infra.enrollment_repo import SqliteEnrollmentRepo
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
@@ -32,6 +33,7 @@ from core.services.marking import MarkingService
 from core.services.progress import ProgressService
 from core.services.room import RoomService
 from core.services.roster import RosterService
+from core.services.spiski import SpiskiService
 
 
 def build(
@@ -101,6 +103,11 @@ def build(
     # buttons; included before the catch-all for the same reason everything else is.
     dp.include_router(room.build_router())
 
+    # P5's viewing screens, and the position in this list is load-bearing: they must come
+    # BEFORE the catch-all below, which claims every callback nobody above it matched.
+    # Included after it, every view button would answer «экран устарел».
+    dp.include_router(views.build_router())
+
     # LAST, and the order is load-bearing rather than tidy: this catch-all claims every
     # callback query no router above it matched.  Included any earlier it would swallow
     # the screens below it; left out entirely, a button from a message older than the
@@ -118,6 +125,7 @@ def build(
             "catalogue": catalogue,
             "marking": marking_service,
             "progress": progress_service,
+            "spiski": SpiskiService(journal, catalogue, progress_service),
             "room_service": room_service,
             "owner_tg_id": owner_tg_id,
         }
