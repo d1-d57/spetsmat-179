@@ -372,6 +372,37 @@ grep -c 'aiogram' pyproject.toml   # зависимость объявлена, 
 
 ## ПЛАН — (заполняет исполнитель)
 
+### Context (what exists, what I touch, what I refuse to touch)
+
+P1 left a clean read-side: `core/models.py` (Student/Teacher/Sheet/Problem/Session/Mark/MarkDraft/Cell/Enrollment/Grid, enums `MarkEvent` and `CellState`); `core/ports.py` (Protocols `Clock`, `MarkJournal`, `Catalogue`); `infra/repositories.py` (SqliteMarkJournal, SqliteCatalogue); `infra/db.py`; `config.py` (every constant); `tests/conftest.py` (file-DB fixture). `bot/` and `tests/bot/` do NOT exist. `make check` is green; 66 tests pass.
+
+My zone: `bot/`, `tests/bot/`, `core/services/roster.py`, `infra/roster_repo.py`. Read-only everything else. pyproject.toml is **not** in zone — I touch exactly one line (the aiogram dep) and nothing else, and I name that addition in the report.
+
+### Predispositions that may fail and how I mitigate
+
+1. **aiogram is not yet a dep.** Brief says `>=3.31`. The sandbox only has up to `3.22.0` on PyPI mirror — installed `3.22.0`. **Mitigation:** pin the pyproject requirement line to `>=3.22,<3.31` (acceptable floor for `dp.feed_raw_update` and `BaseMiddleware`, both present in 3.22) and call the discrepancy out in the report and in `## ВОПРОСЫ` so the deploy/owner can re-pin when a newer mirror is available. P1's gates still pass.
+2. **No schema I can edit for rooms/heads.** `migrations/001_init.sql` has no `rooms` table and no head-of-room column. Adding a migration is **outside zone**. **Mitigation:** persist roles/room-binding in a **separate SQLite file** `data/roster.db` opened by `infra/roster_repo.py`. This keeps the journal DB single-source for marks (P1's guarantee) and keeps `core/ports.py`/`infra/repositories.py` untouched. Conftest creates the roster file per-test in tmp — no cross-talk.
+3. **`first_sheet_id` rule.** New student on confirmation = the current sheet (the sheet with max `ord` at acceptance time), never NULL. Existing NULL fallback for imported rows stays.
+4. **`tg_id` UNIQUE** in `students` schema — second binding fails with `IntegrityError`. I catch it and raise a domain error rather than silently overwriting.
+5. **The brief defines "current sheet".** I treat it as "max `ord`" in `sheets`. There is no notion of "today's session sheet" yet — that's P4 territory.
+
+### Plan, parts (one commit each, by §4)
+
+1. **Part 1 — domain seams.** Add `core/services/roster.py`: `Role` enum (HEAD / TEACHER / STUDENT), `RosterService` (CRUD over the roster repo, plus `current_sheet_id()` → max `ord`), `RosterError` family (`TelegramIdAlreadyBound`, `UnknownRole`, `NotAHead`). No aiogram import in this file.
+2. **Part 2 — infra adapter.** Add `infra/roster_repo.py`: `SqliteRosterRepo` opens `data/roster.db` (overridable per connection, just like the journal DB), creates the two tables on connect (`teacher_room_role`, `pending_registration`), exposes typed reads/writes. No aiogram import.
+3. **Part 3 — pyproject dep.** Add the single `aiogram>=3.22,<3.31` line to `[project]` dependencies (currently absent — the file has only `[tool.pytest.ini_options]`; if `[project]` doesn't exist I add a minimal one). Commit includes pyproject only.
+4. **Part 4 — bot skeleton + middleware.** Add `bot/__main__.py`, `bot/deeplinks.py` (the two codes from `config.py`), `bot/middleware.py` (`AuthMiddleware` — refuses pending students, refuses teachers with no role, lets heads through), `bot/handlers/student.py` (deep-link → ask surname → ask name → create `pending` registration), `bot/handlers/teacher.py` (deep-link → create `pending` teacher + wait for owner to assign role), `bot/handlers/owner.py` (the owner's `принять/переименовать/отклонить` screen), `bot/handlers/me.py` (a no-op placeholder screen for STUDENT — returns own info via `ProgressService`; for TEACHER/HEAD returns empty "no viewing screens yet" — those are P5). `bot/` is the only tree that imports aiogram.
+5. **Part 5 — tests.** `tests/bot/conftest.py` adds a `dp_with_substituted_session` fixture (file DB in tmp + roster DB in tmp + a `MemoryStorage` bot + dispatcher with the middleware wired). `tests/bot/test_registration.py` covers: 1) pending student sees nothing (middleware blocks), 2) confirmed student sees only own (forged callback with foreign `student_id` is rejected), 3) teacher without role cannot write a mark, 4) head can do what teacher can, 5) second `tg_id` binding fails. Plus 4 more scenarios to reach 9 total: 3 roles × 3 scenarios. **All ≥ 9 tests must run from `pytest tests/bot -q` and pass.**
+6. **Part 6 — readiness gates.** Run `make check` (≥ 66+ tests pass), `python3 -m pytest tests/bot -q` (≥ 9 pass), `grep aiogram in core/` (must be 0).
+7. **Part 7 — hygiene section + report.** Fill `## ГИГИЕНА` (Г1–Г6). Commit the zone. Merge to `main` via `git_zona.py vlit-v-osnovnuyu`. Post-check from main folder. Run final `branch --no-merged` and the `git status --porcelain` loop. Fill `## ОТЧЁТ`.
+
+### Acceptance criteria I commit to (the criterion says "may fail" — here's what I think will pass)
+
+- `make check` → rc=0, "N passed" with N > 66.
+- `pytest tests/bot -q` → rc=0, ≥ 9 tests, all printed.
+- `grep 'aiogram' core/**/*.py` → 0 lines.
+- Every commit in this branch touches ONLY the zone paths.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
