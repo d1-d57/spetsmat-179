@@ -670,6 +670,28 @@ SOURCE = "текст" if "текст" in config.MARK_SOURCES else config.MARK_SO
 NOTE = "текстовый ввод"
 
 
+def looks_like_a_record(text: str) -> bool:
+    """Is this typed message a record of a lesson at all, or just a message?
+
+    THE HANDLER THAT ANSWERS EVERY TEXT IS A HANDLER THAT STEALS EVERY TEXT.  A teacher
+    types «спасибо», «а когда следующее занятие?» and «Петров 3, 5» into the same box, and
+    only the third is for this screen.  Registration (P3), the attendance question (P14)
+    and the owner's rename (P19) all take plain text too; they are FSM-gated and stand
+    above this router, but a router that claimed everything left over would still swallow
+    the ordinary sentence and answer it with a confirmation table.
+
+    The test is the format's own: at least one block that carries a NAME and then either a
+    problem label or a прочерк.  A sentence has words and no labels; a record has both.
+    Deliberately strict rather than clever -- a false negative costs the teacher the
+    buttons they already have, a false positive costs everyone the ability to talk to the
+    bot at all.
+    """
+    for block in split_blocks(text):
+        if block.name_text and (block.labels or block.present_no_marks):
+            return True
+    return False
+
+
 def attendance_intents(draft) -> list:
     """``[student_id, ...]`` -- the children a прочерк says were present.
 
