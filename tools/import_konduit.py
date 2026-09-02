@@ -100,7 +100,7 @@ HAND_CHECKED_CELLS = 30
 # ------------------------------------------------------------------- the value registry
 #
 # EVERY distinct value the mark region of the workbook contains, and what it means.  The
-# whole inventory, measured over all 29 920 cells:
+# whole inventory, measured over all 29 938 cells:
 #
 #     None   14 824      the cell is empty
 #     1.0    14 377      solved
@@ -110,7 +110,7 @@ HAND_CHECKED_CELLS = 30
 #
 # ``'x'`` BECOMES ``assert`` + ``retract``, LEAVING THE CELL AT ``RETRACTED``.  The schema
 # offers exactly three states.  ``x`` has to mean "not credited AND not a debt", because
-# the workbook's own arithmetic says so: the ``закрыт`` formula of every sheet reads
+# the workbook's own arithmetic says so: the ``закрыт`` formula of 16 of the 18 sheets reads
 # ``NOT(REGEXMATCH(cell, "^(1|x)$"))``, treating ``1`` and ``x`` identically as "does not
 # owe this".  ``RETRACTED`` is the only state in this schema carrying that meaning
 # ("handed in, not credited; not a debt").  A ``retract`` requires ``reverses_id``, so a
@@ -317,7 +317,7 @@ def read_cells(workbook) -> list:
 
     Raises ``UnknownCellValue`` on the first value the registry does not describe, with
     the sheet, the student and the problem named -- so that the person reading the failure
-    can open the book at that cell rather than search 29 920 of them.
+    can open the book at that cell rather than search 29 938 of them.
     """
     readings = []
     for sheet_number in sheets_to_import():
@@ -755,18 +755,41 @@ class OracleResult:
     #: Divergences traced to a defect of the BOOK and listed in KNOWN_SOURCE_DEFECTS.
     #: Printed on every run; they do not turn the check red.
     known_defects: list = field(default_factory=list)
+    #: Cells deliberately not compared, each with its reason.  DECLARED, not silent:
+    #: coverage short of ``total`` by anything not listed here turns the check red.
+    skipped: list = field(default_factory=list)
 
     @property
     def is_red(self) -> bool:
-        """Zero checked against a non-empty source is RED, not green (§4 of the задание)."""
-        return bool(self.divergences) or (self.total > 0 and self.checked == 0)
+        """A verdict has to carry its coverage IN ITSELF, and that means judging it.
+
+        Three ways to be red, and the third was missing until the §3 verifier found it:
+
+          * a divergence;
+          * zero checked against a non-empty source (§4);
+          * INCOMPLETE COVERAGE -- ``checked`` short of ``total`` by anything not
+            explicitly declared in ``skipped``.
+
+        Printing the coverage is not the same as judging it.  While only ZERO coverage was
+        red, renaming a single one of the 544 labels dropped the full-grid check to
+        "задач 543 из 544, сверено 29883 из 29938" and it still printed [зелёный] and still
+        exited 0 -- which is the very defect commit 056631f fixed by hand after reading the
+        number off the screen.  The number showed it to a person; nothing showed it to the
+        exit code.  A skip that is legitimate must now say so out loud and be counted.
+        """
+        if self.divergences:
+            return True
+        if self.total > 0 and self.checked == 0:
+            return True
+        return self.checked + len(self.skipped) != self.total
 
     def line(self) -> str:
-        return "[%s] %-28s сверено %d из %d, расхождений %d%s%s" % (
+        return "[%s] %-28s сверено %d из %d%s, расхождений %d%s%s" % (
             "КРАСНЫЙ" if self.is_red else "зелёный",
             self.name,
             self.checked,
             self.total,
+            (", объявлено пропусков %d" % len(self.skipped)) if self.skipped else "",
             len(self.divergences),
             (", известных дефектов книги %d" % len(self.known_defects))
             if self.known_defects else "",
@@ -967,7 +990,7 @@ def oracle_hand_cells(connection, workbook) -> OracleResult:
                 % (sheet_number, surname, name, label, raw, expected.value,
                    got.value if got else "НЕТ")
             )
-    return OracleResult("тридцать клеток вручную", "НЕЗАВИСИМЫЙ",
+    return OracleResult("тридцать клеток вручную", "ДЛЯ РУЧНОЙ СВЕРКИ",
                         checked, len(picked), divergences)
 
 
@@ -1054,7 +1077,8 @@ def oracle_debts(connection, workbook) -> OracleResult:
 def oracle_credit(connection, workbook) -> OracleResult:
     """The 'зачёт' sheet: the year's credit, awarded by a person.
 
-    НЕЗАВИСИМЫЙ -- columns D and E are hand-entered, 0 formulas -- and it answers a
+    НЕЗАВИСИМЫЙ -- the surname and name columns this check actually reads, B and C, hold
+    2000 cells and 0 formulas (as do D and E, the credit itself) -- and it answers a
     DIFFERENT question than the grid does, so it is reported as a measurement rather than
     as an equality that must hold.  What is checked is the one thing that must be true:
     every name on the credit sheet is a student this import knows.  Whether the credit was
@@ -1113,8 +1137,83 @@ def journal_cardinality(connection, workbook) -> OracleResult:
     if not divergences and rows.get("assert", 0) - rows.get("retract", 0) != solved:
         divergences.append("assert минус retract не равно числу клеток '1'")
 
-    return OracleResult("журнал: число событий", "НЕЗАВИСИМЫЙ",
+    return OracleResult("журнал: число событий", "ВНУТРЕННИЙ",
                         sum(rows.values()), solved + 2 * withdrawn, divergences)
+
+
+def check_attribution(connection, workbook) -> OracleResult:
+    """Who each mark is attributed to, against the ``принимающий`` column of the book.
+
+    ВНУТРЕННИЙ, and it exists because the §3 verifier found that NO check read
+    ``teacher_id`` at all: the whole §6 decision -- 860 composite marks, the first-named
+    attribution, the ``соавтор:`` tag -- was unverifiable, and wiping every mark onto one
+    teacher passed all six checks green.  A decision nothing can falsify is a decision
+    nobody can trust.
+
+    Also checked here, and for the same reason: every carrier ``assert`` written under an
+    ``x`` must be reversed by its ``retract`` and must carry ``NOTE_X_CARRIER``.  The
+    reversal is the real guard -- a reversed assert can never project as SOLVED, and the
+    schema's unique index on ``reverses_id`` keeps it reversed -- but the note is what
+    stops a later ``group by teacher_id`` from counting 735 synthetic events as real
+    check-offs, and until now nothing tested that it was there.
+    """
+    _problem_ids, student_ids = _lookups(connection)
+    teacher_names = {row["id"]: row["name"]
+                     for row in connection.execute("select id, name from teachers")}
+    receiver_of = _receiver_by_row(workbook)
+
+    marks = connection.execute(
+        "select m.id, m.teacher_id, m.note, m.event, m.reverses_id, "
+        "       st.surname as surname, st.name as name, s.number as number "
+        "  from marks m join students st on st.id = m.student_id "
+        "  join problems p on p.id = m.problem_id join sheets s on s.id = p.sheet_id"
+    ).fetchall()
+
+    checked = 0
+    divergences = []
+    skipped = []
+    for mark in marks:
+        receiver = receiver_of.get((mark["number"], mark["surname"], mark["name"]))
+        if receiver is None:
+            skipped.append("отметка %d: у строки нет принимающего в книге" % mark["id"])
+            continue
+        checked += 1
+        people = split_receiver(receiver)
+        expected = people[0]
+        got = teacher_names.get(mark["teacher_id"])
+        if got != expected and len(divergences) < 40:
+            divergences.append(
+                "%s %s · листок %s: принимающий в книге %r, в журнале %r"
+                % (mark["surname"], mark["name"], mark["number"], expected, got))
+        elif len(people) > 1 and "соавтор: " + ", ".join(people[1:]) not in (mark["note"] or ""):
+            if len(divergences) < 40:
+                divergences.append(
+                    "%s %s · листок %s: составной принимающий %r, метка соавтора потеряна"
+                    % (mark["surname"], mark["name"], mark["number"], receiver))
+
+    unreversed = connection.execute(
+        "select count(*) from marks m where m.event = 'assert' and m.note like ? "
+        "  and not exists (select 1 from marks r where r.reverses_id = m.id)",
+        ("%" + NOTE_X_CARRIER + "%",),
+    ).fetchone()[0]
+    if unreversed:
+        divergences.append(
+            "несущих отметок под 'x' не перекрыто retract-ом: %d — они спроецируются "
+            "как настоящие сдачи" % unreversed)
+
+    carriers = connection.execute(
+        "select count(*) from marks where event = 'assert' and note like ?",
+        ("%" + NOTE_X_CARRIER + "%",),
+    ).fetchone()[0]
+    retracts = connection.execute(
+        "select count(*) from marks where event = 'retract'").fetchone()[0]
+    if carriers != retracts:
+        divergences.append(
+            "несущих отметок с меткой %d, а retract-ов %d — метка потеряна на %d событиях"
+            % (carriers, retracts, abs(carriers - retracts)))
+
+    return OracleResult("привязка к принимающему", "ВНУТРЕННИЙ",
+                        checked, len(marks), divergences, [], skipped)
 
 
 def differential(connection, workbook) -> OracleResult:
@@ -1247,6 +1346,7 @@ def all_checks(connection, workbook) -> list:
         oracle_debts(connection, workbook),
         oracle_credit(connection, workbook),
         journal_cardinality(connection, workbook),
+        check_attribution(connection, workbook),
         differential(connection, workbook),
     ]
 
