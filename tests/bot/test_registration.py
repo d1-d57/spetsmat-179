@@ -45,8 +45,24 @@ def roster(dispatcher) -> RosterService:
     return dispatcher.workflow_data["roster"]
 
 
-def _seed_confirmed_student(roster, *, tg_id: int = STUDENT_TG, klass: str = "10a") -> int:
-    pending = roster.submit_student(tg_id=tg_id, surname="Сидоров", name="Сидор")
+def _seed_confirmed_student(
+    roster,
+    *,
+    tg_id: int = STUDENT_TG,
+    klass: str = "10a",
+    surname: str = "Сидоров",
+    name: str = "Сидор",
+) -> int:
+    """Seed one confirmed student.
+
+    🔴 ``surname`` / ``name`` became parameters with P19 and the reason is the point of
+    that position: since registration BINDS to a catalogue row instead of creating a
+    second one, seeding two students under one name no longer gives two rows -- the
+    second заявка finds the first row, sees it already answers to another Telegram id,
+    and refuses.  That refusal is the feature.  A test that needs two DIFFERENT students
+    now has to name two different students.
+    """
+    pending = roster.submit_student(tg_id=tg_id, surname=surname, name=name)
     return roster.confirm_student(pending, klass=klass)
 
 
@@ -120,7 +136,9 @@ def test_forged_callback_for_foreign_student_is_refused(dispatcher, roster, seed
     equivalent: a hand-made message asking for another student's id is refused.
     """
     own_id = _seed_confirmed_student(roster, tg_id=STUDENT_TG)
-    other_id = _seed_confirmed_student(roster, tg_id=ANOTHER_TG, klass="10b")
+    other_id = _seed_confirmed_student(
+        roster, tg_id=ANOTHER_TG, klass="10b", surname="Кузнецов", name="Кузьма"
+    )
     assert own_id != other_id
 
     recorder = _reset_recorder(dispatcher, recorder)
@@ -226,10 +244,26 @@ def test_second_tg_id_binding_fails(dispatcher, roster, seeded_catalogue, bot_in
 # =============================================================================
 
 def test_owner_accepts_pending_student(dispatcher, roster, seeded_catalogue, bot_instance, recorder):
-    """Pending student exists; the owner presses accept; the student is active."""
+    """Pending student exists; the owner presses accept; the student is active.
+
+    🔴 THE SECOND BUTTON IS NEW WITH P19 AND IT IS THE WHOLE POSITION.  «Новый Ученик»
+    matches nobody in the catalogue, and «принять» no longer creates a row on its own:
+    it offers «нет в списке — завести нового» and waits.  Before that, accepting any
+    заявка inserted a student unconditionally, which on the live base would have made a
+    second Пирогов with an empty year beside the real one carrying 201 marks.  The two
+    assertions below are the original ones, unchanged -- only the door they go through
+    is now explicit.
+    """
     pending = roster.submit_student(tg_id=STRANGER, surname="Новый", name="Ученик")
     recorder = _reset_recorder(dispatcher, recorder)
     feed_callback(dispatcher, bot=bot_instance, from_id=OWNER, data="accept:%d" % pending.id)
+    assert roster.student_id_for(STRANGER) is None, (
+        "«принять» created the row silently; the explicit button exists so it does not"
+    )
+    feed_callback(
+        dispatcher, bot=bot_instance, from_id=OWNER,
+        data="newstud:%d" % pending.id, update_id=3,
+    )
     assert roster.list_pending() == []
     assert roster.student_id_for(STRANGER) is not None
 
