@@ -8,11 +8,24 @@ sort; ``debts`` is a delegation and a split.
 
 THE ONE THING THAT IS GENUINELY NEW HERE IS SILENCE, AND IT NEEDS A SESSION.
 
-The task names ``core/services/sessions.py`` (P6) as the source of attendance.  That file
-does not exist in this repository, no port reads the ``sessions`` or ``attendance`` tables
-the migration creates, and ``marks.session_id`` is NULL on every row that exists: P2's
-importer inserts without it and P4's grid router does not pass it.  A silence rule keyed
-on ``session_id`` would therefore report all fifty-six students silent on its first day.
+The task names ``core/services/sessions.py`` (P6) as the source of attendance.  P6 landed
+in ``main`` while this position was being written, so the file DOES exist -- and it is
+still not the source, for a reason that is checkable rather than argued:
+
+    grep -rn create_lesson bot core infra tools     # nothing outside its own def
+    grep -rn SessionsService bot core infra tools  # nothing outside its own module
+    grep -rn session_id bot                        # nothing
+
+``SessionsService`` is wired into no dispatcher, nothing in production creates a lesson,
+no screen passes ``session_id``, and P2's importer inserts without it.  The ``sessions``
+table on the live database is therefore EMPTY and ``marks.session_id`` is NULL on every
+row that exists.  A silence rule keyed on the session book would report zero lesson days
+forever and the screen would never say anything at all; keyed on ``session_id`` it would
+report all fifty-six students silent on its first day.
+
+So this file keeps deriving the day from ``valid_at`` and the switch-over is named as a
+queue item, to be made by whoever first makes something create a lesson.  Recheck with the
+two greps above: the moment they stop coming back empty, this paragraph is out of date.
 
 So a LESSON DAY is the date part of ``Mark.valid_at``, and the sequence of lesson days is
 taken from the WHOLE journal rather than from the students being looked at.  A day on

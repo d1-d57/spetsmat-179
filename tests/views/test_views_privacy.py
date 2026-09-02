@@ -17,6 +17,12 @@ A BREACH IS NOT ONLY «СЕРВЕР ОТВЕТИЛ». It is the neighbour's surn
 marks, appearing in ANY text the bot sent -- a message, an edit or an alert.  So the
 detector reads all three and looks for the victim's own name and for the shape of their
 sheet, not merely for a non-refusal.
+
+THE FILE IS ``test_views_privacy.py`` AND NOT ``test_privacy.py``, and that is not taste.
+There is no ``__init__.py`` under ``tests/``, so pytest names a module by its BASENAME and
+two files called ``test_privacy.py`` in different folders collide at collection with
+``import file mismatch`` -- the whole run stops, not just the pair.  P7 already owns
+``tests/photo/test_privacy.py``; measured here the moment main was merged in.
 """
 
 from __future__ import annotations
@@ -30,6 +36,14 @@ from tests.views.conftest import feed_callback, feed_message
 REFUSAL = "Вы видите только свои данные."
 
 DAY = "2026-09-08"
+
+#: What ``require_role`` answers an identity outside the allowed set.  It stopped being a
+#: developer diagnostic on 2026-09-02, after the owner's first live ``/start`` showed him
+#: «this screen is for pending_student or pending_teacher or stranger; you are a owner» --
+#: English, internal role names, and a grammatical error in the English at that.  Asserted
+#: here by its text AND by what it must NOT contain: the reader is a child, and the refusal
+#: owes them an instruction, not the shape of the role table.
+ROLE_REFUSAL = "Этот экран вам не открыт."
 
 
 def _forgeries(victim_id: int, sheet_id: int):
@@ -173,8 +187,11 @@ def test_a_student_cannot_reach_the_teachers_screens_at_all(
         assert not any(text.startswith("<pre>") for text in said), (
             "a student was handed the whole-class table"
         )
-        assert any("confirmed_student" in text for text in said), (
-            "the refusal must say what the caller is: %r" % said
+        assert any(ROLE_REFUSAL in text for text in said), (
+            "the teacher's screen must refuse a student in words: %r" % said
+        )
+        assert not any("confirmed_student" in text or "teacher" in text for text in said), (
+            "the refusal must not hand the reader the role table: %r" % said
         )
         refused += 1
 
@@ -215,4 +232,8 @@ def test_a_stranger_reaches_none_of_these_screens(dispatcher, recorder, seeded_c
         assert not any(student.surname in text for text in said), (
             "a stranger was shown %r through %r" % (student.surname, payload)
         )
-        assert any("you are a stranger" in text for text in said), said
+        assert any(ROLE_REFUSAL in text for text in said), said
+        assert not any("stranger" in text for text in said), (
+            "a stranger is refused, not told which internal kind they were sorted into: %r"
+            % said
+        )

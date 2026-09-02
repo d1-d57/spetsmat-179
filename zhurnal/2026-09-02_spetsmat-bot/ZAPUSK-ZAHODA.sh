@@ -101,11 +101,11 @@ else
     ARN=$(python3 "$INSTR/modeli.py" "$MODEL" 2>/dev/null | tail -1 | sed 's/.*→ *//')
     case "$ARN" in
       arn:aws:bedrock:*) : ;;
-      *) echo "❌ modeli.py вернул не ARN для «$MODEL»: ${ARN:-пусто}"; exit 1 ;;
+      *) echo "❌ modeli.py вернул не ARN для «${MODEL}»: ${ARN:-пусто}"; exit 1 ;;
     esac
     CLAUDE_CODE_USE_BEDROCK=1 claude -p --model "$ARN" --dangerously-skip-permissions "$PROMPT" < /dev/null 2>&1 | tee -a "$LOG"
   else
-    echo "⚠ Bedrock-доступа на машине нет — иду штатной авторизацией claude, модель «$MODEL»."
+    echo "⚠ Bedrock-доступа на машине нет — иду штатной авторизацией claude, модель «${MODEL}»."
     claude -p --model "$MODEL" --dangerously-skip-permissions "$PROMPT" < /dev/null 2>&1 | tee -a "$LOG"
   fi
 fi
