@@ -30,6 +30,17 @@
     python3 tests/teksty/sobrat.py --kanal a  # только прямой признак задания
     python3 tests/teksty/sobrat.py --json     # то же машинно
 """
+# TOOL-CONTRACT: called-by-hand
+#   Две живые точки вызова, обе настоящие. (1) Рукой: это АРТЕФАКТ захода —
+#   `python3 tests/teksty/sobrat.py` печатает владельцу все строки, которые
+#   читает человек. (2) Машиной: `tests/teksty/test_teksty.py` импортирует
+#   `sobrat()` и берёт у него охват, поэтому сломанный сборщик валит сторожа,
+#   а не молчит. Проверка контракта видит только упоминания в хуках и шагах
+#   сборки, импорта теста не видит — отсюда маркер.
+# TOOL-CONTRACT: no-input
+#   Входного файла нет: инструмент читает ЖИВОЕ дерево репозитория. Кривой
+#   вход тут — только кривой флаг, и его отвергает `argparse` кодом 2.
+
 from __future__ import annotations
 
 import argparse
@@ -431,6 +442,18 @@ def main() -> int:
         help="a — только прямой признак задания; ab — оба канала (по умолчанию)",
     )
     dovody = razbor.parse_args()
+
+    # rc=2 — «позвали неверно», и это отдельный исход от «чисто» (0) и «нашлось»
+    # (1): инструмент читает ЖИВОЕ дерево, и запущенный из чужой папки он иначе
+    # напечатал бы «строк 0» — то есть соврал бы зелёным.
+    otsutstvuyut = [p for p in PAPKI if not (KOREN / p).is_dir()]
+    if otsutstvuyut:
+        print(
+            "позвали неверно: в %s нет папок %s — это не дерево бота"
+            % (KOREN, ", ".join(otsutstvuyut)),
+            file=sys.stderr,
+        )
+        return 2
 
     najdeno = sobrat(tolko_kanal_a=dovody.kanal == "a")
     if dovody.json:
