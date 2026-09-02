@@ -388,6 +388,97 @@ grep -c 'first_sheet' tools/import_konduit.py   # правило Пирогов�
 
 ## ПЛАН — (заполняет исполнитель)
 
+### 0 · What was found before planning (measured, not assumed)
+
+- `main` had moved: P1 was accepted and merged while this branch was already cut, so
+  `zahod/P2-import` sat **9 commits behind** and did not contain `core/`, `config.py`,
+  `migrations/`, `Makefile` or `tests/` at all — my own zone path
+  `core/services/seeding.py` lives in P1's tree. First action was `git merge main` into
+  this branch. Nothing else in the tree was touched.
+- `git --no-optional-locks branch --no-merged main | grep -c zahod/` → **0** (§0.1 replaced
+  by the orchestrator's single command; the subagent was NOT launched, per the cancellation).
+- The source workbook is where §7 says: `~/Downloads/Кондуит 8КЛ.xlsx`, 33 sheets.
+- Seed and book agree exactly: **18 sheets, 544 labels, 0 sheets with any label difference**;
+  `seed/sheets.json` = 215 обязательная / 288 обычная / 39 звезда / 2 двойная.
+- Full inventory of the 29 920 mark cells: `None` 14 824 · `1.0` 14 377 · `'x'` 735 ·
+  `2.0` 1 · `` '`' `` 1. Nothing else. §1's list is confirmed cell by cell.
+- Status row: `✓` 191 · `●` 113 · `°` 102 · `✘` 88 = 494; the remaining 50 of 544 are
+  sheets `1д`/`2д`, which have no status row. §1's numbers reproduce exactly.
+- Column layouts: **four**, not three — old (`1,2,3,4,6,7,8`: header row 3, принимающий at
+  col 2), new (`9..14,3д,4д`: header row 3, фамилия at col 1, закрыт at col 3), `15` (a
+  blank column before принимающий), and `1д`/`2д` (**header IS row 1**, data starts row 2).
+- Receivers: 19 distinct non-empty strings, of which **three**, not two, are composite:
+  `Саша Оревкова/Ольга Александровна`, `Наталия Павлована/Ольга Александровна`, and
+  **`Даня/Ольга Александровна`** — the third one is not named in §6 and is a finding.
+  `Мика/Вася` contains a slash but is ONE teacher (`seed/teachers.csv`, aka `МН`).
+
+### 1 · 🔴 A FALSE PREMISE IN THE ГОТОВНОСТИ CRITERION, RAISED BEFORE WORK AS §1 REQUIRES
+
+§4 demands three oracles and forbids the sheet's own `SUM` row because it is computed from
+the very cells being checked. I opened the workbook a second time with `data_only=False`
+and read the formulas. **Two of the three oracles §4 names are the same tautology in a
+longer form**, and this has to be said before anything is built on them:
+
+- the `закрыт` column of every sheet is
+  `=IF(SUMPRODUCT(REGEXMATCH(labels,"[°˚]") * NOT(REGEXMATCH(cells,"^(1|x)$")))=0,"✓",<count>)`
+  — a formula over the same mark cells;
+- **every per-sheet column of the `долги` sheet is
+  `=INDEX(INDIRECT(<sheet>&"!A:A"), MATCH($A<row>, INDIRECT(<sheet>&"!C:C"), 0))`** — a
+  VLOOKUP of that `закрыт` column. The debts sheet is therefore *not* independent evidence;
+  it is the SUM row with two extra hops.
+
+It is not worthless, and I am not discarding it: it encodes a **different definition** of
+the same question (obligatory-by-label-regex rather than by `seed/sheets.json`; `x` closes
+a debt), so a disagreement still finds a real defect. But it must be labelled for what it
+is, or this position repeats the exact error it exists to fix.
+
+What IS independent, measured:
+
+- **`гробарий` — 20 rows, and every student surname in them is hand-typed (0 formula cells
+  in the name columns).** A human wrote down who took each problem. This is the only
+  full-provenance oracle in the book and it is not in §4's list.
+- **`зачёт` — 55 rows, columns D and E hand-entered (0 formula cells).** The year's credit,
+  awarded by a person. Independent, and it answers a different question than the grid does.
+- **thirty cells re-read by hand** — independent by construction, as §4 says.
+
+**Proposed correction, which I will implement unless told otherwise:** oracle 1 becomes
+`гробарий` (fully independent), oracle 2 stays the thirty hand cells, oracle 3 stays `долги`
+**declared as partially independent** with the formula quoted in the output, and `зачёт` is
+measured as a fourth. Every oracle prints its own independence class next to its coverage,
+so no reader can mistake a semi-independent agreement for a proof. The `544 из 544` figure
+the criterion asks for is printed where it is honest: as the coverage of the inventory and
+catalogue pass, which really does span all 544 problems.
+
+### 2 · Decisions I am making inside the zone (§6 says decide, do not ask)
+
+- **`'x'` (735 cells) → `assert` + `retract`, cell lands `RETRACTED`.** The schema offers
+  exactly three states; `x` must be "not credited AND not a debt" (the book's own `закрыт`
+  formula treats `1` and `x` identically), and `RETRACTED` is the only state with that
+  meaning. `retract` requires `reverses_id`, so a carrier `assert` precedes it; that carrier
+  is stamped in `note` so it can never be read as an observed check-off.
+- **`2.0` and `` '`' `` (1 cell each) → quarantined, no event written, listed by name in the
+  output.** They are not silent `None`: they are two named entries in an explicit registry,
+  and any value outside that registry raises. This agrees with the book's own arithmetic —
+  neither matches `^(1|x)$`, so the spreadsheet counts both as not-closed too.
+- **Composite receivers → a second author on the mark is impossible (`marks.teacher_id` is
+  one column) and inventing a record per pair loses the pairing.** Decision: the composite
+  is a `teachers` row in its own right, carrying the pair as its `name` and both members
+  through a resolved list in the importer, with `note` on each mark naming the second
+  teacher. Written up in full in the report.
+- **The unregistered senior of room 203, initials НС** — registered as a teacher.
+
+### 3 · Order of work, one commit per part
+
+1. `config.py` gains `KONDUIT_XLSX` (**a named zone extension** — §7 commands it and the
+   post-check greps for it; reported as such).
+2. `core/services/seeding.py` — the seed into a migrated database, idempotent.
+3. `tools/import_konduit.py` part 1 — inventory that FAILS on the unknown, `--inventar`.
+4. `tools/import_konduit.py` part 2 — the import: marks, teachers, explicit `first_sheet_id`
+   with `select count(*) ... is null` → 0 asserted and printed.
+5. `tools/import_konduit.py` part 3 — `--proverit`, the oracles above.
+6. `tools/import_konduit.py` part 4 — `--negativnyj-kontrol`, three corruptions, red on each.
+7. `tests/import/` — the whole of the above under `make check`.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

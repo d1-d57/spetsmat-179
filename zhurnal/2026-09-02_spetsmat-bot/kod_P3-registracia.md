@@ -9,8 +9,42 @@
 > Это блок для владельца — то, чем тебя запустили. Исполнителю здесь делать нечего, твоё задание ниже.
 
 ```
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add P3-registracia --branch zahod/P3-registracia && cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P3-registracia && python3 /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/_generator/tools/orkestr.py zhurnal/2026-09-02_spetsmat-bot --rezhim progon --dvizhok opencode --rod instrumenty --model openrouter/z-ai/glm-5.2:free --zahody kod_P3-registracia.md < /dev/null 2>&1 | tee /tmp/zahod-P3-registracia.log
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add P3-registracia --branch zahod/P3-registracia ; cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P3-registracia && opencode run --auto --model openrouter/z-ai/glm-5.2:free '🔴 ОТМЕНА ОДНОГО ПУНКТА ТВОЕГО ЗАХОДА, ЧИТАЙ ЭТО ПЕРВЫМ. СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ — пункт отменён оркестратором, данное указание сильнее текста захода; причина замерена соседней волной: четыре захода из десяти умерли ровно на этом вызове. Вместо всего блока §0.1 выполни САМ одну команду и вставь её вывод в ## ОТЧЁТ: git --no-optional-locks branch --no-merged main | grep -c zahod/ . | Дальше: твой заход — файл /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_P3-registracia.md . Прочитай ТОЛЬКО его и то, что он называет; остальной проект не изучай. План/вопросы/отчёт пиши в этот же файл внизу (## ПЛАН / ## ВОПРОСЫ / ## ОТЧЁТ), НА АНГЛИЙСКОМ. Ничего сверх задачи не трогай. Субагентов не зови ни на что, кроме верификатора §3; коммиты делай САМ, по ходу работы, а не одним последним ходом. Ветку в конце вливаешь САМ, последним ходом, после коммита зоны. 🔴 Частей в задании несколько: делай ПО ПОРЯДКУ, коммить КАЖДУЮ отдельно; не успел — назови несделанные списком в ## ОТЧЁТ, это законный исход.' < /dev/null 2>&1 | tee /tmp/zahod-P3-registracia.log
 ```
+🔴 **ЧЕМ ЭТА СТРОКА ОТЛИЧАЕТСЯ ОТ ТОЙ, ЧТО ПЕЧАТАЛ ГЕНЕРАТОР — ТРИ ИЗМЕРЕННЫХ ДЕФЕКТА.**
+
+⚠ **`;` вместо `&&` после `worktree add` — не косметика.** На ПОВТОРНОМ запуске (добор, перевыбор модели) команда возвращает `rc=1` при полностью живой рабочей папке, и `&&` рвёт цепочку ДО движка: три попытки подряд провалились с ПУСТЫМ логом, что снаружи неотличимо от «все модели мертвы» (замер 02.09 10:00). Судить надо машинный факт «папка на месте и стоит на нужной ветке», а не код возврата — ровно это вшито в запускалку соседней волны.
+
+**1. Путь к инструменту не существует.** Генератор вписал
+`python3 /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/_generator/tools/orkestr.py` — подставил
+объявленный корень владельца в путь ЧУЖОГО инструмента. У репозитория `spetsmat-bot` каталога
+`_generator/` нет вовсе (`ls -d` → No such file or directory); живой дом инструментов —
+`disciplina/_generator/tools/`.
+
+**2. Строка РЕКУРСИВНА.** Она сама зовёт `orkestr.py --rezhim progon`, а `orkestr.py progon` берёт
+стартовую команду ИЗ ЭТОГО ЖЕ ФАЙЛА и исполняет её — то есть надзиратель запускает надзиратель.
+Внутренний не находит арку по относительному пути и выходит `rc=1` с ПУСТЫМ логом; снаружи это
+выглядит как «модель упала». Замерено живьём 02.09 09:57: два прогона подряд, лог 0 байт.
+Соседняя волна упёрлась в то же и обошла запускалкой — их строка генератора так же сохранена
+в комментарии (`kod_check-zahod-ohvat.md`).
+
+**Форма выше — прямой вызов движка, ровно одно `--model`.** Это то, чего `orkestr.py progon` и ждёт:
+он читает строку, подменяет В НЕЙ ровно имя модели и НАДЗИРАЕТ снаружи, различая четыре исхода —
+упал · молчит · потолок · ЛОЖНЫЙ УСПЕХ. Пускать так:
+```
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/orkestr.py /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot \
+  --rezhim progon --rod instrumenty --molchanie 1800 --potolok 14400 --popytok 3 \
+  --zahody kod_P3-registracia.md
+```
+⚠ `--molchanie 0` НЕ значит «не убивать»: `orkestr` читает это как «лог не рос 0 секунд ⇒ молчит»
+и убивает прогон мгновенно (замер 02.09 09:54, один сожжённый прогон). Порог 1800 с взят потому,
+что думающая модель не даёт байтов минутами, а `tee` буферизует блоками.
+
+<!-- прежняя строка генератора, сохранена дословно, НЕ исполнять:
+
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add P3-registracia --branch zahod/P3-registracia && cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P3-registracia && python3 /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/_generator/tools/orkestr.py zhurnal/2026-09-02_spetsmat-bot --rezhim progon --dvizhok opencode --rod instrumenty --model openrouter/z-ai/glm-5.2:free --zahody kod_P3-registracia.md < /dev/null 2>&1 | tee /tmp/zahod-P3-registracia.log
+
+-->
 
 ── СЧЁТ НЕЗАКРЫТОГО (печать, не гейт) ──
 ГРАНИЦА ОБЛАСТИ: сырые подстроки в `kod_*.md` (пункт 4) — НЕ парсер очереди `dostavit_urok` (который считает только пары ДОМ:/ДОСТАВЛЕНО:). Разница в числах — законна.
