@@ -96,13 +96,30 @@ def main(argv=None) -> int:
         return RC_DEFECT
 
     # ── 1. стартовая строка ────────────────────────────────────────────────
-    m = re.search(r"^```\npython3 \S+git_zona\.py worktree add " + re.escape(a.tema)
-                  + r".*?\n```\n", t, re.S | re.M)
-    if not m:
-        print("❌ не нашёл стартовый блок генератора", file=sys.stderr)
-        return RC_DEFECT
-    staraya = m.group(0)
-    t = t.replace(staraya, (
+    # 🔴 ЗАМЕНА ТОЛЬКО ДЛЯ ПЛАТНЫХ. У бесплатной позиции стартовая строка
+    # генератора уже правильная: она зовёт `orkestr.py --rezhim progon`, то есть
+    # НАДЗИРАТЕЛЯ, которого мандат и требует («бесплатное руками не пускают:
+    # надзиратель различает четыре исхода, включая ЛОЖНЫЙ УСПЕХ»). Мёртвой двери
+    # Bedrock там нет вовсе — маршрут идёт через opencode.
+    # И заменить её нельзя ФИЗИЧЕСКИ: `orkestr.podmenit_model` — якорная замена
+    # по `--model`, она падает при числе вхождений ≠ 1, а в форме
+    # `bash ZAPUSK-ZAHODA.sh <тема> <модель>` их ноль. Подменив строку, мы бы
+    # отобрали у бесплатной позиции надзирателя и не заметили этого до прогона.
+    besplatnaya = "/" in a.model or a.model.endswith(":free")
+    if besplatnaya:
+        print(f"⚠ модель «{a.model}» бесплатная — стартовая строка генератора "
+              f"ОСТАВЛЕНА как есть: она зовёт orkestr.py --rezhim progon, "
+              f"то есть надзирателя, которого требует мандат")
+        staraya = None
+    else:
+        m = re.search(r"^```\npython3 \S+git_zona\.py worktree add " + re.escape(a.tema)
+                      + r".*?\n```\n", t, re.S | re.M)
+        if not m:
+            print("❌ не нашёл стартовый блок генератора", file=sys.stderr)
+            return RC_DEFECT
+        staraya = m.group(0)
+    if staraya is not None:
+      t = t.replace(staraya, (
         "```\n"
         f"bash {ZAPUSK} {a.tema} {a.model}\n"
         "```\n"

@@ -9,6 +9,18 @@
 > Это блок для владельца — то, чем тебя запустили. Исполнителю здесь делать нечего, твоё задание ниже.
 
 ```
+bash /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/ZAPUSK-ZAHODA.sh P2-import opus
+```
+🔴 **ЧЕМ ЭТА СТРОКА ОТЛИЧАЕТСЯ ОТ ТОЙ, ЧТО ПЕЧАТАЛ ГЕНЕРАТОР.**
+Генератор вписал `claude -p --model arn:aws:bedrock:…` — ARN application inference
+profile. На ЭТОЙ машине Bedrock-доступа НЕТ вовсе: ни `~/.aws/`, ни переменных `AWS_*`
+(замер 2026-09-02 08:22). Цена оплачена соседней волной 2026-09-02 07:07: пять платных
+позиций из пяти оборвались за девять минут с «Could not load credentials from any
+providers», и снаружи это неотличимо от «заход думает». `ZAPUSK-ZAHODA.sh` берёт модель
+вторым аргументом и сам выбирает маршрут; добор — тем же вызовом с `--dobor`.
+
+<!-- прежняя строка генератора, сохранена дословно, НЕ исполнять:
+
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add P2-import --branch zahod/P2-import && cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P2-import && claude -p --verbose --output-format stream-json --model arn:aws:bedrock:us-east-1:811345154057:application-inference-profile/d78ovu0ye0t4 --dangerously-skip-permissions 'Твой заход — файл /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_P2-import.md. Прочитай ТОЛЬКО его и то, что он называет; остальной проект не изучай. План/вопросы/отчёт пиши в этот же файл внизу (## ПЛАН / ## ВОПРОСЫ / ## ОТЧЁТ). Ничего сверх задачи не трогай — «ничего сверх задачи» относится к СОДЕРЖАНИЮ работы; git-контур §0.1 — законное исключение, он про состояние репозитория и исполняется целиком.' < /dev/null 2>&1 | tee /tmp/zahod-P2-import.jsonl | python3 -u -c 'import sys,json
 for l in sys.stdin:
  try:
@@ -23,7 +35,8 @@ for l in sys.stdin:
    print("== ПРОГОН: %s c . USD %s . токены вх %s / вых %s / кэш-чтение %s" % ((d.get("duration_ms") or 0)//1000, d.get("total_cost_usd"), u.get("input_tokens"), u.get("output_tokens"), u.get("cache_read_input_tokens")))
  except Exception:
   sys.stdout.write(l)'
-```
+
+-->
 
 Приёмке — время и токены печатает команда, руками их не вписывают (`KONSTITUCIYA §10`; лог остаётся на диске после прогона):
 ```
@@ -60,8 +73,16 @@ for l in open(sys.argv[1], encoding="utf-8"):
        доставлено                               : 0
        🔴 не проверяется машиной: содержательная отработанность записей БЕЗ следа закрытия (метки в доме, строки ✅/ЗАКРЫТО) — нужна ревизия человеком; сырой греп сверх разбора — шаблонные строки формы.
 
-КОНТЕКСТ. <проект в 1–2 фразы>. Прошлый этап: <состояние>. ЦЕЛЬ: <что закрыть>.
-Приёмка — по ОТЧЁТУ, без построчной сверки. <Если стоп до цели: получишь X, но НЕ Y.>
+КОНТЕКСТ. `spetsmat-bot` — телеграм-бот кондуита спецмата 179-й школы: 56 учеников,
+18 преподавателей, три аудитории. Прошлый этап: позиция P1 ПРИНЯТА и влита в `main` —
+есть схема (`migrations/001_init.sql`), журнал отметок с `assert`/`retract`/`erratum`,
+двумя временами и SCD2-закреплениями, `core/` без единой строки aiogram, 66 тестов,
+`make check` зелёный. Базы с данными нет: она пустая. ЦЕЛЬ: загрузить в неё
+прошлогодний кондуит — 56 учеников, 18 преподавателей, 18 листков, 544 задачи,
+15 112 отметок — так, чтобы долги и гробарий ВОСПРОИЗВЕЛИСЬ, и доказать это тремя
+оракулами, независимыми от проверяемых ячеек, плюс негативным контролем.
+Приёмка — по ОТЧЁТУ, без построчной сверки. Если стоп до цели: получишь загруженный
+засев и инвентарь значений, но НЕ проверку оракулами — а именно она и есть эта позиция.
 
 ## ЧТО ФИНАЛИЗИРОВАНО НА ИНТЕРВЬЮ
 
@@ -117,7 +138,121 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 ## 2. ЗАДАЧА
 
 🔴 **WRITE YOUR `## ОТЧЁТ`, `## ПЛАН` AND `## ВОПРОСЫ` IN ENGLISH, AND EVERY FILE AND EVERY COMMIT MESSAGE YOU PRODUCE TOO.** Owner's decision 30.08. It is a каркас-level rule, not a preference — wave 2 lost it twice because the pass text listed the report SECTIONS and never said «every file you create». Fixed Russian addresses stay Cyrillic: `ЦЕНА:` · `ВЕРДИКТ:` · `ДОМ:` · `ДОСТАВЛЕНО:` · `ПОДЪЁМ:` · `[ДОЛГ: …]` · every `## ` heading of this file · every path and command.
-Конкретные шаги — у автора. **КРИТЕРИЙ ГОТОВНОСТИ (может ПРОВАЛИТЬСЯ):** живой прогон на реальном объекте репозитория (не только фикстура) — `python3 -c '<команда прогона>'` на собранном файле или `bash _generator/tools/fixtures/bootstrap_zahod/PROGNAT.sh` → `rc=0` и все ловушки зелёные..
+🔴 **THIS POSITION EXISTS TO FIX AN ERROR THAT WAS ALREADY MADE ONCE AND MISSED.**
+The previous `import_konduit.py` compared the number of solvers computed from the journal
+against row 2 of the Excel sheet. But row 2 is a `SUM` over the very cells the script read.
+The match "to the unit across all 544 problems" proved that `openpyxl` can read a file, and
+nothing beyond it. Worse: `main()` returned `None`, so the exit code was always zero — the
+test could not fail physically. Do not reproduce this shape in any form.
+
+### 1 · Inventory FIRST, and FAIL on the unknown
+
+The old script's `value()` returned `None` for everything except `1.0` and `"x"`, and silently
+threw away real data. A second agent found what it was discarding:
+
+- the mark `✘` on **88 problems** — undocumented; in sheet 4д it marks all 26 problems;
+- the value `2` in sheet 9 (Фёдоров, problem −4б) and a backtick in sheet 15 (Искеева, 1°д);
+- **sheet 15 has a THIRD column layout** — surname, name, closed, empty, receiver;
+- **sheets 1д and 2д have no header row at all** — 50 problems with no type.
+
+So: the importer BEGINS by collecting the set of every distinct cell value in the source and
+**raises on an unknown one**. No silent `None`, ever. The inventory is printed with counts and
+goes into the report, so the next reader sees what the data actually contains.
+
+### 2 · What to load
+
+`seed/students.csv` (56 students: 55 live + 1 technical; 9К — 28, 9Л — 27),
+`seed/teachers.csv` (18 teachers, 17 live), `seed/sheets.json` (18 sheets, 544 problems:
+215 obligatory, 288 plain, 39 starred, 2 double-starred). The marks `°` (102) and `●` (113)
+give exactly 215 obligatory — the two signs are self-consistent, either may be trusted.
+
+**`source` = `импорт` on every imported mark**, and the enum values of the base schema stay
+Cyrillic — they are data fixed by `seed/sheets.json`, and renaming them breaks the seed.
+
+### 3 · `first_sheet_id` — DECIDED, do not re-open, and it is the reason P1 asked
+
+Exactly two students moved during the year, both 9К: **Гамаюнова Софья** left after sheet 6,
+**Пирогов Константин** arrived from sheet 6. This is the whole reason the field exists:
+those who arrive later are not charged the old sheets.
+
+🔴 **The orchestrator's decision, taken because P1 raised it and P2 is what fills the field:**
+- on IMPORT, `first_sheet_id` is set EXPLICITLY for every student — the earliest sheet in
+  which that student has any row. `NULL` must not survive this import: assert it at the end,
+  `select count(*) from students where first_sheet_id is null` → 0, and print the number.
+- P1 left the fallback "NULL means owes from the very first sheet", pinned by
+  `tests/test_verifier_findings.py::test_a_student_with_no_first_sheet_owes_from_the_very_first_sheet`.
+  That fallback is right for imported rows and WRONG for a freshly registered student, who
+  would open the bot to a wall of debts on day one. **Do not change P1's fallback** — it is
+  out of your zone and it is pinned by a test. Just make `NULL` impossible on import, and say
+  so in the report. Registration's default is P3's business.
+
+### 4 · Three oracles, and NOT the spreadsheet's own SUM row
+
+An oracle counts only if it is produced INDEPENDENTLY of the cells being checked:
+
+1. **the examination sheet** (`итоговая ведомость`) by which the year's credit was awarded;
+2. **thirty cells checked by hand** — pick them spread across sheets and students, write each
+   one out in the report as `sheet · student · problem · expected · got`, so a human can
+   re-check any of them without re-running anything;
+3. **the debts sheet** (`лист «долги»`), honouring `first_sheet_id`. Last time the debts
+   diverged on exactly one student, and that divergence is what revealed the Пирогов rule —
+   so a divergence here is a FINDING, not noise: name the student and the reason.
+
+### 5 · 🔴 NEGATIVE CONTROL — the part that makes the oracles mean anything
+
+Corrupt the data three ways and the test MUST go red on each. Green on a corruption is a
+failure of the position:
+
+- delete one event from the journal;
+- flip one mark (`assert` → `retract`);
+- swap two students.
+
+Five lines of code that would have killed the previous tautology in a minute.
+
+### 6 · Two holes in the data — close them, do not paper over them
+
+- **The senior of room 203, initials НС, is not registered as a teacher anywhere** — neither in
+  the list nor on the «принимающие» sheet, and five students are attributed to him. Register him.
+- **Composite receivers**: «Саша Оревкова/Ольга Александровна», «Наталия Павлована/Ольга
+  Александровна». The conduit holds 19 distinct receiver strings against 17 live teachers, and
+  the model "one author per mark" cannot express this. Decide and write down HOW you express it
+  — a second author on the mark, or a separate record — and say why in the report. This is a
+  modelling decision inside your zone; make it, do not ask.
+
+**КРИТЕРИЙ ГОТОВНОСТИ (может ПРОВАЛИТЬСЯ), каждая команда печатает ЧИСЛО:**
+
+    cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P2-import
+    make check                                   # rc=0, все тесты зелёные, число печатается
+    python3 tools/import_konduit.py --proverit   # rc=0; печатает по каждому из ТРЁХ оракулов
+                                                 # «сверено N из M, расхождений K»; 544 задачи,
+                                                 # 30 ручных клеток, долги по листу «долги»
+    python3 tools/import_konduit.py --negativnyj-kontrol
+                                                 # rc=0 И печатает «порч 3 из 3, покраснело 3»
+                                                 # ЗЕЛЁНОЕ НА ПОРЧЕ = ПРОВАЛ ПОЗИЦИИ
+
+🔴 Ноль сверенных при непустом источнике — КРАСНЫЙ, а не зелёный. Отрицательный вердикт обязан
+нести охват В СЕБЕ: «расхождений 0, сверено 544 из 544», а не «расхождений не найдено».
+
+### 7 · ГДЕ ИСХОДНИК — найдено и измерено оркестратором, не ищи заново
+
+🔴 **Путь в самом `tools/import_konduit.py` МЁРТВЫЙ.** Строка 13:
+`SRC = "/sessions/funny-eager-bell/mnt/uploads/Кондуит 8КЛ.xlsx"` — это путь песочницы Cowork,
+на этой машине такого каталога нет вовсе. Это первое, что чинится.
+
+**Живой источник:** `/Users/ivanyakovlev/Downloads/Кондуит 8КЛ.xlsx` — 33 листа,
+`['1','2','3','4','6','7','8','9','10','11','12','13','14','15','1д','2д','3д','4д','1 кр',
+'1,5 кр (геогр)','2 кр','6 кр', …]`. Рядом лежит `Кондуит 8КЛ-2.xlsx`, новее на сутки и с
+другим md5 — **это НЕ вторая версия данных**: оркестратор сверил обе книги поклеточно,
+`906333 клеток сверено, различий 0`. Бери любую, ambiguity закрыта замером. Есть ещё
+`Распределение.xlsx` — он про раскладку по аудиториям, в эту позицию не входит.
+
+🔴 **Исходник в репозиторий НЕ КОПИРУЕТСЯ и НЕ КОММИТИТСЯ.** Это персональные данные
+пятидесяти шести детей; в git едет только обезличенный производный засев, который уже там.
+Путь к книге кладётся КОНСТАНТОЙ в `config.py` (все константы живут там — правило волны),
+с значением по умолчанию `~/Downloads/Кондуит 8КЛ.xlsx` и внятным отказом, если файла нет.
+
+⚠ `seed/students.csv` УЖЕ несёт колонку `first_sheet` — не вычисляй её заново, сверь с тем,
+что даёт книга, и расхождение назови находкой.
 **Отрицательный вердикт несёт ОХВАТ В СЕБЕ:** не «дыр не найдено», а «дыр не найдено, проверено X из Y». Без охвата вердикт не принимается — «проверено 2 из 9» и «проверено 9 из 9» выглядят одинаково.
 
 ## 3. ВЕРИФИКАТОР (если двигаем/теряем/жмём)
@@ -128,8 +263,10 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 Ты работаешь host-side и в `.git` ПИШЕШЬ — значит коммитишь САМ, никому не передавая. Каждую завершённую часть работы коммить СРАЗУ, теми же двумя ходами — не копи всё к финальному ходу:
 ```
 git --no-optional-locks add -- tools/import_konduit.py core/services/seeding.py tests/import/                     # вводит НОВЫЕ пути в индекс
-git --no-optional-locks commit -m "<зона>: <что сделано>" -- tools/import_konduit.py core/services/seeding.py tests/import/   # отсекает всё чужое
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone <зона>   # из корня репо; должен быть ✅
+git --no-optional-locks commit -m "<что сделано>" -- tools/import_konduit.py core/services/seeding.py tests/import/   # отсекает всё чужое
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone "tools/import_konduit.py" && \
+    git_zona.py check --zone "core/services/seeding.py" && \
+    git_zona.py check --zone "tests/import/"   # из корня репо; должен быть ✅
 git --no-optional-locks show --stat                        # обязаны быть ТОЛЬКО твои пути
 ```
 🔴 **КОММИТЬ ПО ХОДУ — РЕШЕНИЕ ВЛАДЕЛЬЦА 25.08 (В11), ПЕРЕВЕРНУВШЕЕ прежний канон «одним последним ходом».** Цена прежнего канона: за сутки ДВА обрыва — канал `opencode run --auto` односторонний и умирает вместе с сессией (владелец закрыл ноутбук), и незакоммиченная работа пропадала целиком. Закончил кусок — закоммитил его; последний ход только ПРОВЕРЯЕТ, что коммитить нечего (`git status --porcelain` пуст, `git_zona.py check --zone` ✅).
@@ -192,7 +329,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 **1 · ВСЕ КОММИТЫ.** Ничего не осталось вне git — ни в рабочем репозитории, ни в соседних, до
 которых ты дотянулся по ходу работы:
 ```
-for R in <репозитории, которых ты касался>; do
+for R in /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot; do
   echo "== $R"; git -C $R --no-optional-locks status --porcelain
 done
 ```
@@ -202,7 +339,7 @@ done
 **2 · ВЛИТИЕ СВОЕЙ ВЕТКИ В ОСНОВНУЮ.** Только после того, как шаг 1 дал «вне git 0» на своей
 зоне — влитие отказывает на грязном дереве:
 ```
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py vlit-v-osnovnuyu zahod/P2-import --zone <своя зона> \
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py vlit-v-osnovnuyu zahod/P2-import --zone "tools/import_konduit.py" --zone "core/services/seeding.py" --zone "tests/import/" \
     --vsyo-ravno "своя рабочая папка ещё жива — влитие последним ходом захода, штатно"
 ```
 Конфликт — ЗАКОННЫЙ исход, не повод форсировать: разрешай по существу, если понимаешь обе
@@ -216,8 +353,9 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 виден»: прогон изменённого механизма из `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`, НЕ из рабочей папки `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P2-import` плюс `grep` по ЖИВОМУ файлу,
 который его зовёт (хук, конвейер, генератор):
 ```
-cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && <команда прогона механизма, который заход менял> && echo $?
-grep -n '<как механизм назван в вызывающем коде>' <живая точка вызова>
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && make check && python3 tools/import_konduit.py --proverit && echo $?
+grep -n 'KONDUIT_XLSX\|--proverit\|--negativnyj-kontrol' config.py tools/import_konduit.py
+grep -c 'first_sheet' tools/import_konduit.py   # правило Пирогова живёт в коде, а не в отчёте
 ```
 🔴 **Красная пост-проверка = ОТКАТ ВЛИТИЯ И СТРОКА В ОТЧЁТ**, а не «доложу, пусть приёмка
 решает»: `git_zona.py vlit-v-osnovnuyu --abort`, если слияние ещё не закоммичено, иначе
@@ -294,7 +432,9 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
 *(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
+**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "tools/import_konduit.py" && \
+    git_zona.py check --zone "core/services/seeding.py" && \
+    git_zona.py check --zone "tests/import/"` → ✅
 *(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
