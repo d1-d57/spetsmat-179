@@ -177,6 +177,38 @@ class SqliteAttendance:
         )
 
 
+class SqliteRoomRoster:
+    """Which teachers are bound to a room, read from the roster store.
+
+    A SECOND SQLITE FILE, and that is not this position's decision: ``infra/roster_repo.py``
+    says in its own docstring that a teacher's role and room «do NOT live in any schema» and
+    are kept in a store of its own beside the journal.  So the room screen reads
+    ``teacher_room_role`` here rather than the ``teachers`` table it reads names from.
+
+    Read-only, and a new adapter rather than a method added to ``RosterRepo``: that file
+    belongs to another position and is live in this wave.  Reading somebody's table through
+    an adapter of one's own is the layering this project already uses; editing their file
+    mid-wave is the one thing a wave cannot do.
+    """
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def teachers_of_room(self, room: str) -> list:
+        """The ids bound to this room, ascending.  An unbound room answers an empty list.
+
+        Both roles, not only ``head``: the point of the query is who may be HANDED a child,
+        and that is every teacher who works in the room.
+        """
+        return [
+            row["teacher_id"]
+            for row in self._connection.execute(
+                "select teacher_id from teacher_room_role where room = ? order by teacher_id",
+                (room,),
+            )
+        ]
+
+
 class SqliteTeachers:
     """The teacher list, read-only.
 

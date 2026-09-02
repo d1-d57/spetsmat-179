@@ -20,7 +20,12 @@ from bot.routers import marking, room
 from infra.db import SystemClock
 from infra.enrollment_repo import SqliteEnrollmentRepo
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
-from infra.room_repo import SqliteAttendance, SqliteSessions, SqliteTeachers
+from infra.room_repo import (
+    SqliteAttendance,
+    SqliteRoomRoster,
+    SqliteSessions,
+    SqliteTeachers,
+)
 from infra.roster_repo import RosterRepo
 from core.services.enrollment import EnrollmentService
 from core.services.marking import MarkingService
@@ -73,6 +78,10 @@ def build(
         attendance=SqliteAttendance(repo._journal),  # noqa: SLF001
         sessions=SqliteSessions(repo._journal),  # noqa: SLF001
         teachers=SqliteTeachers(repo._journal),  # noqa: SLF001
+        # The room of a teacher lives in the ROSTER store, not the journal: see the
+        # docstring of infra/roster_repo.py.  It is what tells the screen which teachers a
+        # child may be handed to, including one who happens to hold nobody tonight.
+        roster=SqliteRoomRoster(repo._roster),  # noqa: SLF001
         clock=SystemClock(),
     )
 
