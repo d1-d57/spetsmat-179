@@ -24,12 +24,44 @@ WHAT IS ACTUALLY WIRED, AND WHAT IS HONESTLY NOT
 ------------------------------------------------
 ``YandexSpeechKitTranscriber`` is real and its request is asserted by tests that need no
 key and no network: verbatim mode on, ``oggopus`` as the format, and NO sample rate in
-the request at all.  What it does NOT carry is the user dictionary: on this project's own
-reading, the phrase list lives on the v3 STREAMING api, which is gRPC and would cost a
-dependency this repository does not have.  ``build_user_dictionary`` therefore exists,
-is built from the catalogue and IS used — by the fuzzy channel in
-``core.services.golos``, which is the same compensation applied one layer later and under
-test.  The gap is named in the report rather than papered over.
+the request at all.
+
+What it does NOT carry is a user dictionary — **and neither would any other client of
+this engine, because SpeechKit has no such parameter to carry.**  Two sentences that
+stood here until 02.09 were wrong, and both are withdrawn by name, because a file that
+misdescribes itself sends the next reader shopping for the wrong thing:
+
+* «the phrase list lives on the v3 STREAMING api, which is gRPC».  It does not.  Yandex
+  publishes the contract as protobuf, in two versions — v2 and v3; v1, the one used
+  here, is plain HTTP and takes its parameters in the query string.  In v3
+  ``StreamingOptions`` carries ``recognition_model``, ``eou_classifier``,
+  ``recognition_classifier``, ``speech_analysis``, ``speaker_labeling``,
+  ``summarization``; ``RecognitionModelOptions`` carries ``model``, ``audio_format``,
+  ``text_normalization``, ``language_restriction``, ``audio_processing_type``; and the
+  two option messages under those carry a normalisation enum, a profanity flag, a
+  literature flag, a phone-formatting enum, a restriction type and a language code.  In
+  v2 ``RecognitionSpec`` carries ten fields, all of them about the audio or the shape of
+  the output.  There is no phrase list, no vocabulary, no context, no boosting, in
+  either — nor on the async file endpoint, which takes the same options message, nor in
+  the v1 query string this file already uses.  **The gRPC dependency would buy nothing:
+  the price was never the obstacle, the goods do not exist.**
+* «``build_user_dictionary`` … IS used — by the fuzzy channel».  It is not.  It is
+  called once, in ``bot.routers.voice.voice_dependencies``, and its only consumer is the
+  ``phrases`` argument below.  The fuzzy channel is handed the catalogue's students
+  directly by ``core.services.golos.match_surname`` and never sees this list.  So the
+  terms are built on every start and read by nobody, and that is what the start line now
+  says out loud.
+
+What Yandex does offer for a vocabulary is model EXTENSION: a corpus handed over by
+request, trained on their side, returned as a private id for the ``model`` field.  It
+wants about an hour of audio for the error-rate evaluation alone, it is not a
+per-request field, and an api key does not reach it.  It is a decision for the owner,
+not a change to this file — named in the report, not papered over.
+
+Recognition therefore runs with no hint, the compensation is entirely downstream in
+``core.services.golos``, and there is exactly one recognition path, so there is nothing
+to fall back FROM: an engine that cannot be reached comes back as
+``TranscriptionUnavailable`` and the lesson goes on with the buttons.
 
 ⚠ A local alternative worth naming: **GigaAM-v3** measures 7,19 % WER on Russian against
 Whisper large-v3's 15,44 %, and runs on four cores in five to eight seconds where Whisper
@@ -158,9 +190,12 @@ class YandexSpeechKitTranscriber:
         self._api_key = api_key
         self._folder_id = folder_id
         self._language = language
-        #: Kept, not sent.  See the module docstring: this endpoint has no phrase list,
-        #: and holding the terms here is what lets the seam stay unchanged when the
-        #: streaming client that CAN send them replaces this one.
+        #: Kept, and NOT sent, and there is no version of this engine that would send
+        #: them — see the module docstring.  The attribute stays because the caller in
+        #: ``bot/routers/voice.py`` passes the list and counting it is what makes the
+        #: start line able to say «%d terms built and going nowhere»; it is not a seam
+        #: waiting for a streaming client, and describing it as one is what kept this
+        #: gap alive for a wave.
         self.phrases = list(phrases)
         self._endpoint = endpoint or self.ENDPOINT
         self._timeout = timeout

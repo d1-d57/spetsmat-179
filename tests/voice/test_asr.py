@@ -189,6 +189,23 @@ def test_the_start_line_says_the_dictionary_never_leaves_this_process():
     assert str(len(transcriber.phrases)) in how, "the line does not say how many terms: %s" % how
 
 
+def test_an_unreachable_engine_becomes_a_refusal_the_screen_can_say_out_loud():
+    """The fallback the задача makes unconditional: a lesson outlives a recogniser.
+
+    Port 1 on the loopback is closed on every machine, so this needs no network and no
+    key.  What it pins is that the failure arrives as ``TranscriptionUnavailable`` —
+    the one exception ``bot/routers/voice.py`` knows how to turn into «не расслышал,
+    повторите» — and never as a raw ``URLError`` that reaches the teacher as a crash.
+    """
+    client = YandexSpeechKitTranscriber(
+        "k", "f", endpoint="http://127.0.0.1:1/speech/v1/stt:recognize", timeout=2
+    )
+
+    with pytest.raises(TranscriptionUnavailable) as refusal:
+        client.transcribe(b"ogg-bytes")
+    assert "unreachable" in str(refusal.value)
+
+
 def test_the_fake_refuses_an_unscripted_recording_instead_of_inventing_one():
     fake = FakeTranscriber({b"a": "Петров три"})
 
