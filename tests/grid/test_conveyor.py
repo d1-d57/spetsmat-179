@@ -36,6 +36,11 @@ STRANGER_TG = 424242
 
 # --------------------------------------------------------------------------- helpers
 
+def _on_the_belt(catalogue) -> list:
+    """The students the screen shows: everyone whose status is not ``left``."""
+    return [student for student in catalogue.students() if student.status != "left"]
+
+
 def _first_cell(catalogue):
     """One (student, problem) pair off the current sheet, named the way the bot names it.
 
@@ -43,7 +48,7 @@ def _first_cell(catalogue):
     the router use -- so the pair a test taps is a pair a teacher could tap.
     """
     sheet = max(catalogue.sheets(), key=lambda s: s.ord)
-    student = catalogue.students()[0]
+    student = _on_the_belt(catalogue)[0]
     problem = catalogue.problems_of_sheet(sheet.id)[0]
     return student, sheet, problem
 
@@ -392,7 +397,7 @@ def test_no_surname_ever_enters_a_payload(
                   data=OpenGrid(student_id=student.id, sheet_id=sheet.id).pack(),
                   update_id=111, query_id="q111")
 
-    surnames = {other.surname for other in seeded_catalogue.students()}
+    surnames = {other.surname for other in _on_the_belt(seeded_catalogue)}
     payloads = [
         button["callback_data"]
         for edit in recorder.edits()
@@ -426,7 +431,7 @@ def test_done_returns_to_the_list_of_students_not_to_a_menu(
         for button in row
     ]
     opened = [OpenGrid.unpack(payload).student_id for payload in payloads]
-    assert opened == [other.id for other in seeded_catalogue.students()]
+    assert opened == [other.id for other in _on_the_belt(seeded_catalogue)]
     assert student.id in opened
 
 
@@ -438,7 +443,7 @@ def test_the_arrows_carry_the_neighbours_own_id(
     A «+1» would be resolved later, against a roster that may have changed since the
     message was drawn -- and would walk from a position the screen no longer shows.
     """
-    students = seeded_catalogue.students()
+    students = _on_the_belt(seeded_catalogue)
     middle = students[3]
     sheet = max(seeded_catalogue.sheets(), key=lambda s: s.ord)
     feed_callback(dispatcher, bot=bot_instance, from_id=teacher_tg_id,
@@ -458,7 +463,7 @@ def test_the_arrows_carry_the_neighbours_own_id(
 def test_the_first_and_the_last_student_have_no_arrow_into_nothing(
     dispatcher, bot_instance, recorder, seeded_catalogue, teacher_tg_id
 ):
-    students = seeded_catalogue.students()
+    students = _on_the_belt(seeded_catalogue)
     sheet = max(seeded_catalogue.sheets(), key=lambda s: s.ord)
 
     for index, expected in ((0, "→"), (len(students) - 1, "←")):
@@ -527,3 +532,44 @@ def test_a_teacher_opens_the_screen_and_a_stranger_does_not(
                  text="/setka", update_id=162)
     for text in recorder.texts():
         assert "учеников" not in text, "a stranger was shown the roster: %r" % text
+
+
+def test_a_departed_student_is_off_the_belt_and_out_of_the_arrows(
+    dispatcher, bot_instance, recorder, seeded_catalogue, seeded_connection, teacher_tg_id
+):
+    """A student whose status is ``left`` stays in the catalogue and leaves the conveyor.
+
+    Their journal rows point at them and always will, so the row cannot be deleted -- but
+    they are not somebody the teacher walks past on a Thursday, and one extra name in the
+    list is one extra tap per lesson for the rest of the year.  Both the list and the
+    arrows are checked, because the two reading different rosters is exactly how «next»
+    starts skipping people.
+    """
+    belt = _on_the_belt(seeded_catalogue)
+    gone = belt[1]
+    seeded_connection.execute(
+        "update students set status = 'left' where id = ?", (gone.id,)
+    )
+    seeded_connection.commit()
+
+    sheet = max(seeded_catalogue.sheets(), key=lambda s: s.ord)
+    feed_callback(dispatcher, bot=bot_instance, from_id=teacher_tg_id,
+                  data=Done(sheet_id=sheet.id).pack(), update_id=171, query_id="q171")
+    listed = [
+        OpenGrid.unpack(button["callback_data"]).student_id
+        for row in (recorder.edits()[-1].get("reply_markup") or {})["inline_keyboard"]
+        for button in row
+    ]
+    assert gone.id not in listed
+    assert listed == [student.id for student in belt if student.id != gone.id]
+
+    recorder.records.clear()
+    feed_callback(dispatcher, bot=bot_instance, from_id=teacher_tg_id,
+                  data=OpenGrid(student_id=belt[0].id, sheet_id=sheet.id).pack(),
+                  update_id=172, query_id="q172")
+    footer = (recorder.edits()[-1].get("reply_markup") or {})["inline_keyboard"][-2]
+    forward = [button for button in footer if "→" in button["text"]]
+    assert len(forward) == 1
+    assert OpenGrid.unpack(forward[0]["callback_data"]).student_id == belt[2].id, (
+        "the arrow still points at the student who left"
+    )

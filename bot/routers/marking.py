@@ -171,6 +171,17 @@ def _find_problem(catalogue, problem_id: int) -> Optional[Problem]:
     return None
 
 
+def _active_students(catalogue) -> list:
+    """The students on the belt, in the order the list and the arrows both use.
+
+    A student whose status is ``left`` stays in the catalogue -- the journal points at
+    their rows and always will -- but they are not somebody the teacher walks past on a
+    Thursday, and leaving them in the conveyor costs a tap per lesson forever.  Filtered
+    in ONE place so that the list and the arrows cannot disagree about what "next" means.
+    """
+    return [student for student in catalogue.students() if student.status != "left"]
+
+
 def _neighbours(students: list, student_id: int) -> tuple:
     """The students on either side, in the order the teacher is looking at.
 
@@ -224,7 +235,7 @@ def _compose_grid(catalogue, progress, *, student_id: int, sheet_id: int, last: 
                 cleared=last["cleared"],
             )
         )
-    previous_student, next_student = _neighbours(catalogue.students(), student_id)
+    previous_student, next_student = _neighbours(_active_students(catalogue), student_id)
     markup = grid_keyboard(
         problems,
         states,
@@ -238,7 +249,7 @@ def _compose_grid(catalogue, progress, *, student_id: int, sheet_id: int, last: 
 
 def _compose_list(catalogue, sheet_id: int):
     """The list «Готово» returns to.  A conveyor returns to the belt, not to a menu."""
-    students = catalogue.students()
+    students = _active_students(catalogue)
     sheet = catalogue.sheet(sheet_id)
     text = "Листок %s · учеников %d" % (
         sheet.number if sheet is not None else "?",
