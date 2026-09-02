@@ -573,3 +573,27 @@ def test_a_departed_student_is_off_the_belt_and_out_of_the_arrows(
     assert OpenGrid.unpack(forward[0]["callback_data"]).student_id == belt[2].id, (
         "the arrow still points at the student who left"
     )
+
+
+def test_a_decoration_button_is_answered_but_not_redrawn_over(
+    dispatcher, bot_instance, recorder, seeded_catalogue, owner_tg_id
+):
+    """A label button on somebody ELSE's live screen must not be treated as stale.
+
+    ``bot/handlers/owner.py`` draws one button per pending registration carrying
+    ``callback_data="noop"`` -- a caption, not a control -- and no handler claims it.  It
+    therefore reaches this catch-all.  Answering it is right: before P4 it was an eternal
+    spinner.  REDRAWING over it would replace the owner's moderation list with the grid's
+    roster, which is a worse failure than the one being fixed.  The line between the two
+    is whether the payload carries fields at all.
+    """
+    feed_callback(dispatcher, bot=bot_instance, from_id=owner_tg_id,
+                  data="noop", update_id=181, query_id="q181")
+
+    assert recorder.methods() == ["AnswerCallbackQuery"], recorder.methods()
+
+    # ...while a payload that DOES carry fields is a stale screen and is redrawn.
+    recorder.records.clear()
+    feed_callback(dispatcher, bot=bot_instance, from_id=owner_tg_id,
+                  data="zz:1:2:3", update_id=182, query_id="q182")
+    assert "EditMessageText" in recorder.methods()

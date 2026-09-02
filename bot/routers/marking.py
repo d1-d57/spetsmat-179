@@ -70,6 +70,11 @@ SOURCE = "кнопка"
 #: message of ``TelegramBadRequest`` and nowhere else.
 NOT_MODIFIED = "message is not modified"
 
+#: The separator every ``CallbackData`` factory of this project packs with.  A payload
+#: that does not contain it carries no fields, so it cannot be a screen payload from any
+#: schema this bot has ever had -- see ``stale_screen`` for why the catch-all cares.
+PAYLOAD_SEPARATOR = ":"
+
 
 def build_routers() -> tuple:
     """Fresh ``(screen, catch_all)`` routers, built per dispatcher rather than once per
@@ -434,15 +439,30 @@ async def stale_screen(query: CallbackQuery, identity, catalogue) -> None:
     """Everything nobody claimed: a button from a message older than the payload schema.
 
     Included LAST.  Without it aiogram drops the update silently -- no handler, no log
-    line, and a spinner that turns until Telegram gives up.  With it the teacher gets a
-    sentence and a working screen in the same tap.
+    line, and a spinner that turns until Telegram gives up.  With it the user gets a
+    sentence and, when a redraw is the right answer, a working screen in the same tap.
 
-    The redraw is gated even though the answer is not: a stranger holding a forwarded
-    button must still get their spinner stopped, and must not get the roster with it.
+    THREE CONDITIONS ON THE REDRAW, and the answer is under none of them.
+
+    * The ANSWER is unconditional.  A stranger holding a forwarded button must still get
+      their spinner stopped; that is the whole failure this handler exists to close.
+    * The redraw is gated by role, so stopping a stranger's spinner does not hand them
+      the roster.
+    * The redraw needs a payload that CARRIES FIELDS.  Every schema this project has ever
+      packed uses ``prefix:field:field``; a bare token with no separator is a decoration
+      -- a label button drawn to be looked at rather than tapped -- and it belongs to
+      whatever screen is currently on the display.  Redrawing over it would replace a
+      live screen of somebody else's with this one, which is a worse failure than the
+      spinner: ``bot/handlers/owner.py`` really does draw ``callback_data="noop"`` on
+      every pending row, and without this condition an owner who taps a name loses their
+      moderation list.  (That button having no handler at all is P3's defect and is
+      reported rather than fixed from here; this handler only refuses to make it worse.)
     """
     await query.answer("Экран устарел — открыт заново.", show_alert=True)
     message = _editable(query)
     if not _may_open(identity) or message is None:
+        return
+    if PAYLOAD_SEPARATOR not in (query.data or ""):
         return
     sheet = _current_sheet(catalogue)
     if sheet is None:
