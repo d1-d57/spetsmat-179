@@ -36,6 +36,15 @@ available leak vector.  Local file, gzip, rotation fourteen days.
 the timer.  The command P10 should schedule is named in ``## ВОПРОСЫ`` of the заход.
 """
 
+# TOOL-CONTRACT: called-by-hand
+#
+# Declared rather than left silent: `git_zona.py vlit-v-osnovnuyu` reported this file as
+# "влито, но не встроено" -- it has no hook, no build step and no other tool calling it, and
+# that is correct BY DESIGN.  §2 of the заход gives the schedule to P10 and forbids this
+# position to write a unit, a timer or a cron line, so until P10 exists the call site is a
+# person typing the command.  The marker says so out loud; the alternative was a debt nobody
+# would find again.
+
 from __future__ import annotations
 
 import argparse
