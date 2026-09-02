@@ -200,17 +200,29 @@ async def _draw_room(query: CallbackQuery, room_service: RoomService, room_day: 
 
 
 async def _refuse_as_stale(query: CallbackQuery) -> None:
-    """The answer to a payload that parsed but cannot mean anything here.
+    """The answer to a payload that parsed but cannot MEAN anything here.
 
-    Three shapes reach this, and all three are «a button from a schema or a room this
-    server does not have» rather than «a button whose row is gone»: an ``op`` outside
-    ``ATTENDANCE_OPS``, an id wider than the store can hold, and an id naming somebody who
-    is not in this room tonight.  None of them may be folded into a nearby meaning: an
-    unknown ``op`` folded into «away» would let a payload ERASE an attendance mark, and an
-    id wider than 64 bits raises inside the query, after the handler started and before it
-    answered.
+    Three shapes reach this, and all three really are «a button from a schema or a room this
+    server does not have»: an ``op`` outside ``ATTENDANCE_OPS``, an id wider than the store
+    can hold, and an id naming somebody who is not on this screen at all.  None of them may
+    be folded into a nearby meaning: an unknown ``op`` folded into «away» would let a
+    payload ERASE an attendance mark, and an id wider than 64 bits raises inside the query,
+    after the handler started and before it answered.
     """
-    await query.answer("Экран устарел — откройте аудиторию заново.", show_alert=True)
+    await query.answer(RoomError.told, show_alert=True)
+
+
+async def _refuse(query: CallbackQuery, refusal: RoomError) -> None:
+    """The answer to a request the DOMAIN refused, in the domain's own words.
+
+    Not «экран устарел».  The screen is two seconds old, the button was drawn for this very
+    room, and the head asked for something the room will not do -- «он сегодня в другой
+    аудитории», «этот ученик больше не занимается».  Telling him to reopen a screen that was
+    never the problem sends him round a loop that changes nothing and teaches him nothing;
+    the long form of the same refusal, with the ids in it, goes on carrying the detail for
+    whoever reads the log.
+    """
+    await query.answer(refusal.told, show_alert=True)
 
 
 # ------------------------------------------------------------------------ handlers
@@ -280,8 +292,8 @@ async def set_present(
         room_day = room_service.set_present(
             room_day, callback_data.student_id, came, host_teacher_id=host_teacher_id
         )
-    except RoomError:
-        await _refuse_as_stale(query)
+    except RoomError as refusal:
+        await _refuse(query, refusal)
         return
 
     await query.answer(attendance_toast(member, came=came))
@@ -351,8 +363,8 @@ async def add_guest(
             host_teacher_id,
             host_teacher_id=host_teacher_id,
         )
-    except RoomError:
-        await _refuse_as_stale(query)
+    except RoomError as refusal:
+        await _refuse(query, refusal)
         return
 
     await query.answer(guest_toast(catalogue.student(callback_data.student_id)))
@@ -453,8 +465,8 @@ async def set_teacher(
             teacher_id,
             host_teacher_id=host_teacher_id,
         )
-    except RoomError:
-        await _refuse_as_stale(query)
+    except RoomError as refusal:
+        await _refuse(query, refusal)
         return
 
     await query.answer(teacher_toast(member, names, teacher_id))

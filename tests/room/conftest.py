@@ -74,6 +74,14 @@ VALID_FROM = "2025-09-01"
 
 HEAD_TG_ID = 700001
 SECOND_TEACHER_TG_ID = 700002
+#: Bound to room 303 in the roster and holding NOBODY today.  He exists so that the one
+#: case the screen used to get wrong is in the fixture rather than in a story: the teacher a
+#: head most wants to hand a child to is the one with nobody, and a room whose teachers were
+#: derived from «whoever holds a child here tonight» could not offer him.
+IDLE_TEACHER_TG_ID = 700004
+#: The HEAD of the room next door.  He has to be a head and not a plain teacher, because the
+#: interesting collision -- two rooms wanting one child on one evening -- needs a second
+#: person who can actually open this screen.
 NEIGHBOUR_TEACHER_TG_ID = 700003
 OWNER_TG_ID = 999999
 
@@ -223,6 +231,8 @@ class Room:
     head_teacher_id: int = 0
     second_teacher_id: int = 0
     neighbour_teacher_id: int = 0
+    #: A teacher of THIS room with no standing students today.
+    idle_teacher_id: int = 0
     #: The eighteen children of room 303, in surname order.
     students: list = field(default_factory=list)
     #: The eighteen children of room 304 -- the pool a guest is taken from.
@@ -287,12 +297,15 @@ def room_world(connection, dispatcher) -> Room:
     world.second_teacher_id = _make_teacher(
         roster, tg_id=SECOND_TEACHER_TG_ID, surname="Второй", room=ROOM, role=Role.TEACHER
     )
+    world.idle_teacher_id = _make_teacher(
+        roster, tg_id=IDLE_TEACHER_TG_ID, surname="Свободный", room=ROOM, role=Role.TEACHER
+    )
     world.neighbour_teacher_id = _make_teacher(
         roster,
         tg_id=NEIGHBOUR_TEACHER_TG_ID,
         surname="Соседний",
         room=OTHER_ROOM,
-        role=Role.TEACHER,
+        role=Role.HEAD,
     )
 
     enrollment = EnrollmentService(SqliteEnrollmentRepo(connection))

@@ -78,6 +78,11 @@ STANDING_TEACHER = 0
 #: second vocabulary the head has to hold.
 PRESENT_MARKER = "✅"
 
+#: A standing child of this room whom another room has taken tonight.  He keeps his place
+#: in the list -- a child who quietly dropped off his own room's screen is the child nobody
+#: goes looking for -- and the arrow says he is not here to be marked.
+ELSEWHERE_MARKER = "→"
+
 #: Surnames do not go four across, so the two screens that are LISTS of people use two
 #: columns.  The room screen itself keeps ``config.GRID_COLUMNS``: it shows a surname and
 #: one digit, which is what four columns were measured for.
@@ -193,11 +198,13 @@ def _label(member: RoomMember) -> str:
     written beside it and nothing may be: a count is a work item, and the moment it
     acquires a neighbour it becomes a comparison between children.
     """
-    return "%s%s %d" % (
-        PRESENT_MARKER if member.present else "",
-        member.student.surname,
-        member.debts,
-    )
+    if member.is_elsewhere:
+        marker = ELSEWHERE_MARKER
+    elif member.present:
+        marker = PRESENT_MARKER
+    else:
+        marker = ""
+    return "%s%s %d" % (marker, member.student.surname, member.debts)
 
 
 def _name_of(student: Optional[Student]) -> str:
@@ -248,6 +255,19 @@ def room_header(room_day: RoomDay, teacher_names: dict) -> str:
             % ", ".join(
                 "%s → %s" % (member.student.surname, _teacher_name(teacher_names, member.teacher_id))
                 for member in moved
+            )
+        )
+
+    # The children this room has TONIGHT LOST to another one.  Said out loud, with the name
+    # of the teacher who has them: without this line they simply stopped appearing in the
+    # distribution, which is precisely how a child gets forgotten for ninety minutes.
+    elsewhere = _by_surname(room_day.elsewhere)
+    if elsewhere:
+        lines.append(
+            "сегодня в другой аудитории: %s"
+            % ", ".join(
+                "%s (%s)" % (member.student.surname, _teacher_name(teacher_names, member.teacher_id))
+                for member in elsewhere
             )
         )
     return "\n".join(lines)
@@ -337,10 +357,24 @@ def assignments_header(room_day: RoomDay, teacher_names: dict) -> str:
         held = [
             member.student.surname
             for member in _by_surname(room_day.members)
-            if member.teacher_id == teacher_id
+            if member.teacher_id == teacher_id and not member.is_elsewhere
         ]
         lines.append(
             "%s: %s" % (_teacher_name(teacher_names, teacher_id), ", ".join(held) or "—")
+        )
+    # EVERY child of the room lands in exactly one line of this block, and the two lines
+    # below are what make that true.  A child whose today-teacher works in another room used
+    # to match no teacher's line and not the «без преподавателя» line either, so the block
+    # said «15 из 18» without saying so -- three children present in the room's own list and
+    # in none of its own rows.
+    elsewhere = _by_surname(room_day.elsewhere)
+    if elsewhere:
+        lines.append(
+            "сегодня в другой аудитории: %s"
+            % ", ".join(
+                "%s (%s)" % (member.student.surname, _teacher_name(teacher_names, member.teacher_id))
+                for member in elsewhere
+            )
         )
     orphans = [
         member.student.surname
@@ -431,11 +465,20 @@ def attendance_toast(member: RoomMember, *, came: bool) -> str:
     whether a tap counted and taps again.  It states the FACT and not a word of praise --
     the same prohibition as on the problem grid, and it bites harder here, because this
     screen is about children rather than about problems.
+
+    TAKING THE MARK BACK ALSO DROPS TONIGHT'S MOVE, AND THE TOAST SAYS SO.  Presence and
+    tonight's teacher are one row and the undo removes the row, so a head who untaps a child
+    he moved five minutes ago loses the move -- silently, until this sentence.  He is told
+    at the moment it happens rather than left to find out when the child is at the wrong
+    table.
     """
-    return "%s — %s" % (
-        member.student.surname,
-        "отмечен" if came else "отметка снята",
-    )
+    if came:
+        return "%s — отмечен" % member.student.surname
+    if member.is_moved_today:
+        return "%s — отметка снята; сегодняшний перевод снят вместе с ней" % (
+            member.student.surname,
+        )
+    return "%s — отметка снята" % member.student.surname
 
 
 def guest_toast(student: Optional[Student]) -> str:

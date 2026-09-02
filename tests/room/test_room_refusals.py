@@ -24,6 +24,7 @@ whose version of it does not exist in this position.
 from __future__ import annotations
 
 from bot.callbacks import ID_MAX
+from core.services.room import NoLongerHere, UnknownTeacher
 from bot.keyboards.room import (
     OP_AWAY,
     OP_CAME,
@@ -172,6 +173,11 @@ def test_a_child_cannot_be_handed_to_a_teacher_of_another_room(
     Handing a child across rooms would be a standing change wearing a today-only costume,
     and it is refused in the service rather than merely omitted from the keyboard: the
     keyboard is what the head sees, and a payload is what the server gets.
+
+    AND THE REFUSAL SAYS WHAT IT IS.  «Экран устарел» would be a false sentence about a
+    screen two seconds old, and it would send the head round a loop that changes nothing:
+    reopening the room offers him the same teachers, because the teacher he asked for is not
+    one of them and never was.
     """
     student_id = room_world.students[0]
     before = _attendance_rows(connection)
@@ -182,7 +188,8 @@ def test_a_child_cannot_be_handed_to_a_teacher_of_another_room(
             student_id=student_id, teacher_id=room_world.neighbour_teacher_id
         ).pack(),
     )
-    assert any(STALE in alert for alert in recorder.alerts()), recorder.alerts()
+    assert recorder.alerts() == [UnknownTeacher.told], recorder.alerts()
+    assert not any(STALE in alert for alert in recorder.alerts())
     assert _attendance_rows(connection) == before
 
 
@@ -240,3 +247,31 @@ def test_taking_the_mark_back_removes_the_row_rather_than_asserting_absence(
     feed_callback(dispatcher, bot=bot_instance, from_id=HEAD_TG_ID,
                   data=Present(student_id=student_id, op=OP_CAME).pack())
     assert _day(dispatcher, room_world).member(student_id).present
+
+
+def test_a_child_who_has_left_is_refused_even_when_the_payload_names_him(
+    connection, dispatcher, bot_instance, recorder, room_world
+):
+    """``candidate_guests`` leaves him out of the LIST; that is not the same as refusing him.
+
+    The list covers the head who is looking at a fresh screen.  A stale screen and a forged
+    payload are exactly the two cases a filter in the list cannot reach, and they are the
+    two that reach the service.
+    """
+    room_service = dispatcher.workflow_data["room_service"]
+    head = room_world.head_teacher_id
+    departed = room_world.outsiders[0]
+    connection.execute("update students set status = 'left' where id = ?", (departed,))
+    connection.commit()
+
+    day = room_service.room_day(ROOM, TODAY, host_teacher_id=head)
+    assert departed not in {student.id for student in room_service.candidate_guests(day)}
+
+    before = _attendance_rows(connection)
+    recorder.clear()
+    feed_callback(
+        dispatcher, bot=bot_instance, from_id=HEAD_TG_ID,
+        data=AddGuest(student_id=departed).pack(),
+    )
+    assert recorder.alerts() == [NoLongerHere.told], recorder.alerts()
+    assert _attendance_rows(connection) == before

@@ -26,12 +26,27 @@ So the today-only row is a row in the table that is already keyed per session::
 today-only assignment, and two of the head's three actions fall out of the one mechanism:
 
   * **today's assignment** -- the attendance row's ``teacher_id`` overrides the standing
-    one for this session and for nothing else.  ``enrollment`` is never written from this
-    module; there is no method here that could, and the port it would need is not imported.
+    one for this session and for nothing else.  This module calls exactly ONE method on the
+    enrollment seam, ``resolve_many``, and the Protocol it is declared against
+    (``StandingArrangements``) offers no other.  That is a CHECKED claim and not an
+    impossible-by-construction one, and it is written down that way: the object handed in
+    at runtime is the full service, and what actually holds the line is a spy in
+    ``tests/room/test_room_service.py`` that reddens if this module touches anything else.
   * **a guest from another room** -- a student whose standing room is not this one, given
     an attendance row whose today-teacher belongs to a teacher of this room.  He shows up
-    on this screen for this lesson.  His standing enrollment is untouched BY CONSTRUCTION
-    rather than by care: nothing in this file can reach it.
+    on this screen for this lesson, and his standing enrollment is not written: the same
+    one read is all this module ever performs on it.
+
+ONE CHILD IS AT ONE LESSON, SO ONE ROW HOLDS HIM
+------------------------------------------------------------------------------------
+
+``unique (session_id, student_id)`` means a child taken into another room tonight is the
+SAME row, now carrying that room's teacher.  From his own room's screen he must therefore
+still be visible -- a child who silently dropped off his own list is the child nobody
+looks for -- but he is not his own head's to mark or to move while somebody else is
+standing next to him.  ``RoomMember.is_elsewhere`` is that state, ``RoomDay.came`` does not
+count him among the arrivals of a room he is not in, and the two actions that would write
+his row refuse with a sentence that says where he is.
 
 TWO ATTENDANCE STATES ON THIS SCREEN, NOT THREE
 ------------------------------------------------------------------------------------
@@ -66,7 +81,7 @@ from typing import ContextManager, Optional, Protocol
 
 import config
 from core.models import Session, Student
-from core.services.enrollment import EnrollmentService, lesson_day_of, weekday_of
+from core.services.enrollment import lesson_day_of, weekday_of
 
 #: The status this screen writes.  Read from ``config`` rather than spelled here, so the
 #: string that the schema's CHECK constraint enforces has one home.
@@ -76,11 +91,26 @@ PRESENT = config.ATTENDANCE_STATUSES[0]
 #: a child did not come, which some later position records when it closes a lesson.
 ABSENT = config.ATTENDANCE_STATUSES[1]
 
+#: A student who has left the conduit.  He stays in the catalogue -- the journal points at
+#: his rows and always will -- and he is not somebody who walks into a room on a Thursday.
+LEFT = config.STUDENT_STATUSES[2]
+
 
 # ------------------------------------------------------------------- domain errors
 
 class RoomError(Exception):
-    """A request about a room that the domain refuses."""
+    """A request about a room that the domain refuses.
+
+    EVERY REFUSAL CARRIES TWO TEXTS AND THEY ARE NOT THE SAME TEXT.  The exception message
+    is for whoever reads the log: it names the ids and says why.  ``told`` is the sentence
+    the head reads on his screen, and it has to be TRUE about his situation -- «экран
+    устарел» told to a head whose screen is two seconds old sends him to reopen a screen
+    that was never the problem, and he learns nothing about what he actually asked for.
+    """
+
+    #: The default, and it is the honest one for the refusals that really do mean «this
+    #: button came from a screen the server no longer recognises».
+    told = "Экран устарел — откройте аудиторию заново."
 
 
 class NotInThisRoom(RoomError):
@@ -99,6 +129,31 @@ class UnknownTeacher(RoomError):
     A teacher is bound to a room hard for the whole year.  Handing a child to a teacher of
     another room would be a standing change wearing a today-only costume.
     """
+
+    told = "Этот преподаватель ведёт в другой аудитории."
+
+
+class ElsewhereTonight(RoomError):
+    """This child is on somebody else's screen tonight, and that head is holding him.
+
+    He is a standing member of THIS room, so he is shown here -- a child who simply
+    vanished from his own room's list would be the child nobody looks for -- but he is not
+    this head's to mark or to move while another room has him.  The refusal exists because
+    presence and tonight's teacher are ONE row: acting on him from here would take him off
+    the screen of the head who is standing next to him.
+    """
+
+    told = "Он сегодня в другой аудитории — его отмечает тот старший."
+
+
+class NoLongerHere(RoomError):
+    """Asked to bring in a child who has left the conduit.
+
+    He stays in the catalogue because the journal points at his rows and always will, and
+    that is exactly why the check is needed: «he exists» is not «he comes on Thursdays».
+    """
+
+    told = "Этот ученик больше не занимается."
 
 
 # ----------------------------------------------------------------------- the seams
@@ -167,6 +222,40 @@ class AttendancePort(Protocol):
         """Remove the row entirely.  Idempotent: removing nothing is not an error."""
 
 
+class StandingArrangements(Protocol):
+    """The standing enrollment, as this screen is allowed to see it: READ, and nothing else.
+
+    ``EnrollmentService`` also offers ``assign``, ``move`` and ``end``.  This screen must
+    reach none of them -- a today-only override written into a standing interval is the
+    very defect the enrollment position exists to remove -- so the seam it is declared
+    against names the one method it uses and no other.
+
+    A Protocol is a declaration and not a wall: the object handed in at runtime is the full
+    service, and nothing stops a future line of this file from calling ``move`` on it.  What
+    closes that is ``tests/room/test_room_service.py``, where a spy fails the run if this
+    module touches anything but ``resolve_many``.  The claim is «checked», not «impossible»,
+    and it is written down that way rather than overstated.
+    """
+
+    def resolve_many(self, student_ids, day: str) -> dict:
+        """``{student_id: Assignment or None}`` for every student asked about, in ONE read."""
+
+
+class RoomRoster(Protocol):
+    """Which teachers belong to a room, from the roster that actually records it.
+
+    THE ROOM OF A TEACHER IS NOT IN THE ENROLLMENT ROWS.  It is in ``teacher_room_role``,
+    beside his role, which is the same place ``bot/routers/room.py`` reads the HEAD's own
+    room from -- so deriving a room's teachers from «whoever holds a child here tonight»
+    was an asymmetry and not an economy.  It cost the one case that matters: a teacher of
+    this room who happens to hold nobody today could not be handed a child, which is
+    precisely the evening on which the head wants to hand him one.
+    """
+
+    def teachers_of_room(self, room: str) -> list:
+        """The ids of the teachers bound to this room.  Empty list when nobody is."""
+
+
 class DebtsPort(Protocol):
     """Debts, as this screen is allowed to ask for them.
 
@@ -231,6 +320,11 @@ class RoomMember:
     standing_teacher_id: Optional[int]
     #: From the attendance row.  ``None`` means the standing arrangement stands.
     today_teacher_id: Optional[int] = None
+    #: A standing child of this room whom ANOTHER room has taken tonight: his one
+    #: attendance row now carries a teacher who works elsewhere.  He stays on this screen,
+    #: because a child who quietly left the list is the child nobody goes looking for, and
+    #: he is not this head's to act on while another head is standing beside him.
+    is_elsewhere: bool = False
 
     @property
     def teacher_id(self) -> Optional[int]:
@@ -239,12 +333,15 @@ class RoomMember:
 
     @property
     def is_moved_today(self) -> bool:
-        """Has the head moved him for this lesson only?
+        """Has the head moved him for this lesson only, WITHIN this room?
 
-        A guest is not "moved": he was brought in, which the screen says differently.
+        A guest is not "moved": he was brought in.  A child taken by another room is not
+        "moved" either, and calling him moved would put «Дельвиг → преподаватель 1» in the
+        header of a room he is not in -- which is what this screen used to say.
         """
         return (
             not self.is_guest
+            and not self.is_elsewhere
             and self.today_teacher_id is not None
             and self.today_teacher_id != self.standing_teacher_id
         )
@@ -278,7 +375,18 @@ class RoomDay:
 
     @property
     def came(self) -> int:
-        return sum(1 for member in self.members if member.present)
+        """How many of this room's people are IN this room, marked as arrived.
+
+        A child another room has taken tonight is marked present -- he is at the lesson --
+        but counting him here would tell this head that somebody is in front of him who is
+        not, which is the one thing «пришли N из M» exists to answer.
+        """
+        return sum(1 for member in self.members if member.present and not member.is_elsewhere)
+
+    @property
+    def elsewhere(self) -> tuple:
+        """This room's children whom another room is holding tonight, in surname order."""
+        return tuple(member for member in self.members if member.is_elsewhere)
 
     @property
     def total(self) -> int:
@@ -305,11 +413,12 @@ class RoomService:
         self,
         *,
         catalogue: RoomCatalogue,
-        enrollment: EnrollmentService,
+        enrollment: StandingArrangements,
         progress: DebtsPort,
         attendance: AttendancePort,
         sessions: SessionPort,
         teachers: TeacherDirectory,
+        roster: RoomRoster,
         clock,
     ) -> None:
         self._catalogue = catalogue
@@ -318,6 +427,7 @@ class RoomService:
         self._attendance = attendance
         self._sessions = sessions
         self._teachers = teachers
+        self._roster = roster
         self._clock = clock
 
     # ------------------------------------------------------------------------ today
@@ -373,18 +483,22 @@ class RoomService:
         students = {student.id: student for student in self._catalogue.students()}
         standing = self._enrollment.resolve_many(list(students), day)
 
-        # Who stands in this room today, and which teachers hold them.  A teacher is bound
-        # to a room hard for the whole year, so the room's teachers ARE the teachers of its
-        # standing rows -- there is no separate table saying so, and inventing one would be
-        # a second truth to drift.
         room_students = {
             student_id
             for student_id, assignment in standing.items()
             if assignment is not None and assignment.room == room
         }
-        teacher_ids = {
-            standing[student_id].teacher_id for student_id in room_students
-        }
+        # WHICH TEACHERS BELONG TO THIS ROOM.  From the roster, where the binding actually
+        # lives -- ``teacher_room_role``, the same table ``bot/routers/room.py`` reads the
+        # head's own room from.  Deriving it from «whoever holds a child here tonight» was
+        # an asymmetry rather than an economy, and it cost the exact case the head cares
+        # about: a teacher of this room who happens to hold nobody today is the one he wants
+        # to hand a child TO, and he could not be offered.
+        teacher_ids = set(self._roster.teachers_of_room(room))
+        # The standing rows too, so that a room whose roster bindings are incomplete still
+        # names everybody who visibly holds a child in it, and the host himself, whose room
+        # is his by definition.
+        teacher_ids.update(standing[student_id].teacher_id for student_id in room_students)
         if host_teacher_id is not None:
             teacher_ids.add(host_teacher_id)
 
@@ -408,6 +522,7 @@ class RoomService:
             student = students[student_id]
             row = rows.get(student_id)
             assignment = standing.get(student_id)
+            today_teacher_id = row.teacher_id if row is not None else None
             members.append(
                 RoomMember(
                     student=student,
@@ -419,7 +534,14 @@ class RoomService:
                         if assignment is not None and assignment.room == room
                         else None
                     ),
-                    today_teacher_id=row.teacher_id if row is not None else None,
+                    today_teacher_id=today_teacher_id,
+                    # One child, one lesson, one row: if that row names a teacher who does
+                    # not work here, another room has taken him for tonight.
+                    is_elsewhere=(
+                        student_id not in guests
+                        and today_teacher_id is not None
+                        and today_teacher_id not in teacher_ids
+                    ),
                 )
             )
         members.sort(key=lambda member: member.sort_key)
@@ -445,7 +567,7 @@ class RoomService:
             (
                 student
                 for student in self._catalogue.students()
-                if student.id not in here and student.status != "left"
+                if student.id not in here and student.status != LEFT
             ),
             key=lambda student: (student.surname, student.name, student.id),
         )
@@ -472,6 +594,7 @@ class RoomService:
         and this screen only ever has the erratum to make.
         """
         member = self._require_member(room_day, student_id)
+        self._require_here(member, room_day)
         with self._attendance.transaction():
             if present:
                 self._attendance.set(
@@ -510,6 +633,16 @@ class RoomService:
         student = self._catalogue.student(student_id)
         if student is None:
             raise NotInThisRoom("student %s is not in the catalogue" % (student_id,))
+        if student.status == LEFT:
+            # ``candidate_guests`` already leaves him out of the list, so this is reachable
+            # only through a stale screen or a forged payload -- which is exactly the pair
+            # of cases a check in the list cannot cover.  He stays in the catalogue because
+            # the journal points at his rows; that is not the same as walking in on a
+            # Thursday.
+            raise NoLongerHere(
+                "student %s has left the conduit and cannot be brought into room %s"
+                % (student_id, room_day.room)
+            )
         if room_day.member(student_id) is not None:
             raise NotInThisRoom(
                 "student %s is already on this screen: bringing him in again would be a "
@@ -547,6 +680,7 @@ class RoomService:
         with the teacher who actually did.
         """
         member = self._require_member(room_day, student_id)
+        self._require_here(member, room_day)
         if teacher_id is not None:
             self._require_teacher(room_day, teacher_id)
         elif member.is_guest:
@@ -567,16 +701,25 @@ class RoomService:
         return self.room_day(room_day.room, room_day.day, host_teacher_id=host_teacher_id)
 
     def teacher_names(self, room_day: RoomDay) -> dict:
-        """``{teacher_id: name}`` for the teachers of this room today.
+        """``{teacher_id: name}`` for every teacher this screen has to NAME.
 
-        A teacher the directory does not know is still offered, under his id: the head can
-        see WHICH teacher is missing from the directory and hand the child over anyway,
-        which beats a room whose distribution silently loses a column.
+        Not only the teachers of this room: a child taken next door has to be reported as
+        «у Ивана в 502», and a screen that resolved only its own room's ids printed
+        «преподаватель 1» instead -- an id shown to a person, about a child, with no way to
+        find out whose id it is.
+
+        A teacher the directory does not know is still named, under his id: the head can see
+        WHICH one is missing and hand the child over anyway, which beats a distribution that
+        silently loses a column.
         """
         known = {teacher.id: teacher.name for teacher in self._teachers.teachers()}
+        wanted = set(room_day.teacher_ids)
+        wanted.update(
+            member.teacher_id for member in room_day.members if member.teacher_id is not None
+        )
         return {
             teacher_id: known.get(teacher_id) or ("преподаватель %d" % teacher_id)
-            for teacher_id in room_day.teacher_ids
+            for teacher_id in sorted(wanted)
         }
 
     def teachers_for(self, room_day: RoomDay) -> tuple:
@@ -592,6 +735,21 @@ class RoomService:
                 "student %s is not in room %s on %s: the room comes from the head's own "
                 "binding and never from the payload, so an id that names somebody else "
                 "reaches nothing" % (student_id, room_day.room, room_day.day)
+            )
+        return member
+
+    def _require_here(self, member: RoomMember, room_day: RoomDay) -> RoomMember:
+        """Refuse to act on a child another room is holding tonight.
+
+        Presence and tonight's teacher are ONE row, so marking him or moving him from here
+        would overwrite what the head standing next to him wrote -- and taking the mark back
+        would delete the child off that head's screen entirely, from a room he is not in.
+        """
+        if member.is_elsewhere:
+            raise ElsewhereTonight(
+                "student %s is a standing member of room %s but teacher %s has taken him "
+                "for the session of %s: his row belongs to that room tonight"
+                % (member.student.id, room_day.room, member.today_teacher_id, room_day.day)
             )
         return member
 

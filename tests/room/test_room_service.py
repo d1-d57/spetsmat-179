@@ -132,3 +132,78 @@ def test_the_day_is_read_out_in_words_in_the_genitive(dispatcher):
     assert day_in_words("2026-09-03") == "четверг, 3 сентября"
     assert day_in_words("2026-01-01") == "четверг, 1 января"
     assert day_in_words("2026-05-31") == "воскресенье, 31 мая"
+
+
+class _EnrollmentSpy:
+    """Forwards ``resolve_many`` and REDDENS on any other attribute of the seam.
+
+    The module's own claim used to be «there is no method here that could write to
+    enrollment», and it was not true: the constructor takes the whole
+    ``EnrollmentService``, and ``assign``, ``move`` and ``end`` are one attribute away.  A
+    Protocol declares the narrow seam but does not build a wall around the object handed in
+    at runtime, so this is the thing that actually holds the line -- and the claim in the
+    docstring now says «checked», which is what it is.
+    """
+
+    def __init__(self, real) -> None:
+        self._real = real
+        self.touched = []
+
+    def __getattr__(self, name):
+        self.touched.append(name)
+        if name != "resolve_many":
+            raise AssertionError(
+                "core/services/room.py reached for %r on the enrollment seam: the standing "
+                "arrangement is READ from this module and nothing else" % (name,)
+            )
+        return self._real.resolve_many
+
+
+def test_this_module_touches_exactly_one_method_of_the_enrollment_seam(
+    connection, roster_path, dispatcher, room_world
+):
+    import sqlite3
+
+    from core.services.enrollment import EnrollmentService
+    from core.services.progress import ProgressService
+    from core.services.room import RoomService
+    from infra.db import SystemClock
+    from infra.enrollment_repo import SqliteEnrollmentRepo
+    from infra.repositories import SqliteCatalogue, SqliteMarkJournal
+    from infra.room_repo import (
+        SqliteAttendance,
+        SqliteRoomRoster,
+        SqliteSessions,
+        SqliteTeachers,
+    )
+
+    roster_connection = sqlite3.connect(roster_path)
+    roster_connection.row_factory = sqlite3.Row
+    catalogue = SqliteCatalogue(connection)
+    spy = _EnrollmentSpy(EnrollmentService(SqliteEnrollmentRepo(connection)))
+    service = RoomService(
+        catalogue=catalogue,
+        enrollment=spy,
+        progress=ProgressService(SqliteMarkJournal(connection), catalogue),
+        attendance=SqliteAttendance(connection),
+        sessions=SqliteSessions(connection),
+        teachers=SqliteTeachers(connection),
+        roster=SqliteRoomRoster(roster_connection),
+        clock=SystemClock(),
+    )
+    try:
+        head = room_world.head_teacher_id
+        day = service.room_day(ROOM, TODAY, host_teacher_id=head)
+        service.candidate_guests(day)
+        service.teacher_names(day)
+        day = service.set_present(day, room_world.students[0], True, host_teacher_id=head)
+        day = service.set_today_teacher(
+            day, room_world.students[0], room_world.other_teacher_of(0), host_teacher_id=head
+        )
+        day = service.add_guest(day, room_world.outsiders[0], head, host_teacher_id=head)
+        service.set_present(day, room_world.students[0], False, host_teacher_id=head)
+    finally:
+        roster_connection.close()
+
+    assert set(spy.touched) == {"resolve_many"}, spy.touched
+    assert spy.touched, "the seam was never used at all: this test would pass on a stub"
