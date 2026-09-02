@@ -747,6 +747,56 @@ it. `git merge --ff-only main` — a pure fast-forward, no content decision, and
 `main` untouched. Recoverable by `git reset --hard 402a412`; the code was identical
 either way (the three commits between were journal files only).
 
+### ГИГИЕНА ВЫХОДА — ЧИСЛА КОМАНДОЙ, НЕ ПАМЯТЬЮ
+
+**Г1. Зона доехала в git.** Все семь путей — ✅ (вывод выше в строке КОММИТ; каждая
+команда прогнана отдельно).
+
+```
+$ git --no-optional-locks status --porcelain        # рабочая папка захода
+                                                     (пусто)
+$ git --no-optional-locks status --porcelain | wc -l
+0
+```
+
+**Вне git по репозиториям, которых я касался — числом:**
+
+* `spetsmat-bot-wt/P18-teksty` (моя рабочая папка): **0**.
+* `spetsmat-bot` (главная папка): **8**, и **ни одна строка не моя зона**.
+  `README.md`, `zhurnal/2026-09-02_spetsmat-bot/PULS-CHASOVOGO-sborka-bota.log`,
+  `zhurnal/2026-09-02_spetsmat-bot/SERDCE-VOLNY-sborka-bota.md` — живые файлы
+  оркестратора, пишутся его часовым прямо сейчас. Пять `??` — файлы очереди
+  заявок, четыре из них поставил я (`git_zona.py zayavka` кладёт файл и не
+  коммитит его), пятая — `2026-09-02T1803`, чужая. Чужую содержательную работу не
+  коммичу; свои заявки лежат тем же способом, что и чужая, чтобы очередь
+  забиралась одним ходом, а не по частям.
+
+**Г2. Второй репозиторий.** Неприменимо: все пути зоны внутри `spetsmat-bot`.
+Инструменты (`git_zona.py`, `bootstrap_zahod.py`) вызывались из `disciplina/` только
+на чтение — там ничего не менялось.
+
+**Г3. Невлитых веток не прибавилось.** На входе `0`, на выходе `1` — ровно моя
+`zahod/P18-teksty`, и она вливается последним ходом (ниже). Чужих невлитых нет.
+
+**Г4. Новый инструмент имеет живую точку вызова.** Новых `.py` в `_generator/**`
+нет — пункт неприменим. Два новых `.py` заведены в `tests/teksty/`, и точка вызова
+у них живая по построению: `test_teksty.py` импортирует `sobrat.py` и падает, если
+тот вернул пусто, а сам `test_teksty.py` подхватывается `python3 -m pytest`
+(проверено: `3 passed`, и он умеет краснеть — опыт с `TEACHER` выше).
+
+**Г5. Новый `.md` зарегистрирован.** Ни одного нового `.md` не заведено —
+`register_doc.py` не звался, `_studio/docs/KARTA.md` не трогалась.
+
+**Г6. В коммите нет чужих путей.** `git --no-optional-locks show --stat` на каждом
+из пяти коммитов — только пути зоны.
+
+**ВЫВОЗ.** Неприменимо, и это проверено, а не предположено: `git remote -v` пуст,
+`git rev-parse --abbrev-ref @{u}` даёт `fatal: no upstream configured for branch
+'zahod/P18-teksty'`. Вывозить некуда — репозиторий локальный.
+
+**ВРЕМЯ И ТОКЕНЫ.** Снимает приёмка из `/tmp/zahod-P18-teksty.jsonl`: счётчик
+снаружи сессии исполнителя.
+
 ### ПОВТОРЯЕМОСТЬ НАХОДОК
 
 **Repeats on the next unit of work — so it is a заход, not a queue item:**
