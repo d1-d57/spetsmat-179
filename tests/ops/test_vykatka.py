@@ -174,3 +174,56 @@ def test_a_dirty_checkout_is_refused_before_the_pull(tmp_path):
     assert finished.returncode == 4, finished.stdout + finished.stderr
     assert "uncommitted changes" in finished.stderr
     assert "git pull" not in finished.stdout
+
+
+# --------------------------------- hardening found by the §3 verifier, kept by these tests
+
+
+def test_a_silent_interpreter_cannot_turn_the_refusal_into_a_green(chistyj_checkout):
+    """``PYTHON=/usr/bin/true`` used to deploy during a lesson.
+
+    ``if reason="$(...)"`` looks only at the exit code, so an interpreter that exits 0 and
+    prints nothing produced a silent green.  A BROKEN interpreter already failed closed; a
+    SILENT one did not.  Both must land on the refusal, because the refusal is the safe side.
+    """
+    import os
+
+    environment = dict(os.environ, PYTHON="/usr/bin/true")
+    finished = subprocess.run(
+        [shutil.which("bash") or "/bin/bash",
+         str(chistyj_checkout / "deploy" / "vykatka.sh"), "--proba", "--chas-zanyatia"],
+        capture_output=True, text=True, check=False, cwd=str(chistyj_checkout), env=environment,
+    )
+    assert finished.returncode == RC_REFUSED_LESSON, finished.stdout + finished.stderr
+    assert "answered nothing at all" in finished.stderr
+    assert "git pull" not in finished.stdout
+
+
+def test_a_missing_interpreter_also_fails_closed(chistyj_checkout):
+    import os
+
+    environment = dict(os.environ, PYTHON="/nonexistent/python")
+    finished = subprocess.run(
+        [shutil.which("bash") or "/bin/bash",
+         str(chistyj_checkout / "deploy" / "vykatka.sh"), "--proba", "--svobodnyj-chas"],
+        capture_output=True, text=True, check=False, cwd=str(chistyj_checkout), env=environment,
+    )
+    assert finished.returncode != 0
+    assert "git pull" not in finished.stdout
+
+
+@pytest.mark.parametrize("order", [
+    ("--chas-zanyatia", "--svobodnyj-chas"),
+    ("--svobodnyj-chas", "--chas-zanyatia"),
+])
+def test_two_contradictory_moments_are_refused_in_either_order(order, chistyj_checkout):
+    """"Last one wins" made the verdict depend on argument order -- a coin toss, not a rule."""
+    finished = _run("--proba", *order, checkout=chistyj_checkout)
+    assert finished.returncode == 64, finished.stdout + finished.stderr
+    assert "contradicts" in finished.stderr
+
+
+def test_the_same_flag_twice_is_still_accepted(chistyj_checkout):
+    """Refusing a contradiction must not turn into refusing a repetition."""
+    finished = _run("--proba", "--chas-zanyatia", "--chas-zanyatia", checkout=chistyj_checkout)
+    assert finished.returncode == RC_REFUSED_LESSON

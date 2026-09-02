@@ -45,8 +45,15 @@ USAGE
 for argument in "$@"; do
   case "$argument" in
     --proba) DRY_RUN=1 ;;
-    --chas-zanyatia) CLOCK="--chas-zanyatia" ;;
-    --svobodnyj-chas) CLOCK="--svobodnyj-chas" ;;
+    --chas-zanyatia|--svobodnyj-chas)
+      # The two simulation flags are mutually exclusive.  With "last one wins" the pair
+      # `--chas-zanyatia --svobodnyj-chas` deployed and the reverse order refused, which is
+      # a coin toss dressed as a decision.  Found by the §3 verifier.
+      if [ -n "$CLOCK" ] && [ "$CLOCK" != "$argument" ]; then
+        echo "$argument contradicts $CLOCK -- name one moment, not two" >&2
+        exit 64
+      fi
+      CLOCK="$argument" ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $argument" >&2; usage >&2; exit 64 ;;
   esac
@@ -73,8 +80,21 @@ cd "$CHECKOUT"
 # The answer comes from ops/raspisanie.py and from nowhere else: one place knows when a
 # lesson is, so the deploy and the backup timers cannot disagree about it.
 
+# THE ANSWER MUST BE AN ANSWER, NOT AN EMPTY STRING.
+#
+# `if reason="$(...)"` looks only at the exit code.  An interpreter that exits 0 and prints
+# nothing -- `PYTHON=/usr/bin/true`, a stub on PATH, a truncated checkout -- therefore
+# produced a silent green and a deploy in the middle of a lesson.  Found by the §3 verifier.
+# A broken interpreter already failed closed (rc != 0 -> refuse); a SILENT one did not, and
+# now both do.  The refusal is the safe side, so anything unexpected lands on it.
+
 say "is a lesson running?"
 if reason="$("$PYTHON" "$CHECKOUT/ops/raspisanie.py" $CLOCK)"; then
+  if [ -z "$reason" ]; then
+    echo "REFUSED: the schedule answered nothing at all -- $PYTHON is not running" >&2
+    echo "ops/raspisanie.py.  Refusing rather than guessing that no lesson is on." >&2
+    exit "$RC_REFUSED_LESSON"
+  fi
   echo "  $reason"
 else
   echo "  $reason"

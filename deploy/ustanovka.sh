@@ -23,9 +23,9 @@ JOURNAL_DIR=/etc/systemd/journald.conf.d
 SERVICE_USER="${SPETSMAT_USER:-spetsmat}"
 DRY_RUN=0
 
-# Every unit that must be enabled.  A unit missing from this list installs, works, and
-# disappears at the next reboot -- so the list is checked against the files on disk below,
-# rather than trusted.
+# Every unit that must be ENABLED.  A unit missing from this list installs, works, and
+# disappears at the next reboot -- so the list is checked against the files on disk by
+# ops/proverka_ustanovki.py, which compares it with the set of units that have [Install].
 ENABLE_UNITS=(
   spetsmat-bot.service
   spetsmat-rezervnaya-kopia-pered-zanyatiem.timer
@@ -35,11 +35,23 @@ ENABLE_UNITS=(
   spetsmat-proverka-sredy.timer
 )
 
-# Templates: activated by OnFailure= and by the timers' Unit=, never enabled themselves.
-TEMPLATE_UNITS=(
-  spetsmat-alert@.service
-  spetsmat-rezervnaya-kopia@.service
-)
+# WHAT GETS INSTALLED IS EVERY UNIT FILE IN deploy/, FOUND BY LOOKING, NOT BY A LIST.
+#
+# This was a hand-written list of eight names, and it was WRONG: the two units the timers
+# actually start -- spetsmat-proverka-vosstanovlenia.service and spetsmat-proverka-sredy.service
+# -- have no [Install] of their own and were in neither list, so they were never copied to
+# /etc/systemd/system at all.  On a real server the weekly restore check and the daily
+# environment check would have fired into a unit that does not exist, silently, forever:
+# the backups would keep being taken and nobody would ever find out they cannot be restored,
+# which is the single failure this whole position was written to prevent.  Found by the §3
+# verifier, not by any check of mine.
+#
+# The lesson is not "fix the list" but "stop keeping a list": the directory is the truth.
+INSTALL_UNITS=()
+for path in "$CHECKOUT"/deploy/*.service "$CHECKOUT"/deploy/*.timer; do
+  [ -e "$path" ] || continue
+  INSTALL_UNITS+=("$(basename "$path")")
+done
 
 for argument in "$@"; do
   case "$argument" in
@@ -80,7 +92,7 @@ say "service user: $SERVICE_USER"
 # the exact line; ops/proverka_ustanovki.py --storozh reports the debt.
 
 WATCHDOG_SED=()
-if python3 "$CHECKOUT/ops/proverka_ustanovki.py" --storozh >/dev/null 2>&1; then
+if python3 "$CHECKOUT/ops/proverka_ustanovki.py" --tolko-storozh >/dev/null 2>&1; then
   say "watchdog: bot/ sends READY=1 and WATCHDOG=1 -- installing the unit as written"
 else
   say "watchdog: NOT WIRED in bot/ -- installing with Type=notify and WatchdogSec disabled"
@@ -91,8 +103,8 @@ else
                 -e "s|^WatchdogSec=|#WatchdogSec=|")
 fi
 
-say "installing units into $UNIT_DIR"
-for unit in "${ENABLE_UNITS[@]}" "${TEMPLATE_UNITS[@]}"; do
+say "installing units into $UNIT_DIR (${#INSTALL_UNITS[@]} file(s) found in deploy/)"
+for unit in "${INSTALL_UNITS[@]}"; do
   source_file="$CHECKOUT/deploy/$unit"
   [ -f "$source_file" ] || { echo "missing unit file: $source_file" >&2; exit 1; }
   if [ "$DRY_RUN" = 1 ]; then

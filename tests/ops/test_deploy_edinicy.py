@@ -28,10 +28,20 @@ DEPLOY = Path(ustanovka.DEPLOY)
 
 @pytest.fixture
 def kopia_deploy(tmp_path: Path) -> Path:
-    """A writable copy of ``deploy/``, so a test may break it without touching the real one."""
-    target = tmp_path / "deploy"
-    shutil.copytree(DEPLOY, target)
-    return target
+    """A writable copy shaped like a CHECKOUT, so a test may break it without touching the real one.
+
+    ``deploy/`` alone is not enough: the checks resolve ``@CHECKOUT@`` against the parent of
+    the deploy directory and the install script globs ``$CHECKOUT/deploy``, so a bare copy
+    makes every ``ExecStart`` point at a missing file and every unit look uninstalled.  That
+    is a red for the wrong reason, and a red for the wrong reason hides the right one.
+    """
+    root = tmp_path / "checkout"
+    root.mkdir()
+    shutil.copytree(DEPLOY, root / "deploy")
+    shutil.copytree(DEPLOY.parent / "ops", root / "ops")
+    shutil.copytree(DEPLOY.parent / "bot", root / "bot")
+    assert ustanovka.check_all(root / "deploy").passed, "the untouched copy must start green"
+    return root / "deploy"
 
 
 # ------------------------------------------------------------------ the real declaration
@@ -40,7 +50,7 @@ def kopia_deploy(tmp_path: Path) -> Path:
 def test_the_real_deploy_directory_is_green():
     verdict = ustanovka.check_all(DEPLOY)
     assert verdict.passed, verdict.report()
-    assert "of 7 checks" in verdict.report()
+    assert "of 10 checks" in verdict.report()
 
 
 def test_every_unit_that_can_be_enabled_is_enabled_by_the_install_script():
@@ -312,7 +322,13 @@ def test_the_install_script_refuses_to_ship_a_watchdog_that_nothing_pings():
     and neutralises rather than assuming.
     """
     script = (DEPLOY / "ustanovka.sh").read_text(encoding="utf-8")
-    assert "proverka_ustanovki.py --storozh" in script
+    code = "\n".join(line for line in script.splitlines() if not line.lstrip().startswith("#"))
+    assert re.search(r'proverka_ustanovki\.py"?\s+--tolko-storozh', code), (
+        "the install script must ask the narrow question in CODE (not in a comment: the "
+        "earlier form of this assertion was satisfied by the comment above the call, which "
+        "is how it stayed green while the call itself changed).  The full verdict now runs "
+        "the install script, so asking for it from inside is mutual recursion."
+    )
     assert "s|^Type=notify|Type=simple|" in script
     assert "s|^WatchdogSec=|#WatchdogSec=|" in script
 
@@ -322,3 +338,80 @@ def test_the_readme_names_the_exact_line_the_next_position_must_add():
     for marker in ustanovka.NOTIFY_MARKERS:
         assert marker in readme, "deploy/README.md does not name %s" % marker
     assert "start_polling" in readme, "the README must say WHERE the hook goes, not only what it is"
+
+
+# ------------------------- the seven breakages the checker used to let through (§3 verifier)
+#
+# Every one of these returned GREEN 7/7 before the verifier ran.  They are here as tests so
+# that a future simplification of the checker cannot quietly restore the hole.
+
+
+def test_an_execstart_pointing_at_a_file_that_does_not_exist_is_caught(kopia_deploy):
+    unit = kopia_deploy / ustanovka.MAIN_UNIT
+    unit.write_text(unit.read_text(encoding="utf-8")
+                    .replace("ExecStart=/usr/bin/python3 -m bot",
+                             "ExecStart=@CHECKOUT@/ops/net_takogo.py"), encoding="utf-8")
+    assert "execstart" in ustanovka.check_all(kopia_deploy).failed_names
+
+
+def test_a_service_with_no_execstart_at_all_is_caught(kopia_deploy):
+    unit = kopia_deploy / "spetsmat-proverka-sredy.service"
+    unit.write_text("\n".join(line for line in unit.read_text(encoding="utf-8").splitlines()
+                              if not line.startswith("ExecStart=")), encoding="utf-8")
+    assert "execstart" in ustanovka.check_all(kopia_deploy).failed_names
+
+
+def test_a_nonsense_oncalendar_is_caught(kopia_deploy):
+    timer = kopia_deploy / "spetsmat-rezervnaya-kopia-sutochnyj.timer"
+    timer.write_text(re.sub(r"OnCalendar=.*", "OnCalendar=kazhdyj vtornik v polovinu",
+                            timer.read_text(encoding="utf-8")), encoding="utf-8")
+    assert "timers" in ustanovka.check_all(kopia_deploy).failed_names
+
+
+def test_a_timer_with_no_schedule_is_caught(kopia_deploy):
+    """A timer without OnCalendar never fires -- and a backup that never runs looks identical."""
+    timer = kopia_deploy / "spetsmat-proverka-vosstanovlenia.timer"
+    timer.write_text("\n".join(line for line in timer.read_text(encoding="utf-8").splitlines()
+                               if not line.startswith("OnCalendar=")), encoding="utf-8")
+    assert "timers" in ustanovka.check_all(kopia_deploy).failed_names
+
+
+def test_a_timer_with_no_timer_section_is_caught(kopia_deploy):
+    timer = kopia_deploy / "spetsmat-proverka-sredy.timer"
+    timer.write_text(timer.read_text(encoding="utf-8").replace("[Timer]", "[Tmier]"),
+                     encoding="utf-8")
+    assert "timers" in ustanovka.check_all(kopia_deploy).failed_names
+
+
+def test_a_timer_pointing_at_a_unit_that_does_not_exist_is_caught(kopia_deploy):
+    timer = kopia_deploy / "spetsmat-rezervnaya-kopia-sutochnyj.timer"
+    timer.write_text(timer.read_text(encoding="utf-8")
+                     .replace("Unit=spetsmat-rezervnaya-kopia@sutochnyj.service",
+                              "Unit=spetsmat-net-takogo.service"), encoding="utf-8")
+    assert "timers" in ustanovka.check_all(kopia_deploy).failed_names
+
+
+def test_a_missing_service_behind_a_live_timer_is_caught(kopia_deploy):
+    """THE ONE THAT WAS REALLY BROKEN.
+
+    The restore-check and environment-check services have no [Install] of their own -- their
+    timers start them by name -- so a hand-kept install list left them out entirely and both
+    timers would have fired into nothing on a real server, forever and silently.  Deleting the
+    service reproduces the state the shipped code was actually in.
+    """
+    (kopia_deploy / "spetsmat-proverka-vosstanovlenia.service").unlink()
+    assert "timers" in ustanovka.check_all(kopia_deploy).failed_names
+
+
+def test_the_install_script_installs_every_unit_file_and_not_a_remembered_list(kopia_deploy):
+    """Behaviour, not source: the dry run is executed and what it says it installs is compared."""
+    check = ustanovka.check_installed(kopia_deploy)
+    assert check.passed, check.detail
+    (kopia_deploy / "spetsmat-novyj.service").write_text(
+        "[Unit]\nDescription=a unit added tomorrow\n\n[Service]\nType=oneshot\n"
+        "Environment=TZ=UTC\nExecStart=/bin/true\nOnFailure=spetsmat-alert@%n.service\n",
+        encoding="utf-8")
+    later = ustanovka.check_installed(kopia_deploy)
+    assert later.passed, (
+        "a unit added to deploy/ must be installed without anyone editing a list; %s" % later.detail
+    )

@@ -91,6 +91,24 @@ def directive(text: str, key: str) -> str | None:
     return None
 
 
+def directives(text: str, key: str) -> list[str]:
+    """Every value of ``Key=``, with systemd's backslash continuations folded in.
+
+    ``ExecStart`` legitimately appears more than once in a ``Type=oneshot`` unit, and the
+    single-value accessor above would silently check only the first one.
+    """
+    folded = text.replace("\\\n", " ")
+    values = []
+    for line in folded.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, _, value = stripped.partition("=")
+        if name.strip() == key:
+            values.append(value.strip())
+    return values
+
+
 def units_needing_enable(units: dict[str, str]) -> list[str]:
     """Every unit carrying an ``[Install]`` section, i.e. every unit ``enable`` applies to.
 
@@ -235,6 +253,107 @@ def check_placeholders(units: dict[str, str], script_text: str) -> OneCheck:
                     "%d placeholder(s) in the units, all substituted by ustanovka.sh" % len(used))
 
 
+def check_installed(deploy_dir: Path | str | None = None) -> OneCheck:
+    """Does ``ustanovka.sh`` actually copy every unit file, or only the ones it remembers?
+
+    Asked by RUNNING the script's dry run and reading what it says it would install, not by
+    grepping its source: the question is behaviour.  This check exists because the script
+    once carried a hand-written list of eight names while ``deploy/`` held ten, and the two
+    that were missing were the units the restore-check and environment-check timers start --
+    so both timers would have fired into nothing, silently, on a real server.  Found by the
+    §3 verifier; no check of mine saw it.
+    """
+    directory = Path(deploy_dir) if deploy_dir is not None else DEPLOY
+    script = directory / "ustanovka.sh"
+    if not script.exists():
+        return OneCheck("installed", False, "no ustanovka.sh in %s" % directory)
+    bash = shutil.which("bash")
+    if bash is None:
+        return OneCheck("installed", False, "SKIPPED: no bash to run the dry run with")
+
+    finished = subprocess.run([bash, str(script), "--proba"],
+                              capture_output=True, text=True, check=False)
+    if finished.returncode != 0:
+        return OneCheck("installed", False, "the dry run failed: %s" % finished.stderr.strip()[:200])
+
+    installed = set()
+    for line in finished.stdout.splitlines():
+        if "would install:" not in line or "->" not in line:
+            continue
+        source = line.split("would install:", 1)[1].split("->", 1)[0].strip()
+        installed.add(Path(source).name)
+
+    on_disk = {name for name in read_units(directory)}
+    missing = sorted(on_disk - installed)
+    if missing:
+        return OneCheck("installed", False,
+                        "present in deploy/ and NEVER installed: %s" % ", ".join(missing))
+    return OneCheck("installed", True,
+                    "all %d unit file(s) in deploy/ are installed by ustanovka.sh" % len(on_disk))
+
+
+def check_execstart(units: dict[str, str], deploy_dir: Path | str | None = None) -> OneCheck:
+    """Every service must have an ``ExecStart``, and it must point at a file that exists.
+
+    A unit with no ``ExecStart`` fails to load; one pointing at a missing script fails at
+    every start, burns the five-per-five-minutes budget in twenty-five seconds and gives up.
+    Both look, from ``deploy/``, exactly like a working unit.
+    """
+    root = Path(deploy_dir).parent if deploy_dir is not None else ROOT
+    problems = []
+    for name, text in sorted(units.items()):
+        if not name.endswith(".service"):
+            continue
+        commands = directives(text, "ExecStart")
+        if not commands:
+            problems.append("%s has no ExecStart" % name)
+            continue
+        for command in commands:
+            for token in command.split():
+                if "@CHECKOUT@" not in token:
+                    continue
+                target = Path(token.replace("@CHECKOUT@", str(root)))
+                if not target.exists():
+                    problems.append("%s runs %s, which does not exist" % (name, token))
+    if problems:
+        return OneCheck("execstart", False, "; ".join(problems))
+    services = [name for name in units if name.endswith(".service")]
+    return OneCheck("execstart", True,
+                    "%d service unit(s), every ExecStart present and every named file on disk"
+                    % len(services))
+
+
+def check_timers(units: dict[str, str]) -> OneCheck:
+    """A timer must have a ``[Timer]`` section, a schedule, and a unit that actually exists.
+
+    The last one is the quiet failure: with no ``Unit=``, systemd starts the service of the
+    same name, and if that file was never written the timer fires into nothing forever.
+    """
+    problems = []
+    timers = [name for name in units if name.endswith(".timer")]
+    for name in sorted(timers):
+        text = units[name]
+        if "[Timer]" not in text:
+            problems.append("%s has no [Timer] section" % name)
+            continue
+        schedule = directives(text, "OnCalendar") + directives(text, "OnBootSec") \
+            + directives(text, "OnUnitActiveSec")
+        if not schedule:
+            problems.append("%s has no schedule at all" % name)
+        for entry in directives(text, "OnCalendar"):
+            if not re.search(r"\d{2}:\d{2}(:\d{2})?", entry):
+                problems.append("%s has OnCalendar=%r, which names no time" % (name, entry))
+        target = directives(text, "Unit")
+        target_name = target[0] if target else name[:-len(".timer")] + ".service"
+        base = re.sub(r"@[^.]*\.service$", "@.service", target_name)
+        if base not in units:
+            problems.append("%s starts %s, which is not in deploy/" % (name, target_name))
+    if problems:
+        return OneCheck("timers", False, "; ".join(problems))
+    return OneCheck("timers", True,
+                    "%d timer(s), each with a schedule and an existing target unit" % len(timers))
+
+
 #: What the bot must contain for ``Type=notify`` plus ``WatchdogSec`` to mean anything.
 #: ``READY=1`` is what systemd waits for at start; ``WATCHDOG=1`` is the periodic proof of
 #: life.  Either one alone is not enough: without READY the unit never finishes starting,
@@ -308,6 +427,9 @@ def check_all(deploy_dir: Path | str | None = None, live: bool = False,
         check_timezone(units),
         check_graceful_stop(units),
         check_placeholders(units, script_text),
+        check_execstart(units, deploy_dir),
+        check_timers(units),
+        check_installed(deploy_dir),
     ]
     if wiring:
         checks.append(check_watchdog_wired(root))
@@ -324,8 +446,21 @@ def main(argv: list[str] | None = None) -> int:
                         help="additionally ask systemd whether the units are really enabled")
     parser.add_argument("--storozh", action="store_true",
                         help="additionally check that bot/ actually sends READY=1 and WATCHDOG=1")
+    parser.add_argument("--tolko-storozh", action="store_true",
+                        help="ONLY the watchdog-wiring question, nothing else")
     parser.add_argument("--deploy", default=None, help="directory of unit files")
     args = parser.parse_args(argv)
+
+    # ``--tolko-storozh`` exists to break a loop, and the loop was real: ustanovka.sh asks
+    # this module whether the watchdog is wired, and `check_installed` answers "does the
+    # script install everything?" by RUNNING the script.  With the full verdict on both
+    # sides that is infinite mutual recursion -- it hung for two minutes before being
+    # noticed.  The install script needs one answer, so it gets one answer.
+    if args.tolko_storozh:
+        check = check_watchdog_wired(None)
+        print("  %-22s %s  %s" % (check.name, "PASS" if check.passed else "RED ", check.detail))
+        return 0 if check.passed else 1
+
     verdict = check_all(args.deploy, live=args.zhivaya, wiring=args.storozh)
     print(verdict.report())
     return 0 if verdict.passed else 1
