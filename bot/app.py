@@ -16,8 +16,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import bot.config_local as cfg
 from bot.handlers import owner, registration, student, teacher
 from bot.middleware import AuthMiddleware
-from infra.repositories import SqliteCatalogue
+from bot.routers import marking
+from infra.db import SystemClock
+from infra.repositories import SqliteCatalogue, SqliteMarkJournal
 from infra.roster_repo import RosterRepo
+from core.services.marking import MarkingService
+from core.services.progress import ProgressService
 from core.services.roster import RosterService
 
 
@@ -47,6 +51,13 @@ def build(
     catalogue = SqliteCatalogue(repo._journal)  # noqa: SLF001  -- shared journal connection
     roster = RosterService(repo, sheets_for_current=lambda: _current_sheet_id(catalogue))
 
+    # P4's two seams over the same journal connection: the grid writes through
+    # ``MarkingService`` and reads through ``ProgressService``, and reimplements
+    # neither.  Nothing under ``bot/`` opens a connection by hand.
+    journal = SqliteMarkJournal(repo._journal)  # noqa: SLF001  -- shared journal connection
+    marking_service = MarkingService(journal, SystemClock())
+    progress_service = ProgressService(journal, catalogue)
+
     # Single outer middleware stamps ``identity`` onto every update.
     dp.message.middleware(AuthMiddleware(roster, owner_tg_id=owner_tg_id))
     dp.callback_query.middleware(AuthMiddleware(roster, owner_tg_id=owner_tg_id))
@@ -57,6 +68,15 @@ def build(
     dp.include_router(owner.router)
     dp.include_router(student.router)
     dp.include_router(teacher.router)
+    grid_router, stale_router = marking.build_routers()
+    dp.include_router(grid_router)
+
+    # LAST, and the order is load-bearing rather than tidy: this catch-all claims every
+    # callback query no router above it matched.  Included any earlier it would swallow
+    # the screens below it; left out entirely, a button from a message older than the
+    # payload schema matches nothing, aiogram drops the update, and the user watches a
+    # spinner turn with not one line in the log.
+    dp.include_router(stale_router)
 
     # Stash the service so handlers that need it get it through DI -- the
     # ``roster`` argument they declare is resolved by aiogram because the
@@ -66,6 +86,8 @@ def build(
         {
             "roster": roster,
             "catalogue": catalogue,
+            "marking": marking_service,
+            "progress": progress_service,
             "owner_tg_id": owner_tg_id,
         }
     )
