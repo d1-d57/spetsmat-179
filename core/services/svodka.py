@@ -30,13 +30,19 @@ the marking.  The head is the person who decides what to do about a problem nobo
 and about a child nobody has spoken to for three lessons, and a summary delivered to
 somebody who cannot act on it is noise.
 
-WHAT IS FORBIDDEN HERE ABOVE ALL ELSE.  No ratings, no percentages, no shares relative to
-the class, no points, no levels, no streaks, no badges.  No comparison of teachers with
-one another -- not "you marked the fewest", not a table by room.  No comparison of
-children with one another in a text an adult reads: the silent list is the list of those
-NOBODY HAS SPOKEN TO, not the list of the worst.  Wordings state facts.  And NOTHING is
-ever written next to a plus.  The готовности criterion greps ``bot/`` and ``core/`` for
-that whole vocabulary, so the rule has a carrier and is not a hope.
+WHAT IS FORBIDDEN HERE ABOVE ALL ELSE.  Nothing that ranks, nothing that scores, nothing
+that measures one person against the class, and none of the game furniture that goes with
+them -- the задание names the whole vocabulary in its section 4 and this file contains not
+one word of it.  No comparison of teachers with one another, neither in a sentence nor in
+a table by room.  No comparison of children with one another in a text an adult reads: the
+silent list is the list of those NOBODY HAS SPOKEN TO, not the list of the worst.  Wordings
+state facts.  And NOTHING is ever written next to a plus.
+
+THE FORBIDDEN WORDS ARE NAMED AROUND HERE RATHER THAN SPELLED OUT, and that is not
+squeamishness: the готовности criterion greps ``bot/`` and ``core/`` for the literal
+strings and CANNOT TELL A PROHIBITION FROM A VIOLATION.  A docstring that listed them
+would turn its own gate red.  ``bot/keyboards/views.py`` already says this about itself,
+and the same discipline applies to every file under the gate.
 
 NOTHING HERE IMPORTS sqlite3 AND NOTHING HERE IMPORTS ANY TELEGRAM LIBRARY.  The stores
 sit behind Protocols implemented in ``infra/uvedomlenia_repo.py``; the sending sits in
@@ -53,7 +59,7 @@ and for the reason it cannot be keyed on ``session_id``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Protocol, Sequence
+from typing import Optional, Protocol
 
 import config
 from core.models import MarkEvent, Session, Teacher
@@ -545,9 +551,10 @@ class SvodkaService:
 #
 # The text lives in module functions and not in the router, so that §4 has one home and
 # the tests can read the words without a Telegram server.  Every wording below states a
-# fact.  There is no rating, no percentage, no share of the class, no point, no level, no
-# streak, no badge; no teacher is set beside another and no child is set beside another.
-# NOTHING is written next to a plus -- a count stands alone.
+# fact.  Nothing here ranks, scores, or measures one person against the class, and none of
+# the game furniture section 4 forbids appears in any string below; no teacher is set
+# beside another and no child is set beside another.  NOTHING is written next to a plus --
+# a count stands alone.  (Named around, not spelled out: see the module docstring.)
 
 
 def day_in_words(held_on: str) -> str:
