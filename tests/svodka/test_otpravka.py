@@ -216,10 +216,26 @@ def test_the_service_is_actually_on_the_dispatcher(tmp_path, recorder):
 
     The one thing a unit test of the service can never notice: a perfectly correct module
     that no dispatcher ever constructs.
+
+    THE FOUR GLOBAL ROUTERS ARE DETACHED FIRST, and skipping that is a defect this test
+    had until a FULL run caught it.  ``bot/handlers/`` keeps its routers as module globals,
+    a ``Router`` remembers the dispatcher it was attached to, and by the time this file
+    runs another test module has already built one -- so ``build`` raises "Router is
+    already attached" from aiogram.  Green on ``pytest tests/svodka`` alone and red on
+    ``make check``: exactly the shape of failure that reaches the deploy instead of the
+    author.  ``tests/bot/conftest.py`` does the same four lines for the same reason, and
+    the routers this position adds are FACTORIES precisely so they never need it.
     """
     from aiogram import Bot
     from bot.app import build
+    from bot.handlers import owner as owner_module
+    from bot.handlers import registration as registration_module
+    from bot.handlers import student as student_module
+    from bot.handlers import teacher as teacher_module
     from infra.db import apply_migrations
+
+    for module in (owner_module, registration_module, student_module, teacher_module):
+        module.router._parent_router = None
 
     journal_path = tmp_path / "journal.db"
     apply_migrations(journal_path)
