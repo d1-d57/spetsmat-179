@@ -373,6 +373,22 @@ every заход whose worktree branches off anything but current `main`.
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Every `## ` section name is quoted verbatim inside `## СТАРТОВОЕ СООБЩЕНИЕ`, so an anchor match hits the wrong copy first
+The start message is one enormous single line that literally contains the strings
+`## ГИГИЕНА ВХОДА`, `## ПЛАН`, `## ВОПРОСЫ`, `## ОТЧЁТ`. A search for a section header
+therefore finds it near the TOP of the file — inside the quoted command — long before the
+real header near the bottom. Writing my `## ВОПРОСЫ` section by matching on
+`## ГИГИЕНА ВХОДА` cut the document at that false position and re-appended everything from
+it: a 490-line file became 1100 lines with the whole заход duplicated.
+ЦЕНА: one destroyed report file, recovered in full (backup + reconstruction, ~two rounds).
+It is recoverable ONLY because the file is uncommitted by contract and the duplication is
+structurally undoable; an executor who did not notice would hand the analyst a report
+containing two contradictory copies of every section, including two `## ФАЗА ПРИЁМКИ`
+blocks for the analyst to fill. §1 already carries the closing rule — «Якорные замены —
+abort при ≠1» — and it is the right one; what is missing is the warning that in THIS file
+the count is never 1 for a section name, because `bootstrap_zahod.py` itself plants the
+second copy. Repeats for every executor of every заход, since every заход has this block.
+
 ## ПЛАН — (заполняет исполнитель)
 
 **Measured before touching anything (baseline, not assumed):**
@@ -422,6 +438,40 @@ refactor, no renames, no new constants, `bot/config_local.py` not deleted.
 > ```
 > `ДОМ: владелец` — когда дома-файла нет вовсе (сам вопрос владельцу); для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит только случай «доставлено» без метки на месте, недоставленное просто печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+
+1. `bot/config_local.py` is now a pure re-export and is meant to die. Killing it means
+   editing five call sites onto `import config`: `bot/__main__.py`, `bot/app.py`,
+   `bot/middleware.py`, `bot/handlers/owner.py`, `bot/handlers/registration.py`. All five
+   are foreign zones for this position — a заход of its own.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/
+   ДОСТАВЛЕНО: нет
+
+2. Three of those five call sites import the module and never use it: `import bot.config_local as cfg`
+   in `bot/app.py:16`, `bot/middleware.py:20`, `bot/handlers/owner.py:24` — zero `cfg.*` references
+   in any of them (found by the §3 verifier, not by me). They can simply be deleted, which shrinks
+   item 1 from five call sites to two.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/
+   ДОСТАВЛЕНО: нет
+
+3. `tools/blank.py:243` carries `parser.add_argument("--room", default="302", ...)` — a bare room
+   number outside `config.py`, the last barefoot room literal in the tree. Foreign zone, not fixed.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/
+   ДОСТАВЛЕНО: нет
+
+4. `core/services/roster.py:56` defines `ROOMS` a second time and NOTHING imports it (`grep
+   roster.ROOMS` → zero consumers), while `config.py` names it the source of truth for core. One of
+   the two statements is wrong: either core's copy is dead code, or `config.py`'s comment points at
+   a constant nobody reads. Pre-existing, outside my zone, worth one decision.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. Three factory-level findings with measured prices are written up in `## УРОКИ ФАБРИКЕ` above:
+   the `--zone "./path"` form that `vlit-v-osnovnuyu` rejects, `timeout` missing on this machine,
+   and the criterion's test count belonging to the main folder rather than the worktree. All three
+   are generated into every заход of the wave.
+   ДОМ: <эта арка>/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
@@ -482,13 +532,172 @@ $ git --no-optional-locks branch --no-merged main | grep -c zahod/
 не потому, что я её пропустил.
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "./config.py" && \
-    git_zona.py check --zone "bot/config_local.py"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/config.py` — открывать любым
+редактором; рядом второй файл зоны
+`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/bot/config_local.py`. Оба названы по пути в
+ГЛАВНОЙ папке, потому что ветка уже влита в `main` и владелец смотрит туда.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `6168231` — «config.py: the six bot constants get their home here, token and owner
+id read from the environment» · `6c4295d` — «bot/config_local.py: thin re-export from
+config.py, one home for the constants» · слияние `3620e0a` «Merge branch
+'zahod/P17-konstanty'» · `git_zona.py check --zone config.py` → ✅ и
+`git_zona.py check --zone bot/config_local.py` → ✅ (обе прогнаны из главной папки ПОСЛЕ
+влития). ⚠ Форма `--zone "./config.py"`, напечатанная в этом файле, у подкоманды
+`vlit-v-osnovnuyu` НЕ работает — см. `## УРОКИ ФАБРИКЕ`; `check` её принимает, `vlit` нет.
+
+**ЧТО СДЕЛАНО И ЗАЧЕМ**
+
+Six constants moved out of `bot/config_local.py` into `config.py`, and `bot/config_local.py`
+left as a thin re-export. Two parts, two commits, each green on its own.
+
+1. `6168231` — `config.py` receives `BOT_TOKEN`, `OWNER_TG_ID`, `DEEPLINK_CODE_STUDENT`,
+   `DEEPLINK_CODE_TEACHER`, `ROOMS`, `NAME_MAX_LEN`, with their explanatory comments carried
+   over. The task text named four; the file held **six**, and the §3 verifier demands "all
+   constants of `bot/config_local.py`, moved 100%, left 0" — so all six moved. Nothing renamed,
+   no constant invented.
+2. `6c4295d` — `bot/config_local.py` now defines nothing at all: `from config import (...)`
+   plus `__all__`, and a docstring saying in one line that it is kept for backwards
+   compatibility and dies together with the edit of its call sites. All five call sites
+   (`bot/__main__.py`, `bot/app.py`, `bot/middleware.py`, `bot/handlers/owner.py`,
+   `bot/handlers/registration.py`) are untouched and keep working, because they read attributes
+   of the module.
+
+**ЗАЧЕМ, и почему это оказалось не косметикой.** The blocker was real and I reproduced it before
+touching anything: `python3 -m bot` → `rc=2`, `BOT_TOKEN is empty.` The cause was
+`bot/config_local.py` line 18, `BOT_TOKEN = ""` — a hard-empty constant, so no environment
+variable could ever reach the process. Now `config.py` has
+`BOT_TOKEN = os.environ.get("BOT_TOKEN", "")` and `OWNER_TG_ID = int(os.environ.get("OWNER_ID", "") or 0)`,
+the re-export passes them through, and **the bot rises**. The empty default is kept on purpose:
+without the variable the bot still dies loudly at startup instead of running silently disabled.
+
+**КАК ПРОВЕРИЛ** *(все числа — вывод команд, не пересказ)*
+
+```
+$ make check                       # рабочая папка, ДО работы
+rc=0 · 300 passed in 37.94s
+$ make check                       # рабочая папка, ПОСЛЕ обеих частей
+rc=0 · 300 passed in 49.74s        # ровно столько же
+$ cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && make check   # ПОСЛЕ влития, главная папка
+rc=0 · 486 passed in 49.57s        # ровно число из критерия
+```
+🔴 **Про 486 против 300 — расхождение объяснено, а не замолчано.** В рабочей папке база 300,
+в главной 486: worktree отрезан от снимка `6e4e3fa` и не содержит 186 тестов соседних позиций.
+Я назвал это в `## ПЛАН` ДО работы как «критерий, похоже, врёт» — и оказался неправ ровно
+наполовину: число 486 верно для главной папки и подтвердилось после влития, а неверен адрес,
+по которому критерий велит его мерить. Обе стороны сошлись: 300 → 300 в worktree, 486 в `main`.
+Мой заход не добавил и не убрал ни одного теста.
+
+```
+$ BOT_TOKEN=$(grep '^BOT_TOKEN=' ~/…/secrets/bot.env | cut -d= -f2-) \
+  OWNER_ID=$(grep '^OWNER_ID=' ~/…/secrets/bot.env | cut -d= -f2-) \
+  perl -e 'alarm 25; exec @ARGV' -- python3 -m bot
+rc=142      # из ГЛАВНОЙ папки, после влития. SIGALRM: бот прожил 25 с и убит часами.
+            # Ни одной строки ошибки за 25 с — поднялся и опрашивает Telegram.
+$ python3 -m bot          # там же, без переменных окружения
+rc=2 · "BOT_TOKEN is empty.  Set the environment variable and try again."
+```
+🔴 **Подстановка команды названа отдельно.** Критерий требует `timeout 25 python3 -m bot` и
+`rc=124`. `which timeout gtimeout` → **обе не найдены** на этой машине, команда неисполнима как
+написана (дала бы `rc=127 command not found`). Заменена на `perl -e 'alarm 25; exec @ARGV'`,
+где `rc=142` (SIGALRM) — точный аналог `rc=124`: процесс был жив и убит по часам. Второй прогон
+без переменных оставлен нарочно: он показывает, что громкое падение на пустом токене НЕ сломано.
+
+```
+$ python3 -c "import config; print(len([k for k in dir(config) if k.isupper()]))"
+30                                    # было 24 (AST-подсчёт по HEAD~2), стало 30 — ровно +6
+$ git check-ignore -v secrets/
+.gitignore:2:secrets/	secrets/      · rc=0  (секреты игнорируются)
+$ grep -rn "8420265757\|AAH\|AAG" config.py bot/
+rc=1                                  (ни одного секрета в коде)
+```
+
+**РЕЗУЛЬТАТ ВЕРИФИКАТОРА §3** — свежий субагент, метод другой (греп по живому дереву на литералы,
+без чтения диффа и истории), сплошная выборка все шесть констант:
+> **ВЕРДИКТ: подтверждено.** Переезд полный: все шесть констант живут в `config.py`,
+> `bot/config_local.py` ничего не определяет, ни один модуль вне `config.py` не держит своей копии
+> дип-линка, кап-длины, токена или owner-id. Единственная копия `ROOMS` в
+> `core/services/roster.py` — предсуществующая и задокументированная, не новая. Остаточный долг
+> косметический: три мёртвых импорта `cfg` и один `default="302"` в `tools/blank.py`.
+>
+> **выдано 10 позиций из 10 найденных**
+
+Три находки верификатора я НЕ чинил, и это осознанно: мёртвые импорты `import bot.config_local as cfg`
+в `bot/app.py`, `bot/middleware.py`, `bot/handlers/owner.py` и `default="302"` в `tools/blank.py`
+лежат в ЧУЖИХ зонах, которые §2.4 запрещает трогать поимённо. Переданы пунктами очереди в `## ВОПРОСЫ`.
+⚠ Верификатор отдельно сообщил, что голый `pytest` даёт `299 passed, 1 failed`
+(`tests/photo/test_blank.py`, `sqlite3.OperationalError: no such table: students`). Это не мой
+регресс и не регресс вообще: `make check` сначала накатывает миграции во временную БД, голый
+`pytest` — нет. Через `make check` тот же тест зелёный, и до меня, и после.
+
+**ЧТО НЕ ТРОГАЛ.** `bot/app.py`, роутеры, `core/`, `infra/`, `migrations/`, тесты — ни строки.
+Логика не рефакторилась, константы не переименовывались, новых констант не заводил,
+`bot/config_local.py` не удалён. `git show --stat` на обоих коммитах: ровно один свой путь в каждом.
+
+**НЕОБРАТИМОЕ.** ⚠ Отдельной строкой, потому что владелец этого не видел: при записи секции
+`## ВОПРОСЫ` я разрезал ЭТОТ файл-заход по ложному якорю и продублировал его целиком
+(490 строк → 1100). Восстановлен полностью и проверен по числу заголовков (по одному каждого,
+704 строки); копия повреждённого состояния лежит в
+`/private/tmp/claude-501/-Users-ivanyakovlev-Documents-GitHub-spetsmat-bot-wt-P17-konstanty/0961ec41-efe0-4ca7-9b67-1887ea5d5724/scratchpad/broken.md`.
+Код и коммиты этим затронуты не были — файл-заход по контракту зоны не коммитится вовсе.
+Разбор — четвёртым пунктом в `## УРОКИ ФАБРИКЕ`.
+
+**НЕОБРАТИМОЕ.** `bot/config_local.py` перезаписан целиком (36 строк определений → 30 строк
+ре-экспорта) — восстанавливается из `6e4e3fa:bot/config_local.py`, прежнее содержимое целиком
+лежит в истории. Влитие в `main` — коммит слияния `3620e0a`, откат `git reset --hard d507b77`
+(хэш `main` ДО влития, снят командой перед шагом 2). Больше ничего необратимого: удалений,
+переименований, перемещений и `checkout` поверх несохранённого не было.
+
+**ПОВТОРЯЕМОСТЬ НАХОДОК** *(вычислимо: повторится на следующей единице работы — заход ДО
+следующего прогона, а не пункт очереди)*
+- **Повторятся, класс НЕМЕДЛЕННОЕ — все три урока в `## УРОКИ ФАБРИКЕ`, и все три машинного
+  происхождения, то есть уже стоят в тексте соседних заходов:** (1) `--zone "./путь"` в
+  сгенерированной команде `vlit-v-osnovnuyu` — печатается в КАЖДЫЙ заход и отказывает на последнем
+  ходу каждого; (2) `timeout` в критерии готовности — на этой машине его нет вовсе, ломается любой
+  критерий, доказывающий живость таймаутом; (3) число тестов из главной папки, вписанное в критерий,
+  который велено мерить в worktree — врёт в каждом заходе, чей worktree отрезан не от текущего `main`.
+- **Не повторится, законно уходит в очередь:** мёртвые импорты `cfg` и `default="302"` — разовый
+  хвост именно этого переезда, у следующей позиции своей причины возникнуть неоткуда.
+
+**ЧИСЛА ГИТ-ГИГИЕНЫ** *(§WARNING шаг 6 — печатались командой, вставлены дословно)*
+- **Вне git, своя зона:** `0` (`git status --porcelain` в рабочей папке пуст).
+- **Вне git, главная папка:** `5` изменённых + `1` неотслеживаемый — **всё чужое**, поимённо:
+  `README.md`, `zhurnal/…/PULS-CHASOVOGO-sborka-bota.log`, `kod_P10-ekspluatacia.md`,
+  `kod_P5-ekrany.md`, `?? .commit-plan`, плюс мой файл-заход `kod_P17-konstanty.md`, который
+  контракт зоны прямо запрещает коммитить (это делает аналитик при приёмке). Чужое названо и
+  оставлено, как велит шаг 1.
+- **Влитие:** ✅ без конфликтов, `3620e0a`. Пост-проверка из ГЛАВНОЙ папки **зелёная**
+  (486 passed rc=0 · бот поднялся rc=142 · `grep -c 'from config import\|import config'
+  bot/config_local.py` → `1` · `OWNER_TG_ID`/`DEEPLINK_*` реально в `config.py`). Откат не
+  потребовался.
+- **Невлитых веток:** на входе `1`, сейчас `2` — `zahod/P10-ekspluatacia` и `zahod/P9-listok`.
+  🔴 Число выросло, и рост НЕ мой: моя ветка из списка ушла (влита), а эти две — соседние ЖИВЫЕ
+  заходы той же волны, появившиеся за время моего прогона; у P10 файл-заход прямо сейчас лежит
+  незакоммиченным в главной папке. Обе законны и вливать их мне нельзя: это забрало бы чужую
+  недописанную работу.
+- **Не вывезено:** **неприменимо, потому что** у репозитория нет ни одного удалённого адреса —
+  `git remote -v` печатает пусто, `git log @{u}..` отвечает
+  `fatal: no upstream configured for branch 'zahod/P17-konstanty'`. Вывозить некуда; заявку на
+  это не ставлю, потому что отсутствие remote — свойство репозитория, а не мой долг.
+- **Заявок открыто:** `5`, все чужие и все заведены до меня (в т.ч. блокирующая
+  `2026-09-02T1346-orkestr-py-45-489-porog-45`). Ни одна не в моей зоне, ни одной не закрывал.
+
+**ГИГИЕНА §4.1 Г1–Г6**
+- **Г1.** `git_zona.py check --zone config.py` → ✅ · `--zone bot/config_local.py` → ✅.
+- **Г2.** Неприменимо: оба пути зоны лежат внутри `spetsmat-bot`, зона за его пределы не выходила.
+- **Г3.** Разобрано числом выше: было 1, стало 2, обе новые — чужие живые ветки, названы поимённо.
+- **Г4.** Ни одного нового `.py` в `_generator/**` не заводил.
+- **Г5.** Ни одного нового `.md` не заводил.
+- **Г6.** `git show --stat` на `6168231` → только `config.py`; на `6c4295d` → только
+  `bot/config_local.py`. Чужих путей нет.
+
+**ВРЕМЯ ПРОГОНА И ТОКЕНЫ:** неприменимо — движок без счётчика стоимости в логе.
+
+**ЧАСТИ ЗАДАНИЯ.** Обе части выполнены и закоммичены раздельно, по порядку; несделанных нет.
+
+**ОТКРЫТОЕ «ВОЗВРАЩАТЬСЯ».** `bot/config_local.py` жив как ре-экспорт — это временный дом по
+заданию. Он умирает вместе с правкой пяти call sites (`bot/__main__.py`, `bot/app.py`,
+`bot/middleware.py`, `bot/handlers/owner.py`, `bot/handlers/registration.py`) на `import config`;
+это чужие зоны и отдельный заход. Пункт 1 в `## ВОПРОСЫ`.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
