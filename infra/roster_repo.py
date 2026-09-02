@@ -180,6 +180,46 @@ class RosterRepo(RosterPort):
         ).fetchone()
         return row["id"] if row is not None else None
 
+    def create_confirmed_student(
+        self,
+        *,
+        surname: str,
+        name: str,
+        klass: Optional[str],
+        first_sheet_id: int,
+        tg_id: int,
+    ) -> int:
+        # Two statements, NOT wrapped in ``transaction`` -- ``infra/repositories.py``
+        # owns the journal transactions.  The bind's UNIQUE constraint is what
+        # makes the second binding fail loudly; if the bind raises, the row is
+        # left as an unbound ``active`` student, which is the honest failure mode
+        # -- the next test sees the row but no Telegram binding.
+        student_id = self._create_student_row(
+            surname=surname, name=name, klass=klass, first_sheet_id=first_sheet_id
+        )
+        self._bind_student_tg_id(student_id=student_id, tg_id=tg_id)
+        return student_id
+
+    def create_confirmed_teacher(
+        self,
+        *,
+        name: str,
+        aka: Optional[str],
+        tg_id: int,
+        role: Role,
+        room: Optional[str] = None,
+    ) -> int:
+        teacher_id = self._create_teacher_row(name=name, aka=aka)
+        try:
+            self._bind_teacher_tg_id(teacher_id=teacher_id, tg_id=tg_id)
+        except TelegramIdAlreadyBound:
+            # We created the row but the binding failed -- undo so the owner
+            # can press the button again without picking up a dangling teacher.
+            self._journal.execute("delete from teachers where id = ?", (teacher_id,))
+            raise
+        self.bind_teacher(teacher_id=teacher_id, role=role, room=room)
+        return teacher_id
+
     # ----------------------------------------------------------- roster port impl
 
     def create_pending(

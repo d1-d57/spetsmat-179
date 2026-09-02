@@ -155,6 +155,9 @@ class RosterPort(Protocol):
     def lookup_teacher(self, tg_id: int) -> Optional[TeacherBinding]:
         """What the middleware needs to know about one teacher, or None."""
 
+    def lookup_teacher_by_id(self, teacher_id: int) -> Optional[TeacherBinding]:
+        """The same lookup by primary key -- avoids a join through the journal DB."""
+
     def bind_student_tg_id(self, *, student_id: int, tg_id: int) -> None:
         """Bind a Telegram id to an already-confirmed student.
 
@@ -163,6 +166,38 @@ class RosterPort(Protocol):
 
     def lookup_student(self, tg_id: int) -> Optional[int]:
         """The student id bound to this Telegram id, or None if unbound or pending."""
+
+    def create_confirmed_student(
+        self,
+        *,
+        surname: str,
+        name: str,
+        klass: Optional[str],
+        first_sheet_id: int,
+        tg_id: int,
+    ) -> int:
+        """Insert a confirmed student and bind tg_id, in one operation.
+
+        Returns the new student id.  Raises ``TelegramIdAlreadyBound`` on
+        collision with an existing student row's tg_id.  Used by the owner
+        when accepting a pending student -- the caller (the bot) has already
+        read the current sheet id from the catalogue.
+        """
+
+    def create_confirmed_teacher(
+        self,
+        *,
+        name: str,
+        aka: Optional[str],
+        tg_id: int,
+        role: Role,
+        room: Optional[str] = None,
+    ) -> int:
+        """Insert a confirmed teacher and bind tg_id + role, in one operation.
+
+        Returns the new teacher id.  Raises ``TelegramIdAlreadyBound`` on
+        collision.  Used by the owner when accepting a pending teacher.
+        """
 
 
 # ----------------------------------------------------------- the service
@@ -217,7 +252,7 @@ class RosterService:
         self,
         registration: PendingRegistration,
         *,
-        student_id: int,
+        klass: Optional[str] = None,
     ) -> int:
         """Promote a pending student to ``active`` and bind their ``tg_id``.
 
@@ -225,7 +260,7 @@ class RosterService:
         first sheet of the year.  The schema carries ``tg_id`` as UNIQUE; the
         port raises ``TelegramIdAlreadyBound`` on collision and we re-raise.
 
-        Returns the student id (the same as the one passed in, for chaining).
+        Returns the new student id.
         """
         if registration.intended_role is not Role.STUDENT:
             raise RosterError(
@@ -239,20 +274,19 @@ class RosterService:
                 "student against NULL (NULL is the imported-row fallback, not the "
                 "registration path)"
             )
-        try:
-            self._port.bind_student_tg_id(student_id=student_id, tg_id=registration.tg_id)
-        except TelegramIdAlreadyBound:
-            raise
-        # Promotion (status, first_sheet_id) and pending-row removal are done by
-        # the bot's transaction wrapper -- this service deliberately does not
-        # know about the journal DB.
+        student_id = self._port.create_confirmed_student(
+            surname=registration.surname,
+            name=registration.name,
+            klass=klass,
+            first_sheet_id=current,
+            tg_id=registration.tg_id,
+        )
         return student_id
 
     def confirm_teacher(
         self,
         registration: PendingRegistration,
         *,
-        teacher_id: int,
         role: Role,
         room: Optional[str] = None,
     ) -> TeacherBinding:
@@ -269,7 +303,16 @@ class RosterService:
             )
         if role is Role.HEAD and room is None:
             raise RosterError("a HEAD must be bound to a room")
-        return self._port.bind_teacher(teacher_id=teacher_id, role=role, room=room)
+        # The full name the teacher gave is the teacher's ``name``; the
+        # shorter surname goes into ``aka`` so a search by either works.
+        teacher_id = self._port.create_confirmed_teacher(
+            name="%s %s" % (registration.surname, registration.name),
+            aka=registration.surname,
+            tg_id=registration.tg_id,
+            role=role,
+            room=room,
+        )
+        return self._port.lookup_teacher_by_id(teacher_id)
 
     def reject(self, registration_id: int) -> None:
         self._port.resolve_pending(registration_id, accept=False)
