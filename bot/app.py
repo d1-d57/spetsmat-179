@@ -7,6 +7,8 @@ the only caller of ``build`` in production; tests bypass it and call
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Optional
 
 from aiogram import Bot, Dispatcher
@@ -17,6 +19,7 @@ import bot.config_local as cfg
 from bot.handlers import owner, registration, student, teacher
 from bot.middleware import AuthMiddleware
 from bot.routers import marking, room
+from bot.routers import photo, voice
 from bot.routers import views
 from infra.db import SystemClock
 from infra.enrollment_repo import SqliteEnrollmentRepo
@@ -35,6 +38,77 @@ from core.services.room import RoomService
 from core.services.roster import RosterService
 from core.services.spiski import SpiskiService
 
+log = logging.getLogger(__name__)
+
+
+# ===========================================================================
+#  RECOGNITION, BUILT FROM THE ENVIRONMENT
+# ===========================================================================
+#
+# The class of error this section exists to close: a dependency that is ALIVE IN THE
+# TESTS AND DEAD IN BATTLE.  ``bot/routers/photo.py:346`` reads ``data.get("vision")``
+# and answers «Разбор фото не настроен» when it is missing; the word ``vision`` appeared
+# nowhere in this file and only in ``tests/photo/conftest.py``, where a fixture supplies
+# it.  P7 passed 18 gates out of 18 with the screen unreachable in production.
+#
+# Nothing secret lands in git here: the code holds the NAME of an environment variable
+# and an empty default, never a value.
+
+#: The environment variables that decide whether photo recognition is real.  The names
+#: are the ones ``bot.env.example`` already carries; they are NOT in ``config.py``
+#: because a key is a secret and that file is in git.
+VISION_KEY_ENV = "LLM_API_KEY"
+VISION_MODEL_ENV = "LLM_MODEL"
+VISION_PROVIDER_ENV = "LLM_PROVIDER"
+
+#: The OpenAI-compatible endpoint of each provider ``bot.env.example`` offers.  A
+#: provider the map does not know turns recognition OFF and says so, rather than being
+#: silently answered by whichever endpoint happens to be the default -- that silence is
+#: the same class of failure this whole section is here to close.
+VISION_ENDPOINTS = {
+    "openrouter": "https://openrouter.ai/api/v1/chat/completions",
+    "openai": "https://api.openai.com/v1/chat/completions",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+}
+
+
+def build_vision(environ: Optional[dict] = None) -> tuple:
+    """``(vision | None, how)`` -- the recogniser this machine can actually offer.
+
+    Shaped after ``infra.asr.build_transcriber`` on purpose: the second element is the
+    sentence the starting process logs, so that «recognition is off» is never something a
+    reader has to infer from the absence of a line.
+
+    **No key configured means ``None``, not a crash.**  A bot without photo recognition is
+    useful; a bot that refused to start would not be.  The screen already says «Разбор
+    фото не настроен» for exactly this value.
+
+    The model is built through P7's own constructor (``infra.llm.VisionModel``), which is
+    read-only for this position; nothing here reimplements a line of it.
+    """
+    from infra.llm import DEFAULT_MODEL, VisionModel
+
+    environ = os.environ if environ is None else environ
+    key = (environ.get(VISION_KEY_ENV) or "").strip()
+    model = (environ.get(VISION_MODEL_ENV) or "").strip() or DEFAULT_MODEL
+    provider = (environ.get(VISION_PROVIDER_ENV) or "").strip().lower() or "openrouter"
+
+    if not key:
+        return None, (
+            "NO VISION: %s unset -- photographs will be refused, not guessed"
+            % VISION_KEY_ENV
+        )
+    endpoint = VISION_ENDPOINTS.get(provider)
+    if endpoint is None:
+        return None, (
+            "NO VISION: %s=%r is not one of %s -- photographs will be refused"
+            % (VISION_PROVIDER_ENV, provider, ", ".join(sorted(VISION_ENDPOINTS)))
+        )
+    return (
+        VisionModel(api_key=key, model=model, endpoint=endpoint),
+        "vision on: provider %s, model %s" % (provider, model),
+    )
+
 
 def build(
     *,
@@ -44,6 +118,7 @@ def build(
     roster_path,
     bot: Optional[Bot] = None,
     storage: Optional[MemoryStorage] = None,
+    environ: Optional[dict] = None,
 ) -> Dispatcher:
     """Build the dispatcher with the middleware and handlers wired in.
 
@@ -108,6 +183,16 @@ def build(
     # Included after it, every view button would answer «экран устарел».
     dp.include_router(views.build_router())
 
+    # P7's photograph screen and P8's voice screen.  Both were written, both passed their
+    # gates, and NEITHER was reachable: no line here included them, so a photograph and a
+    # voice note matched no handler at all and the user watched nothing happen.  Their
+    # position in this list is load-bearing for the same reason P5's is -- included after
+    # the catch-all below, every button of theirs would answer «экран устарел»
+    # (``tests/photo/conftest.py`` moves its router here by hand for exactly that reason).
+    photo_router, = photo.build_routers()
+    dp.include_router(photo_router)
+    dp.include_router(voice.build_router())
+
     # LAST, and the order is load-bearing rather than tidy: this catch-all claims every
     # callback query no router above it matched.  Included any earlier it would swallow
     # the screens below it; left out entirely, a button from a message older than the
@@ -130,6 +215,24 @@ def build(
             "owner_tg_id": owner_tg_id,
         }
     )
+
+    # The two recognisers, from the environment.  They go in through the SAME door as
+    # everything above, because that door is the one aiogram resolves a handler's
+    # arguments from: ``vision`` is read as ``data.get("vision")`` by the photo screen,
+    # and ``transcriber`` / ``download`` / ``schema_extractor`` are declared by name in
+    # the signature of ``voice.on_voice``.  Missing, the first answers «не настроен» and
+    # the second raises before it says anything at all.
+    vision, vision_note = build_vision(environ)
+    dp.workflow_data["vision"] = vision
+    dp.workflow_data["vision_note"] = vision_note
+    dp.workflow_data.update(voice.voice_dependencies(catalogue, environ=environ))
+
+    # Logged rather than silent, and the reason is measured in ``infra/asr.py``: a fake
+    # recogniser that installs itself in silence answers every dictation with the same
+    # canned line and looks exactly like a working bot.  The same is true of a vision
+    # client that is ``None``.
+    log.info("%s", vision_note)
+    log.info("%s", dp.workflow_data["asr_note"])
 
     return dp
 
