@@ -157,6 +157,29 @@ run systemctl restart systemd-journald
 # says so.  A green install with a forgotten enable is exactly the state this proves is
 # absent.
 
+# ------------------------------------------------------------------ the token debt
+#
+# There is a standing decision of the owner (git-operaciya request 2026-09-02T1431) that
+# the bot token must be rotated BEFORE the repository or the bot becomes reachable by
+# anyone but him, and one of its three named trigger conditions is THE FIRST DEPLOY TO A
+# SERVER -- which is this script.  A live token is in the git history of this checkout.
+# The condition is checked here rather than remembered, because this is the moment it fires.
+
+say "token rotation debt"
+cat <<'DEBT'
+  🔴 OWNER'S DECISION 2026-09-02: rotate the bot token BEFORE the repository or the bot
+     becomes reachable by anyone but you.  A live @conduit179_bot token sits in this
+     checkout's git history, and "first deploy to a server" is one of the three conditions
+     that make the debt due.  Running this script on a server IS that condition.
+
+       1. @BotFather -> /revoke
+       2. put the new token ONLY in secrets/bot.env, never in a chat and never in git
+       3. re-run this script
+
+     While the checkout has no remote and lives only on your machine, the debt sleeps.
+     Check with:  git remote | wc -l    (0 means it is still asleep)
+DEBT
+
 say "proving the install"
 if [ "$DRY_RUN" = 1 ]; then
   echo "  would run: python3 $CHECKOUT/ops/proverka_ustanovki.py --zhivaya"
