@@ -19,6 +19,8 @@ THE TWO STATES, AND WHY THEY ARE THE RIGHT PAIR.
 
 from __future__ import annotations
 
+import pytest
+
 from core.models import CellState, MarkEvent
 from core.services.svodka import PRESENT, ABSENT
 
@@ -170,32 +172,156 @@ def test_an_imported_mark_is_not_this_evening(svodka, notify_world, mark_at):
     )
 
 
-def test_a_struck_mark_is_not_work(svodka, notify_world, mark_at):
-    """An ``erratum`` says the record should never have existed.
+def test_a_struck_mark_still_proves_the_teacher_was_here(svodka, notify_world, mark_at):
+    """The two folds ask DIFFERENT questions, and this is the case that separates them.
 
-    Leaving the struck row standing would let a mistyped button answer for a teacher who
-    in fact wrote nothing -- and it is the same rule ``handed_in`` obeys, so the two halves
-    of one lesson cannot disagree about what happened at it.  ``CellState.EMPTY`` is the
-    target that writes an ``erratum`` (``core/services/marking.EVENT_FOR_TARGET``), which
-    is how a teacher un-does a wrong button in production.
+    ``handed_in`` asks what still stands, so a row struck by an ``erratum`` is not the
+    student's work.  ``teachers_without_marks`` asks whether the person was in the room,
+    and somebody who tapped a button and then corrected himself demonstrably was -- asking
+    him "were you at the lesson?" is the reproach section 2 exists to prevent.
+
+    The first draft applied one rule to both and asked him anyway; the after-type verifier
+    of this position named it (finding 6).  ``CellState.EMPTY`` is the target that writes
+    an ``erratum`` (``core/services/marking.EVENT_FOR_TARGET``), which is how a teacher
+    un-does a wrong button in production.
     """
     day = "2026-09-10"
     session_id = notify_world.session_ids[day]
     teacher_id = notify_world.teacher_ids[0]
+    student_id = notify_world.student_ids[0]
 
-    mark_at(
-        notify_world.student_ids[0], notify_world.problem_ids[0], day,
-        teacher_id=teacher_id,
-    )
-    assert teacher_id not in {t.id for t in svodka.teachers_without_marks(session_id)}
-
+    mark_at(student_id, notify_world.problem_ids[0], day, teacher_id=teacher_id)
     outcome = mark_at(
-        notify_world.student_ids[0], notify_world.problem_ids[0], day,
+        student_id, notify_world.problem_ids[0], day,
         teacher_id=teacher_id, state=CellState.EMPTY,
     )
     assert outcome.written and outcome.mark.event is MarkEvent.ERRATUM, (
-        "the fixture did not actually write an erratum; the test below would pass vacuously"
+        "the fixture did not actually write an erratum; the assertions below would be vacuous"
     )
-    assert teacher_id in {t.id for t in svodka.teachers_without_marks(session_id)}, (
-        "a mark struck by an erratum still answered for the teacher"
+
+    # He was here: he is not asked.
+    assert teacher_id not in {t.id for t in svodka.teachers_without_marks(session_id)}
+    # The child's work did not survive: it is not in the hand-in list.
+    work = svodka.handed_in(session_id)
+    assert work.handed_in == 0, (
+        "a mark struck by an erratum was counted as the student's work"
     )
+
+
+def test_one_problem_touched_twice_is_still_one_problem(svodka, notify_world, mark_at):
+    """A cell handed in and not defended is ONE hand-in, not two.
+
+    Counting journal ROWS reported «— 2» for a student who handed in a single problem and
+    failed to defend it, indistinguishable from a student who handed in two different ones.
+    Found by the after-type verifier of this position, finding 4.
+    """
+    day = "2026-09-10"
+    session_id = notify_world.session_ids[day]
+    student_id = notify_world.student_ids[0]
+
+    mark_at(student_id, notify_world.problem_ids[0], day,
+            teacher_id=notify_world.teacher_ids[0])
+    mark_at(student_id, notify_world.problem_ids[0], day,
+            teacher_id=notify_world.teacher_ids[0], state=CellState.RETRACTED)
+    mark_at(student_id, notify_world.problem_ids[0], day,
+            teacher_id=notify_world.teacher_ids[0])
+
+    work = svodka.handed_in(session_id)
+    assert [row.count for row in work.students] == [1], (
+        "one problem touched three times was counted as %r" % [r.count for r in work.students]
+    )
+
+
+def test_a_departed_student_does_not_break_the_coverage_line(
+    svodka, notify_world, mark_at, connection
+):
+    """Numerator and denominator come from ONE population.
+
+    A student marked ``left`` after an evening he attended made the summary print «всего
+    сдавали 8 из 1» -- listed in the numerator, absent from the denominator.  A coverage
+    line that is arithmetically impossible is worse than no coverage line, because the
+    whole module stakes its honesty on those numbers.  Found by the verifier, finding 5.
+    """
+    day = "2026-09-10"
+    session_id = notify_world.session_ids[day]
+    for index, student_id in enumerate(notify_world.student_ids):
+        mark_at(student_id, notify_world.problem_ids[index % 4], day,
+                teacher_id=notify_world.teacher_ids[0])
+
+    connection.execute(
+        "update students set status = 'left' where id in (?, ?)",
+        (notify_world.student_ids[0], notify_world.student_ids[1]),
+    )
+    connection.commit()
+
+    work = svodka.handed_in(session_id)
+    assert work.handed_in <= work.considered, (
+        "«всего сдавали %d из %d» is arithmetically impossible"
+        % (work.handed_in, work.considered)
+    )
+    assert work.considered == len(notify_world.student_ids) - 2
+
+
+def test_two_lessons_on_one_day_are_refused_rather_than_sent_twice(
+    svodka, notify_world, mark_at, connection
+):
+    """The one case the sent-log CANNOT see, refused loudly instead of sent twice.
+
+    Marks are attributed by day while ``session_id`` is NULL; the claim is keyed on the
+    session.  Two lessons on one date therefore read the same rows, build identical
+    summaries and BOTH claim successfully -- the evening goes out twice to everybody and no
+    unique index can notice, because the two keys disagree about what one lesson is.
+    Found by the after-type verifier of this position, finding 1; nothing available inside
+    this position can decide which lesson a session-less mark belonged to, so it stops.
+    """
+    from core.services.svodka import AmbiguousLesson
+
+    day = "2026-09-10"
+    connection.execute("insert into sessions (held_on, kind) values (?, 'обычное')", (day,))
+    connection.commit()
+    mark_at(notify_world.student_ids[0], notify_world.problem_ids[0], day,
+            teacher_id=notify_world.teacher_ids[0])
+
+    with pytest.raises(AmbiguousLesson):
+        svodka.plan(notify_world.session_ids[day])
+
+
+def test_only_the_teachers_of_that_day_are_asked(
+    svodka, notify_world, roster_connection, connection
+):
+    """A Monday teacher is not asked about a Thursday lesson.
+
+    Without the roll the question went to EVERY row of the ``teachers`` table -- sixteen
+    people out of eighteen, twice a week -- which turns a question about a fact into a nag
+    by sheer volume.  Found by the after-type verifier of this position, finding 2.
+
+    2026-09-10 is a Thursday (ISO weekday 4) and 2026-09-07 a Monday (1); the fixture puts
+    the first three teachers on Monday and the last three on Thursday.
+    """
+    for index, teacher_id in enumerate(notify_world.teacher_ids):
+        connection.execute(
+            "insert into enrollment (student_id, teacher_id, room, weekday, valid_from) "
+            "values (?, ?, ?, ?, ?)",
+            (notify_world.student_ids[index], teacher_id, "203",
+             1 if index < 3 else 4, "2026-09-01"),
+        )
+    connection.commit()
+
+    monday = svodka.teachers_without_marks(notify_world.session_ids["2026-09-07"])
+    thursday = svodka.teachers_without_marks(notify_world.session_ids["2026-09-10"])
+    assert [t.id for t in monday] == notify_world.teacher_ids[:3]
+    assert [t.id for t in thursday] == notify_world.teacher_ids[3:]
+
+
+def test_an_empty_roll_asks_everybody_rather_than_nobody(svodka, notify_world):
+    """An unpopulated ``enrollment`` must not silence the question entirely.
+
+    That is the real state at the start of a year, and narrowing to an empty roll would
+    mean nobody is ever asked while the run reports success -- a feature that looks broken
+    and reports green.  The fallback is wider, not narrower, and the plan says which branch
+    it took.
+    """
+    session_id = notify_world.session_ids["2026-09-10"]
+    plan = svodka.plan(session_id)
+    assert plan.roll_known is False
+    assert len(plan.questions) == len(notify_world.teacher_ids)

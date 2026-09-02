@@ -55,6 +55,7 @@ from infra.uvedomlenia_repo import (
     SqliteNotifiableTeachers,
     SqliteSentLog,
     SqliteTeacherAttendance,
+    SqliteWorkingTeachers,
 )
 
 #: How many teachers the world holds.  The готовности criterion counts twelve checks over
@@ -236,6 +237,10 @@ def svodka(
         sent_log=sent_log,
         teacher_attendance=teacher_presence,
         clock=clock,
+        # Who actually teaches on the lesson day.  Empty in most tests -- the fixture does
+        # not populate ``enrollment`` -- so the service falls back to the whole teacher
+        # list, which is the behaviour the twelve checks are counted over.
+        roll=SqliteWorkingTeachers(connection),
     )
 
 

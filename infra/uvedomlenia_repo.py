@@ -34,7 +34,7 @@ import sqlite3
 from typing import Optional
 
 from core.models import Teacher
-from core.services.svodka import SentRecord, TeacherPresence
+from core.services.svodka import SentRecord, StoreRefused, TeacherPresence
 
 _TEACHER_COLUMNS = "id, tg_id, name, aka, is_owner"
 
@@ -123,13 +123,25 @@ class SqliteTeacherAttendance:
         row he corrects is his own.  The unique key makes that an UPDATE rather than a
         second row.
         """
-        self._connection.execute(
-            "insert into teacher_attendance "
-            "(session_id, teacher_id, status, answered_at) values (?, ?, ?, ?) "
-            "on conflict (session_id, teacher_id) do update set "
-            "status = excluded.status, answered_at = excluded.answered_at",
-            (session_id, teacher_id, status, answered_at),
-        )
+        try:
+            self._connection.execute(
+                "insert into teacher_attendance "
+                "(session_id, teacher_id, status, answered_at) values (?, ?, ?, ?) "
+                "on conflict (session_id, teacher_id) do update set "
+                "status = excluded.status, answered_at = excluded.answered_at",
+                (session_id, teacher_id, status, answered_at),
+            )
+        except sqlite3.IntegrityError as error:
+            # The foreign key is the carrier and it must stay the carrier -- but the
+            # EXCEPTION must not travel.  ``core/`` says of itself that it does not know
+            # sqlite3, and a raw ``IntegrityError`` reaching the router means the callback
+            # handler crashes on a teacher binding that points at a removed row, instead of
+            # answering the person who tapped.  Translated here, where sqlite3 belongs.
+            # Found by the after-type verifier of this position, finding 9.
+            raise StoreRefused(
+                "the store refused attendance for teacher %s at lesson %s: %s"
+                % (teacher_id, session_id, error)
+            ) from error
         return TeacherPresence(
             session_id=session_id,
             teacher_id=teacher_id,
@@ -150,6 +162,51 @@ class SqliteTeacherAttendance:
                 "select session_id, teacher_id, status, answered_at "
                 "from teacher_attendance where session_id = ? order by teacher_id",
                 (session_id,),
+            )
+        ]
+
+
+class SqliteWorkingTeachers:
+    """Which teachers actually teach on a given lesson day, out of ``enrollment``.
+
+    WHY THIS EXISTS, IN ONE MEASUREMENT.  Without it the after-lesson question goes to
+    EVERY row of the ``teachers`` table: eighteen teachers, two of whom marked, sixteen
+    asked "were you at the lesson?" twice a week -- including people who do not teach that
+    weekday at all and people who have never been in the conduit.  A question about a fact
+    turns into a nag by sheer volume, which is the one thing section 2 of the задание is
+    about.  Found by the after-type verifier of this position, finding 2.
+
+    ``enrollment`` is a Type 2 slowly-changing dimension keyed PER LESSON DAY: a teacher is
+    bound to a group for a weekday over the half-open interval ``[valid_from, valid_to)``.
+    So "who teaches on Thursday the 10th" is the set of teacher ids with an interval
+    covering that date on that weekday, and a Monday teacher is correctly not asked about a
+    Thursday lesson.
+
+    Read-only, and an adapter of its own rather than a method on ``infra/enrollment_repo.py``:
+    that file belongs to another position, and ``infra/room_repo.py`` states the rule this
+    follows -- reading somebody's table through an adapter of one's own is the layering this
+    project uses; editing their file mid-wave is the one thing a wave cannot do.
+    """
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def on_day(self, day: str, weekday: int) -> list:
+        """Teacher ids teaching on ``day`` (``YYYY-MM-DD``, ISO weekday ``weekday``).
+
+        An EMPTY answer is meaningful and the caller must handle it rather than treat it as
+        "ask nobody": before P2's importer has populated ``enrollment`` -- the real state at
+        the start of a year -- nobody would ever be asked anything, and the feature would
+        look broken while reporting success.  The caller's fallback is named in
+        ``SvodkaService.teachers_without_marks`` and reported as coverage.
+        """
+        return [
+            row["teacher_id"]
+            for row in self._connection.execute(
+                "select distinct teacher_id from enrollment "
+                "where weekday = ? and valid_from <= ? and ? < valid_to "
+                "order by teacher_id",
+                (weekday, day, day),
             )
         ]
 
