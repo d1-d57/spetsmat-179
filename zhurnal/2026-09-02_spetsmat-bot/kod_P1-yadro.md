@@ -373,6 +373,74 @@ grep -rn 'aiogram' core/ ; echo "rc=$? (1 = ни одного вхождения
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Toolchain measured first (rc printed before conclusions).** System `python3` is 3.9.6 with
+no `pytest` and no `yoyo`; `python3.13 -m venv` is broken on this machine (`ensurepip` exits 1,
+the produced interpreter cannot import `encodings`); `python3.12 -m venv` works and
+`pip install pytest yoyo-migrations` succeeds (network probe to pypi.org → 200).
+Therefore `make check` builds a local `.venv` from `python3.12` (already covered by the
+repository `.gitignore`, which I do not touch — it is outside my zone). `sqlite_version` 3.53.1
+under 3.12, so `STRICT` (needs 3.37+) is available.
+
+**Checked before committing to plain SQL under yoyo:** yoyo reads `.sql` migrations through
+`sqlparse.split`, which keeps `create trigger ... begin ... end;` as ONE statement (verified
+empirically: a file with two triggers split into 4 statements, not 8). So the append-only
+triggers can live in `migrations/001_init.sql` as plain SQL. This was the one real risk of the
+"plain SQL under yoyo" instruction and it is closed.
+
+**Assumption I state instead of guessing: enum VALUES stay Cyrillic, everything else is English.**
+The English rule covers files I write. But `problems.kind` (`обязательная` / `обычная` / `звезда`
+/ `двойная`), `sessions.kind` (`обычное`), `marks.source` (`кнопка` / `фото` / `голос` / `импорт`)
+and `attendance.status` (`был` / `не был`) are DATA values fixed by the base schema and already
+present in `seed/sheets.json`; renaming them would silently break P2's import. They are "fixed
+addresses" in the sense of the rule. The three event kinds are new and named in English by the
+задание itself: `assert` / `retract` / `erratum`. All prose, comments, identifiers, commit
+messages and this report are English.
+
+**Semantic fork written down, as ordered (§4 test 4).** State of a cell is the LAST event for
+(student, problem):
+  - no events        → `EMPTY`      — not credited, IS a debt if the problem is obligatory
+  - `assert`         → `SOLVED`     — credited, counts in statistics
+  - `retract`        → `RETRACTED`  — NOT credited, NOT a debt (it was handed in), counts in
+                                      statistics as "handed in, not credited"
+  - `erratum`        → `EMPTY`      — struck out of statistics entirely, as if it never was
+Reversal returns the cell to EMPTY/RETRACTED, never to "what was there before" — the projection
+never looks past the last event. This is the fork the задание names; it goes in a comment in
+`core/services/progress.py` and in the migration.
+
+**`GRAVEYARD_THRESHOLD` reading I commit to:** "taken by" = number of distinct students whose
+cell is `SOLVED`. `RETRACTED` is not "taken". P2 verifies this against the real conduit.
+
+### Order of work — five parts, each committed separately
+
+1. **`config.py` + `pyproject.toml`.** Every constant in one known file: the five named by the
+   задание plus the enumerations (`PROBLEM_KINDS`, `OBLIGATORY_KINDS`, `MARK_EVENTS`,
+   `MARK_SOURCES`, `SESSION_KINDS`, `STUDENT_STATUSES`, `ATTENDANCE_STATUSES`) and
+   `OPEN_END_DATE = "9999-12-31"`. `pyproject.toml` carries the pytest config only.
+2. **`migrations/001_init.sql`.** Base schema taken literally from
+   `zhurnal/2026-09-02_spetsmat-bot/спецмат-бот-архитектура.md` § «Схема», plus the four
+   additions: (a) `valid_at` / `recorded_at`; (b) `event` in (`assert`,`retract`,`erratum`) with
+   `reverses_id`; (c) `enrollment` as SCD Type 2 with `weekday` in the key, half-open intervals
+   and `9999-12-31` instead of NULL, guarded by a partial unique index on the open row plus an
+   overlap trigger; (d) append-only enforced by `before update` / `before delete` triggers on
+   `marks`. Everything `STRICT`, `CHECK` on every enumeration, `unique` on the idempotency key.
+3. **`core/` + `infra/`.** `models.py`, `ports.py` (Protocols), `services/marking.py` (target
+   state as an argument, never a toggle), `services/progress.py` (grid, debts, graveyard),
+   `infra/db.py` (connection, PRAGMA, yoyo runner), `infra/repositories.py` (SQLite adapters
+   behind the ports). Not one line of aiogram in `core/`.
+4. **`tests/`.** The five named tests plus the carriers around them; ≥ 12 tests.
+   `tests/test_differential.py` accumulates comparisons over ~30 random scenarios on a small
+   world (5 students × 4 problems = 20 cells) so that ≥ 200 student×problem pairs are compared,
+   and prints the coverage as a number.
+5. **`Makefile`** with the single `make check`.
+
+### Where I think the готовности criterion is right, and the one place it needs reading
+The criterion is sound and can fail. One note, raised here BEFORE the work as required: the
+differential test's "не менее 200 пар" cannot come from a single world of 5×4 = 20 cells; the
+задание asks for both a SMALL world and ≥ 200 pairs, and the only consistent reading is that
+comparisons ACCUMULATE across repeated randomised scenarios over that small world. That is what I
+build, and the printed number is the accumulated count with its denominator
+("compared N of N pairs, 0 mismatches"). I am not widening the world to reach 200.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

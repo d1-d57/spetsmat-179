@@ -36,7 +36,7 @@ KOREN="$HOME/Documents/GitHub/spetsmat-bot"
 ARKA="$KOREN/zhurnal/2026-09-02_spetsmat-bot"
 
 PERIOD_SEK=300
-MERTVA_MIN=45           # сердце молчит столько — голова считается умершей
+MERTVA_MIN=90           # сердце молчит столько — голова считается умершей
 PODYOMOV_MAX=2          # больше — петля, нужен человек
 
 PULS="$ARKA/PULS-CHASOVOGO-sborka-bota.log"
