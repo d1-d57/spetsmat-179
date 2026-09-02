@@ -31,15 +31,12 @@ import dependency_scan as scanner  # noqa: E402
 #: trigger -> (who claims it, in resolution order · what the fix is).  Every entry is a
 #: LIVE DEFECT, not an exemption: the second claimant of each is unreachable right now.
 KNOWN = {
-    "callback:vy": (
-        "bot.routers.views.open_year_callback (ViewYear, bot/keyboards/views.py) "
-        "shadows bot.routers.voice.confirm (VoiceConfirm, bot/routers/voice.py:119) -- "
-        "VoiceConfirm().pack() == ViewYear(student_id=1).pack() == 'vy:1' byte for byte, "
-        "so «Записать» on a dictation reaches views-student, whose require_role refuses a "
-        "teacher: a voice draft cannot be written to the journal by anyone. "
-        "FIX: one word -- give VoiceConfirm a prefix of its own (e.g. prefix='vgo'). "
-        "Include order cannot fix it: whichever router goes first, the other screen dies."
-    ),
+    # 🔴 «callback:vy» СНЯТ ОТСЮДА 02.09 19:4x, ПОТОМУ ЧТО ПОЧИНЕН, а не потому что
+    # надоел: VoiceConfirm получил собственный префикс «vgo», и теперь столкновение
+    # стережёт tests/klyuchi/test_callback_prefixes.py — он перебирает ВСЕ 30 классов
+    # CallbackData и краснеет на любом совпадении pack(), а не только на этом одном.
+    # Прежний порядок был обратный и потому бесполезен: дефект стоял в этом реестре
+    # как «известный», гейт его ПЕЧАТАЛ и давал 6 passed — заявка 2026-09-02T1802.
     "text:/me": (
         "bot.handlers.student.show_me shadows bot.handlers.teacher.show_me -- the student "
         "router is included first and claims /me for everybody, then refuses a teacher by "

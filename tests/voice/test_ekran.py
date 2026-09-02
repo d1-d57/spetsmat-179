@@ -14,6 +14,9 @@ import hashlib
 import pytest
 
 from core.models import CellState
+from bot.routers.voice import VoiceConfirm  # 🔴 КЛАСС, А НЕ СТРОКА: литерал «vy:1»
+# пережил бы смену префикса молча — тест остался бы зелёным, проверяя нажатие,
+# которого экран больше не получает. Замер 02.09: таких литералов было восемь.
 from core.services.golos import normalise_label
 from tests.voice.conftest import feed_callback, feed_voice
 
@@ -117,7 +120,7 @@ def test_confirming_writes_through_the_marking_service_with_source_golos(
             "Кахиани %s" % label)
 
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
-                  data="vy:1", update_id=2)
+                  data=VoiceConfirm().pack(), update_id=2)
 
     journal = voice_dispatcher.workflow_data["marking"]._journal  # noqa: SLF001
     events = journal.events()
@@ -137,7 +140,7 @@ def test_the_idempotency_key_is_the_recording_plus_the_cell(
     file_id = dictate(voice_dispatcher, bot_instance, teacher_tg_id, transcript_script,
                       "Кахиани %s" % label)
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
-                  data="vy:1", update_id=2)
+                  data=VoiceConfirm().pack(), update_id=2)
 
     digest = hashlib.sha256(file_id.encode("utf-8")).hexdigest()
     journal = voice_dispatcher.workflow_data["marking"]._journal  # noqa: SLF001
@@ -160,7 +163,7 @@ def test_the_same_recording_sent_twice_writes_one_event(
         feed_voice(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
                    file_id="same-audio", update_id=update_id)
         feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
-                      data="vy:1", update_id=update_id + 1,
+                      data=VoiceConfirm().pack(), update_id=update_id + 1,
                       query_id="cb-%d" % update_id)
 
     journal = voice_dispatcher.workflow_data["marking"]._journal  # noqa: SLF001
@@ -198,7 +201,7 @@ def test_untapping_a_cell_keeps_it_out_of_the_journal(
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
                   data="vc:0:0", update_id=2)
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
-                  data="vy:1", update_id=3)
+                  data=VoiceConfirm().pack(), update_id=3)
 
     journal = voice_dispatcher.workflow_data["marking"]._journal  # noqa: SLF001
     written = [event.problem_id for event in journal.events()]
@@ -217,7 +220,7 @@ def test_an_unresolved_row_offers_buttons_and_writes_nothing_until_one_is_tapped
     assert "кто это?" in "\n".join(recorder.texts())
 
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
-                  data="vy:1", update_id=2)
+                  data=VoiceConfirm().pack(), update_id=2)
     journal = voice_dispatcher.workflow_data["marking"]._journal  # noqa: SLF001
     assert journal.events() == [], "an unresolved row reached the journal"
 
@@ -242,7 +245,7 @@ def test_tapping_an_offered_candidate_resolves_the_row_and_then_it_writes(
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
                   data=offered[0], update_id=2)
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
-                  data="vy:1", update_id=3)
+                  data=VoiceConfirm().pack(), update_id=3)
 
     journal = voice_dispatcher.workflow_data["marking"]._journal  # noqa: SLF001
     assert len(journal.events()) == 1
@@ -265,7 +268,7 @@ def test_a_candidate_the_row_did_not_offer_is_refused(
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
                   data="vp:0:%d" % outsider, update_id=2)
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
-                  data="vy:1", update_id=3)
+                  data=VoiceConfirm().pack(), update_id=3)
 
     journal = voice_dispatcher.workflow_data["marking"]._journal  # noqa: SLF001
     assert journal.events() == []
@@ -321,7 +324,7 @@ def test_a_heard_label_that_matches_no_problem_is_shown_and_cannot_be_ticked(
     assert any("такой задачи нет" in alert for alert in recorder.alerts())
 
     feed_callback(voice_dispatcher, bot=bot_instance, from_id=teacher_tg_id,
-                  data="vy:1", update_id=3)
+                  data=VoiceConfirm().pack(), update_id=3)
     journal = voice_dispatcher.workflow_data["marking"]._journal  # noqa: SLF001
     assert journal.events() == []
 
@@ -373,7 +376,7 @@ def test_the_source_this_screen_writes_is_one_the_schema_accepts():
     """A source outside ``config.MARK_SOURCES`` is refused by a CHECK constraint at the
     database, i.e. at the moment a real teacher confirms a real dictation."""
     import config
-    from bot.routers.voice import SOURCE
+    from bot.routers.voice import VoiceConfirm, SOURCE
 
     assert SOURCE in config.MARK_SOURCES
 

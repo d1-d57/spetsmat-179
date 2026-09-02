@@ -121,7 +121,14 @@ class VoicePick(CallbackData, prefix="vp"):
     student_id: int
 
 
-class VoiceConfirm(CallbackData, prefix="vy"):
+# 🔴 ПРЕФИКС «vgo», А НЕ «vy»: «vy» ЗАНЯТ экраном года (bot/keyboards/views.py:108,
+# ViewYear). Замер 02.09 18:5x: VoiceConfirm().pack() и ViewYear(student_id=1).pack()
+# давали ПОБАЙТОВО одинаковое "vy:1", а views включён в bot/app.py раньше — значит
+# «Записать» под диктовкой уходило в экран УЧЕНИКА, чей require_role отказывает
+# преподавателю, и голосовой черновик не мог записать НИКТО. Порядком включения это
+# не лечится: кого ни поставь первым, второй экран умирает молча.
+# Гейт классов P20 этот дефект ПЕЧАТАЛ и давал 6 passed — заявка 2026-09-02T1802.
+class VoiceConfirm(CallbackData, prefix="vgo"):
     """«Записать» — the one button that reaches the journal.  ``vy:1``.
 
     The field is there so the payload CONTAINS THE SEPARATOR: the stale catch-all treats
