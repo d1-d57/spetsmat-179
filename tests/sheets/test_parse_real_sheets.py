@@ -9,7 +9,9 @@ mode they are here to catch.
 Counts held honest:
   * sheet ``1``  -- 23 problems, 12 obligatory;
   * sheet ``2д`` -- 32 problems (one duplicate repair);
-  * sheet ``4д`` -- 26 problems, every one graveyard-marked.
+  * sheet ``4д`` -- 26 problems, stored by the seed WITHOUT a header row and
+    WITHOUT the ``✘`` glyph (``grep -c '✘' seed/sheets.json`` is 0); the
+    graveyard path is covered synthetically, not by this sheet.
 """
 
 from __future__ import annotations
@@ -19,8 +21,10 @@ from pathlib import Path
 
 import pytest
 
+from core.services import sheets as parser
 from core.services.sheets import (
     ListokLine,
+    NotConfirmed,
     UnknownActorRole,
     UnknownLabelShape,
     confirm_and_write,
@@ -124,9 +128,17 @@ def test_4d_carries_graveyard_marks_as_meta():
             ListokLine(text="1✘", kind_hint="обычная"),
             ListokLine(text="2а✘", kind_hint="обычная"),
             ListokLine(text="2б✘", kind_hint="обычная"),
-            ListokLine(text="3✘", kind_hint="обязательная"),
+            # ``°`` is what makes this one obligatory -- the GLYPH, not the
+            # hint.  The hint agrees with it, which is now the only thing a
+            # hint is allowed to do.
+            ListokLine(text="3°✘", kind_hint="обязательная"),
         ],
-        has_header=False,
+        # ``4д`` HAS a header.  It used to be listed in ``NO_HEADER_SHEETS``
+        # and declared here without one; nobody noticed because the flag did
+        # nothing.  The задание's measured fact is that ``1д`` and ``2д``
+        # carry the 50 header-less problems between them -- 18 + 32 = 50 --
+        # and ``4д``'s 26 are not part of that number.
+        has_header=True,
     )
     assert len(draft.problems) == 4
     for problem in draft.problems:
@@ -137,9 +149,13 @@ def test_4d_carries_graveyard_marks_as_meta():
         assert problem.kind in ("обычная", "обязательная"), (
             "✘ не должен менять kind; получено %r" % problem.kind
         )
-    # The ✘ version of an obligatory problem stays obligatory; the hint
-    # wins, not the meta-mark.
+    # The ✘ version of an obligatory problem stays obligatory: ``°`` decides
+    # the kind and ``✘`` never touches it.
     assert draft.problems[3].kind == "обязательная"
+    assert draft.problems[3].label == "3°", (
+        "✘ снимается с хранимой метки, ° остаётся; получено %r"
+        % draft.problems[3].label
+    )
 
 
 def test_unknown_label_shape_raises():
@@ -179,7 +195,7 @@ def test_teacher_is_refused_at_confirm_gate(in_memory_writer):
 
     sheet_id, problem_ids = confirm_and_write(
         draft, actor_role="senior", writer=in_memory_writer,
-        issued_at="2026-09-02",
+        confirmed=True, issued_at="2026-09-02",
     )
     assert sheet_id == 1
     assert len(problem_ids) == 23
@@ -190,16 +206,155 @@ def test_teacher_is_refused_at_confirm_gate(in_memory_writer):
     with pytest.raises(UnknownActorRole):
         confirm_and_write(
             draft, actor_role="teacher", writer=in_memory_writer,
+            confirmed=True,
         )
 
     with pytest.raises(UnknownActorRole):
         confirm_and_write(
             draft, actor_role="unknown_role", writer=in_memory_writer,
+            confirmed=True,
         )
 
     # The refused attempts left no state behind.
     assert len(in_memory_writer.sheets) == 1
     assert len(in_memory_writer.problems) == 23
+
+
+def test_nothing_is_written_without_an_explicit_confirm(in_memory_writer):
+    """The senior's YES is a parameter that can be missing, not a convention.
+
+    Before this test the "no write without confirmation" rule was carried by
+    the NAME ``confirm_and_write`` and by nothing else -- the §3 verifier
+    pointed out that a rule which cannot go red is not a rule.  ``confirmed``
+    defaults to ``False``, so a caller who forgets it is REFUSED rather than
+    writing a whole listok nobody looked at.
+
+    A senior who is genuinely a senior is still refused without the YES: the
+    role and the confirmation are two independent gates, and this test proves
+    they are independent by passing the strongest possible role.
+    """
+    seed_sheet = next(s for s in _seed_sheets() if s["number"] == "1")
+    draft = parse_sheet(
+        number=seed_sheet["number"],
+        title=seed_sheet["title"],
+        ord=seed_sheet["ord"],
+        layout=seed_sheet.get("layout", "old"),
+        lines=_lines_for_seed_sheet(seed_sheet),
+        has_header=True,
+    )
+
+    with pytest.raises(NotConfirmed):
+        confirm_and_write(draft, actor_role="senior", writer=in_memory_writer)
+    with pytest.raises(NotConfirmed):
+        confirm_and_write(
+            draft, actor_role="senior", writer=in_memory_writer, confirmed=False,
+        )
+
+    assert in_memory_writer.sheets == [], "неподтверждённый черновик записал листок"
+    assert in_memory_writer.problems == [], "неподтверждённый черновик записал задачи"
+
+
+def test_only_literal_true_confirms(in_memory_writer):
+    """``confirmed`` is a bool, and truthy is not the same thing as ``True``.
+
+    The gate used to read ``if not confirmed``, so the strings ``"no"`` and
+    ``"false"``, the number ``-1``, a non-empty list and a bare ``object()``
+    all counted as a human saying yes -- the §3 verifier wrote nine listki
+    that way in a single probe.  A screen that forwards a form field or a JSON
+    value verbatim hands this gate a string, and the string ``"false"`` is
+    truthy.  This is the project's single most important rule; it does not get
+    to be decided by Python's truth table.
+    """
+    seed_sheet = next(s for s in _seed_sheets() if s["number"] == "1")
+    draft = parse_sheet(
+        number=seed_sheet["number"],
+        title=seed_sheet["title"],
+        ord=seed_sheet["ord"],
+        layout=seed_sheet.get("layout", "old"),
+        lines=_lines_for_seed_sheet(seed_sheet),
+        has_header=True,
+    )
+
+    for truthy in ("yes", "no", "false", "False", -1, 0.1, [0], {"a": 1}, object(), 1):
+        with pytest.raises(NotConfirmed):
+            confirm_and_write(
+                draft, actor_role="senior", writer=in_memory_writer,
+                confirmed=truthy,
+            )
+    assert in_memory_writer.sheets == [], (
+        "нечто похожее на True записало листок: %r" % (in_memory_writer.sheets,)
+    )
+    assert in_memory_writer.problems == []
+
+    # And the one value that IS the human's yes.
+    sheet_id, problem_ids = confirm_and_write(
+        draft, actor_role="senior", writer=in_memory_writer, confirmed=True,
+    )
+    assert sheet_id == 1 and len(problem_ids) == 23
+
+
+def test_a_parser_that_was_never_taught_refuses_everything():
+    """Never taught and taught-nothing-on-purpose are different states.
+
+    They used to be the same one, and both meant "accept whatever the grammar
+    lets through": a freshly imported module had ZERO strictness, and the
+    verifier got ``999999ж**`` back as ``двойная`` out of a parser that had
+    been taught nothing at all.  The loose mode is legitimate -- a caller who
+    does not know last year's data yet wants it -- but it has to be asked for
+    by name, not arrived at by doing nothing.
+    """
+    saved_registered = parser._SHAPES_REGISTERED
+    saved_base_re = parser._KNOWN_BASE_RE
+    try:
+        parser._SHAPES_REGISTERED = False
+        parser._KNOWN_BASE_RE = None
+        with pytest.raises(UnknownLabelShape) as info:
+            parse_sheet(
+                number="test", title="тест", ord=1, layout="old",
+                lines=[ListokLine(text="999999ж**")],
+            )
+        assert "register_known_label_shapes" in str(info.value), (
+            "отказ обязан сказать, ЧТО позвать; получено %s" % info.value
+        )
+
+        # Asked for by name: the grammar-only mode, and it accepts.
+        parser.register_known_label_shapes([])
+        draft = parse_sheet(
+            number="test", title="тест", ord=1, layout="old",
+            lines=[ListokLine(text="999999ж**")],
+        )
+        assert draft.problems[0].kind == "двойная"
+    finally:
+        parser._SHAPES_REGISTERED = saved_registered
+        parser._KNOWN_BASE_RE = saved_base_re
+
+
+def test_a_repair_landing_on_a_folded_label_still_names_what_she_typed():
+    """Two rewrites on one row must report the EARLIER one, not the later.
+
+    The Latin-``a`` fold happens first, the duplicate repair second, and
+    ``repaired_from`` used to be overwritten by the repair with the already
+    folded form -- reporting back a label the senior never wrote.  Not
+    reachable through the seed (sheet 7's ``2°a`` is not a duplicate);
+    reachable on a real listok, which is what this parser is for.
+    """
+    # The repair registry is keyed on the BASE -- number plus letter, with the
+    # infix ``°`` and the modifier run stripped -- so ``2°a`` is keyed ``2а``.
+    key = ("складка", "2а", 0)
+    parser.DUPLICATE_LABEL_REPAIRS[key] = "3"
+    try:
+        draft = parse_sheet(
+            number="складка", title="тест", ord=1, layout="old",
+            lines=[ListokLine(text="2°a")],
+        )
+    finally:
+        del parser.DUPLICATE_LABEL_REPAIRS[key]
+
+    assert draft.problems[0].label == "3"
+    assert draft.problems[0].repaired_from == "2°a", (
+        "названо %r — это форма ПОСЛЕ свёртки, старший писал '2°a'"
+        % draft.problems[0].repaired_from
+    )
 
 
 def test_duplicate_label_without_repair_raises():
@@ -251,33 +406,127 @@ def test_repaired_label_carries_the_original():
     assert repaired[0].label == "12г"
 
 
-def test_kind_hint_from_layout_wins_over_taught_list():
-    """If the column was headed ``°``, every line in that column is обязательная.
+def test_kind_hint_is_a_cross_check_and_disagreement_raises():
+    """The kind comes from the glyphs; the hint may only agree with them.
 
-    Layout carries meaning: the column-header glyph (``°`` or ``●``) tells
-    the senior which column is "obligatory", and the parser must respect
-    that even when the bare base would have given a different kind.  The
-    taught list (first occurrence in the seed) is the LAST fallback: when
-    the senior did not mark a kind_hint, the parser trusts the seed.
+    This test replaces one that asserted the opposite -- that a ``kind_hint``
+    from the layout OUTRANKED the taught list, and so decided the kind for
+    every label with no kind-bearing glyph.  The §3 verifier showed what that
+    precedence bought: the reconciliation fed the seed's own ``kind`` column
+    back in as the hint, and 288 of the seed's 544 rows carry no glyph, so on
+    those rows the assertion compared the answer with itself.  Strip the hint
+    and the parser was wrong on 178 of 544 rows.
+
+    The law that replaced it is a MEASUREMENT over the whole oracle, not a
+    preference: across all 544 rows the modifier run fixes the kind with zero
+    ambiguity.  So the parser reads the glyphs, and a hint that disagrees with
+    them is an ambiguity it refuses out loud instead of resolving behind the
+    senior's back.
     """
-    # Same base, different kind_hints: hint wins for one row, taught list
-    # wins for the other.  Both end up обязательная here because the seed's
-    # first occurrence of ``1б`` was an obligatory one; the test asserts
-    # the precedence of explicit modifiers over the hint and the taught list.
     draft = parse_sheet(
         number="test",
         title="тест",
         ord=1,
         layout="old",
         lines=[
-            ListokLine(text="1а", kind_hint="обычная"),  # hint wins: обычная
-            ListokLine(text="1а°", kind_hint="обычная"),  # modifier wins: обязательная
-            ListokLine(text="1б", kind_hint=""),  # taught list wins: обязательная
+            ListokLine(text="1а", kind_hint="обычная"),  # agrees
+            ListokLine(text="1а°", kind_hint="обязательная"),  # agrees
+            ListokLine(text="1б", kind_hint=""),  # no hint at all
         ],
     )
     assert draft.problems[0].kind == "обычная"
     assert draft.problems[1].kind == "обязательная"
-    assert draft.problems[2].kind == "обязательная"
+    # No glyph, no hint: обычная.  The taught list no longer votes on kind --
+    # ``1б`` appears in the seed only as ``1б°``, and a bare ``1б`` really is
+    # an ordinary problem.
+    assert draft.problems[2].kind == "обычная"
+
+    # A hint that contradicts the glyph is refused, in both directions.
+    with pytest.raises(UnknownLabelShape) as info:
+        parse_sheet(
+            number="test", title="тест", ord=1, layout="old",
+            lines=[ListokLine(text="1а°", kind_hint="обычная")],
+        )
+    assert "1а°" in str(info.value)
+
+    with pytest.raises(UnknownLabelShape):
+        parse_sheet(
+            number="test", title="тест", ord=1, layout="old",
+            lines=[ListokLine(text="1а", kind_hint="звезда")],
+        )
+
+
+def test_taught_list_is_not_switched_off_by_a_modifier():
+    """An untaught base raises even when it carries a glyph or a hint.
+
+    The strictness gate used to stand down whenever the label bore any
+    modifier or the caller passed any hint, which is to say on nearly every
+    real line.  The verifier walked in with ``99*``, ``777°`` and
+    ``12345ж**`` and the parser -- taught only last year's 136 bases --
+    accepted all three.  A gate ordinary input switches off is not a gate.
+    """
+    for text, hint in (
+        ("999", ""),
+        ("999*", ""),
+        ("999°", ""),
+        ("999ж**", ""),
+        ("999", "обычная"),
+    ):
+        with pytest.raises(UnknownLabelShape) as info:
+            parse_sheet(
+                number="test", title="тест", ord=1, layout="old",
+                lines=[ListokLine(text=text, kind_hint=hint)],
+            )
+        assert "999" in str(info.value), (
+            "отказ обязан назвать метку %r; получено %s" % (text, info.value)
+        )
+
+
+def test_a_blank_cell_costs_no_ordinal():
+    """``ord`` counts problems, not spreadsheet rows.
+
+    A listok with a blank cell in the middle used to come out numbered
+    1, 3, 4 -- the parser took ``ord`` from the line index and the skipped
+    row kept its number.  The seed hides this (every seed label is
+    non-empty); a real listok, which is what this parser is for, does not.
+    """
+    draft = parse_sheet(
+        number="test",
+        title="тест",
+        ord=1,
+        layout="old",
+        lines=[
+            ListokLine(text="1", kind_hint=""),
+            ListokLine(text="   ", kind_hint=""),
+            ListokLine(text="2а", kind_hint=""),
+        ],
+    )
+    assert [(p.label, p.ord) for p in draft.problems] == [("1", 1), ("2а", 2)]
+
+
+def test_the_latin_a_fold_is_reported_not_silent():
+    """Sheet 7 carries ``2°a`` with a LATIN ``a``; the fold must be visible.
+
+    The module promised in its own docstring that the fold is reported
+    through ``repaired_from``; it was not, and the §3 verifier found the row
+    by feeding all 544 seed rows through the parser -- ``2°a`` came back as
+    ``2°а`` with ``repaired_from=''``.  A rewrite the caller is never told
+    about is a silent rewrite, whatever the docstring says.
+    """
+    draft = parse_sheet(
+        number="test",
+        title="тест",
+        ord=1,
+        layout="old",
+        lines=[ListokLine(text="2°a", kind_hint="обязательная")],
+    )
+    problem = draft.problems[0]
+    assert problem.label == "2°а", "латинская a должна свернуться в русскую"
+    assert problem.repaired_from == "2°a", (
+        "свёртка обязана быть названа в repaired_from; получено %r"
+        % problem.repaired_from
+    )
+    assert problem.kind == "обязательная"
 
 
 def test_no_header_sheet_refused_unless_listed(in_memory_writer):
@@ -296,6 +545,19 @@ def test_no_header_sheet_refused_unless_listed(in_memory_writer):
             layout="old",
             lines=[ListokLine(text="1", kind_hint="")],
             has_header=False,
+        )
+
+    # And the other direction, which used not to be checked at all: a listok
+    # this module KNOWS is header-less, declared with a header.  One of the
+    # two sides is wrong and the parser refuses to pick which.
+    with pytest.raises(ValueError):
+        parse_sheet(
+            number="1д",  # in NO_HEADER_SHEETS
+            title="тест",
+            ord=1,
+            layout="old",
+            lines=[ListokLine(text="1", kind_hint="")],
+            has_header=True,
         )
 
 
