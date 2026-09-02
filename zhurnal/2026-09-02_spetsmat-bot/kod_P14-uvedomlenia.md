@@ -324,6 +324,61 @@ grep -c 'spiski\|progress' core/services/svodka.py   # проекции пере
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Entry state, checked first move, not assumed.** The worktree branch `zahod/P14-uvedomlenia`
+stood 80 commits BEHIND `main` and 0 ahead: it was budded before P5, P6, P7, P8, P10, P13 and
+P17 were merged, so `core/services/spiski.py` and `core/services/sessions.py` — the two anchors
+this position is told to read — did not exist on disk at all. Fast-forwarded to `main`
+(`merge --ff-only`, rc=0, a073ee6 → 774b51d) before touching anything. Baseline after that:
+`make check` → **645 passed**, rc=0. This is the number the готовности criterion must beat.
+
+**Three facts measured in the anchors that shape every decision below.**
+
+1. `marks.session_id` IS NULL ON EVERY ROW PRODUCTION WRITES. `grep -rn session_id bot/` comes
+   back empty — nothing under `bot/` passes a session to `MarkingService`. So "кто сколько сдал
+   за это занятие" CANNOT be keyed on `session_id`: it would report zero hand-ins forever. It is
+   keyed on the lesson's `held_on` against `Mark.valid_at[:10]`, which is the rule
+   `core/services/spiski.py` already derives lesson days by, with `session_id` honoured when a
+   row does carry one. Both halves of P5's validity rule are reused verbatim: rows whose
+   `source` is the import are out, and an `erratum` together with the row it strikes is out.
+2. `attendance` IS PER STUDENT BY SCHEMA — `student_id integer not null references students(id)`,
+   `unique(session_id, student_id)`. A TEACHER's own presence has no row it can legally occupy,
+   so §2's «ответ уходит в явку» cannot land in P6's table without a foreign-key violation.
+   Teacher presence therefore gets a table of its own, carrying the SAME `config.ATTENDANCE_STATUSES`
+   values, so the two are one vocabulary. Named in `## ВОПРОСЫ` as a debt for whoever unifies them.
+3. THERE IS NO «SENT» TABLE ANYWHERE. §Идемпотентность needs one, and `migrations/` is read-only
+   for edits — but ADDING `002_uvedomlenia.sql` edits nothing, and `apply_migrations` picks it up
+   for every fixture and for `make check`. That is the honest home for a journal-database table
+   that must survive a restart, and it is preferred over the `create table if not exists` trick
+   `infra/roster_repo.py` uses, because that file says in its own docstring that its data "has no
+   historical value" — a sent-log's whole value IS historical.
+
+**Parts, in the order §1–§4 name them; each one its own commit.**
+
+- **Part 1 — the store (out of zone, declared).** `migrations/002_uvedomlenia.sql`:
+  `sent_notifications` keyed `unique(session_id, recipient_kind, recipient_id)` and
+  `teacher_attendance` keyed `unique(session_id, teacher_id)`. `infra/uvedomlenia_repo.py`: three
+  small adapters (sent-log, teacher attendance, the heads of the rooms read out of
+  `teacher_room_role`), a separate file for the reason `infra/room_repo.py` states in its own
+  docstring — reading another position's table through an adapter of one's own is this project's
+  layering; editing their file mid-wave is the one thing a wave cannot do.
+- **Part 2 — `core/services/svodka.py` (§1 and §3).** Ports and pure text. Nothing here imports
+  sqlite3 and nothing imports aiogram. `plan(session_id)` returns the notifications for one CLOSED
+  lesson — never a clock, never "is it 19:00 yet": the trigger is the lesson, per §1. Silence comes
+  from `SpiskiService.silent()`, the graveyard from `SpiskiService.graveyard()`; neither is
+  recomputed. `claim(...)` is the idempotency gate: insert-or-nothing, zero rows affected means
+  «уже слали, выходим».
+- **Part 3 — `bot/routers/uvedomlenia.py` (§2).** The two buttons and the callable P10 will
+  schedule. The router owns aiogram; the service owns the truth.
+- **Part 4 — `tests/svodka/` (the готовности criterion).** 6 teachers × 2 states = 12 checks,
+  a named idempotency test, and a sweep for every forbidden word of §4.
+- **Part 5 — `bot/app.py` (out of zone, declared, separate commit).** One `include_router` and one
+  `workflow_data` entry, by ADDITION as §5 requires.
+
+**The criterion is not disputed** — it can fail as written, and each of its four commands prints a
+number. One clarification recorded before the work rather than after: `grep -rniE "…" bot/ core/`
+returning rc=1 is the green case, and the pattern must not be defeated by the checker's own file —
+so no test of mine spells a forbidden word either, and the sweep runs over `bot/` and `core/` whole.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

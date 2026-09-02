@@ -320,6 +320,79 @@ grep -c "cp " tools/proverka_vosstanovlenia.py   # должно быть 0
 
 ## ПЛАН — (заполняет исполнитель)
 
+Read: `core/services/progress.py`, `core/models.py`, `core/ports.py`, `infra/db.py`,
+`infra/repositories.py`, `core/services/seeding.py`, `config.py`, `migrations/001_init.sql`,
+`Makefile`, `pyproject.toml`, `tests/conftest.py`, the value registry of
+`tools/import_konduit.py`. Nothing else of the project.
+
+Baseline measured before any edit: `make check` → rc=0, **148 passed**.
+
+### Part 1 — `tools/export_xlsx.py` (committed on its own)
+
+1. Open the database **read-only**: `sqlite3.connect("file:<path>?mode=ro", uri=True)`.
+   Read-only is not a promise in a comment, it is the URI: an accidental write raises
+   `attempt to write a readonly database` instead of landing in the file teachers are
+   marking into. No `journal_mode` pragma is set — setting it is itself a write; only
+   `busy_timeout` from `config.BUSY_TIMEOUT_MS` is, and that one is a reader pragma.
+2. Reuse the projection, do not re-derive it: `SqliteMarkJournal` + `SqliteCatalogue`
+   from `infra/repositories.py` under `ProgressService.states_for_many` — the same call
+   the bot's grids go through. The export must never be able to disagree with the screen.
+3. One sheet per листок (18), students down (56), problems across, in `ord` order.
+   Signs are the conduit's own alphabet, taken from `VALUE_REGISTRY` of the importer, not
+   invented here: `1` = credited, `x` = handed in and not credited (RETRACTED), empty
+   cell = nothing was written. That makes the export readable by the person who read the
+   paper tables and re-readable by the importer.
+4. `--proba` runs against a throwaway database the tool builds itself (migrations +
+   `seed/`) in a temp directory, because `data/` is gitignored and absent in every
+   worktree by construction. It prints `листов N, учеников M, клеток K`.
+5. Output path comes from `config.DB_PATH.parent` (`data/`, already gitignored), so the
+   workbook with 56 surnames cannot reach git. `--kuda` overrides.
+
+### Part 2 — `tools/proverka_vosstanovlenia.py` (committed on its own)
+
+6. Snapshot: `VACUUM INTO` a temp file, then gzip, into `backups/` (gitignored),
+   rotation 14 days. Never `cp`: `cp` takes the file mid-transaction and in WAL mode
+   loses the side files.
+7. Restore check — three assertions, all of them, every run, each printed WITH ITS VALUE:
+   (1) the snapshot gunzips and `pragma integrity_check` says `ok`; (2) students ≥ 50;
+   (3) the newest `marks.valid_at` is not older than seven days. Any red → rc≠0 and the
+   failing assertion is named.
+8. `--na-porchennom` is the position: it makes a whole snapshot, then applies four
+   named corruptions to copies of it — truncation, a flipped byte, an emptied students
+   table, a back-dated last mark — and every one MUST redden, naming which assertion
+   caught it. It prints `порч N, покраснело N` and returns rc≠0 by construction. A green
+   on a corrupted snapshot is a failure of this position, so the corruption run reports
+   `ПРОВАЛ · ЗЕЛЁНОЕ НА ПОРЧЕ` by name for any that survives.
+9. Back-dating has to drop the append-only trigger inside the corrupted copy first —
+   the schema refuses `update on marks`. That is the corruption doing its job, in a copy,
+   never on the live file.
+
+### Part 3 — `tests/export/` (committed on its own)
+
+10. Tests over both tools on a fixture database, including: the export cell agrees with
+    `ProgressService` cell by cell; the export cannot write to the database; the backup
+    is `VACUUM INTO` and the source file is byte-identical afterwards; each of the three
+    assertions goes red on its own corruption and green on the whole snapshot; rotation
+    drops what is older than fourteen days and keeps what is not.
+
+### Objections stated before the work, per §1
+
+- **`config.py` has no export or backup path constant** and the zone forbids editing it.
+  Both tools therefore carry one module-level constant each, derived from `config.ROOT`,
+  with the debt named in `## ОТЧЁТ` and in `## ВОПРОСЫ`. Nothing is scattered: one
+  constant, one file, one owner.
+- **The criterion `python3 tools/proverka_vosstanovlenia.py` → rc=0 assumes a live
+  database.** `data/` is gitignored, so no worktree has one and the command as written
+  could only ever be red here. The tool therefore falls back to a probe database it
+  builds from migrations + seed, and says so in a loud banner on every line of output —
+  it never reports a green about a live database it did not find.
+- **The verifier of §3 asks for "выкатить в час занятия — скрипт обязан отказать".**
+  There is no such script in this зона and there cannot be: §2.2 says the schedule and
+  the roll-out are P10's and forbids a unit, a timer or a cron line, and §0.1 says
+  "деплоя в этом заходе нет". A backup is a read and must NOT refuse during lesson hours
+  — refusing would mean no backup on the days the data actually changes. The verifier
+  is therefore run on the corruption axis only, and its coverage is stated as such.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
