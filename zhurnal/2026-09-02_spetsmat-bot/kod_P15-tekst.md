@@ -365,6 +365,135 @@ grep -n 'include_router' bot/app.py   # порядок роутеров: сво�
 
 ## ПЛАН — (заполняет исполнитель)
 
+### 0 · What the reconnaissance changed about this plan (read this first)
+
+**The working branch was cut from a main that is 95 commits old.**  `zahod/P15-tekst`
+stood at `71919b9`; `main` stands at `5f3cb93`.  My HEAD was a strict ancestor, so I
+fast-forwarded the branch onto current `main` before touching anything.  This is not a
+liberty: §0.1 states the intent literally — *«Её ветка отпочкована от свежей основной,
+поэтому инструмент, которым ты работаешь, уже на диске»* — and on the branch as handed to
+me that was false.  Both anchors this задание names by path were missing from disk:
+
+  * `core/services/raspoznavanie.py` (P7's fuzzy index) — **absent** before the ff, present after;
+  * `core/services/sessions.py` (P6's attendance, where the прочерк must land) — same.
+
+Writing against them without the ff would have meant writing the third index this задание
+forbids.  Recorded as an урок фабрике with its price.
+
+**A second, larger finding: `core/services/golos.py` (P8) already is a text→draft
+pipeline.**  It imports P7's `ratio`, `case_forms` and `CONFIDENCE_THRESHOLD` (it does not
+copy them), and it already carries `Verdict`, `Candidate`, `score_against_roster`,
+`match_surname`, `normalise_label`, `resolve_labels`, `DraftCell`, `DraftRow`, `Draft` and
+`build_draft`.  `bot/routers/voice.py` already draws the confirmation table over exactly
+that `Draft` and writes through P4's `MarkingService` with `bot/routers/photo.py`'s
+`checked_cells`.  So «не строить вторую таблицу и второй путь записи» is not an
+aspiration here — it is achievable literally, and this plan takes it literally.
+
+**Measured, not assumed.**  I built a live catalogue from `seed/` (56 students) and ran
+the owner's four strings through the existing `golos.match_surname` before writing a line:
+
+        Лёня Санин      -> id 23 (Исанин)    certain, 90.9, next 66.7
+        Катя Долкирева  -> id 18 (Долгирева) certain, 88.9, next 58.8
+        Аня Бочарова    -> id  9 (Бочарова)  certain, 100.0, next 75.0
+        Влад Быков      -> id 11 (Быков)     certain, 100.0, next 66.7
+
+All four already resolve, and they resolve through the SURNAME channel.  That changes what
+the diminutives dictionary is for: it is not what rescues these four, it is what keeps the
+given-name channel from being dead weight (`ratio("лёня","леонид")` is far below
+threshold, so today the first token of «Лёня Санин» contributes nothing).  I will still
+build it — the задание asks for it by name and asks for a coverage number — but the отчёт
+will say plainly that the four owner tests pass with and without it, and report what it
+changes in the margins.  Claiming the dictionary rescued them would be угаданное.
+
+### 1 · What is genuinely missing, and therefore what I write
+
+`parse_dictation` is a parser for SPEECH, and it mis-handles the owner's WRITTEN format in
+two ways I checked by hand:
+
+  * `Аня Бочарова [3д] 5, 12` — the tokeniser drops `[` and `]`, so `3д` arrives as a
+    glued digit token and becomes **a problem label**.  The sheet marker is silently eaten
+    and the child gets a phantom problem `3д`.
+  * `Влад Быков —` — the dash is dropped as noise, so the block is indistinguishable from
+    a name typed with nothing after it.  §1 rule 4 needs it to be a positive fact.
+
+So `core/services/bystryj_tekst.py` is a WRITTEN-format block parser, and it reuses every
+matching and drafting part of `golos.py` rather than restating it.
+
+**Part A — the block parser** (`core/services/bystryj_tekst.py`)
+  1. Split the message into BLOCKS.  A block ends where the next NAME begins, **not at a
+     newline** (§1 rule 1).  A line opens a new block iff it starts with a word token that
+     is not a problem label and not a dash; a line that starts with a digit, a dash or a
+     `[` continues the block above it.  Horizontal rules (`---`, `—`, `___`) between
+     blocks are separators, not content.
+  2. Inside a block: `<name tokens> [ '[' sheet ']' ] <labels…>` — the bracket, when
+     present, stands AFTER the name and BEFORE the labels (§1 rule 3), and it names a
+     sheet by `number` (`3д`, `1д`, `15`) against `catalogue.sheets()`.
+  3. `—` · `-` · `–` alone after the name is not a label: it sets `present_no_marks=True`
+     on the block (§1 rule 4).
+  4. Labels are resolved with `golos.resolve_labels` against the block's sheet when the
+     bracket named one, and against the current sheet first otherwise (§1 rule 2).
+  5. Names are resolved with `golos.match_surname`, extended by the diminutives channel
+     below.  Never a guess: below threshold or inside the ambiguity margin → `UNKNOWN`
+     plus alternatives, i.e. buttons.
+
+**Part B — the diminutives dictionary, as DATA**
+  A module-level table `{full name -> (diminutive, …)}` covering the given names of the
+  catalogue, inverted once at import into `{diminutive -> full}`.  It feeds
+  `score_against_roster`'s given-name channel by ADDING forms, not by branching: a
+  diminutive that maps to the student's own `name` is scored as if the teacher had written
+  the full name.  The отчёт names how many of the 56 catalogue names are covered, counted
+  by a command, not by eye.
+
+**Part C — the прочерк goes to attendance, not to marks**
+  A block with `present_no_marks` produces NO cells and instead an attendance intent
+  (`status="был"`, `core/services/sessions.py`).  P6's
+  `AttendanceView.present_no_marks` is the existing derivation and I do not build a second
+  one.  This keeps «пришёл и не сдал» distinguishable from «нет записи», which is the
+  distinction P6's `test_red_line_present_no_marks_differs_from_absent` already owns.
+
+**Part D — the router** (`bot/routers/text_input.py`)
+  Plain text in → the SAME confirmation table.  I do not draw a second one: the router
+  converts its draft into the stored shape `bot/routers/voice.py` already renders, and
+  the write goes through `photo.checked_cells` + `MarkingService.set_state`, as both other
+  screens do.  Own callback prefixes (`tc`/`tp`/`ty`/`tn`/`ta`), checked against the 24
+  prefixes in use so nothing collides.
+
+**Part E — tests** (`tests/text/`), including the named ones the criterion greps for.
+
+### 2 · Two things I must flag BEFORE writing, not after (§1: назвать предпосылки вслух)
+
+**(a) There is no lawful `source` for this channel.**  `migrations/001_init.sql:118`
+constrains `source in ('кнопка','фото','голос','импорт')` and `config.MARK_SOURCES` says
+the same.  Both files are READ-ONLY for me by §4.  So a mark written by this screen cannot
+carry «текст» today.  I will not silently borrow «голос» — that corrupts the voice
+channel's own statistics.  My module declares `SOURCE = "текст"` as the correct value and
+falls back to `"кнопка"` when the constraint does not know it, with the provenance kept in
+`note`.  Named in `## ВОПРОСЫ` with its дом; the fallback disappears by itself the day
+someone adds the value in the two out-of-zone files.
+
+**(b) `bot/app.py` is outside my zone, so my router is built and included nowhere** —
+exactly the state P7's `photo.py` and P8's `voice.py` are already in.  §3 of the задание
+asks me to grep the live `bot/app.py` and report where my handler must stand.  I will
+report the line and the ordering constraint; I will not edit the file.
+
+### 3 · Criterion, and my one objection to it
+
+I do not dispute the готовности criterion — the four named tests are the right test and
+the ЯВКА test is the right second one.  One line of it cannot pass as written:
+`make check` promises «N passed, N больше того, что было до тебя», but the baseline is
+taken on a branch 95 commits behind; the honest comparison is against the fast-forwarded
+tree, and the отчёт reports both numbers so the difference is visible rather than argued.
+
+### 4 · Order of work, each part committed separately
+
+  1. fast-forward onto current `main` *(done before the plan was written)*
+  2. Part A + B — parser and diminutives, with `tests/text/test_imena.py` — commit
+  3. Part C — прочерк → attendance, with `tests/text/test_procherk.py` — commit
+  4. Part D — router over the EXISTING confirmation table, with its tests — commit
+  5. Part E — coverage/idempotency tests, gate run, отчёт — commit
+  6. merge my own branch into main, last move
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

@@ -380,7 +380,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — проверял с подозрением: двенадцать тестов за 0.02 с — тот же вид, что был у заглушки P6. Заглушки нет: `pytest tests/sheets` = 12 passed, оракул НЕ свой, а `seed/sheets.json`, уже проверенный семью оракулами P2, и тесты названы по существу — `test_three_real_sheets_round_trip_against_seed`, `test_4d_carries_graveyard_marks_as_meta`, `test_duplicate_label_without_repair_raises`. Главное для правила волны: `test_teacher_is_refused_at_confirm_gate` — разборщик отдаёт ЧЕРНОВИК на подтверждение старшему, а не пишет в базу сам. 🔴 ОКНО ЭТОЙ ПОЗИЦИИ ВИСЕЛО МЁРТВЫМ 75 МИНУТ: лог не рос с 15:50 после `rc=0`, процесс `opencode` был жив. Снято по номеру процесса (41989, 41997), без образца по имени движка; счётчик чужих `opencode` 8→7, то есть ушёл ровно мой.
 
 **ВЕТКА РАБОТЫ:** `zahod/P9-listok`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -390,6 +390,8 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > Читается командой (из любой папки, в том числе из worktree): `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki`
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
+
+заявок нет: работа была влита в main самим заходом до зависания (`4452bb9`), коммит на месте, вывоз непроверяем, деплой вне зоны, гашение окна сделано приёмкой руками и в очередь не просится.
 
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 

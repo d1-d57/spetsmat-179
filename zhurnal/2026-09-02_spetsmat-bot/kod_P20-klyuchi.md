@@ -356,6 +356,57 @@ grep -c 'LLM_API_KEY\|SPETSMAT_ASR' bot/app.py infra/asr.py   # имена из 
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Команда влития, напечатанная самим заходом, ОТКАЗЫВАЕТ на собственной зоне
+
+`bootstrap_zahod.py` печатает зону как `--zone "./bot.env.example"` — и в §4, и в WARNING-блоке,
+дважды. `git_zona.py vlit-v-osnovnuyu` сравнивает путь слияния (`bot.env.example`) с зоной
+БУКВАЛЬНО, `./` не нормализует, и отвечает «⛔ Слияние выходит за зоны — не сливаю НИЧЕГО».
+Отказ выглядит как «заход вышел за зону», то есть как ошибка исполнителя, а не как рассогласование
+двух инструментов фабрики. Чинится в одном из двух мест: генератор печатает путь без `./`, либо
+`git_zona.py` нормализует зону через `os.path.normpath` перед сравнением.
+ЦЕНА: один отказавший ход последним ходом захода — самый дорогой момент, потому что дальше по
+жёсткому порядку стоят пост-проверка, гашение и вывоз, и все три неисполнимы до влития. Исполнитель
+с пустым контекстом читает «вышел за зону» как СВОЮ ошибку и может пойти искать несуществующую
+правку вместо того, чтобы убрать две буквы. Здесь стоило одного хода только потому, что зона из
+четырёх путей маленькая и лишний путь был виден глазом.
+
+### `check_tool_contract.py` не видит живой точки вызова у python-модуля, который ИМПОРТИРУЮТ
+
+`vlit-v-osnovnuyu` объявил «влито, но не встроено» два файла из пяти:
+`tests/klyuchi/dependency_scan.py` (импортируется тремя тестами рядом: `import dependency_scan`)
+и `tests/klyuchi/conftest.py` (исполняется самим pytest по имени файла — это и есть его контракт
+вызова). Проверка ищет упоминание файла как вызываемого и не покрывает ни `import <модуль>` без
+расширения `.py`, ни неявное обнаружение `conftest.py`. Оба варианта выхода, которые она предлагает,
+неверны для такого файла: живая точка вызова уже есть, а маркер `# TOOL-CONTRACT: called-by-hand`
+был бы ложью — их зовут не руками.
+ЦЕНА: два ложно-красных на пяти новых файлах, то есть 40 % выдачи захода помечены как долг, которого
+нет. Дороже само правило: единственный способ погасить красное — поставить ложный маркер, а фабрика
+уже платила 28 обходами `--no-verify` за ровно такую вилку «правило требует того, чего инструмент не
+умеет». Чинить надо проверку: `import <basename без .py>` и `conftest.py`/`test_*.py` как
+самостоятельные контракты вызова pytest.
+
+### Критерий готовности содержал команду, которую нельзя сделать зелёной
+
+Четвёртая команда критерия сравнивает `grep`-ом ВСЕ ASR-подобные идентификаторы `infra/asr.py` с
+именами переменных в шаблоне. Три из них — `ASR_KEY_ENV`, `ASR_FOLDER_ENV`, `ASR_TIMEOUT_SECONDS` —
+переменными окружения не являются вовсе: первые две ХРАНЯТ имена, третья не имеет за собой
+переменной. `rc=0` достижим только порчей: либо вписать три несуществующие переменные в шаблон
+владельца, либо переименовать рабочие константы под регулярку.
+ЦЕНА: критерий, который обязан краснеть по делу, краснеет всегда — и через два захода перестаёт
+читаться, потому что «он всегда красный». Хуже: исполнитель под давлением «критерий должен быть
+зелёным» испортит код ради грепа, и это будет выглядеть как выполненное задание. Здесь стоило одного
+разбора и параллельной корректной команды; в другой раз может стоить порчи имён в принятой позиции.
+
+### Заход соседней позиции закоммитил МОЙ файл-заход
+
+`kod_P20-klyuchi.md` с моим `## ПЛАН` уехал в коммит `b04101a` («P15 переписана ЦЕЛИКОМ…»), то есть
+чужой заход подмёл его своим `commit`. Контракт зоны прямо говорит: файл-заход коммитит АНАЛИТИК при
+приёмке, не исполнитель — и уж точно не сосед.
+ЦЕНА: здесь ноль — содержание сохранилось целиком, потерь нет. Но механизм ровно тот, за который §4
+берёт `commit -- <пути>`: сосед забрал индекс шире своей зоны. При обратном тайминге (его коммит
+между моим `## ПЛАН` и моим `## ОТЧЁТ`) приёмка читала бы наполовину написанный отчёт как готовый,
+а гейт Г0 «работа дошла до git» был бы при этом зелёным.
+
 ## ПЛАН — (заполняет исполнитель)
 
 ### 🔴 FALSE PREMISE IN THE TASK, NAMED BEFORE WORK (§1 "оспорить ложную предпосылку")
@@ -456,6 +507,79 @@ carried machine-side, where it can go red properly, by `tests/klyuchi/`.
 ### CRITERION — as written in the task, all four commands, rc first
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+🔴 **ГЛАВНОЕ, И ЭТО НЕ ПУНКТ ОЧЕРЕДИ, А СЛЕДУЮЩИЙ ЗАХОД:** префикс `vy` у `VoiceConfirm`
+сталкивается с `ViewYear`, и голосовая отметка не доезжает до журнала. Одно слово в
+`bot/routers/voice.py:119`. Владелец добывает ключ SpeechKit прямо сейчас и упрётся в это
+в первый же вечер — чинить ДО его прогона, не после.
+
+1. Столкновение payload-префикса `vy`: `VoiceConfirm` (`bot/routers/voice.py:119`) и
+   `ViewYear` (`bot/keyboards/views.py:108`) паковываются в одну строку `vy:1` побайтово.
+   `views` включён раньше `voice`, поэтому «Записать» на голосовом черновике попадает в
+   `views-student` и учитель получает отказ по роли: `voice.confirm` недостижима, диктовка
+   не записывается никем. Чинится ОДНИМ СЛОВОМ — дать `VoiceConfirm` свой префикс
+   (например `vgo`). Порядком включения НЕ чинится: кто первый, тот и убивает второго.
+   `bot/routers/` был READ-ONLY для этого захода, поэтому не тронут.
+   ДОМ: bot/routers/voice.py
+   ДОСТАВЛЕНО: нет
+2. `bot/handlers/owner.py:138 rename_surname` и `:154 rename_name` затенены
+   `registration.student_surname` / `student_name` на состоянии
+   `StudentRegistration.waiting_for_surname`: `registration.router` включён первым. Владелец,
+   нажав «переименовать», заводит НОВУЮ заявку на самого себя (замер верификатора живым
+   прогоном: `/pending` вырос с 2 строк до 3). Существовало до этого захода.
+   ДОМ: bot/handlers/owner.py
+   ДОСТАВЛЕНО: нет
+3. `bot/handlers/teacher.py:22 show_me` недостижима: `bot/handlers/student.py:22` забирает
+   `/me` у всех и затем отказывает по роли. `/upload_sheet` того же роутера работает.
+   Существовало до этого захода.
+   ДОМ: bot/handlers/student.py
+   ДОСТАВЛЕНО: нет
+4. `tests/photo/conftest.py:241-247` и `tests/voice/conftest.py:78-82` теперь дублируют то,
+   что делает `build()`: оба включают роутер вручную и подставляют зависимости, которые
+   `bot/app.py` кладёт сам. `tests/voice/conftest.py` прямо просит себя заменить: «when the
+   include lands in `bot/app.py` this fixture should be replaced by `build()`». Include
+   приехал — фикстуры не заменены, оба файла вне зоны этого захода.
+   ДОМ: tests/voice/conftest.py
+   ДОСТАВЛЕНО: нет
+5. `bot/__main__.py` не логирует, реально ли поднялись распознавания. `build()` пишет обе
+   строки через `logging.getLogger("bot.app").info`, но логирование в процессе не настроено,
+   поэтому владелец при старте не увидит ни «vision on: provider …», ни «NO RECOGNISER: …».
+   Один `logging.basicConfig` в `bot/__main__.py` — вне зоны этого захода.
+   ДОМ: bot/__main__.py
+   ДОСТАВЛЕНО: нет
+6. Гейт достижимости (`tests/klyuchi/test_registered_handlers_are_reachable.py`) не покрывает
+   хендлеры, отличаемые ТОЛЬКО состоянием FSM: aiogram хранит состояние, переданное в
+   декоратор, в форме, которую обход прочесть не может. Из-за этого пункт 2 выше машиной не
+   виден. Чинится либо чтением `StateFilter` из декораторной формы, либо живым прогоном
+   синтетических обновлений по каждому хендлеру.
+   ДОМ: tests/klyuchi/test_registered_handlers_are_reachable.py
+   ДОСТАВЛЕНО: нет
+7. Генератор печатает зону влития как `--zone "./bot.env.example"`, а `git_zona.py` сравнивает
+   путь буквально и отказывает. Чинить в одном из двух: генератор без `./`, либо
+   `os.path.normpath` в инструменте.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+8. `check_tool_contract.py` не признаёт живой точкой вызова ни `import <модуль>` без
+   расширения, ни неявное обнаружение `conftest.py` — два новых файла из пяти помечены
+   «влито, но не встроено» ложно.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+9. Четвёртая команда КРИТЕРИЯ ГОТОВНОСТИ этого захода неисполнима: она сравнивает все
+   ASR-подобные идентификаторы `infra/asr.py`, три из которых не переменные окружения.
+   Исправленный вариант приведён в `## ОТЧЁТ` и даёт rc=0.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+10. Заход позиции P15 закоммитил файл-заход P20 (`b04101a`), хотя контракт зоны отдаёт это
+    аналитику при приёмке. Содержание не пострадало; механизм — `commit` шире своей зоны.
+    ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/_INFRA-git/INCIDENTY.md
+    ДОСТАВЛЕНО: нет
+11. `check_uroki.py` краснеет на всей арке из-за двух записей `P1-yadro#1` и `P1-yadro#2` в
+    `UROKI-FABRIKE.md:72,80`: урок, лежащий в этом файле, назвал своим домом сам этот файл.
+    Чинится удалением двух строк `ДОМ:` (самоссылка дома не нужна). Пока живо, приёмка
+    ЛЮБОГО захода этой арки получает rc=1 на чужом долге.
+    ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+    ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -489,21 +613,399 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 **ЧТО СДЕЛАНО** *(с хэшами)*
 <влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+
+**ЧТО ОСТАЛОСЬ, ПОИМЁННО, И ПОЧЕМУ ЭТО НЕПРОХОДИМО МОИМИ ПРАВАМИ — ОДНА ВЕТКА:**
+`zahod/P15-tekst`. На входе её не было (`grep -c zahod/` дал 2, и обе — `zahod/P16-eksport`
+и `zahod/P9-listok` — влиты их собственными заходами, пока шла работа). Она появилась ПОСЛЕ
+моего снимка входа: рядом идёт живой заход позиции P15, он коммитил в неё в ходе моей работы
+(его коммит `b04101a` — тот самый, что подмёл мой файл-заход). Правило волны, объявленное в
+клапане §0.1 этого же захода дословно: «Ветку вливает каждый заход свою сам». Влить чужую
+живую ветку значит слить наполовину сделанную работу соседа и подменить файлы у него под
+ногами — прямой запрет контракта зоны. Не «сложно» и не «не моя тема»: чужая живая рабочая
+папка, единственная законная причина из названных.
+
+🔴 Ставлю `нет`, а не `да`, потому что галочка не источник истины: приёмка гоняет
+`git --no-optional-locks branch --no-merged main` заново, и на момент сдачи он печатает
+`zahod/P15-tekst`. Свою ветку я влил — `bc17f00`, Г14 это подтверждает фактом.
+
+*(🔴 §0.1 CANCELLED BY THE ORCHESTRATOR before this заход started — the git-contour
+subagent was NOT launched, on a measured cause: four заходы out of ten in a neighbouring
+wave died on exactly that call. The orchestrator's instruction replaced the whole block
+with ONE command, run by hand, whose output is below. This section is therefore filled by
+the исполнитель and not by a subagent, and it is short BY THE CANCELLATION, not by
+omission.)*
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+2
+```
+
+Снимок входа, снятый тем же первым ходом:
+```
+$ git --no-optional-locks status --porcelain          # рабочая папка захода
+(пусто)
+$ git rev-parse --abbrev-ref HEAD
+zahod/P20-klyuchi
+```
+
+**ЧТО СДЕЛАНО:** ветка `zahod/P20-klyuchi` влита в `main` последним ходом — merge-коммит
+`bc17f00`, пять коммитов, семь путей, без конфликтов. Обе ветки, бывшие невлитыми на
+входе, влиты их собственными заходами, пока шла работа: на выходе невлитых `zahod/*` — 0.
+Заявок эта работа не ставила и не закрывала: субагент, который их разбирает, отменён
+оркестратором.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
+
+**ПРАВКИ ПРОЧИТАНЫ:** блок `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` пуст — правок не было.
+
+### 🔴 THE ONE LINE THE OWNER IS WAITING FOR — THE VARIABLE NAMES
+
+Copy `bot.env.example` to `secrets/bot.env` and fill in FOUR values. These are the names
+the code actually reads, and a test now goes red if the template and the code ever
+disagree again.
+
+    LLM_API_KEY=         # разбор ФОТО. Читает bot/app.py:build_vision
+    LLM_PROVIDER=        # openrouter | gemini | openai. Пусто = openrouter
+    LLM_MODEL=           # пусто = minimax/minimax-m3:free
+
+    SPETSMAT_ASR_KEY=    # речь, Yandex SpeechKit. Читает infra/asr.py:build_transcriber
+    SPETSMAT_ASR_FOLDER= # 🔴 НУЖНЫ ОБЕ СТРОКИ: ключ без каталога SpeechKit не работает
+
+🔴 **`SPETSMAT_ASR_FOLDER` — строка, которой в шаблоне не было вовсе.** Yandex SpeechKit
+требует и ключ, и id каталога; со старым шаблоном голос нельзя было настроить даже при
+совпадающих именах. Заполнена одна из двух — бот назовёт в логе, какой второй не хватает,
+а не притворится работающим.
+
+### WHAT WAS DONE, AND WHY — three parts, one commit each
+
+**Part 1 · `0873cfe` — the key reaches the bot, and the door it opens is now hung.**
+`build_vision()` in `bot/app.py` builds P7's own `infra.llm.VisionModel` from the
+environment and `build()` puts it into `workflow_data["vision"]`, where
+`bot/routers/photo.py:346` reads it. No key → `None` and the bot still starts, because a
+bot without recognition is useful and one that did not start is not. `infra/llm.py` is
+P7's zone and was not touched. Only the variable NAME and an empty default are in the
+code; no secret goes into git.
+
+🔴 **AND THE THING THE BRIEF DID NOT KNOW: neither router was included at all.**
+The brief says a photograph today gets «не настроен». It does not — it gets NOTHING:
+
+    grep -n 'photo\|voice' bot/app.py   →  rc=1, ПУСТО
+
+`bot/routers/photo.py` and `bot/routers/voice.py` were written, tested and accepted while
+`bot/app.py` included neither, so a photograph and a voice note matched no handler and the
+user watched nothing happen. `tests/voice/conftest.py:78-82` says so in writing («the voice
+router is not included there … when the include lands in `bot/app.py` this fixture should
+be replaced by `build()`»); `tests/photo/conftest.py:241-247` includes its own copy by hand.
+The missing `vision` key was the SECOND lock on that door. Both routers are now included,
+BEFORE the stale catch-all — after it, every button of theirs would answer «экран устарел».
+
+**Part 2 · `cdc5843` — one home for the speech variable names.**
+`infra/asr.py:260-261` read `SPETSMAT_ASR_KEY` / `SPETSMAT_ASR_FOLDER`; the template offered
+`ASR_PROVIDER` / `ASR_API_KEY`. Nothing crashed: `build_transcriber` found neither name,
+installed `FakeTranscriber`, and every dictation came back as the same canned line.
+Decision, as the brief advises: **the `SPETSMAT_` prefix stays in the code and the template
+is fixed** — the prefix protects against a foreign `ASR_API_KEY` on a shared machine, and
+`tests/voice/test_asr.py:129-144` already asserts those names, so the cheap direction is
+also the correct one. `infra/asr.py` was therefore not edited at all.
+
+**Part 3 · `e02b969` + `6488b68` + `50e02fe` — the gate on the CLASS, `tests/klyuchi/`.**
+A test asserting `"vision" in workflow_data` is green forever the day after it is written
+and finds nothing. So BOTH sides are derived and the gate is their difference:
+
+| side | how it is obtained |
+|---|---|
+| asked for | AST of `bot/**`: every key read off a `**data` kwarg |
+| supplied | a dispatcher `bot.app.build` **actually built** — not a fixture's idea of one |
+| by aiogram | **MEASURED**: a bare dispatcher is fed a real message and a real callback query and the keys the handler receives are read off. A hand-written list would rot on the next aiogram release, in silence — this file's own failure mode |
+| by middleware | AST: whatever `bot/middleware.py` stamps onto `data` in its `__call__` |
+| by filters | per handler, never blanket: `Command` forgives `command` only where a `Command` filter is actually registered |
+
+FSM dictionaries are excluded **by construction, not by a list of slot names**: the scanner
+refuses to read any function whose `**data` name is rebound in the body (`data = await
+state.get_data()` binds a different dictionary), and counts those functions out loud so
+that «excluded» can never quietly become «not looked at».
+
+Six gates, in three files:
+1. a key read through `**data` and put there by nobody — caught `vision`;
+2. a NAMED parameter of a registered handler that cannot be resolved — caught `transcriber`
+   and `download`, where a miss is a `TypeError` in front of a teacher, not a polite refusal;
+3. a screen whose router factory exists and which `build()` includes nowhere — caught
+   `photo` and `voice`; no dependency gate can see this one, because there is no handler to reach;
+4. + 5. the template and the code naming one variable, **both directions** — a variable the
+   code reads and the template omits cannot be configured; a template line nobody reads is
+   the `ASR_API_KEY` bug in its pure form;
+6. registered-and-still-unreachable — two screens claiming one trigger (see the verifier below).
+
+### HOW IT WAS CHECKED — every command's rc first
+
+```
+$ make check                                     # из рабочей папки
+650 passed in 515.79s                            rc=0     (было 645 · +5 моих)
+
+$ python3 -m pytest tests/klyuchi -q             rc=0
+[ключи] файлов bot/** прочитано 22 · потребляется 6, кладётся 6, НЕ ПОДСТАВЛЕНО 0
+[ключи] хендлеров на включённых роутерах проверено 52 из 52 · неразрешимых аргументов 0
+[ключи] роутеров-экранов найдено 5, включено build() 5, не включено 0
+[достижимость] триггеров прочитано 32 · столкновений 2 (известных 2, новых 0)
+[имена] переменных читают infra/asr.py, bot/app.py: 5 · строк в bot.env.example 8 · нет в шаблоне 0
+[имена] строк шаблона 8 · читающих модулей 4 · строк, которых не читает никто, 0
+6 passed
+
+$ grep -c "vision" bot/app.py
+11                                               rc=0     (больше 0 — ключ реально кладётся)
+```
+
+🔴 **ЧЕТВЁРТАЯ КОМАНДА КРИТЕРИЯ КРАСНАЯ, И НЕ ПОТОМУ, ЧТО ИМЕНА РАСХОДЯТСЯ.**
+Literal form, exactly as the brief prints it:
+```
+$ diff <(grep -oE "^[A-Z_]*ASR[A-Z_]*" bot.env.example | sort -u) \
+       <(grep -ohE "SPETSMAT_ASR_[A-Z]+|ASR_[A-Z_]+" infra/asr.py | sort -u)
+0a1,3
+> ASR_FOLDER_ENV
+> ASR_KEY_ENV
+> ASR_TIMEOUT_SECONDS
+rc=1
+```
+**Nothing was REMOVED — the two environment names match exactly.** What the right-hand
+side adds are three identifiers that are not environment variables at all: `ASR_KEY_ENV`
+and `ASR_FOLDER_ENV` are the Python constants that HOLD the names, and `ASR_TIMEOUT_SECONDS`
+is a plain module constant with no variable behind it. `rc=0` is reachable only by writing
+those three into `bot.env.example` as though the owner had to fill them in, or by renaming
+working constants to dodge a regex. Both make the code worse to make a grep green; neither
+was done. **The criterion is unsatisfiable as written** — this is stated in `## ПЛАН`, before
+the work, as §1 requires.
+
+Corrected form — one token different in shape, comparing only the QUOTED STRING LITERALS,
+which is what an environment variable name actually is in that file:
+```
+$ diff <(grep -oE "^[A-Z_]*ASR[A-Z_]*" bot.env.example | sort -u) \
+       <(grep -ohE '"SPETSMAT_ASR_[A-Z_]+"|"ASR_[A-Z_]+"' infra/asr.py | tr -d '"' | sort -u)
+rc=0 (имена сошлись)
+```
+And the check is carried machine-side, where it can go red properly, by
+`tests/klyuchi/test_template_names_what_the_code_reads.py` — proved able to fail by putting
+the template back to `ASR_PROVIDER` / `ASR_API_KEY`: 2 unconfigurable + 2 orphans, red.
+
+**КАЖДЫЙ ГЕЙТ ПРОВЕРЕН НА ПОРЧЕ — 5 из 5 порч покраснели, и все 5 позеленели обратно:**
+
+| порча | что покраснело |
+|---|---|
+| `dp.workflow_data["vision"]` убрана | гейт 1: «1 зависимость … мимо сигнатуры» |
+| `voice_dependencies` не подключена | гейт 2: «2 именованных аргумента … не лежат в workflow_data» |
+| `include_router(photo_router)` убран | гейт 3: «экран photo … bot/app.py его не включает» |
+| шаблон возвращён к `ASR_PROVIDER`/`ASR_API_KEY` | гейты 4 и 5: «код читает 2 переменных, которых нет» + «2 строки не читает никто» |
+| строка убрана из ведомости `KNOWN` | гейт 6: «1 новое столкновение триггеров» |
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА (§3, после-типа, свежий субагент, ДРУГИМ методом)
+
+Метод верификатора — не мой: он собрал перечень руками по `bot/app.py` и девяти модулям
+роутеров и хендлеров, поднял диспетчер живьём и **прогнал реальные обновления через
+`dp.feed_raw_update()`**, наблюдая, какой хендлер действительно отработал. Мой гейт читает
+синтаксис; он смотрел на исполнение.
+
+**По заявленному критерию — подтвердил: `дыр не найдено, проверено 131 из 131 пар
+(хендлер, зависимость) на 50 из 50 хендлеров, остаток 0`.** 46 хендлеров из 50 отработали
+живьём без единого `TypeError`; оставшиеся 4 доказаны мёртвыми (ниже). Финальная строка
+ответа на месте: «выдано 6 позиций из 6 найденных».
+
+🔴 **И нашёл ТОТ ЖЕ КЛАСС ОТКАЗА ДРУГИМ МЕХАНИЗМОМ: три хендлера зарегистрированы и
+недостижимы.** Я перепроверил все три сам, независимо, и подтверждаю:
+
+1. 🔴 **СТОЛКНОВЕНИЕ ПРЕФИКСА `vy` — И ЭТО ПОСЛЕДСТВИЕ МОЕЙ ЖЕ ПРАВКИ, НАЗЫВАЮ ПРЯМО.**
+   `VoiceConfirm().pack() == ViewYear(student_id=1).pack() == "vy:1"` — побайтово, проверено
+   мной командой. `views` включён раньше `voice`, поэтому «Записать» на голосовом черновике
+   попадает в `views-student`, чей `require_role("confirmed_student")` отказывает учителю.
+   **`bot/routers/voice.py:506 confirm` недостижима: голосовая диктовка не может быть
+   записана в журнал никем.** До моей правки роутер `voice` не был включён вовсе, так что
+   голос был мёртв ЦЕЛИКОМ; сейчас работает всё, кроме последней кнопки. Ничего ранее
+   работавшего не сломано — `views-student` как забирал `vy`, так и забирает.
+   **ЧИНИТСЯ ОДНИМ СЛОВОМ: `prefix="vy"` → `prefix="vgo"` в `bot/routers/voice.py:119`.**
+   Порядком включения НЕ чинится: кто бы ни шёл первым, второй экран умирает.
+   🔴 **`bot/routers/` — READ-ONLY по §4 задания, поэтому я НЕ ТРОГАЛ. Это ближайший
+   следующий ход и он блокирует голос.**
+2. **Владелец не может переименовать заявку.** `bot/handlers/owner.py:138 rename_surname` и
+   `:154 rename_name` затенены `registration.student_surname` / `student_name` на том же
+   состоянии `StudentRegistration.waiting_for_surname`; `registration.router` включён первым.
+   Владелец, нажав «переименовать», заводит НОВУЮ заявку на самого себя. Замер верификатора:
+   `/pending` вырос с 2 строк до 3. Существовало ДО моей правки, к ней отношения не имеет.
+3. **`/me` учителя.** `bot/handlers/student.py:22` забирает `/me` у всех и затем отказывает
+   по роли, поэтому `bot/handlers/teacher.py:22 show_me` недостижима. Тоже ДО моей правки.
+
+Гейт 6 (`test_registered_handlers_are_reachable.py`) закрывает ЭТОТ класс: он читает, кто
+претендует на каждый триггер, и падает на ЛЮБОМ новом столкновении. Известные два (`vy`,
+`/me`) лежат в ведомости с их починкой и печатаются красным на каждом прогоне — ведомость,
+а не красный гейт, потому что оба чинятся в файлах, которые этому заходу READ-ONLY, а
+вечно красный гейт через неделю читается как шум. **Ведомость сама краснеет, если запись в
+ней перестала соответствовать коду** — удалить строку это последний шаг починки, а не первый.
+🔴 **ОХВАТ ГЕЙТА 6 НАЗВАН, А НЕ ПОДРАЗУМЕВАЕТСЯ:** читаются префикс payload и точный
+`F.text == "литерал"`; хендлер, отличаемый ТОЛЬКО состоянием FSM, НЕ покрыт — aiogram
+хранит состояние, переданное в декоратор, в форме, которую этот обход прочесть не может, а
+догадка дала бы уверенно неверный гейт. **Дефект №2 выше — ровно этой формы и гейтом не
+виден**, поэтому назван здесь строкой.
+
+### ЧТО Я НЕ ТРОГАЛ
+
+- `infra/asr.py` — **в зоне, но правка не понадобилась**: решение принято в пользу имён кода.
+- `infra/llm.py`, `core/`, `config.py`, `migrations/`, `bot/routers/`, `bot/handlers/`,
+  `bot/keyboards/`, `bot/middleware.py` — READ-ONLY по §4, не тронуты ни одной строкой.
+- `tests/photo/conftest.py` и `tests/voice/conftest.py` — вне зоны. Оба теперь дублируют то,
+  что делает `build()`; `tests/voice/conftest.py:78-82` само просит себя заменить на `build()`.
+  Оставлены как есть, пункт очереди ниже.
+- Шесть грязных файлов в главной папке (`README.md`, `PULS-CHASOVOGO-sborka-bota.log`,
+  `kod_P15-tekst.md`, `kod_P16-eksport.md`, `kod_P19-privyazka.md`, `INCIDENTY.md`) — чужая
+  содержательная работа соседних заходов, не моя, не тронута.
+
+### НЕОБРАТИМОЕ
+
+**Необратимого нет.** Пять временных порч файлов зоны, каждая ради доказательства, что гейт
+умеет краснеть, каждая откачена тем же ходом `git checkout -- <файл>` из закоммиченного
+состояния и подтверждена зелёным перепрогоном. Ничего не удалено, не переименовано и не
+перемещено; `git reset` не звался; за зону не выходил.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+- 🔴 **Столкновение префикса `vy` — НЕ повторится, но БЛОКИРУЕТ: это заход ДО следующего
+  прогона владельца, не пункт очереди.** Пока оно живо, голосовая отметка не доезжает до
+  журнала, а владелец добывает ключ SpeechKit прямо сейчас — он упрётся в это в первый же
+  вечер. Класс «регистрация есть, достижимости нет» ПОВТОРИТСЯ на каждом следующем экране
+  волны (P15-текст, P9-листок вводят свои payload'ы) — гейт 6 поэтому написан на класс.
+- 🔴 **«Зависимость жива в тестах и мертва в бою» ПОВТОРИТСЯ на каждом следующем экране**,
+  который заводит свою зависимость: это уже третий случай подряд (`BOT_TOKEN`, `vision`,
+  `transcriber`). Именно поэтому три гейта написаны на класс, а не на случай, и стоят в
+  `make check`: следующая позиция краснеет ДО приёмки, а не в бою.
+- Затенение `/me` и затенение переименования заявки — существуют ДО этой работы и не
+  повторяются сами по себе: пункты очереди.
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/bot.env.example` — открыть текстовым редактором, скопировать в `secrets/bot.env`, вписать четыре значения по списку в начале отчёта. Это тот файл, ради которого позиция существует: именно из него владелец настраивает оба распознавания.
+Вторым артефактом — код и гейт, влитые в `main`: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/bot/app.py` и `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tests/klyuchi/` (запускается `python3 -m pytest tests/klyuchi -q` из корня).
+**РОД АРТЕФАКТА:** `исходник`
+*(продукт этого захода — КОД: он закоммичен раньше отчёта, потому что отчёт цитирует хэши. Г3 сверяет не время, а доехал ли артефакт в названные ниже коммиты — доехал, все пять, и слит в `main` мержем `bc17f00`.)*
+**НЕ ЗАПОЛНЕНО НИЖЕ ПО ШАБЛОНУ:**
 *(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "bot/app.py" && \
-    git_zona.py check --zone "infra/asr.py" && \
-    git_zona.py check --zone "./bot.env.example" && \
-    git_zona.py check --zone "tests/klyuchi/"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**КОММИТ:** `bc17f00` — `Merge branch 'zahod/P20-klyuchi'` (влил сам, последним ходом). Пять коммитов ПО ХОДУ работы (§4), по одному на часть: `0873cfe` `cdc5843` `e02b969` `6488b68` `50e02fe`.
+
+| хэш | часть |
+|---|---|
+| `0873cfe` | Part 1 — vision из окружения + оба роутера включены |
+| `cdc5843` | Part 2 — один дом имён речи, шаблон описывает то, что читает код |
+| `e02b969` | Part 3 — гейт на класс: три гейта на зависимости |
+| `6488b68` | Part 3b — гейт на вторую половину класса: шаблон ↔ код |
+| `50e02fe` | Part 3c — гейт на третий класс: зарегистрирован и недостижим |
+| `bc17f00` | merge `zahod/P20-klyuchi` → `main` (влил сам, последним ходом) |
+
+```
+$ git_zona.py check --zone "bot/app.py"       ✅ работа доехала в git, вне git ничего нет
+$ git_zona.py check --zone "infra/asr.py"     ✅ работа доехала в git, вне git ничего нет
+$ git_zona.py check --zone "bot.env.example"  ✅ работа доехала в git, вне git ничего нет
+$ git_zona.py check --zone "tests/klyuchi/"   ✅ работа доехала в git, вне git ничего нет
+```
+
+### 4.1 ГИГИЕНА — Г1…Г6, каждый КОМАНДОЙ
+
+- **Г1. Зона доехала в git.** Все четыре ✅ — вывод выше дословно.
+- **Г2. Второй репозиторий.** **Неприменимо:** все четыре пути зоны лежат внутри
+  `spetsmat-bot`, зона за его пределы не расширялась. Команда на случай применимости
+  (`cd ../<репозиторий> && git --no-optional-locks status --porcelain` → пусто) не звалась.
+- **Г3. Невлитых веток не прибавилось.** Вход 2 → выход **0**. `git --no-optional-locks
+  branch --no-merged main` печатает пусто. Не выросло, а упало: обе входные ветки влиты их
+  собственными заходами, пока шла работа; свою я влил сам мержем `bc17f00`.
+- **Г4. Новый инструмент имеет живую точку вызова.** **Неприменимо в букве:** ни одного
+  нового `.py` в `_generator/**` не заведено — все пять новых файлов лежат в
+  `tests/klyuchi/` рабочего репозитория. 🔴 **Но по существу отвечаю, потому что
+  `vlit-v-osnovnuyu` покрасил два из них** («влито, но не встроено»:
+  `tests/klyuchi/conftest.py`, `tests/klyuchi/dependency_scan.py`). **Живая точка вызова у
+  обоих есть, показана командой:**
+  ```
+  $ grep -rn "import dependency_scan" tests/klyuchi/
+  tests/klyuchi/test_dependencies_reach_the_bot.py:32
+  tests/klyuchi/test_template_names_what_the_code_reads.py:25
+  tests/klyuchi/test_registered_handlers_are_reachable.py:29
+  ```
+  `conftest.py` исполняется самим pytest (фикстуры `dispatcher`, `bot_instance`,
+  `roster_path`), а pytest зовёт `make check`. Оба файла отработали в каждом зелёном
+  прогоне `tests/klyuchi` — сироты бы не отработали. Маркер `# TOOL-CONTRACT:
+  called-by-hand` я НЕ ставил: он был бы ложью, их зовут не руками. Проверка не покрывает
+  ни `import <модуль>` без расширения, ни неявное обнаружение `conftest.py` — это урок
+  фабрике, записан ниже.
+- **Г5. Новый `.md` зарегистрирован.** **Неприменимо:** ни одного нового `.md` не заведено,
+  `register_doc.py` не звался, `_studio/docs/KARTA.md` в коммиты не входил.
+- **Г6. В коммите нет чужих путей.** `git --no-optional-locks show --stat` по всем пяти
+  коммитам даёт ровно семь путей, и все семь — мои: `bot/app.py`, `bot.env.example`,
+  `tests/klyuchi/{conftest,dependency_scan,test_dependencies_reach_the_bot,
+  test_registered_handlers_are_reachable,test_template_names_what_the_code_reads}.py`.
+  Чужого пути нет ни одного.
+
+### WARNING · ПОЛНАЯ ГИТ-ГИГИЕНА ПОСЛЕДНИМ ХОДОМ — числа, а не слова
+
+**1 · ВСЕ КОММИТЫ.**
+```
+$ for R in /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot; do echo "== $R"; git -C $R --no-optional-locks status --porcelain; done
+== /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot
+ M README.md
+ M zhurnal/2026-09-02_spetsmat-bot/PULS-CHASOVOGO-sborka-bota.log
+ M zhurnal/2026-09-02_spetsmat-bot/kod_P15-tekst.md
+ M zhurnal/2026-09-02_spetsmat-bot/kod_P16-eksport.md
+ M zhurnal/2026-09-02_spetsmat-bot/kod_P19-privyazka.md
+ M zhurnal/_INFRA-git/INCIDENTY.md
+== рабочая папка /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P20-klyuchi
+(пусто)
+```
+**Вне git по МОЕЙ зоне: 0.** Шесть грязных путей в главной папке — чужая содержательная
+работа соседних заходов волны (их отчёты, реестр `README.md`, автолог инцидентов). Не моя,
+не тронута, называю строкой и оставляю, как велит блок.
+
+**2 · ВЛИТИЕ СВОЕЙ ВЕТКИ.** `✅ Влито в main без конфликтов: bc17f00`. Пять коммитов, семь
+путей, конфликтов нет, `README.md` слиянием не затронут.
+🔴 Первый вызов ОТКАЗАЛ, и это находка, а не помеха: команда, напечатанная в самом заходе
+(и в §4, и в этом блоке), несёт `--zone "./bot.env.example"`, а инструмент сравнивает путь
+буквально и вернул «⛔ Слияние выходит за зоны … bot.env.example». Прошло с `--zone
+"bot.env.example"` без `./`. Урок фабрике записан ниже.
+
+**3 · ПОСТ-ПРОВЕРКА ИЗ ГЛАВНОЙ ПАПКИ** (`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`,
+НЕ из рабочей):
+```
+$ make check
+757 passed in 155.54s                                            rc=0
+$ python3 -m pytest tests/klyuchi -q
+6 passed                                                          rc=0
+$ grep -n 'vision' bot/app.py        → 10 строк, в т.ч. :276 dp.workflow_data["vision"] = vision
+$ grep -c 'LLM_API_KEY\|SPETSMAT_ASR' bot/app.py infra/asr.py
+bot/app.py:1    infra/asr.py:2                                    (имена из окружения, не литералы)
+```
+**Пост-проверка ЗЕЛЁНАЯ, отката не потребовалось.** 757 против 650 в рабочей папке — в
+`main` уже влиты соседние позиции волны; мои пять тестов входят в оба числа.
+
+**4 · ГАШЕНИЕ.** `git --no-optional-locks branch --no-merged main` → **пусто, 0 веток.**
+Ни одной живой невлитой ветки не осталось; поимённо называть нечего.
+
+**5 · ВЫВОЗ.** **Неприменимо, и это проверено командой, а не предположено:** у репозитория
+НЕТ удалённых вовсе (`git remote -v` → пусто), у ветки нет upstream (`fatal: no upstream
+configured for branch 'zahod/P20-klyuchi'`). Вывозить некуда, `@{u}..` неисполним по
+построению. Заявку `--rod git-operaciya` не ставил: невывезенного не существует, а не
+«ноль».
+
+**ЧУЖОЙ КРАСНЫЙ, КОТОРЫЙ УВИДИТ ПРИЁМКА — НАЗЫВАЮ ЗАРАНЕЕ, ЧТОБЫ ЕГО НЕ ПРИНЯЛИ ЗА МОЙ.**
+```
+$ python3 …/check_uroki.py zhurnal/2026-09-02_spetsmat-bot/kod_P20-klyuchi.md      rc=1
+❌ ДОМ УРОКА НЕ РЕЗОЛВИТСЯ:
+  zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md:72   ← НЕ мой файл
+  zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md:80   ← НЕ мой файл
+$ … | grep -c "kod_P20-klyuchi"
+0        ← в моём файле претензий НОЛЬ
+```
+Обе строки — записи `P1-yadro#1` и `P1-yadro#2`, влитые коммитом `9c50db2` задолго до этого
+захода: урок, лежащий В `UROKI-FABRIKE.md`, назвал своим домом сам `UROKI-FABRIKE.md`, и
+проверка справедливо отказывает самоссылке. Файл вне моей зоны, не тронут. Свои десять
+пунктов очереди я на этой проверке провёл: первая редакция краснела, адрес исправлен на
+абсолютный, претензий к `kod_P20-klyuchi.md` больше нет.
+
+**6 · ПРОВЕРКА ФАКТОМ.** По репозиторию `spetsmat-bot`: **вне git по моей зоне 0** (чужого
+6, названо); **невлитых своих 0, невлитых чужих 0**; **невывезенных своей ветки —
+неприменимо, удалённых нет**; **пост-проверка зелёная, `make check` rc=0, 757 passed.**
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
@@ -517,7 +1019,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — обе дыры владельца закрыты и проверены МНОЙ, а не отчётом: проводка `vision` в `bot/app.py:276`, имена ASR сошлись в коде и в `bot.env.example`. Гейт на КЛАСС доказан экспериментом: `pytest tests/klyuchi` = 6/6, после удаления строки `workflow_data["vision"]` краснеет `test_every_key_a_handler_reads_out_of_data_is_one_build_puts_there`, после отката снова зелёный. Тесты main: 788 passed.
 
 **ВЕТКА РАБОТЫ:** `zahod/P20-klyuchi`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -527,6 +1029,8 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > Читается командой (из любой папки, в том числе из worktree): `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki`
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
+
+- 2026-09-02T1701-build-vision-tests-photo-conftest-py — pravka-koda — фикстуры фото и голоса собирают зависимости в обход `build()`: тот же механизм, из-за которого дыра `vision` прожила волну; гейт `tests/klyuchi/` ловит `app.py`, а фикстура его обходит.
 
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 

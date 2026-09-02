@@ -514,33 +514,307 @@ Each of the three parts is committed separately.
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+🔴 **THE §0.1 GIT-CONTOUR SUBAGENT WAS CANCELLED BY THE ORCHESTRATOR, IN WRITING, BEFORE
+THIS ЗАХОД STARTED.** The instruction that reached me overrides §0.1 word for word:
+«СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ … пункт ОТМЕНЁН оркестратором, данное указание
+сильнее текста захода». The stated reason is measured: four заходы out of ten in the
+neighbouring wave died on that very call. In place of the whole block I was told to run
+ONE command myself and paste its output here. So this section is not «filled by the
+субагент» — the субагент does not exist for this заход, and its absence is the
+orchestrator's decision, not an omission of mine. Everything below is my own.
+
+**СНИМОК ВХОДА** *(the one command the orchestrator prescribed, run as my first move,
+before any work)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+2
 ```
-<сюда — вывод, дословно>
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Nothing of the git-contour block was performed, and nothing of it was mine to perform:
+merging other people's `--vlit` branches, closing заявки and committing paths outside
+this зона all belonged to the cancelled субагент. What I did do is my own half, and it
+is listed in full in `## ОТЧЁТ`: five commits on `zahod/P19-privyazka`
+(`a8f09b7`, `d24cf17`, `48402fd`, `a413f73`, plus the scratchpad and grep-gate commits),
+and the merge of my OWN branch into `main` as the last move — which §0.1 assigns to me
+and not to the субагент in any case («кто вливает СВОЮ ветку этого захода — ты сам,
+последним ходом, после коммита зоны»).
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+
+*(`нет`, with the list the section demands, and every item is impassable with MY rights
+rather than merely hard:*
+- *the entry debt is the two unmerged `zahod/*` branches the command above counted. They
+  were not mine to merge: §0.1 gives the merging of OTHER people's branches to the
+  субагент the orchestrator cancelled, and the заход's own КЛАПАН block records the
+  analyst's reason — «волна идёт: zahod/P14-uvedomlenia, zahod/P16-eksport и
+  zahod/P9-listok работают прямо сейчас», i.e. they belong to заходы that were running
+  while I ran. Merging a branch out from under a live заход is the exact failure the
+  contract forbids;*
+- *открытые заявки, вывоз and the closing of заявки likewise sat inside the cancelled
+  block and carry no command I was given a substitute for.*
+
+*The one entry debt that WAS mine — my own branch reaching `main` — is closed: see
+`## ОТЧЁТ`, section «ПОЛНАЯ ГИТ-ГИГИЕНА».)*
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "core/services/roster.py" && \
-    git_zona.py check --zone "infra/roster_repo.py" && \
-    git_zona.py check --zone "bot/handlers/owner.py" && \
-    git_zona.py check --zone "tests/privyazka/"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/core/services/roster.py` — открывать редактором; the artefact of this position is CODE, and this file is where the fix lives. Its three companions: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/infra/roster_repo.py`, `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/bot/handlers/owner.py`, `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tests/privyazka/`. The one file to open if only one is opened: `roster.py`.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `a8f09b7` · `d24cf17` · `48402fd` · `a413f73` · `f76423d` · `83f539d` · `a92fa62` · `44af11a` · `c2796b0` — nine commits on `zahod/P19-privyazka`, merged into `main` as `7b28710` and `fd21253`. Zone gate, all four, from the working folder:
+```
+git_zona.py check --zone core/services/roster.py  → ✅  rc=0
+git_zona.py check --zone infra/roster_repo.py     → ✅  rc=0
+git_zona.py check --zone bot/handlers/owner.py    → ✅  rc=0
+git_zona.py check --zone tests/privyazka/         → ✅  rc=0
+```
+
+**ПРАВКИ ПРОЧИТАНЫ:** none — the `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` block reads `<правок нет>`.
+
+---
+
+### WHAT WAS DONE, AND WHY
+
+**Both parts of the задание are done.** The stop-line the задание allowed for («получишь
+привязку, но НЕ уведомление») was not needed.
+
+**Part 1 — «принять» binds instead of creating.** Was: `on_accept → roster.confirm_student
+→ create_confirmed_student`, an unconditional INSERT with no catalogue lookup anywhere.
+On the live base, accepting Пирогов Константин would have made a 57th row with an empty
+year, bound the telegram to it, and left the real 201 marks on a row nobody could reach.
+Now the screen matches first: **one hit binds; a tie draws one button per candidate;
+zero hits draws «нет в списке — завести нового» and nothing else.** Creating a row is
+reachable from exactly one callback prefix (`newstud:`) and exactly one button press.
+`first_sheet_id` is absent from the binding UPDATE on purpose — the imported anchor is
+the reason Пирогов's marks are not debts.
+
+The matcher **imports P7** (`core.services.raspoznavanie.case_forms`, `ratio`) and
+writes no second index; `grep -c token_set_ratio core/services/roster.py` → 0. What was
+added is only the part P7 has no reason to own: which scored row is an ANSWER and which
+is a TIE. Normalisation folds the four differences that are not a different person —
+ё/е, hyphen/space, a trailing initial, stray whitespace.
+
+**Part 2 — the owner is told at once, and told once.** `pending_notifier` sends one
+message naming who is asking and in what role, with the same three buttons `/pending`
+draws. Idempotency is a ROW in the roster store (`notified_registration`), claimed and
+committed before the message is built, and dropped together with the заявка — because
+SQLite recycles `pending_registration.id`, and a stale marker would silence the NEXT
+child rather than the same one.
+
+🔴 **The seam that kept part 2 inside the зона, named explicitly because приёмка will
+look for the wiring in the wrong place.** The заявка is written by
+`bot/handlers/registration.py` and the service is built by `bot/app.py`; both are
+read-only here. So the notifier is installed by an aiogram `@router.startup()` hook in
+`bot/handlers/owner.py`. This is not a trick: `Dispatcher.start_polling` emits startup
+with `bot=bots[-1]` and the whole of `workflow_data` (which already carries `roster` and
+`owner_tg_id`) — I read that off aiogram 3.22's own source, and the test drives
+`dp.emit_startup` with exactly those kwargs. **Not one line of `bot/app.py` changed.**
+
+### HOW IT WAS CHECKED
+
+**КРИТЕРИЙ ГОТОВНОСТИ, all four, return code first:**
+```
+make check                                  rc=0 · 676 passed   (baseline on main: 645)
+python3 -m pytest tests/privyazka -q        rc=0 · 31 passed
+    ОХВАТ ПРИВЯЗКИ: каталог 56 учеников · заявок подано 56
+      разрешено в существующих: 56
+      создано новых:            0
+      ушло на кнопки владельцу: 0
+      ДУБЛЕЙ:                   0
+python3 -m pytest tests/privyazka -q -k "pirogov"        rc=0 · 13 passed, 18 deselected
+python3 -m pytest tests/privyazka -q -k "dva or ambig"   rc=0 ·  5 passed, 26 deselected
+```
+The coverage line prints under `capsys.disabled()` — pytest swallows a plain `print` on
+a passing test, and a number shown to nobody is the failure the задание describes.
+
+🔴 **THE AMBIGUITY IS A MEASURED TIE, NOT A STAGED ONE.** The live catalogue holds
+**Цикунов Александр** and **Цуканов Александр** — same given name, surnames differing by
+a transposition. A child typing «Цукунов» scores **85,714…  against both**, so the two
+land at 0,9000 each and there is nothing for a threshold to break. A staged catalogue of
+«Иванов А» and «Иванов Б» would have proved the code can draw buttons, not that it has
+anything to draw them for.
+
+**Проверено МУТАЦИЯМИ, because a green test that cannot go red is not a check.** Four
+mutations run and reverted, each named with what it broke:
+| mutation | result |
+|---|---|
+| «принять» calls `create_new_student` instead of `bind_student` (the original bug) | 🔴 1 failed |
+| the binding also writes `first_sheet_id` | 🔴 2 failed |
+| `confirm_student` never takes its binding branch | 🔴 1 failed — **and this one was GREEN on the first run** |
+| an absent name field scored as 0 again (the verifier's finding) | 🔴 3 failed |
+The third is the useful one: **the first negative control passed, which meant the suite
+had a hole.** Every test reached the catalogue through `match_student` + `bind_student`
+and none through the public one-call `confirm_student`, which is what P3's own tests
+call — a version of it that fell back to inserting would have put the duplicate straight
+back on the live base with a fully green suite. Two tests now stand on it (`a413f73`).
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА (§3, ПОСЛЕ-типа, свежий субагент, ДРУГИМ методом)
+
+It wrote its own harness (`scratchpad/verifier-P19/proverka.py`) — its own migrated
+database, its own `select count(*)` after every step, **no `pytest` run at all**.
+Coverage it reports: **76 заявки through the real service against a real migrated
+database** (56 sweep + Пирогов + Иванов + Цукунов + 15 robustness probes + 2 collision),
+plus 7 direct `match_students` probes; 6 measured parts. Its numbers:
+
+* **sweep:** `single=56 ambiguous=0 none=0`, bound to the RIGHT `(surname,name)` row
+  **56 of 56**, wrong row 0, bind errors 0, students 56 → 56, **duplicate pairs 0**;
+* **Пирогов:** `kind=single (1.0)`, students 56 → 56, the row carrying his tg_id is
+  `id=37`, **marks on that row 201**, `first_sheet_id` 6 → 6, status active. It noted
+  that the service's «current sheet» was 18 — i.e. a created row would have been
+  anchored at 18 and shown a year of false debts;
+* **not in the list:** «Иванов Иван» → `none`, 56 before AND after the match, 57 only
+  after the explicit `create_new_student`;
+* **two candidates:** «Цукунов Александр» → `ambiguous`, both real children,
+  `0.9000` each, students 56 → 56, rows carrying a tg_id **0** — nothing written;
+* **reading `bot/handlers/owner.py`:** «Plainly: no. The `accept:` callback cannot reach
+  a row-creating call» — separate handler, separate prefix, separate press;
+* **harm grep:** `create_confirmed_student` reachable only from `create_new_student`;
+  `raspoznavanie` imported, not reimplemented; `token_set_ratio` count 0.
+
+It ended with the required line: `выдано 2 позиций из 2 найденных`. **Both findings are
+answered, and one of them was a real bug I then fixed:**
+
+1. 🔴 **«Пирогов» + «К.» in the GIVEN-NAME box came back as «nobody in the list».**
+   `normalise_name` strips the initial (correctly — an initial is not a name), leaving an
+   empty field, which was then scored as a total mismatch: `0,7·1,0 + 0,3·0,0 = 0,70`,
+   under `ACCEPT_FLOOR`. The owner would have seen «в списке не найден» **with the create
+   button** — one press from the second Пирогов this whole position exists to prevent,
+   and on screen it would not have looked like a failure at all. Fixed in `a92fa62`:
+   `_field_score` returns `None` for a field the заявка left empty and `_combine`
+   renormalises the weights over the fields that carry evidence. A given name that IS
+   filled in keeps its full vote — «Пирогов Пётр» is still nobody, «Иванов» with no name
+   is still nobody. Three named tests; the mutation that restores the old behaviour goes
+   red. The verifier also noted the swapped-fields case («Константин»/«Пирогов» → none):
+   **left as it is, deliberately** — a swap-tolerant matcher would happily bind «Иванов
+   Пётр» to «Петров Иван», and the owner has a rename button. It is item 5 of `## ВОПРОСЫ`.
+2. **«The code moved under me mid-verification.»** True and it was me: commit `83f539d`
+   landed while it ran. The diff was **comment-only, 8 insertions / 4 deletions, no
+   executable line**, and the verifier re-ran A–F against the final HEAD with identical
+   results — it says so itself. Fair catch about process; no effect on its measurements.
+
+### ЧТО НЕ ТРОГАЛ
+
+`core/services/marking.py`, `core/services/progress.py`, `core/ports.py`,
+`infra/repositories.py`, `config.py`, `migrations/`, `bot/app.py` — untouched, as the
+задание requires. `core/services/raspoznavanie.py` — **imported, not edited** (zone of
+accepted P7). No migration was written: the `notified_registration` table lives in the
+roster store, whose schema is `create table if not exists` in `infra/roster_repo.py`,
+which is inside the zone; `migrations/` was not opened.
+
+### 🔴 ВНЕ ЗОНЫ — ОДИН ФАЙЛ, НАЗВАН ЗДЕСЬ ПРЯМО
+
+`tests/bot/test_registration.py` — **outside the зона, edited anyway, committed alone as
+`48402fd` so it can be judged on its own.** Why: two of its tests assert the OLD contract
+— that «принять» creates a student, and that two заявки under one name give two rows —
+and that contract is precisely what the задание orders replaced. The зона and the
+критерий готовности (`make check` rc=0, N greater than before) could not both be obeyed:
+leaving the file alone means two red tests, and a red `make check` means the WARNING
+block forbids the merge, so the position delivers nothing. I chose to deliver, minimally
+and visibly. **Nothing was deleted or weakened:** `test_owner_accepts_pending_student`
+keeps both of its original assertions and gains one (that nothing is created before the
+button is pressed); `_seed_confirmed_student` gained a name parameter so the privacy test
+that needs TWO students names two students instead of relying on duplicates being
+possible. The general lesson is item 1 of `## ВОПРОСЫ` and the first entry of
+`## УРОКИ ФАБРИКЕ`.
+
+Two further paths outside the four zone entries, both sanctioned by the контракт's own
+«SCRATCHPAD — ТОЛЬКО ЛИЧНЫЙ» clause and both mine: `scratchpad/P19-privyazka/proto.py`
+(the measurement the three thresholds were read off) and `scratchpad/verifier-P19/proverka.py`
+(the verifier's harness, kept as the evidence). `git_zona.py` flagged both as «влито, но
+не встроено»; neither is meant to have a call point, and `c2796b0` says so with the
+`# TOOL-CONTRACT: called-by-hand` marker the tool offers, rather than leaving the debt
+unnamed.
+
+### НЕОБРАТИМОЕ
+
+**Необратимого нет.** No file was deleted, renamed or moved; no `git reset`; no
+`git checkout` over unsaved work; no deploy (the задание has none). Four mutations were
+made to working files during the negative-control runs and every one was restored from a
+copy in the same command — `git status --porcelain` was verified empty after each, and
+the final state is committed. Everything this заход wrote is additive and is in git.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+* **Repeats on the next заход, therefore a заход and not a queue item:** the зона of a
+  заход that overturns a behaviour must contain the tests pinning it. Every position of
+  this wave that changes an existing contract meets it, and it costs the same fork each
+  time. Item 1 of `## ВОПРОСЫ`, `## УРОКИ ФАБРИКЕ` entry 1.
+* **Repeats, cheaply fixable:** a post-check gate «`grep -c <forbidden name>` must be 0»
+  goes red on the comment that warns against the name. Any заход told to avoid a named
+  function meets it. Item 2, `## УРОКИ ФАБРИКЕ` entry 2.
+* **Does not repeat — legitimately a queue item:** the roster store's missing commits
+  (item 4), the notifier wiring being invisible from `app.py` (item 3), and the
+  thresholds being measured against this year's list (item 5). All three are facts about
+  this file and this catalogue, not about the next unit of work.
+
+### ⚠️🔴 ПОЛНАЯ ГИТ-ГИГИЕНА — ЧИСЛА, ПЕЧАТАННЫЕ КОМАНДОЙ
+
+**1 · ВСЕ КОММИТЫ.**
+```
+== /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P19-privyazka : вне git 0
+== /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot           : вне git 7
+ M README.md
+ M zhurnal/2026-09-02_spetsmat-bot/PULS-CHASOVOGO-sborka-bota.log
+ M zhurnal/2026-09-02_spetsmat-bot/kod_P15-tekst.md
+ M zhurnal/2026-09-02_spetsmat-bot/kod_P16-eksport.md
+ M zhurnal/2026-09-02_spetsmat-bot/kod_P19-privyazka.md
+ M zhurnal/_INFRA-git/INCIDENTY.md
+?? zhurnal/_INFRA-git/zayavki/sdelano/
+```
+**Вне git в МОЁМ репозитории — 0.** The seven in the main folder are not mine and I left
+them: `kod_P19-privyazka.md` is THIS file, which the контракт forbids me to commit («это
+делает аналитик при приёмке»); `kod_P15-tekst.md` and `kod_P16-eksport.md` are other
+заходы' channels; `README.md`, the hourly log, `INCIDENTY.md` and the `zayavki/sdelano/`
+directory are written by the tooling and by заходы running beside me. Touching another
+живой заход's channel is the failure the контракт names.
+
+**2 · ВЛИТИЕ СВОЕЙ ВЕТКИ.** Done by me, last, after the zone was committed:
+`✅ Влито в main без конфликтов: 7b28710`, then `fd21253` for the marker commit. No
+conflicts, so no `README.md` merge decision arose. `--vsyo-ravno` was given the reason
+the WARNING block prescribes (own working folder still alive, штатное влитие последним
+ходом). The first attempt **refused** — «Слияние выходит за зоны … не сливаю НИЧЕГО» —
+because three touched paths were not declared; I declared them by name rather than
+forcing, which is why the out-of-zone file is visible in the merge command itself.
+
+**3 · ПОСТ-ПРОВЕРКА ИЗ ГЛАВНОЙ ПАПКИ** — `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`,
+after the merge, HEAD `fd21253` on `main`:
+```
+make check                             rc=0 · 788 passed   ← ЗЕЛЁНАЯ
+python3 -m pytest tests/privyazka -q   rc=0 ·  31 passed
+    ДУБЛЕЙ: 0 · разрешено в существующих 56 · создано новых 0
+grep -c create_confirmed_student core/services/roster.py  → 2   (creation kept, reachable only by the explicit button)
+grep -n raspoznavanie core/services/roster.py             → line 22: from core.services.raspoznavanie import case_forms, ratio
+grep -c token_set_ratio core/services/roster.py           → 0
+```
+**Пост-проверка ЗЕЛЁНАЯ, отката не потребовалось.** (788 rather than 676 because `main`
+also received P14, P16 and P20 while I worked; the mechanism I changed is green among
+all of it.)
+
+**4 · ГАШЕНИЕ.** `git --no-optional-locks branch --no-merged main | grep -c 'zahod/'` →
+**0**. Entry snapshot was **2**; it went DOWN, not up, so Г3 needs no justification —
+mine merged and the neighbours merged their own. No showcase branch was touched.
+
+**5 · ВЫВОЗ.** `git remote -v` → **0 remotes configured.** There is nowhere to push:
+невывезенных на своей ветке **0** by construction, and I raised no заявка for it because
+there is no operation to request. This is a property of the repository, not a debt.
+
+**6 · ПРОВЕРКА ФАКТОМ.** Every number above is the output of the command beside it, run
+after the merge, not recalled: вне git 0 (mine) / 7 (not mine, named); невлитых `zahod/*`
+0; невывезенных 0 (no remote); пост-проверка зелёная.
+
+**ЗАЯВКИ:** none raised — no merge, commit, export, deploy or gashing operation was left
+undone that would need one. The зона is committed, my branch is merged, nothing is
+unmerged, and there is no remote to export to.
+
+**ВРЕМЯ ПРОГОНА И ТОКЕНЫ:** снимает приёмка из лога прогона
+(`/tmp/zahod-P19-privyazka.jsonl`) — исполнителю счётчик недоступен.
+
+**ВОЗВРАЩАТЬСЯ:** items 3, 4 and 5 of `## ВОПРОСЫ` are open and none of them blocks
+tomorrow's lesson. The one worth a look soonest is item 4 — the roster store's
+pre-existing writes do not commit, so a bot that is killed rather than stopped can lose
+заявки. It is one line in `RosterRepo.open` and it belongs to whoever owns that decision.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
@@ -554,7 +828,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — позиция закрывает F6 — то, из-за чего Пирогов, зарегистрировавшись, раздвоился бы и увидел пустой год вместо 201 отметки. Проверено не отчётом: `pytest tests/privyazka` = 31 passed, и суть держат ИМЕНОВАННЫЕ тесты, а не общий зелёный — `test_all_fifty_six_bind_into_existing_rows_and_make_no_duplicates` (подметание по ВСЕМУ каталогу, а не по одному случаю), `test_second_binding_of_the_same_row_is_refused_loudly`, `test_nothing_is_written_while_the_owner_has_not_chosen` — последний и есть человеческие ворота, которые волна себе поставила. Неоднозначность даёт кнопки владельцу, а не догадку машины (`test_dva_kandidata_dayut_knopki_a_ne_vybor`).
 
 **ВЕТКА РАБОТЫ:** `zahod/P19-privyazka`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -564,6 +838,8 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > Читается командой (из любой папки, в том числе из worktree): `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki`
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
+
+заявок нет: ни одна из пяти операций не понадобилась — влитие сделано самим заходом и подтверждено `git branch --merged main`, коммиты по ходу нашёл Г1, вывоз непроверяем (удалённых нет), деплой вне зоны (P10), гашение не нужно — волна идёт.
 
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 
