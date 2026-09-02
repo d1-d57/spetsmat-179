@@ -20,6 +20,7 @@ from bot.handlers import owner, registration, student, teacher
 from bot.middleware import AuthMiddleware
 from bot.routers import marking, room
 from bot.routers import photo, voice
+from bot.routers import text_input
 from bot.routers import uvedomlenia
 from bot.routers import views
 from infra.db import SystemClock
@@ -215,6 +216,17 @@ def build(
     # that nothing reaches, which is the exact defect the block above says P7 and P8
     # already shipped once.
     dp.include_router(uvedomlenia.build_router())
+
+    # P15's typed screen — the fourth door into the same journal, and the one tomorrow's
+    # lesson runs on: the owner has no printer, so the photograph channel cannot be tried
+    # until he is at school.  Its position is load-bearing twice over.  BEFORE the
+    # catch-all, like everything above, or its table's taps would answer «экран устарел».
+    # AFTER registration/owner/student/teacher, because those own the teacher's typing
+    # while an FSM dialogue is open — a surname being entered at registration is plain
+    # text too, and an earlier router wins.  Its own filter refuses when a dialogue is
+    # open and when the message is not a record of a lesson, so an ordinary sentence
+    # reaches whatever it was meant for instead of being answered with a form.
+    dp.include_router(text_input.build_router())
 
     # LAST, and the order is load-bearing rather than tidy: this catch-all claims every
     # callback query no router above it matched.  Included any earlier it would swallow
