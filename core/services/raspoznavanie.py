@@ -28,8 +28,13 @@ paragraph.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Optional
+
+#: Куда уходит то, что человеку читать незачем: имя класса исключения Python и
+#: отсутствие библиотеки на сервере.
+log = logging.getLogger(__name__)
 
 #: The prefix a student's code carries on the printed form and in every payload that
 #: leaves this machine.  One letter, so that a code stays short enough to be read off a
@@ -269,8 +274,15 @@ def prepare(raw: bytes) -> Prepared:
         # ``convert`` forces the decode: a colour space, not a greyscale conversion.
         image = image.convert("RGB")
     except Exception as error:  # a corrupt upload is an expected input, not a crash
-        raise IntakeRefused("не смог прочитать изображение (%s) — пришлите снимок заново"
-                            % type(error).__name__)
+        # 🔴 ЗДЕСЬ ПЕЧАТАЛОСЬ `type(error).__name__` — имя класса исключения
+        # Python («UnidentifiedImageError»), и его читал преподаватель. Отказ
+        # показывается ДОСЛОВНО (`answer(str(refusal))` в `bot/routers/photo.py`),
+        # так что имя класса доезжало до человека целиком.
+        log.warning("не удалось раскодировать снимок: %r", error)
+        raise IntakeRefused(
+            "не смог прочитать этот снимок — пришлите фото заново, "
+            "обычной камерой и без обрезки"
+        )
     steps.append("exif:%s" % ("rotated" if image.size != before else "already-upright"))
     frame = numpy.asarray(image)[:, :, ::-1]  # PIL is RGB, OpenCV is BGR
 
@@ -311,9 +323,12 @@ def _cv2():
     try:
         import cv2
     except ImportError as error:  # pragma: no cover -- installed on every machine here
+        # 🔴 ЗДЕСЬ ЧЕЛОВЕКУ ПОКАЗЫВАЛИ КОМАНДУ УСТАНОВКИ ПАКЕТА. Отказ читает
+        # преподаватель на занятии; поставить библиотеку на сервер он не может,
+        # а сделать сейчас может ровно одно — отметить кнопками.
+        log.error("на сервере нет OpenCV, разбор фото невозможен: %s", error)
         raise IntakeRefused(
-            "для разбора фото нужен OpenCV: python3 -m pip install --user opencv-python-headless (%s)"
-            % error
+            "разбор фото на сервере сейчас не работает — отметьте кнопками: /setka"
         )
     return cv2
 
@@ -459,7 +474,12 @@ def _encode(frame) -> bytes:
     cv2 = _cv2()
     ok, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
     if not ok:  # pragma: no cover -- imencode fails only on a malformed array
-        raise IntakeRefused("не смог закодировать изображение в JPEG")
+        # Показывается человеку дословно, поэтому говорит про снимок, а не
+        # про кодек: «JPEG» преподавателю на занятии ничего не даёт.
+        log.error("imencode отказал: кадр %r", getattr(frame, "shape", None))
+        raise IntakeRefused(
+            "не смог подготовить этот снимок — пришлите фото заново"
+        )
     return buffer.tobytes()
 
 

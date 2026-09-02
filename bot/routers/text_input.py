@@ -209,7 +209,10 @@ def _name_of(catalogue, student_id: Optional[int]) -> str:
         return "?"
     student = catalogue.student(student_id)
     if student is None:
-        return "ученик %d" % student_id
+        # 🔴 БЫЛО «ученик %d» с `student_id` — первичным ключом строки базы.
+        # Сюда попадают, когда ученика между черновиком и перерисовкой убрали
+        # из списка; число преподавателю не говорит ничего и выглядит как имя.
+        return "ученика больше нет в списке"
     return ("%s %s" % (student.surname, student.name)).strip()
 
 
@@ -406,7 +409,11 @@ async def _stored_draft(state: FSMContext) -> Optional[dict]:
 
 
 async def _refuse_as_stale(query: CallbackQuery) -> None:
-    await query.answer("Этот разбор устарел — пришлите запись заново.", show_alert=True)
+    # Экран разбирает НАБРАННОЕ СООБЩЕНИЕ, а не диктовку: «пришлите запись
+    # заново» посылало преподавателя делать не то, что он делал.
+    await query.answer(
+        "Этот разбор устарел — напишите сообщение заново.", show_alert=True
+    )
 
 
 async def toggle_cell(

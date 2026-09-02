@@ -37,6 +37,7 @@ built, exactly as ``bot/keyboards/grid.button`` does.  Moving these payload clas
 from __future__ import annotations
 
 import io
+import logging
 from typing import Optional
 
 from aiogram import F, Router
@@ -64,6 +65,9 @@ from core.services.raspoznavanie import (
     rows_from_answer,
 )
 from infra.llm import LlmError, ModelRefused, SpendLimitReached
+
+#: Куда уходит то, что человеку читать незачем: текст исключения модели.
+log = logging.getLogger(__name__)
 
 #: Where a mark written by this screen came from.  One of ``config.MARK_SOURCES``.
 SOURCE = "фото"
@@ -243,7 +247,10 @@ def _name_of(catalogue, row) -> str:
         return "строка %s" % (row.get("code") or "?")
     student = catalogue.student(student_id)
     if student is None:
-        return "ученик %d" % student_id
+        # 🔴 БЫЛО «ученик %d» с `student_id` — первичным ключом строки базы.
+        # Сюда попадают, когда ученика между черновиком и перерисовкой убрали
+        # из списка; число преподавателю не говорит ничего и выглядит как имя.
+        return "ученика больше нет в списке"
     return ("%s %s." % (student.surname, (student.name or "")[:1])).strip()
 
 
@@ -347,11 +354,16 @@ async def receive_photo(message: Message, **data) -> None:
 
     sheet = _current_sheet(catalogue)
     if sheet is None:
-        await message.answer("В каталоге ещё нет листков — бланк не к чему привязать.")
+        await message.answer(
+            "Листков пока нет — бланк не к чему привязать. Листки заводит владелец."
+        )
         return
     if vision is None:
+        # 🔴 БЫЛО «нет ключа модели» — внутреннее состояние настройки сервера.
+        # Преподавателю на занятии оно ничего не даёт: ключ ставит владелец, а
+        # сделать сейчас можно ровно одно, и это и написано.
         await message.answer(
-            "Разбор фото не настроен: нет ключа модели. Отметьте кнопками — /setka."
+            "Разбор фото сейчас выключен. Отметьте кнопками — /setka."
         )
         return
 
@@ -384,7 +396,19 @@ async def receive_photo(message: Message, **data) -> None:
         )
         return
     except LlmError as error:
-        await _redraw_message(waiting, "Не получилось разобрать фото: %s" % error)
+        # 🔴 ЗДЕСЬ ПОДСТАВЛЯЛСЯ ТЕКСТ ИСКЛЮЧЕНИЯ. Он написан для того, кто чинит
+        # код: «ответ не разобрался как JSON: Extra data: line 7 column 1»,
+        # «ответ — не объект, а list», «сеть недоступна: [Errno 8] nodename nor
+        # servname provided». Преподаватель, сфотографировавший бланк на
+        # занятии, читал бы именно это — и по открытой заявке
+        # 2026-09-02T1733 на сегодняшней модели он читал бы это на КАЖДОМ
+        # снимке. Причина уходит в журнал бота, где её и читают.
+        log.warning("разбор фото отказал: %s", error)
+        await _redraw_message(
+            waiting,
+            "Не получилось разобрать фото. Переснимите бланк целиком и ровно; "
+            "если снова не выйдет, отметьте кнопками — /setka.",
+        )
         return
 
     # 🔴 WHICH SHEET IS ON THE PAPER, before a single mark is drafted.
@@ -574,13 +598,18 @@ async def _download(message: Message, bot) -> bytes:
     if message.photo:
         chosen = choose_photo_size(message.photo)
         if chosen is None:
-            raise IntakeRefused("снимок слишком большой — Telegram отдаёт боту до 20 МБ")
+            raise IntakeRefused(
+                "снимок слишком большой — Telegram отдаёт боту до 20 МБ; "
+                "снимите бланк ещё раз обычной камерой"
+            )
         file_id = chosen.file_id
     elif message.document is not None:
         refuse_if_too_large(message.document.file_size or 0)
         file_id = message.document.file_id
     else:  # pragma: no cover -- the filter admits nothing else
-        raise IntakeRefused("это не изображение")
+        raise IntakeRefused(
+            "это не изображение — пришлите фотографию бланка, а не файл"
+        )
 
     buffer = io.BytesIO()
     await bot.download(file_id, destination=buffer)

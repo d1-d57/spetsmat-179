@@ -21,11 +21,17 @@ router.message.middleware(require_role("confirmed_student"))
 
 @router.message(F.text == "/me")
 async def show_me(message: Message, identity) -> None:
-    """A confirmed student's own id -- the only piece of self a P3 screen knows.
+    """Подтверждённому ученику — то, что он может сделать дальше.
 
-    P5 replaces this with a plusnik and a debt list.
+    🔴 ЗДЕСЬ ПЕЧАТАЛОСЬ «Ваш номер в журнале: %d» с `identity.student_id`.
+    Это первичный ключ строки в базе, а не номер в журнале: он ничего не
+    значит для ребёнка, он ВРЁТ про то, чем является, и он же — внутреннее
+    состояние, напечатанное человеку. Экраны года и долгов делает P5, и
+    именно их ученику и надо назвать.
     """
-    await message.answer("Ваш номер в журнале: %d" % identity.student_id)
+    await message.answer(
+        "Вы в списке. Ваш год — /god, что нужно сдать — /dolgi."
+    )
 
 
 @router.message(F.text.startswith("/peek"))
@@ -34,4 +40,6 @@ async def forbidden_peek(message: Message, identity) -> None:
     a refusal here -- NOT in the middleware (the URL is well-formed) and NOT
     silently (the brief requires coverage, not just correctness).
     """
-    await message.answer("Вы видите только свои данные.")
+    await message.answer(
+        "Вы видите только свои данные. Свой год — /god, свои долги — /dolgi."
+    )

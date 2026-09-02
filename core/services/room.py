@@ -718,7 +718,11 @@ class RoomService:
             member.teacher_id for member in room_day.members if member.teacher_id is not None
         )
         return {
-            teacher_id: known.get(teacher_id) or ("преподаватель %d" % teacher_id)
+            # 🔴 БЫЛО «преподаватель %d» с `teacher_id` — ключом строки базы,
+            # и его читал старший аудитории на своём экране. Отсюда словарь
+            # уходит УЖЕ ЗАПОЛНЕННЫМ на каждый id, поэтому запасной текст в
+            # `bot/keyboards/room.py` до этого случая не доживал никогда.
+            teacher_id: known.get(teacher_id) or "преподаватель не из списка"
             for teacher_id in sorted(wanted)
         }
 

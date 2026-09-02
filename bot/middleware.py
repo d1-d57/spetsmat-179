@@ -108,7 +108,11 @@ class AuthMiddleware(BaseMiddleware):
         tg_id = _extract_tg_id(event)
         if tg_id is None:
             # No identifiable sender (channel post).  No role, no access.
-            return await _deny(event, "this bot only speaks to people, not channels.")
+            return await _deny(
+                event,
+                "Бот отвечает только в личной переписке — из канала он вас не видит. "
+                "Напишите ему напрямую.",
+            )
 
         if tg_id == self._owner_tg_id:
             data["identity"] = Identity(tg_id=tg_id, kind="owner")
@@ -166,7 +170,13 @@ def require_role(*allowed: str):
         async def __call__(self, handler, event, data):
             identity = data.get("identity")
             if identity is None:
-                return await _deny(event, "auth not initialised")
+                # 🔴 БЫЛО «auth not initialised» — диагностика разработчика,
+                # по-английски, живому человеку. Что случилось внутри,
+                # человека не касается; ему нужен следующий шаг.
+                return await _deny(
+                    event,
+                    "Бот сейчас не может вас узнать. Попробуйте ещё раз через минуту.",
+                )
             if identity.kind not in allowed_set:
                 # 🔴 ОТКАЗ ЧИТАЕТ ЖИВОЙ ЧЕЛОВЕК, ЧАЩЕ ВСЕГО РЕБЁНОК.
                 # Здесь стояла диагностика разработчика — «this screen is for
@@ -175,7 +185,11 @@ def require_role(*allowed: str):
                 # в самом английском. Владелец увидел ровно её первым же
                 # `/start` в 14:24 живого прогона. Отказ не обязан объяснять
                 # устройство ролей — он обязан сказать человеку, что делать.
-                return await _deny(event, "Этот экран вам не открыт.")
+                return await _deny(
+                    event,
+                    "Этот экран вам не открыт. Если вы недавно отправили "
+                    "заявку — её ещё не подтвердили.",
+                )
             return await handler(event, data)
 
     _Require.__name__ = "Require(%s)" % "|".join(sorted(allowed_set))
