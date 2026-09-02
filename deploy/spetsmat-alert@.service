@@ -1,0 +1,22 @@
+# The alarm, fired by OnFailure= of whichever unit gave up.  %i is that unit's name.
+#
+# Type=oneshot and nothing else: this must be able to run when the thing it reports on is
+# already broken, so it has no dependencies of its own to fail on.
+
+[Unit]
+Description=alarm for %i through the second bot
+# No OnFailure= here on purpose: an alerter that alerts about itself is a loop, and there
+# is nothing left below it to catch anyway.  Its own failure goes to the journal, which is
+# what `journalctl -u spetsmat-alert@` is for.
+
+[Service]
+Type=oneshot
+Environment=TZ=UTC
+User=@USER@
+WorkingDirectory=@CHECKOUT@
+EnvironmentFile=@CHECKOUT@/secrets/bot.env
+ExecStart=/usr/bin/python3 @CHECKOUT@/ops/opoveshchenie.py \
+    --rod trevoga \
+    --tekst "unit gave up: five failed starts in five minutes means broken code, not a broken network" \
+    --edinica %i \
+    --strok-zhurnala 20

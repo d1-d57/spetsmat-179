@@ -1,0 +1,26 @@
+# THE RESTORE CHECK IS A SEPARATE TASK, NOT AN APPENDIX TO THE BACKUP.  A backup nobody
+# restored is not a backup, and by the owner's own list this is the most expensive failure
+# of all, because it is discovered only at the moment when nothing can be done.
+#
+# All three assertions must pass before the heartbeat goes out, and the heartbeat is the
+# whole point: whoever watches the channel watches for the MISSING pulse.  SILENCE MEANS
+# ALARM -- a check that died before it could complain is as loud as one that failed.
+
+[Unit]
+Description=weekly restore check of the latest snapshot
+OnFailure=spetsmat-alert@%n.service
+
+[Service]
+Type=oneshot
+Environment=TZ=UTC
+User=@USER@
+WorkingDirectory=@CHECKOUT@
+EnvironmentFile=@CHECKOUT@/secrets/bot.env
+ExecStart=/usr/bin/python3 @CHECKOUT@/ops/proverka_vosstanovlenia.py
+ExecStart=/usr/bin/python3 @CHECKOUT@/ops/opoveshchenie.py --rod puls \
+    --tekst "restore check green: integrity ok, roster full, marks fresh"
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=@CHECKOUT@/data

@@ -1,0 +1,18 @@
+# THE SCHEDULE IS TIED TO LESSONS, NOT TO DAYS.  One snapshot before the lesson, one right
+# after, one daily: the worst possible loss is then ONE LESSON, not one day.
+#
+# The times below are UTC because the system clock is UTC.  They must agree with
+# ops/raspisanie.py, and tests/ops/test_deploy_edinicy.py asserts that they do -- two
+# answers to "when is a lesson" would eventually disagree, and the disagreement would show
+# up as a missing snapshot exactly on the day something was lost.
+
+[Unit]
+Description=snapshot before the lesson
+
+[Timer]
+OnCalendar=Mon,Thu *-*-* 12:45:00 UTC
+Persistent=true
+Unit=spetsmat-rezervnaya-kopia@pered-zanyatiem.service
+
+[Install]
+WantedBy=timers.target

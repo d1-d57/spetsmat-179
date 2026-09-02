@@ -1,0 +1,14 @@
+# Right after the lesson ends (19:00 Moscow = 16:00 UTC), with a quarter of an hour for the
+# marks that are still being entered on the way out.  Kept in step with ops/raspisanie.py
+# by tests/ops/test_deploy_edinicy.py.
+
+[Unit]
+Description=snapshot right after the lesson
+
+[Timer]
+OnCalendar=Mon,Thu *-*-* 16:15:00 UTC
+Persistent=true
+Unit=spetsmat-rezervnaya-kopia@posle-zanyatia.service
+
+[Install]
+WantedBy=timers.target

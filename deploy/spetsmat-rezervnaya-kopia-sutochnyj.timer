@@ -1,0 +1,13 @@
+# The daily snapshot, at night, far from any lesson.  Persistent=true so that a machine
+# which was off at 01:00 takes it on the next boot instead of skipping the day silently.
+
+[Unit]
+Description=daily snapshot
+
+[Timer]
+OnCalendar=*-*-* 01:00:00 UTC
+Persistent=true
+Unit=spetsmat-rezervnaya-kopia@sutochnyj.service
+
+[Install]
+WantedBy=timers.target
