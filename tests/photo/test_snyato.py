@@ -292,8 +292,17 @@ def test_no_label_can_be_in_both_lists_after_a_parse_of_the_same_cell(label):
     """A cell is in ONE state.  If a model answers both, the two lists disagree loudly.
 
     Nothing here silently resolves the contradiction: the parser keeps what the model
-    said, and the screen shows the teacher a row that is visibly odd -- which is the
-    correct behaviour for a paper that really does carry a tick struck through by a dash.
+    said, and hands both lists on, which is the correct behaviour for a paper that really
+    does carry a tick struck through by a dash -- the contradiction is the teacher's to
+    settle, and a parser that picked a side would settle it invisibly.
+
+    🔴 AND THE TEACHER DOES NOT SEE IT YET, WHICH IS WHY THIS IS SAID HERE RATHER THAN
+    IMPLIED.  An earlier version of this docstring claimed the screen «shows a row that
+    is visibly odd»; it does not.  ``build_draft`` (``bot/routers/photo.py``) still reads
+    only ``row.solved``, so a cell in both lists reaches the screen as a plain hand-in.
+    Carrying the field this far is the half that fits in this заход's zone; the last leg
+    is written out address by address in the ``## ВОПРОСЫ`` of ``kod_R1-foto.md``.  Found
+    by the §3 verifier, which read the claim and went looking for the screen.
     """
     payload = _envelope(
         [{"student_code": "u1", "solved": [label], "retracted": [label]}]

@@ -517,12 +517,23 @@ def _crop_to_sheet(frame):
         cropped = frame[max(0, y):y + h, max(0, x):x + w]
         if cropped.size == 0:
             return frame, ["crop:skipped-empty-rect"]
+        source_height, source_width = frame.shape[:2]
+        # 🔴 THE LOG NAMES THE BAND IT KEPT, PER SIDE, AND NOT THE ONE IT ASKED FOR.
+        # ``margin`` alone is a REQUEST, and the slice above grants it per side: a band
+        # that runs off the frame stops at the frame.  On the very form this заход is
+        # about the grid reaches 8 px from the right edge, so the right band is 8 px
+        # while ``margin`` says 187 -- and 8 px is the number at which the codes stay
+        # outside.  That is the SAME failure the shared clamp had, and a line printing
+        # only the request cannot tell the two apart, which is the one job this line has.
+        kept = (
+            max(0, margin + min(x, 0)),                      # left
+            max(0, margin + min(y, 0)),                      # top
+            max(0, margin - max(0, x + w - source_width)),    # right
+            max(0, margin - max(0, y + h - source_height)),   # bottom
+        )
         return cropped, [
-            # The band is named in the step log with the same honesty as the neighbours:
-            # a crop that silently kept a margin and one that silently did not look
-            # identical from outside, and this line is what tells them apart.
-            "crop:bounding-rect(%dx%d,margin=%dpx)"
-            % (cropped.shape[1], cropped.shape[0], margin),
+            "crop:bounding-rect(%dx%d,margin=%dpx,kept=l%d,t%d,r%d,b%d)"
+            % ((cropped.shape[1], cropped.shape[0], margin) + kept),
             "perspective:skipped-rectangular(skew=%.3f)" % skew,
         ]
 
@@ -568,8 +579,13 @@ def _crop_to_sheet(frame):
         flags=cv2.INTER_AREA, borderMode=cv2.BORDER_REPLICATE,
     )
     return warped, [
-        "perspective:corrected(skew=%.3f,%dx%d,margin=%dpx)"
-        % (skew, width, height, margin)
+        # 🔴 THE KEPT BAND AGAIN, AND HERE IT SHRINKS FOR A DIFFERENT REASON.  Nothing is
+        # clamped away in this branch -- the warp samples past the frame instead -- but
+        # ``scale`` above may shrink the whole target so that no dimension grows, and the
+        # band shrinks with it: ask for 187 px at scale 0,63 and the output carries 118.
+        # A line printing the request would report a band the picture does not have.
+        "perspective:corrected(skew=%.3f,%dx%d,margin=%dpx,kept=%dpx)"
+        % (skew, width, height, margin, int(round(margin * scale)))
     ]
 
 

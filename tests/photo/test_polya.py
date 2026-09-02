@@ -100,11 +100,34 @@ def _found_rect(frame):
 
 
 def _margin_of(steps):
-    """The band this run actually kept, read out of the step log."""
+    """The band this run ASKED FOR, read out of the step log.
+
+    Named for the request and not for the result, because those are two different numbers
+    whenever a side runs into the frame -- see ``_kept_of``.  The first version of this
+    helper called the request «the band actually kept», and the docstring was the whole
+    of the evidence for it.
+    """
     for step in steps:
         if "margin=" in step:
             return int(step.split("margin=", 1)[1].split("px", 1)[0])
     raise AssertionError("no step names a margin: %r" % (list(steps),))
+
+
+def _kept_of(steps):
+    """The band the step log says it KEPT: ``{"l": .., "t": .., "r": .., "b": ..}``.
+
+    The warping branch keeps one number for all four sides -- it clamps nothing and
+    shrinks everything together -- so it is spread across the four keys here, and a
+    caller comparing sides sees «equal», which is true of that branch.
+    """
+    for step in steps:
+        if "kept=" in step:
+            body = step.split("kept=", 1)[1].rstrip(")")
+            if body.endswith("px"):
+                value = int(body[:-2])
+                return {side: value for side in "ltrb"}
+            return {part[0]: int(part[1:]) for part in body.split(",")}
+    raise AssertionError("no step names the band it kept: %r" % (list(steps),))
 
 
 # ------------------------------------------------------------------- the premise
@@ -236,6 +259,53 @@ def test_the_step_log_names_the_band_as_honestly_as_it_names_the_crop(form_bytes
     assert _margin_of(geometry) > 0
 
 
+def test_the_step_log_names_the_band_it_KEPT_and_not_the_one_it_asked_for(form_bytes):
+    """🔴 THE REQUEST AND THE RESULT ARE DIFFERENT NUMBERS, AND ONLY ONE OF THEM IS TRUE.
+
+    ``margin`` is what the crop ASKS for; the slice grants it per side, and a band that
+    runs off the frame stops at the frame.  On this very form the grid stands 8 px from
+    the right edge, so the right band is 8 px while ``margin`` says 187 -- and 8 px is
+    exactly the number at which the codes stay outside, which is the shared-clamp defect
+    this file already tests for.  A log printing only the request reads identically in
+    both cases, so the ONE job of that line -- telling a crop that kept its band from one
+    that did not -- is not done by it.  Found by the §3 verifier, not by this file.
+
+    The assertion is against PIXELS, not against a second copy of the formula: the four
+    numbers must add up to the picture that came out.
+    """
+    frame = _frame(form_bytes)
+    x, y, w, h = _found_rect(frame)
+    height, width = frame.shape[:2]
+
+    assert width - (x + w) < 0.08 * max(frame.shape[:2]), (
+        "this form no longer has a side against the frame edge, so this test proves "
+        "nothing; rebuild it from one that does"
+    )
+
+    cropped, steps = _crop_to_sheet(frame)
+    asked, kept = _margin_of(steps), _kept_of(steps)
+
+    assert kept["r"] < asked, (
+        "the right side ran into the frame edge, yet the log reports the full band "
+        "%d px on it (kept=%r) -- the request is being printed as the result" % (asked, kept)
+    )
+    assert kept["l"] == asked, (
+        "the left side had room for the whole band and must show it: %r" % (kept,)
+    )
+
+    # ±2 px: the offset runs along the quadrilateral's own edges and the grid is a degree
+    # or so off square, so the grown bounding box is not the found box plus exactly the
+    # band.  The claim under test is «these four numbers describe THIS picture».
+    assert abs(cropped.shape[1] - (w + kept["l"] + kept["r"])) <= 2, (
+        "log says l%d r%d around a %d px rectangle, which is %d px, but the picture is "
+        "%d px wide" % (kept["l"], kept["r"], w, w + kept["l"] + kept["r"], cropped.shape[1])
+    )
+    assert abs(cropped.shape[0] - (h + kept["t"] + kept["b"])) <= 2, (
+        "log says t%d b%d around a %d px rectangle, but the picture is %d px tall"
+        % (kept["t"], kept["b"], h, cropped.shape[0])
+    )
+
+
 # -------------------------------------------------------- the branch a real photo takes
 
 def _skewed(raw):
@@ -297,6 +367,39 @@ def test_the_warping_branch_keeps_the_band_too(form_bytes, monkeypatch):
     assert _ink_count(withband) > 0.7 * whole, (
         "the band recovered only %d of the frame's %d ink pixels"
         % (_ink_count(withband), whole)
+    )
+
+
+def test_the_warping_branch_reports_the_band_the_shrink_guard_left_it(form_bytes):
+    """🔴 THE WARP CLAMPS NOTHING AND STILL DOES NOT GET THE BAND IT ASKED FOR.
+
+    The guard above the warp forbids any dimension from growing, and a grown quadrilateral
+    on a tilted sheet routinely trips it: the whole target is scaled down, and the band is
+    scaled down with it.  Nothing is lost -- the picture is smaller, not cropped -- but the
+    number of pixels of band in the OUTPUT is no longer the number that was requested, and
+    the step log is the only place a reader could learn that.
+
+    Measured here rather than recomputed: 125 px asked, 113 px in the picture.  The
+    assertion is the INEQUALITY plus «the guard actually fired», so it stays true if the
+    lean of the fixture is ever retuned.
+    """
+    frame = _skewed(form_bytes)
+    _, steps = _crop_to_sheet(frame)
+
+    step = [s for s in steps if s.startswith("perspective:corrected")]
+    assert step, steps
+
+    asked, kept = _margin_of(steps), _kept_of(steps)
+    width = int(step[0].split(",")[1].split("x")[0])
+
+    assert width == frame.shape[1], (
+        "the shrink guard did not fire on this fixture (%d wide against a %d frame), so "
+        "there is nothing here to report and this test proves nothing"
+        % (width, frame.shape[1])
+    )
+    assert 0 < kept["l"] < asked, (
+        "the guard shrank the target but the log still reports the full %d px band "
+        "(kept=%r)" % (asked, kept)
     )
 
 
