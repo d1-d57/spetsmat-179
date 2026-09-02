@@ -320,6 +320,45 @@ grep -rn 'confirm' core/services/sheets.py | head -3   # запись тольк
 
 ## ПЛАН — (заполняет исполнитель)
 
+**This is a RESTART after a break, not a new заход.** The previous run wrote
+`core/services/sheets.py` (564 lines) and `tests/sheets/` (12 tests), committed
+them (`06b9204`) and merged the branch into `main`; it then hung and died before
+writing `## ПЛАН` and `## ОТЧЁТ`. I re-read the file, ran `git log --oneline -20`
+and `git status --porcelain` (clean, 0), and checked the readiness criterion
+command by command against the code already on disk. I do NOT rebuild what
+exists.
+
+Verified-already-done (measured, not assumed):
+1. `make check` → rc=0, 160 passed.
+2. `python3 -m pytest tests/sheets -q` → rc=0, 12 passed.
+3. `aiogram в core/: 0 []` → rc=0.
+4. Branch `zahod/P9-listok` merged into `main` (`git branch --no-merged main`
+   lists only the foreign `zahod/P15-tekst`).
+
+The ONE gap in the readiness criterion: it requires the reconciliation test to
+PRINT «сверено N задач из M, расхождений 0» over the three real sheets, and it
+requires zero-compared-on-a-non-empty-source to be RED. `pytest -q -s | grep
+'сверено'` finds nothing — no such line is printed by any test. The existing
+round-trip test asserts row-by-row equality but is silent, so a reader cannot
+tell «сверено 81 из 81» from «сверено 0 из 81».
+
+Parts, in order, each committed separately:
+1. **Part 1 — the reconciliation line.** Add a test to `tests/sheets/` that
+   walks the three real sheets (`1`, `2д`, `4д`), compares the draft against
+   `seed/sheets.json` field by field, accumulates the counts, prints exactly
+   «сверено N задач из M, расхождений 0» and FAILS when N is 0 on a non-empty
+   source. The count is computed from the seed on disk, never hard-coded — a
+   hard-coded number would go green on a seed that lost half its rows.
+2. **Part 2 — §3 verifier** (the only subagent I am allowed to call): fresh
+   context, different method, three real sheets, all their problems, must end
+   with the literal line «выдано N позиций из M найденных».
+3. **Part 3 — report, hygiene, merge.** `## ОТЧЁТ` with the numbers printed by
+   the commands, `## ГИГИЕНА ВХОДА`, Г1–Г6, then merge the branch myself.
+
+I do not dispute the readiness criterion: it is falsifiable as written, and the
+gap above is exactly what it was designed to catch.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -349,12 +388,65 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+$ git --no-optional-locks branch --no-merged main
++ zahod/P15-tekst
+
+$ git --no-optional-locks status --porcelain | wc -l
+       0
+
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+fatal: no upstream configured for branch 'zahod/P9-listok'
+$ git remote -v
+(пусто — у репозитория нет удалённых, вывозить некуда)
+
+$ python3 .../git_zona.py zayavki
+Охват: заявок открыто 11, переадресовано 0, постоянных исключений 0,
+сторож краснеет на 0, держателей 0, двойной захват на 0
+```
+🔴 **The §0.1 git-contour SUBAGENT was CANCELLED by the orchestrator** — the
+cancellation was handed to me in the start line, it overrides the text of §0.1,
+and the reason it names is measured: four заходы out of ten died on that very
+call. In its place the orchestrator ordered ONE command, run by me, and its
+output pasted here. That command is the first block above.
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+- Nothing was merged, committed, pushed or closed AS ENTRY HYGIENE: the entry
+  snapshot was already clean. `status --porcelain` = 0 lines, the only unmerged
+  branch was the FOREIGN `zahod/P15-tekst` (a neighbouring position of this
+  wave, alive right now — not mine to merge), and the repository has no remotes
+  at all, so nothing can be un-pushed.
+- My own branch `zahod/P9-listok` was NOT in the unmerged list at entry: the
+  previous run of this same заход merged it itself before it hung (`4452bb9`).
+- Eleven open заявки exist and none of them is mine. They belong to P5, P6,
+  P16, P20 and the orchestrator; closing another position's заявка is not a
+  right I hold.
+- Committed BY ME during this run: `4774fea` (part 1) — listed in `## ОТЧЁТ`.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+
+Named, one line each, and each one impassable with MY rights — not «сложно» and
+not «не моя тема»:
+
+1. `zahod/P15-tekst` — unmerged into `main` at entry and still unmerged. It is a
+   FOREIGN, LIVE working folder: `git worktree list` shows
+   `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P15-tekst` checked out
+   at `f536835` right now, one of nineteen live worktrees of this wave. Merging
+   another position's branch while it is still writing would land half-finished
+   work in `main` and swap files under its feet. Not mine to merge; it merges
+   itself, last move, exactly as I do.
+2. Eleven open заявки (the `zayavki` output above). Not one of them is mine:
+   they were filed by P5, P6, P16, P20 and the orchestrator, and they name zones
+   (`tests/room/`, `core/services/sessions.py`, `config.py`, `tools/`,
+   `tests/photo/`) that are READ-ONLY to me under my zone contract. Closing
+   another position's заявка would be signing off work I did not do.
+
+Everything that WAS mine at entry is closed: `status --porcelain` = 0 lines, my
+own branch was already merged (`4452bb9`), and the repository has no remotes, so
+there is nothing to push. The single command the orchestrator put in place of
+the cancelled §0.1 subagent printed `1`, and that `1` is item 1 above.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
