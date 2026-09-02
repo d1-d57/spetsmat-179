@@ -107,3 +107,48 @@ def test_pirogov_is_found_however_he_types_it(
         [c.student.label for c in match.candidates],
     )
     assert match.one.id == full_catalogue["student_ids"][PIROGOV]
+
+
+@pytest.mark.parametrize(
+    "typed_surname, typed_name",
+    [
+        ("Пирогов", "К."),   # the initial typed into the GIVEN-NAME box
+        ("Пирогов", ""),     # the given-name box left empty
+        ("Пирогов", "   "),  # and the same, with the child hitting the space bar
+    ],
+)
+def test_pirogov_is_found_when_the_given_name_box_carries_no_name(
+    roster, full_catalogue, typed_surname, typed_name
+):
+    """🔴 A field with nothing in it must not vote against the field that has evidence.
+
+    Found by this position's own verifier: «Пирогов» + «К.» used to come back as
+    «nobody in the list», because the initial normalises away and an absent given name
+    was scored as a total mismatch -- 0,7·1,0 + 0,3·0,0 = 0,70, under the floor.  The
+    owner then saw «в списке не найден» and a create button, one press from the second
+    Пирогов this whole position exists to prevent.  The near miss is the dangerous
+    shape: it does not look like a failure on the screen, it looks like a new child.
+    """
+    pending = roster.submit_student(
+        tg_id=tg_for(hash((typed_surname, typed_name)) % 1000 + 300),
+        surname=typed_surname,
+        name=typed_name,
+    )
+    match = roster.match_student(pending)
+    assert match.kind == "single", "%r %r -> %s (%r)" % (
+        typed_surname, typed_name, match.kind,
+        [c.student.label for c in match.candidates],
+    )
+    assert match.one.id == full_catalogue["student_ids"][PIROGOV]
+
+
+def test_an_empty_name_still_does_not_rescue_a_wrong_surname(roster, full_catalogue):
+    """Renormalising the weights must not turn the surname floor into a wildcard."""
+    pending = roster.submit_student(tg_id=tg_for(371), surname="Иванов", name="")
+    assert roster.match_student(pending).kind == "none"
+
+
+def test_the_right_surname_with_the_wrong_name_is_still_nobody(roster, full_catalogue):
+    """A given name that IS filled in keeps its vote: «Пирогов Пётр» is not Константин."""
+    pending = roster.submit_student(tg_id=tg_for(372), surname="Пирогов", name="Пётр")
+    assert roster.match_student(pending).kind == "none"

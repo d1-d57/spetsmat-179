@@ -227,20 +227,43 @@ def normalise_name(text: str) -> str:
     return " ".join(words)
 
 
-def _field_score(query: str, catalogue_value: str) -> float:
-    """0..1 for one field, over P7's case forms of the catalogue value."""
+def _field_score(query: str, catalogue_value: str) -> Optional[float]:
+    """0..1 for one field, or ``None`` when the заявка said nothing in that field.
+
+    🔴 ``None`` IS NOT ZERO, AND THE DIFFERENCE IS A DUPLICATE.  «Пирогов» typed with
+    «К.» in the given-name box normalises to a given name of nothing at all -- the
+    initial is stripped, correctly, because an initial is not a name.  Scoring that as
+    a zero drags a perfect surname down to 0,70, below ``ACCEPT_FLOOR``, and the owner
+    is shown «в списке не найден» with the create button one press away from a second
+    Пирогов.  A field nobody filled in is a field with no evidence in it, and evidence
+    that does not exist must not vote.  *Found by the verifier of this position, on
+    exactly that заявка.*
+    """
     needle = normalise_name(query)
     if not needle:
-        return 0.0
+        return None
     forms = case_forms(catalogue_value) or (catalogue_value,)
     return max(ratio(needle, normalise_name(form)) for form in forms) / 100.0
 
 
+def _combine(surname_score: Optional[float], name_score: Optional[float]) -> float:
+    """Weigh the fields that carry evidence, and only those.
+
+    Both present: the surname carries 0,7 and the given name breaks ties with 0,3.
+    Given name absent: the surname carries the whole decision -- the weights are
+    renormalised rather than the missing half counted as a mismatch.
+    """
+    if surname_score is None:
+        return 0.0
+    if name_score is None:
+        return surname_score
+    return _SURNAME_WEIGHT * surname_score + _NAME_WEIGHT * name_score
+
+
 def score_student(surname: str, name: str, student: CatalogueStudent) -> float:
     """How well a заявка fits one catalogue row, 0..1."""
-    return (
-        _SURNAME_WEIGHT * _field_score(surname, student.surname)
-        + _NAME_WEIGHT * _field_score(name, student.name)
+    return _combine(
+        _field_score(surname, student.surname), _field_score(name, student.name)
     )
 
 
@@ -257,12 +280,9 @@ def match_students(
     scored: list = []
     for student in catalogue:
         surname_score = _field_score(surname, student.surname)
-        if surname_score < SURNAME_FLOOR:
+        if surname_score is None or surname_score < SURNAME_FLOOR:
             continue
-        combined = (
-            _SURNAME_WEIGHT * surname_score
-            + _NAME_WEIGHT * _field_score(name, student.name)
-        )
+        combined = _combine(surname_score, _field_score(name, student.name))
         if combined >= ACCEPT_FLOOR:
             scored.append(ScoredStudent(student=student, score=combined))
     if not scored:
