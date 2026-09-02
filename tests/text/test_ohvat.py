@@ -622,3 +622,19 @@ def test_a_prose_word_that_IS_a_childs_name_is_read_as_that_child(students, cata
 
     assert row.student_id is not None
     assert catalogue.student(row.student_id).name == "Вера"
+
+
+@pytest.mark.parametrize("written", ["№7, 9а", "№ 7, 9а", "#7, 9а"])
+def test_a_number_sign_in_front_of_a_label_does_not_eat_it(written, students, catalogue):
+    """«Лёня Санин №7, 9а» used to show a confident row carrying only `9а`.
+
+    `№` is what a teacher writes in front of a number without thinking about it, and glued
+    to the digit it made the token something that was neither a label nor a name — so
+    задача 7 was gone, and the row looked perfectly ordinary while it happened.  The same
+    silent shape as the unspaced comma, with a different character in front instead of in
+    the middle.
+    """
+    row = rows_of("Лёня Санин %s" % written, students, catalogue)[0]
+
+    assert row.student_id == 23
+    assert [cell.label for cell in row.cells] == ["7", "9а"]

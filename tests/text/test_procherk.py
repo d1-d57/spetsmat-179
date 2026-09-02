@@ -174,3 +174,57 @@ def test_procherk_twice_does_not_double_the_attendance(catalogue, sessions, stud
     assert [outcome.written for outcome in second] == [False]
     assert [outcome.changed for outcome in second] == [False]
     assert len(sessions.attendance_for(lesson.id)) == 1
+
+
+# =============================================================================
+#  A ЯВКА IS A CLAIM ABOUT A CHILD, AND IT NEEDS THE SAME PROOF A PLUS DOES
+# =============================================================================
+
+def test_procherk_of_a_row_the_parser_distrusts_claims_nobody(students, catalogue):
+    """«Санин 7 дома —» — the guard emptied Домра's cells and the явка went through anyway.
+
+    Found by the §3 verifier, and it is the mark bug one door over: `present_no_marks` was
+    read straight off the row while the CELLS of the same row were being refused. «Записать»
+    then recorded Домра Евгений as present at a lesson the teacher never wrote him into.
+
+    Worse than a stray plus in one respect: a plus that goes missing is noticed by the child
+    it went missing from, and an invented явка is a fact nobody will ever go looking for.
+
+    The gate heals itself — a tap on «кто это?» sets the verdict to CERTAIN and the явка
+    counts from then on.
+    """
+    from bot.routers.text_input import draft_to_state, present_students
+
+    draft = tekst.build_draft("Санин 7 дома —", students=students, catalogue=catalogue)
+    stray = draft.rows[1]
+
+    assert stray.student_id is not None, "this test needs the row to have resolved"
+    assert stray.verdict is Verdict.DOUBTFUL
+    assert stray.present_no_marks is True, "the FACT survives; only its subject is doubted"
+    assert tekst.attendance_intents(draft) == []
+    assert present_students(draft_to_state(draft)) == []
+
+
+def test_procherk_of_a_confirmed_row_still_counts(students, catalogue):
+    """The gate must refuse the doubtful row and nothing else."""
+    from bot.routers.text_input import draft_to_state, present_students
+
+    draft = tekst.build_draft("Влад Быков —", students=students, catalogue=catalogue)
+
+    assert tekst.attendance_intents(draft) == [11]
+    assert present_students(draft_to_state(draft)) == [11]
+
+
+def test_procherk_counts_once_the_teacher_has_answered_kto_eto(students, catalogue):
+    """The stored twin reads the verdict the TAP wrote, which is what makes the gate
+    self-healing rather than a dead end for a child the parser could not name."""
+    from bot.routers.text_input import draft_to_state, present_students
+
+    stored = draft_to_state(
+        tekst.build_draft("Санин 7 дома —", students=students, catalogue=catalogue)
+    )
+    assert present_students(stored) == []
+
+    # Exactly what ``pick_student`` writes when the teacher taps an alternative.
+    stored["rows"][1]["verdict"] = Verdict.CERTAIN.value
+    assert present_students(stored) == [stored["rows"][1]["student_id"]]

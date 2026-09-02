@@ -394,8 +394,11 @@ _SHEET_MARKER = re.compile(r"\[\s*([^\[\]]*?)\s*\]")
 _LABEL = re.compile(r"^\d+\s*[а-яёa-z]?[%s]*$" % re.escape(golos.LABEL_DECORATIONS))
 
 #: Punctuation that separates labels and carries nothing: commas, semicolons, the trailing
-#: full stop of a line.  Stripped from the ends of a token before it is classified.
-_TRIM = " \t,;.·•"
+#: full stop of a line, and the `№`/`#` a teacher puts in front of a number.  Stripped from
+#: the ends of a token before it is classified -- without `№` the token «№7» is not a label,
+#: so it was read as a NAME and задача 7 disappeared from a row that otherwise looked
+#: perfectly confident.
+_TRIM = " \t,;.·•№#"
 
 #: A separator with no space after it, which is ordinary phone typing and used to be a
 #: silent loss.  «7, 9а, 11б,12» made `11б,12` ONE token, which is not a label, so it was
@@ -891,9 +894,19 @@ def attendance_intents(draft) -> list:
     ``bot.routers.photo.checked_cells`` refuses to write a mark for «probably Petya»:
     attendance lands on a child or it does not land.  The teacher answers «кто это?» with
     a tap and the row is counted on the next pass.
+
+    🔴 AND A ROW THE PARSER DISTRUSTS CONTRIBUTES NOTHING EITHER.  This clause was missing
+    and the hole was measured: «Санин 7 дома —» made a DOUBTFUL row for Домра Евгений whose
+    CELLS the guard had emptied, and the явка went through anyway -- «Записать» recorded a
+    child as present at a lesson the teacher never wrote them into.  It is the same defect
+    as a plus on the wrong child, one door over, and it is worse in one way: an attendance
+    row is not something the child can notice going missing.  The gate heals itself -- a tap
+    on «кто это?» sets the verdict to CERTAIN, and the явка counts from then on.
     """
     return [
         row.student_id
         for row in getattr(draft, "rows", ())
-        if getattr(row, "present_no_marks", False) and row.student_id is not None
+        if getattr(row, "present_no_marks", False)
+        and row.student_id is not None
+        and getattr(row, "verdict", None) is Verdict.CERTAIN
     ]

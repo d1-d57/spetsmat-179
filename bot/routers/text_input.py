@@ -181,14 +181,22 @@ def draft_to_state(draft) -> dict:
 def present_students(stored: dict) -> list:
     """``[student_id, ...]`` the прочерки of this table assert were in the room.
 
-    The stored twin of ``tekst.attendance_intents``, and it applies the same rule
-    ``checked_cells`` applies to marks: a row with no student resolved contributes nothing.
-    Attendance lands on a child or it does not land.
+    The stored twin of ``tekst.attendance_intents``, and it applies the same two rules:
+    a row with no student resolved contributes nothing, and neither does a row the parser
+    marked DOUBTFUL.  Attendance lands on a child the teacher confirmed or it does not
+    land -- a plus on a stranger's line is at least a plus somebody may notice missing,
+    while an invented явка is a fact about a child nobody will ever go looking for.
+
+    The second rule reads the STORED verdict rather than the parsed one on purpose: a tap
+    on «кто это?» rewrites that field to ``certain``, so the teacher's answer is what turns
+    a distrusted row into a counted one.
     """
     return [
         row["student_id"]
         for row in stored.get("rows", [])
-        if row.get("present_no_marks") and row.get("student_id") is not None
+        if row.get("present_no_marks")
+        and row.get("student_id") is not None
+        and row.get("verdict") == Verdict.CERTAIN.value
     ]
 
 
