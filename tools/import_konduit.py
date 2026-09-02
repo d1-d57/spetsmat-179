@@ -51,6 +51,7 @@ import config
 from core.models import CellState
 from core.services.progress import ProgressService
 from core.services.seeding import (
+    DUPLICATE_LABEL_REPAIRS,
     read_sheets,
     read_students,
     repairs_applied,
@@ -229,15 +230,30 @@ def problem_columns(worksheet, layout: Layout) -> dict:
     Labels come from row 1 in every layout, including ``1д``/``2д`` where row 1 is also
     the header row: the service columns are excluded by starting at
     ``first_problem_column``, not by recognising the header words a second time.
+
+    THE SAME LABEL REPAIR THE SEED LOADER APPLIES IS APPLIED HERE, keyed identically on
+    the occurrence index.  Without it the two ``12д`` columns of sheet ``2д`` both resolve
+    to the single ``12д`` row of the catalogue, one problem of the 544 is never reached by
+    any reading, and the cells of one of the two columns are attributed to the other
+    column's problem.  Both columns happen to be empty, so nothing was misattributed in
+    fact -- but it was silent, and the coverage line is what showed it: the full-grid check
+    reported 543 problems of 544.  That is precisely why the coverage is printed rather
+    than described.
     """
     labels = {}
+    occurrences: dict = {}
     for column in range(layout.first_problem_column, worksheet.max_column + 1):
         raw = worksheet.cell(1, column).value
         if raw is None:
             continue
         label = str(int(raw)) if isinstance(raw, float) and raw.is_integer() else str(raw).strip()
-        if label:
-            labels[column] = label
+        if not label:
+            continue
+        index = occurrences.get(label, 0)
+        occurrences[label] = index + 1
+        labels[column] = DUPLICATE_LABEL_REPAIRS.get(
+            (worksheet.title, label, index), label
+        )
     return labels
 
 
@@ -1079,9 +1095,10 @@ def differential(connection, workbook) -> OracleResult:
                     % (reading.sheet, reading.surname, reading.name, reading.label,
                        reading.raw, expected.value, got.value)
                 )
-    result = OracleResult("полная сетка (544 задачи)", "ВНУТРЕННИЙ", checked, total, divergences)
-    result.problems_seen = len(problems_seen)
-    return result
+    return OracleResult(
+        "полная сетка, задач %d из %d" % (len(problems_seen), len(problem_ids)),
+        "ВНУТРЕННИЙ", checked, total, divergences,
+    )
 
 
 # ------------------------------------------------------------------- the negative control

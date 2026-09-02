@@ -106,7 +106,7 @@ def test_every_oracle_is_green_over_its_full_coverage(connection, real_import,
     assert not any(result.is_red for result in results), \
         [result.line() for result in results if result.is_red]
 
-    assert by_name["полная сетка (544 задачи)"].checked == 29938
+    assert by_name["полная сетка, задач 544 из 544"].checked == 29938
     assert by_name["тридцать клеток вручную"].checked == 30
     assert by_name["гробарий (имена от руки)"].checked == 20
     assert by_name["лист «зачёт» (имена)"].checked == 55
@@ -136,3 +136,22 @@ def test_the_negative_control_reddens_on_the_real_book(connection, real_import,
     capsys.readouterr()
     assert any(result.is_red for result in after), \
         "ЗЕЛЁНОЕ НА ПОРЧЕ %r — провал позиции" % which
+
+
+def test_every_one_of_the_544_problems_is_reached_by_a_reading(connection, real_import,
+                                                               real_workbook):
+    """The label repair has to be applied by the READER too, not only by the seed loader.
+
+    While it was applied only in ``core/services/seeding.py``, the two ``12д`` columns of
+    sheet ``2д`` both resolved to the single ``12д`` row of the catalogue: one problem of
+    the 544 was never reached by any reading, and one column's cells were attributed to
+    the other column's problem.  Both columns are empty, so nothing was misattributed in
+    fact -- but it was silent, and only the printed coverage showed it (543 of 544).  This
+    test is that coverage, pinned.
+    """
+    from tools.import_konduit import differential
+
+    result = differential(connection, real_workbook)
+    assert result.name == "полная сетка, задач 544 из 544"
+    assert result.checked == 29938
+    assert not result.is_red
