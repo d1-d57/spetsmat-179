@@ -372,6 +372,60 @@ grep -c 'answer()' bot/routers/marking.py   # answer() РАНЬШЕ перери
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### The branch of the заход was cut BEFORE the position it says it extends was merged
+
+The файл-заход states that P3 «принята и влита — есть `bot/` со скелетом, `bot/app.py`,
+middleware», and §0.1 explains at length why the working folder is created AFTER the merge:
+«Заводя ветку ПОСЛЕ влития, ты отпочковываешь её от основной, которая уже всё содержит».
+On this заход neither was true. `zahod/P4-setka` existed already — cut at the generator's
+snapshot commit `e926e8d`, which predates the acceptance of both P2 and P3 — and its tree
+contained no `bot/` directory at all. `git log main..HEAD` = 0, `HEAD..main` = 25: a pure
+ancestor, so `git merge --ff-only main` repaired it with no merge commit.
+
+ЦЕНА: three tool calls to discover, one to repair — cheap ONLY because the missing thing was
+a whole directory. The expensive shape is the near miss: had P3 merged a CHANGED
+`bot/app.py` rather than a new one, the заход would have started writing against a stale
+copy, and the divergence would have surfaced at влитие, after all the code was written. The
+counter §0.1 offers («невлитых веток … 2, ПРОВЕРЬ ПЕРВЫМ ХОДОМ») does not catch this: it
+counts what is NOT merged into `main`, and here the problem was what `main` had gained that
+the branch had not. The missing check is one line and the opposite direction:
+`git log --oneline HEAD..main | wc -l` → 0, in §0.1, beside the one already there.
+
+### The zone contract and the готовности criterion contradicted each other, and both were machine-checked
+
+`КОНТРАКТ ЗОНЫ` lists four paths and says everything else is READ-ONLY, «даже если
+„мешает“». The task text says of `bot/app.py` «Shared: extend by ADDING your routers», and
+the WARNING block's post-check greps `bot/app.py` for `include_router` to prove the catch-all
+router is included LAST. An aiogram router that is not included does not exist in the running
+bot, so the two instructions cannot both be obeyed: obeying the zone ships dead code that
+passes every test, obeying the criterion edits a file outside the zone and lights up Г6.
+
+ЦЕНА: no work was lost, because the contradiction was visible before the first line of code —
+but it converted a mechanical step into a judgement call an исполнитель has to make alone and
+declare, and it guarantees a red Г6 («в коммите нет чужих путей») on a заход that did exactly
+what its own criterion demanded. Every position whose product is a router, a handler or a
+plugin hits this: the artefact is only real once something outside the zone points at it. The
+fix is in the generator, not in the wording — a заход whose criterion greps a file must have
+that file in its zone, and `check_sborki.py` can compare the two lists mechanically.
+
+### A module-global `Router` makes every position after the first one break the position before it
+
+aiogram's idiom is `router = Router()` at module level. A `Router` remembers the dispatcher it
+was attached to and refuses to be attached twice, so a second `build()` in one process raises.
+P3 met this and paid it inside its own fixture — `tests/bot/conftest.py` reaches into
+`module.router._parent_router` and nulls it for each of its four handler modules before every
+build. That fixture is P3's file, so P4 adding two routers to `bot/app.build` broke P3's tests
+from outside, with no edit to P3's code at all.
+
+ЦЕНА: 12 of P3's 13 bot tests went from green to `RuntimeError` on the commit that added two
+`include_router` lines, and the only in-zone repair was to hand out routers from a factory
+(`marking.build_routers()`) instead of module globals. Left unnoticed it is worse than it
+looks: the failure is in the PREVIOUS position's test file, so приёмка reads it as P3 having
+regressed. Every further position that adds a router repeats this, and each one either edits a
+shared fixture (two writers in one file — the single thing a wave cannot do) or discovers the
+factory independently.
+
+
 ## ПЛАН — (заполняет исполнитель)
 
 **BASE OF THE BRANCH — FIRST FINDING, FIXED BEFORE ANY CODE.** `zahod/P4-setka` was cut
