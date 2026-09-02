@@ -40,6 +40,30 @@ CALLBACK_DATA_LIMIT_BYTES = 64
 OP_CLEAR = 0
 OP_SOLVE = 1
 
+#: The only two values ``Mark.op`` may carry.  Anything else is a payload from a schema
+#: this bot does not have, and it must be REFUSED rather than folded into one of the two:
+#: ``op`` is typed ``int`` because a payload is numbers, and an ``int`` field accepts
+#: ``7`` and ``-3`` as readily as ``0``.
+OPS = (OP_CLEAR, OP_SOLVE)
+
+#: SQLite stores an INTEGER in 64 bits and raises ``OverflowError`` on anything wider --
+#: from inside the query, i.e. after the handler has started and before it has answered.
+#: Python integers have no such bound, so a payload of twenty digits fits the 64 BYTES,
+#: unpacks cleanly, passes every type check, and then explodes at the database.  The
+#: bound belongs here, beside the payloads, because it is a property of what an id CAN
+#: be rather than of any one screen.
+ID_MAX = 2 ** 63 - 1
+ID_MIN = -ID_MAX - 1
+
+
+def ids_are_storable(*values: int) -> bool:
+    """Can every one of these ids reach the database at all?
+
+    False means the payload cannot name a real row and never could: the honest answer is
+    that the screen is out of date, not a traceback halfway through a query.
+    """
+    return all(ID_MIN <= value <= ID_MAX for value in values)
+
 
 class Mark(CallbackData, prefix="m"):
     """One tap on one problem of one student's grid: ``m:56:600:1``.

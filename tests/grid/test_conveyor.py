@@ -635,3 +635,88 @@ def test_two_teachers_on_the_same_student_do_not_share_a_last_action_line(
     )
     # The MARK itself is shared, of course -- it is a fact about the student.
     assert "сдано 1 из" in text, text
+
+
+# ------------------------------- what the §3 verifier found, and what now closes it
+
+def test_an_op_outside_the_two_targets_never_erases_a_mark(
+    dispatcher, bot_instance, recorder, seeded_catalogue, seeded_connection, teacher_tg_id
+):
+    """`m:1:1:7` used to STRIKE the mark, and that is the worst shape this screen has.
+
+    ``Mark.op`` is typed ``int`` because a payload is numbers, and an ``int`` field takes
+    ``7`` and ``-3`` as readily as ``0``.  Folding everything-that-is-not-1 into "clear"
+    meant a button from a schema the server does not have silently erased a mark instead
+    of saying «экран устарел» -- the failure this position claims to close, arriving
+    through the filter rather than past it.  Found by the §3 verifier, whose exact input
+    is reproduced here.
+    """
+    student, _sheet, problem = _first_cell(seeded_catalogue)
+    _tap(dispatcher, bot=bot_instance, tg_id=teacher_tg_id, student_id=student.id,
+         problem_id=problem.id, op=OP_SOLVE, update_id=201, query_id="q201")
+    assert [event.event for event in _events(seeded_connection, student.id, problem.id)] \
+        == [MarkEvent.ASSERT]
+
+    for forged_op in (2, 7, -3, 99):
+        recorder.records.clear()
+        _tap(dispatcher, bot=bot_instance, tg_id=teacher_tg_id, student_id=student.id,
+             problem_id=problem.id, op=forged_op, update_id=202,
+             query_id="q-op-%d" % forged_op)
+        assert any("устарел" in alert.lower() for alert in recorder.alerts()), (
+            "op=%d was not refused: %r" % (forged_op, recorder.alerts())
+        )
+        assert [event.event for event in _events(seeded_connection, student.id, problem.id)] \
+            == [MarkEvent.ASSERT], "op=%d changed the journal" % forged_op
+
+
+def test_an_id_wider_than_the_store_is_refused_before_it_reaches_a_query(
+    dispatcher, bot_instance, recorder, seeded_catalogue, teacher_tg_id
+):
+    """`m:99999999999999999999:1:1` used to raise before anything had answered.
+
+    Twenty digits fit inside 64 BYTES, unpack cleanly and pass every type check -- and
+    then SQLite raises ``OverflowError`` from inside the query, after the handler started
+    and before ``answer()``.  aiogram logs it and drops the update, which is an eternal
+    spinner arriving THROUGH the filter, where the catch-all cannot reach it.  Found by
+    the §3 verifier; its three inputs are all here, and so is the boundary itself.
+    """
+    huge = 99999999999999999999
+    for data in (
+        Mark(student_id=huge, task_id=1, op=1).pack(),
+        OpenGrid(student_id=huge, sheet_id=1).pack(),
+        PickSheet(student_id=huge).pack(),
+        Done(sheet_id=huge).pack(),
+        Mark(student_id=1, task_id=huge, op=1).pack(),
+    ):
+        recorder.records.clear()
+        feed_callback(dispatcher, bot=bot_instance, from_id=teacher_tg_id,
+                      data=data, update_id=211, query_id="q-huge-%s" % data)
+        assert "AnswerCallbackQuery" in recorder.methods(), (
+            "%r left the spinner turning" % data
+        )
+        assert any("устарел" in alert.lower() for alert in recorder.alerts()), data
+
+    # The boundary is SQLite's, not a round number of our own: the largest id the store
+    # can hold must still be answered as an ordinary missing row.
+    recorder.records.clear()
+    feed_callback(dispatcher, bot=bot_instance, from_id=teacher_tg_id,
+                  data=OpenGrid(student_id=2 ** 63 - 1, sheet_id=1).pack(),
+                  update_id=212, query_id="q-edge")
+    assert any("ученика нет" in alert for alert in recorder.alerts()), recorder.alerts()
+
+
+def test_a_payload_over_the_byte_limit_is_refused_where_the_button_is_built(
+    seeded_catalogue,
+):
+    """The 64-byte law holds at BUILD time, not only in a test over today's seed.
+
+    Telegram rejects the whole message on one oversized payload and names neither the
+    button nor the row.  The builder names both, before anything is sent, and it does so
+    for payload shapes nobody has written a test for yet -- which is the shape that
+    actually breaks.
+    """
+    from bot.keyboards.grid import button
+
+    assert button("ok", "m:1:2:1").callback_data == "m:1:2:1"
+    with pytest.raises(ValueError, match="over Telegram's limit"):
+        button("слишком длинная", "m:%s:1:1" % ("9" * 70))

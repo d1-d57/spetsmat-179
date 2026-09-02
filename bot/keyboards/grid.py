@@ -40,7 +40,17 @@ from zoneinfo import ZoneInfo
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
-from bot.callbacks import OP_CLEAR, OP_SOLVE, Done, Mark, Noop, OpenGrid, PickSheet
+from bot.callbacks import (
+    CALLBACK_DATA_LIMIT_BYTES,
+    OP_CLEAR,
+    OP_SOLVE,
+    Done,
+    Mark,
+    Noop,
+    OpenGrid,
+    PickSheet,
+    payload_fits,
+)
 from core.isotime import parse_iso
 from core.models import CellState, Problem, Sheet, Student
 
@@ -64,6 +74,25 @@ FILLER_LABEL = "·"
 
 # --------------------------------------------------------------------------- helpers
 
+def button(text: str, payload: str) -> InlineKeyboardButton:
+    """The ONE place a button is made, so the 64-byte law has a carrier in the BUILD and
+    not only in a test.
+
+    Telegram rejects the whole message when one payload is too long, and the API error
+    names neither the button nor the row.  Refusing here names both, at the moment the
+    keyboard is assembled, before anything has been sent -- and it means the rule holds
+    for a payload shape nobody has written a test for yet, which is the shape that
+    actually breaks.  Reachable only through a bug or an absurd id: the widest payload
+    over the whole seed measures 14 bytes of the 64.
+    """
+    if not payload_fits(payload):
+        raise ValueError(
+            "callback_data %r is %d bytes, over Telegram's limit of %d, on the button %r"
+            % (payload, len(payload.encode("utf-8")), CALLBACK_DATA_LIMIT_BYTES, text)
+        )
+    return InlineKeyboardButton(text=text, callback_data=payload)
+
+
 def rows_of(items: Sequence, width: int) -> list:
     """Cut a flat sequence into rows of ``width``.  The last row may be short."""
     return [list(items[start:start + width]) for start in range(0, len(items), width)]
@@ -78,14 +107,14 @@ def _cell_button(problem: Problem, state: CellState, student_id: int) -> InlineK
     a RETRACTED cell offers "solve it" too, since re-solving is the way back.
     """
     op = OP_CLEAR if state is CellState.SOLVED else OP_SOLVE
-    return InlineKeyboardButton(
-        text="%s%s" % (STATE_MARKER[state], problem.label),
-        callback_data=Mark(student_id=student_id, task_id=problem.id, op=op).pack(),
+    return button(
+        "%s%s" % (STATE_MARKER[state], problem.label),
+        Mark(student_id=student_id, task_id=problem.id, op=op).pack(),
     )
 
 
 def _filler_button() -> InlineKeyboardButton:
-    return InlineKeyboardButton(text=FILLER_LABEL, callback_data=Noop().pack())
+    return button(FILLER_LABEL, Noop().pack())
 
 
 def _name_of(student: Optional[Student]) -> str:
@@ -136,9 +165,7 @@ def grid_keyboard(
             next_student=next_student,
         )
     )
-    keyboard.append(
-        [InlineKeyboardButton(text="Готово", callback_data=Done(sheet_id=sheet_id).pack())]
-    )
+    keyboard.append([button("Готово", Done(sheet_id=sheet_id).pack())])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
@@ -162,26 +189,17 @@ def _navigation_row(
     row: list = []
     if previous_student is not None:
         row.append(
-            InlineKeyboardButton(
-                text="← %s" % previous_student.surname,
-                callback_data=OpenGrid(
-                    student_id=previous_student.id, sheet_id=sheet_id
-                ).pack(),
+            button(
+                "← %s" % previous_student.surname,
+                OpenGrid(student_id=previous_student.id, sheet_id=sheet_id).pack(),
             )
         )
-    row.append(
-        InlineKeyboardButton(
-            text="Другой листок",
-            callback_data=PickSheet(student_id=student_id).pack(),
-        )
-    )
+    row.append(button("Другой листок", PickSheet(student_id=student_id).pack()))
     if next_student is not None:
         row.append(
-            InlineKeyboardButton(
-                text="%s →" % next_student.surname,
-                callback_data=OpenGrid(
-                    student_id=next_student.id, sheet_id=sheet_id
-                ).pack(),
+            button(
+                "%s →" % next_student.surname,
+                OpenGrid(student_id=next_student.id, sheet_id=sheet_id).pack(),
             )
         )
     return row
@@ -257,9 +275,9 @@ def students_keyboard(students: Iterable[Student], *, sheet_id: int) -> InlineKe
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(
-                    text=_name_of(student),
-                    callback_data=OpenGrid(student_id=student.id, sheet_id=sheet_id).pack(),
+                button(
+                    _name_of(student),
+                    OpenGrid(student_id=student.id, sheet_id=sheet_id).pack(),
                 )
             ]
             for student in students
@@ -274,9 +292,9 @@ def sheets_keyboard(sheets: Iterable[Sheet], *, student_id: int) -> InlineKeyboa
     the tail is padded for the same reason it is padded there.
     """
     buttons = [
-        InlineKeyboardButton(
-            text="Листок %s" % sheet.number,
-            callback_data=OpenGrid(student_id=student_id, sheet_id=sheet.id).pack(),
+        button(
+            "Листок %s" % sheet.number,
+            OpenGrid(student_id=student_id, sheet_id=sheet.id).pack(),
         )
         for sheet in sheets
     ]

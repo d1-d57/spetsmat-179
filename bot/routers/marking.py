@@ -46,7 +46,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
-from bot.callbacks import OP_SOLVE, Done, Mark, Noop, OpenGrid, PickSheet
+from bot.callbacks import OPS, OP_SOLVE, Done, Mark, Noop, OpenGrid, PickSheet, ids_are_storable
 from bot.keyboards.grid import (
     grid_header,
     grid_keyboard,
@@ -128,6 +128,18 @@ def _may_open(identity) -> bool:
     if identity is None:
         return False
     return identity.kind in MARKING_ROLES
+
+
+async def _refuse_as_stale(query: CallbackQuery) -> None:
+    """The answer to a payload that parsed but cannot mean anything.
+
+    Two shapes reach this, and both are «a button from a schema the server does not
+    have» rather than «a button whose row is gone»: an ``op`` outside ``OPS``, and an id
+    outside what the store can hold.  Both used to be worse than the stale button this
+    screen was built to fix -- one silently STRUCK a mark, the other raised inside a
+    query before anything had answered, leaving the spinner turning.
+    """
+    await query.answer("Экран устарел — откройте сетку заново.", show_alert=True)
 
 
 def _editable(query: CallbackQuery) -> Optional[Message]:
@@ -300,6 +312,9 @@ async def open_grid(
     if not _may_open(identity):
         await query.answer("Эта сетка не ваша.", show_alert=True)
         return
+    if not ids_are_storable(callback_data.student_id, callback_data.sheet_id):
+        await _refuse_as_stale(query)
+        return
     if catalogue.student(callback_data.student_id) is None:
         await query.answer("Такого ученика нет.", show_alert=True)
         return
@@ -340,6 +355,15 @@ async def set_mark(
     """
     if not _may_open(identity):
         await query.answer("Эта сетка не ваша.", show_alert=True)
+        return
+    # BEFORE any catalogue read, and before the toast: an unknown ``op`` must not be
+    # folded into "clear" (that would let a forged payload ERASE a mark), and an id wider
+    # than the store must not reach a query (that would raise before anything answered).
+    if callback_data.op not in OPS:
+        await _refuse_as_stale(query)
+        return
+    if not ids_are_storable(callback_data.student_id, callback_data.task_id):
+        await _refuse_as_stale(query)
         return
 
     problem = _find_problem(catalogue, callback_data.task_id)
@@ -395,6 +419,9 @@ async def set_mark(
 
 async def done(query: CallbackQuery, callback_data: Done, catalogue) -> None:
     """«Готово» — back to the LIST of students, never to a menu.  It is a conveyor."""
+    if not ids_are_storable(callback_data.sheet_id):
+        await _refuse_as_stale(query)
+        return
     await query.answer()
     message = _editable(query)
     if message is not None:
@@ -409,6 +436,9 @@ async def pick_sheet(
     deep by design: an extra level of navigation costs a full cycle of the seam."""
     if not _may_open(identity):
         await query.answer("Эта сетка не ваша.", show_alert=True)
+        return
+    if not ids_are_storable(callback_data.student_id):
+        await _refuse_as_stale(query)
         return
     await query.answer()
     message = _editable(query)
