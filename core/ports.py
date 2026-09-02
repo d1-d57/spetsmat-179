@@ -1,9 +1,13 @@
 """The seams.  ``core/`` talks to the outside world only through these Protocols.
 
-Nothing here imports sqlite3 and nothing here imports aiogram.  ``infra/`` implements
-them against SQLite; a test implements them against a dict when that is cheaper.  This
-is what makes the bot, the importer and the tests adapters BESIDE the core rather than
-rewrites of it.
+Nothing here imports sqlite3 and nothing here imports any Telegram library.  ``infra/``
+implements them against SQLite; a test implements them against a dict when that is
+cheaper.  This is what makes the bot, the importer and the tests adapters BESIDE the
+core rather than rewrites of it.
+
+(The name of the forbidden library is deliberately not spelled out anywhere under
+``core/``: the готовности gate greps this tree for that literal string, so writing it
+even inside a comment turns the gate red.)
 """
 
 from __future__ import annotations

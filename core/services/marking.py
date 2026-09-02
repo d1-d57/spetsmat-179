@@ -6,7 +6,7 @@ writes whatever event gets it there -- it never flips what it finds.  A double t
 harmless by construction and the whole subject of races disappears: two identical taps
 arriving in either order leave the same cell state and one journal row, not two.
 
-Nothing here imports sqlite3 and nothing here imports aiogram.
+Nothing here imports sqlite3 and nothing here imports any Telegram library.
 """
 
 from __future__ import annotations

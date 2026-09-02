@@ -1,8 +1,8 @@
-"""The domain, as plain Python objects.  Not one line of aiogram, and no SQL.
+"""The domain, as plain Python objects.  No Telegram library, and no SQL.
 
 Everything above this layer -- the bot, the importer, a future web client -- is an
-adapter beside it, which is the whole reason the rule "core/ imports aiogram in not one
-line" exists.
+adapter beside it, which is the whole reason this tree is forbidden to import the bot
+framework in even one line.
 """
 
 from __future__ import annotations
