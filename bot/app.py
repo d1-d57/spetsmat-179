@@ -20,6 +20,7 @@ from bot.handlers import owner, registration, student, teacher
 from bot.middleware import AuthMiddleware
 from bot.routers import marking, room
 from bot.routers import photo, voice
+from bot.routers import uvedomlenia
 from bot.routers import views
 from infra.db import SystemClock
 from infra.enrollment_repo import SqliteEnrollmentRepo
@@ -31,12 +32,21 @@ from infra.room_repo import (
     SqliteTeachers,
 )
 from infra.roster_repo import RosterRepo
+from infra.sessions_repo import SqliteSessionBook
+from infra.uvedomlenia_repo import (
+    SqliteHeadsOfRooms,
+    SqliteNotifiableTeachers,
+    SqliteSentLog,
+    SqliteTeacherAttendance,
+    SqliteWorkingTeachers,
+)
 from core.services.enrollment import EnrollmentService
 from core.services.marking import MarkingService
 from core.services.progress import ProgressService
 from core.services.room import RoomService
 from core.services.roster import RosterService
 from core.services.spiski import SpiskiService
+from core.services.svodka import SvodkaService
 
 log = logging.getLogger(__name__)
 
@@ -193,12 +203,49 @@ def build(
     dp.include_router(photo_router)
     dp.include_router(voice.build_router())
 
+    # P14's after-lesson notifications.  It contributes ONE callback -- the teacher's
+    # answer to «вы были на занятии?» -- and, like everything else here, must stand before
+    # the catch-all or that answer would come back as «экран устарел».  The SENDING half
+    # of this position is not a handler at all: it is `uvedomlenia.send_after_lesson`,
+    # called with the id of a lesson that has closed, and when to call it is P10's
+    # question.
+    #
+    # RESOLVED BY UNION, NOT BY CHOOSING A SIDE.  P7/P8 and P14 each ADDED their own
+    # include here in parallel, and both are right: dropping either one leaves a router
+    # that nothing reaches, which is the exact defect the block above says P7 and P8
+    # already shipped once.
+    dp.include_router(uvedomlenia.build_router())
+
     # LAST, and the order is load-bearing rather than tidy: this catch-all claims every
     # callback query no router above it matched.  Included any earlier it would swallow
     # the screens below it; left out entirely, a button from a message older than the
     # payload schema matches nothing, aiogram drops the update, and the user watches a
     # spinner turn with not one line in the log.
     dp.include_router(stale_router)
+
+    # P5's lists, built once so that P14's notifications read the SAME projection the
+    # screens do rather than a second one built beside it.
+    spiski_service = SpiskiService(journal, catalogue, progress_service)
+
+    # P14's after-lesson notifications.  Every store it writes lives in the journal except
+    # the head of a room, which `infra/roster_repo.py` keeps in the roster file; the two
+    # connections are the ones already open above and nothing here opens a third.
+    svodka_service = SvodkaService(
+        lessons=SqliteSessionBook(repo._journal),  # noqa: SLF001  -- shared journal connection
+        spiski=spiski_service,
+        journal=journal,
+        catalogue=catalogue,
+        teachers=SqliteNotifiableTeachers(repo._journal),  # noqa: SLF001
+        heads=SqliteHeadsOfRooms(repo._roster),  # noqa: SLF001
+        sent_log=SqliteSentLog(repo._journal),  # noqa: SLF001
+        teacher_attendance=SqliteTeacherAttendance(repo._journal),  # noqa: SLF001
+        clock=SystemClock(),
+        # Who teaches on a given lesson day, read out of ``enrollment``.  Without it the
+        # after-lesson question goes to every row of the ``teachers`` table; with it, only
+        # to the people who work that weekday.  An unpopulated table falls back to the
+        # wider set rather than to nobody.
+        roll=SqliteWorkingTeachers(repo._journal),  # noqa: SLF001
+    )
 
     # Stash the service so handlers that need it get it through DI -- the
     # ``roster`` argument they declare is resolved by aiogram because the
@@ -210,7 +257,10 @@ def build(
             "catalogue": catalogue,
             "marking": marking_service,
             "progress": progress_service,
-            "spiski": SpiskiService(journal, catalogue, progress_service),
+            "spiski": spiski_service,
+            # The handler declares an argument named ``svodka``; aiogram resolves it from
+            # here, the same way every other service on this dispatcher is resolved.
+            "svodka": svodka_service,
             "room_service": room_service,
             "owner_tg_id": owner_tg_id,
         }
