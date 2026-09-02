@@ -27,11 +27,11 @@ TMPDB := $(shell mktemp -d)/spetsmat-check.db
 check: deps migrate test
 
 deps:
-	@$(PYTHON) -c "import pytest, yoyo" 2>/dev/null \
+	@$(PYTHON) -c "import pytest, yoyo, aiogram" 2>/dev/null \
 	  || { echo "missing test dependencies for $(PYTHON)."; \
-	       echo "install them with:  $(PYTHON) -m pip install --user pytest yoyo-migrations"; \
+	       echo "install them with:  $(PYTHON) -m pip install --user pytest yoyo-migrations 'aiogram>=3.22,<3.31'"; \
 	       exit 1; }
-	@echo "deps: pytest and yoyo-migrations importable by $(PYTHON)"
+	@echo "deps: pytest, yoyo-migrations and aiogram importable by $(PYTHON)"
 
 migrate:
 	@echo "migrate: applying migrations to $(TMPDB)"
