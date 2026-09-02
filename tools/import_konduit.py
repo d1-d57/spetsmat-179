@@ -170,6 +170,10 @@ class SourceMissing(Exception):
     """The workbook is not where ``config.KONDUIT_XLSX`` says it is."""
 
 
+class AlreadyImported(Exception):
+    """Asked to import into a journal that already holds events."""
+
+
 # ------------------------------------------------------------------------- the layouts
 
 
@@ -457,6 +461,22 @@ class ImportCounts:
 def import_workbook(connection, workbook) -> ImportCounts:
     """Seed the catalogue, then write every mark of the eighteen sheets into the journal."""
     counts = ImportCounts()
+
+    # THE CATALOGUE LOAD IS IDEMPOTENT; THE JOURNAL LOAD IS NOT, AND CANNOT BE.  A mark is
+    # an EVENT -- "this happened" -- so a second import does not overwrite the first, it
+    # says it happened again, and the journal quietly doubles.  Every state check would
+    # stay green while it did, because the projection reads only the LAST event of a cell
+    # and a duplicate assert leaves that state identical.  Found by corrupting the journal
+    # with a duplicated event and watching all five checks stay green.
+    standing = connection.execute("select count(*) from marks").fetchone()[0]
+    if standing:
+        raise AlreadyImported(
+            "в журнале уже %d событий — повторный импорт удвоил бы его молча.\n"
+            "Журнал append-only: отметка это СОБЫТИЕ, второй импорт не перезаписывает "
+            "первый, а говорит, что это случилось ещё раз.\n"
+            "Импортируйте в чистую базу." % standing
+        )
+
     counts.repairs = repairs_applied(read_sheets())
     seed_catalogue(connection)
 
@@ -1060,6 +1080,43 @@ def oracle_credit(connection, workbook) -> OracleResult:
     return OracleResult("лист «зачёт» (имена)", "НЕЗАВИСИМЫЙ", checked, total, divergences)
 
 
+def journal_cardinality(connection, workbook) -> OracleResult:
+    """How many ROWS the journal holds, against an arithmetic identity from the source.
+
+    Every other check in this file judges the PROJECTION -- the state of a cell, which is
+    its last event.  That leaves one whole class of damage invisible: duplicate an event
+    and the state does not move, so all five of the other checks stay green while the
+    journal doubles.  That is not hypothetical, it is how an importer run twice fails.
+
+    The identity is exact and comes from the inventory rather than from the journal:
+
+        asserts  = (cells reading '1') + (cells reading 'x')   -- each 'x' needs a carrier
+        retracts = (cells reading 'x')
+
+    so ``asserts - retracts`` must equal the number of '1' cells to the unit.  Nothing
+    here is derived from ``marks``, which is what makes it a check and not a restatement.
+    """
+    counts = inventory(read_cells(workbook))
+    solved = sum(count for value, count in counts.items()
+                 if VALUE_REGISTRY[value] == SOLVED)
+    withdrawn = sum(count for value, count in counts.items()
+                    if VALUE_REGISTRY[value] == WITHDRAWN)
+
+    rows = dict(connection.execute("select event, count(*) from marks group by event").fetchall())
+    expected = {"assert": solved + withdrawn, "retract": withdrawn, "erratum": 0}
+
+    divergences = []
+    for event, want in expected.items():
+        got = rows.get(event, 0)
+        if got != want:
+            divergences.append("событий %r: ожидается %d, в журнале %d" % (event, want, got))
+    if not divergences and rows.get("assert", 0) - rows.get("retract", 0) != solved:
+        divergences.append("assert минус retract не равно числу клеток '1'")
+
+    return OracleResult("журнал: число событий", "НЕЗАВИСИМЫЙ",
+                        sum(rows.values()), solved + 2 * withdrawn, divergences)
+
+
 def differential(connection, workbook) -> OracleResult:
     """A second, independent read of the workbook against the projected journal.
 
@@ -1189,6 +1246,7 @@ def all_checks(connection, workbook) -> list:
         oracle_hand_cells(connection, workbook),
         oracle_debts(connection, workbook),
         oracle_credit(connection, workbook),
+        journal_cardinality(connection, workbook),
         differential(connection, workbook),
     ]
 

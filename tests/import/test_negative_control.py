@@ -30,7 +30,7 @@ def checked(connection, imported, workbook):
 
 
 def test_the_checks_are_green_before_any_corruption(checked):
-    assert len(checked) == 5
+    assert len(checked) == 6
 
 
 @pytest.mark.parametrize("which", CORRUPTIONS)
@@ -106,3 +106,45 @@ def test_a_wrong_first_sheet_id_is_caught_by_the_debts_oracle(connection, import
     connection.commit()
 
     assert oracle_debts(connection, workbook).is_red
+
+
+def test_a_duplicated_event_leaves_every_state_identical_and_is_caught_anyway(
+    connection, imported, workbook, checked
+):
+    """The corruption that all five state checks miss, and why the sixth one exists.
+
+    A mark is an EVENT, and the projection reads only the LAST event of a cell, so
+    duplicating an assert moves no state at all.  Every check that judges the projection
+    stays green while the journal doubles -- which is exactly what an importer run twice
+    would do.  ``journal_cardinality`` judges ROW COUNTS against an identity taken from
+    the source inventory, so it sees what the projection cannot.
+    """
+    from tools.import_konduit import differential, journal_cardinality
+
+    row = connection.execute(
+        "select * from marks where event = 'assert' order by id limit 1"
+    ).fetchone()
+    connection.execute(
+        "insert into marks (student_id, problem_id, event, teacher_id, valid_at, "
+        "recorded_at, source) values (?, ?, 'assert', ?, ?, ?, 'импорт')",
+        (row["student_id"], row["problem_id"], row["teacher_id"],
+         row["valid_at"], row["recorded_at"]),
+    )
+    connection.commit()
+
+    assert not differential(connection, workbook).is_red, \
+        "the projection cannot see this, and is not expected to"
+    assert journal_cardinality(connection, workbook).is_red
+
+
+def test_importing_twice_into_one_journal_is_refused(connection, imported, workbook):
+    """The catalogue load is idempotent; the journal load cannot be.
+
+    A second import does not overwrite the first -- it says the same thing happened again.
+    Refusing is the only honest answer, and it has to be an exception rather than a silent
+    skip so that a caller cannot mistake a doubled journal for a fresh one.
+    """
+    from tools.import_konduit import AlreadyImported, import_workbook
+
+    with pytest.raises(AlreadyImported, match="удвоил бы его молча"):
+        import_workbook(connection, workbook)
