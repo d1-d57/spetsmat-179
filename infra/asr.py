@@ -95,7 +95,13 @@ class FakeTranscriber:
     ) -> None:
         #: sha256-free: keyed by the raw bytes, because a test writes ``b"petrov"`` and
         #: wants ``"Петров три пять семь бэ"`` back without computing a digest first.
-        self.script = dict(script or {})
+        #:
+        #: HELD BY REFERENCE, not copied.  A fixture builds the fake once and the test
+        #: that uses it adds its line afterwards; a defensive copy here would leave every
+        #: such test talking to an engine that had already made up its mind, and the
+        #: failure reads as «the recogniser heard nothing» rather than «the fake was
+        #: snapshotted».
+        self.script = script if script is not None else {}
         self.default = default
         self.reason = reason
         self.calls: list = []
