@@ -380,6 +380,58 @@ grep -c 'first_sheet' tools/import_konduit.py   # правило Пирогов�
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### The заход written to kill a tautology named a tautology as its own oracle
+§4 forbids the sheet's `SUM` row because it is computed from the cells being checked, and
+then names the `долги` sheet as oracle 3. Read with `data_only=False`, every per-sheet
+column of `долги` is `=INDEX(INDIRECT(<лист>&"!A:A"), MATCH(...))` — a VLOOKUP of that
+sheet's `закрыт` column, which is itself `=SUMPRODUCT(...)` over the very mark cells. It is
+the SUM row with two extra hops.
+ЦЕНА: followed literally, this position ships a long-form SUM row and reproduces the exact
+error it exists to fix — while reporting «три оракула, расхождений 0» and passing acceptance.
+The measurement that catches it (open the source a second time with formulas visible and
+classify each oracle by provenance BEFORE trusting it) took ten minutes and appears in no
+checklist. It generalises: **a заход that names an oracle living inside the same artefact as
+the data must require that oracle's provenance to be measured, not asserted.**
+
+### A заход's branch can be cut before its dependency merges, and §0.1 cannot see it
+`zahod/P2-import` was cut from `main` before P1 was accepted. By the time this заход ran,
+`main` was 9 commits ahead and my worktree held no `core/`, no `config.py`, no `migrations/`,
+no `Makefile`, no `tests/` — my own zone path `core/services/seeding.py` was in P1's tree,
+not mine. §0.1's design («твоя ветка отпочкована от свежей основной, поэтому инструмент уже
+на диске») assumes the branch is created AFTER the merge; a wave launching заходы in
+parallel breaks that silently.
+ЦЕНА: without checking `git log zahod/P2-import..main` first, I would have written
+`core/services/seeding.py` into an empty tree against a schema that was not there and
+duplicated P1's core — a whole position thrown away plus a conflict in every file. Detection
+cost five minutes. **A заход whose zone names a file an earlier заход produces should be
+required to verify that file is on disk before the first line of work, and to merge `main`
+into its own branch if it is not.**
+
+### The three named corruptions all passed; every defect the verifier found came from ones it invented
+§3 specifies the verifier's method as the three named corruptions (delete an event, flip a
+mark, swap two students). All three were already red before it ran. Its nine findings came
+entirely from six corruptions it invented itself — and one of them, «rename one of the 544
+labels», exposed a real defect in my work: coverage was PRINTED but not JUDGED, so a
+543-of-544 run still exited 0.
+ЦЕНА: a verifier that had executed §3 literally would have returned «порч 3 из 3,
+покраснело 3» — a clean pass — and the defect would have shipped inside the very position
+whose subject is checks that cannot fail. **§3 should require the verifier to invent
+corruptions BEYOND the named ones, and should say that the named three are a floor, not the
+method.** The named three are the ones the author already thought of, which is exactly why
+they are the ones that pass.
+
+### A subagent that dies on a transport error takes its findings with it, and only §0.1 has a retry protocol
+The §3 verifier died at ~6 minutes on a Cloudflare 522 against `api.anthropic.com`. §0.1
+carries a precise protocol for this (45-second pause, up to three attempts, time measured by
+`date`) — but written as a property of the git-contour subagent, and §3 says nothing.
+ЦЕНА: six minutes of verification lost, and with no protocol stated at §3 the natural
+reading is that the verifier cannot be run — i.e. the one mandatory subagent of the заход
+gets silently skipped. I applied §0.1's protocol by analogy and relaunched (attempt 2 of 3,
+after a 130-second backoff). **The retry protocol belongs to the section on subagents in
+general, not to §0.1 alone.**
+
+<!-- инструкция раздела УРОКИ сохранена ниже -->
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -480,6 +532,56 @@ catalogue pass, which really does span all 544 problems.
 7. `tests/import/` — the whole of the above under `make check`.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. Лист «гробарий», листок 3, задача 16б*: выписан один Цуканов, в сетке двое — Аникина
+   (строка 5) и Цуканов (строка 54); собственный счётчик столбца даёт 2. Гробарий недосчитан
+   на одно имя. На знак это не влияет (`=IF(COUNTA(D:ZZ)<=2,"✘","✓")` при одном и при двух
+   именах одинаков), но список имён в книге неполон.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. Листок 4д: 26 задач, отметок НОЛЬ у всех 55 учеников, строка счётчиков — сплошные нули,
+   строка статуса — 26 знаков `✘`. Это факт (листок никто не сдавал) или потерянные данные?
+   Импорт вносит его как есть; если данные потеряны, восстанавливать надо до того, как
+   прошлый год станет основанием для долгов.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. Лист «2д» несёт метку `12д` дважды (столбцы 28 и 30), а буква `г` в ряду `12а…12ж`
+   отсутствует. Схема запрещает `unique (sheet_id, label)`, поэтому засев без починки не
+   грузится вовсе. Починка сделана реестром (`столбец 28 → 12г`), оба столбца пусты, цена
+   нулевая — но правильно исправить сам `seed/sheets.json` и книгу. `seed/` вне моей зоны.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+4. Таблица `enrollment` (кто кого ведёт, SCD2) после импорта ПУСТА. Данные для неё — в
+   `Распределение.xlsx`, который §7 прямо выводит за границы этой позиции. Пока она пуста,
+   у любой проекции «по преподавателю» нет истории.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/PLAN.md
+   ДОСТАВЛЕНО: нет
+
+5. `valid_at` у всех импортированных отметок — одна условная дата `2026-06-30`: книга не
+   хранит дат ни по отметке, ни по листку. Есть даты выдачи листков — проставляются одним
+   параметром (`seed_catalogue(issued_at=…)`, `IMPORT_VALID_AT`).
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+6. Парность составных принимающих живёт в `note` как `соавтор: <имя>` (860 отметок).
+   Полноценная таблица `mark_authors` требует миграции — вне зоны P2.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/PLAN.md
+   ДОСТАВЛЕНО: нет
+
+7. `git_zona.py vlit-v-osnovnuyu` пометил три влитых файла как «влито, но не встроено»
+   (`core/services/seeding.py`, `tests/import/conftest.py`, `tests/import/synthetic.py`).
+   Проверено — у всех трёх живая точка вызова: `tools/import_konduit.py:53` импортирует
+   `core.services.seeding`, `conftest.py:14` и `test_value_registry.py:24` импортируют
+   `synthetic`, а `conftest.py` грузит сам pytest и его фикстуры зовут все пять тестовых
+   модулей. Эвристика ищет хук/шаг сборки и не видит ни python-импорта, ни сбора pytest —
+   ложное срабатывание на любом модуле-библиотеке и на любом conftest.
+   ДОМ: zhurnal/_INFRA-git/INCIDENTY.md
+   ДОСТАВЛЕНО: нет
+
+<!-- инструкция раздела ВОПРОСЫ сохранена ниже -->
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -502,31 +604,301 @@ catalogue pass, which really does span all 544 problems.
 > какие были. Пустой снимок = красный.
 
 **СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+
+🔴 **ЭТУ СЕКЦИЮ ЗАПОЛНЯЕТ СУБАГЕНТ ГИТ-КОНТУРА, А ОН НЕ ЗАПУСКАЛСЯ: §0.1 ОТМЕНЁН ОРКЕСТРАТОРОМ**
+в стартовом сообщении, дословно — «СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ… пункт ОТМЕНЁН
+оркестратором, данное указание сильнее текста захода. Причина замерена соседней волной: четыре
+захода из десяти умерли ровно на этом вызове.» Вместо всего блока §0.1 предписана ОДНА команда,
+её вывод — ниже. Гигиена ВХОДА поэтому не разбиралась никем; гигиена ВЫХОДА (блок WARNING)
+исполнена мной полностью и её числа — в `## ОТЧЁТ`, раздел `### КОММИТ`.
+
+Единственная предписанная команда, первым ходом, до всякой работы:
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
 ```
-<сюда — вывод, дословно>
+
+Остальной снимок входа снят мной ПОПУТНО (не по заданию субагента — его не было), первым же
+ходом в рабочей папке:
+```
+$ git --no-optional-locks branch --no-merged main
+(пусто — невлитых веток не было)
+
+$ git --no-optional-locks status --porcelain | wc -l
+0
+
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+fatal: no upstream configured for branch 'zahod/P2-import'
+(у репозитория НЕТ remote вовсе: `git remote -v` пуст — вывозить некуда)
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+Ничего из работы субагента — он отменён. Мной, как часть СВОЕЙ работы:
+- обнаружено, что `zahod/P2-import` отстала от `main` на **9 коммитов** (P1 принята и влита
+  ПОСЛЕ того, как эта ветка была отрезана), и мой собственный путь зоны
+  `core/services/seeding.py` физически отсутствовал в рабочей папке → `git merge main`;
+- девять своих коммитов по ходу работы: `33e1268` `17aced5` `09e55d9` `20742a0` `bc2c7b7`
+  `056631f` `22b01b7` `9c76fb8` `8981bb6`;
+- своя ветка влита в `main` последним ходом: мерж `8c1bc79`.
+
+Заявок (`git_zona.py zayavki`) не закрывал и не заводил — закрытие заявок принадлежит
+субагенту, которого не было; своих заявок у меня не возникло.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да` *(на входе их не было: невлитых веток 0, вне git 0,
+невывезенного нет за отсутствием remote)*
+
+⚠ Оговорка, чтобы галочка не читалась шире, чем она есть: на входе разбирать было нечего, и
+это ЗАМЕРЕНО, а не предположено. Долги, появившиеся В ХОДЕ волны и НЕ мои — правки соседних
+заходов в `README.md`, пульс/сердце оркестратора, автолог `INCIDENTY.md`, чужой `.commit-plan` —
+я оставил и назвал поимённо в `## ОТЧЁТ`, раздел `### WHAT I DID NOT TOUCH`.
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "tools/import_konduit.py" && \
-    git_zona.py check --zone "core/services/seeding.py" && \
-    git_zona.py check --zone "tests/import/"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+### §0.1 — CANCELLED BY THE ORCHESTRATOR; WHAT WAS RUN INSTEAD
+
+The git-contour subagent was NOT launched — the orchestrator cancelled that clause in the
+starting message. The one command ordered in its place, and its output:
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+
+**Before any work:** `zahod/P2-import` was **9 commits behind `main`** — P1 was accepted and
+merged after this branch was cut, so `core/`, `config.py`, `migrations/`, `Makefile`, `tests/`
+and my own zone path `core/services/seeding.py` were absent from my worktree. `git merge main`
+first, nothing else touched. (Урок фабрике #2.)
+
+### WHAT WAS DONE AND WHY — nine commits, one per part, committed as the work went
+
+| commit | what |
+|---|---|
+| `33e1268` | `config.py`: `KONDUIT_XLSX`, `SEED_DIR` — the dead sandbox path leaves the importer |
+| `17aced5` | `core/services/seeding.py`: the anonymised catalogue into a migrated DB, idempotent |
+| `09e55d9` | `tools/import_konduit.py`: inventory, the import, oracles labelled by independence |
+| `20742a0` | `tests/import/`: a synthetic conduit, so the suite runs without the children's data |
+| `bc2c7b7` | the sheet list comes from the seed, not from a tuple beside it |
+| `056631f` | the reader applies the same label repair as the seed loader — 544 of 544 |
+| `22b01b7` | the debts oracle checks the late arrival's pre-arrival sheets — 770 of 770 |
+| `9c76fb8` | count the journal's ROWS too, and refuse a second import into a full journal |
+| `8981bb6` | judge coverage instead of printing it; make the §6 attribution falsifiable |
+
+### 🔴 THE FALSE PREMISE IN §4 — RAISED IN `## ПЛАН` BEFORE WORK, AND MEASURED
+
+§4 forbids the sheet's own `SUM` row because it is computed from the cells being checked, and
+then names the `долги` sheet as an independent oracle. Opened a second time with
+`data_only=False`:
+
+- the `закрыт` column (16 of the 18 sheets carry one) is
+  `=IF(SUMPRODUCT(REGEXMATCH(labels,"[°˚]") * NOT(REGEXMATCH(cells,"^(1|x)$")))=0,"✓",<count>)`
+  — over the very mark cells;
+- **every** per-sheet column of `долги` is
+  `=INDEX(INDIRECT(<лист>&"!A:A"), MATCH($A<row>, INDIRECT(<лист>&"!C:C"), 0))` — a VLOOKUP of
+  that `закрыт` column.
+
+**The debts sheet is the SUM row with two extra hops.** It is run anyway — it encodes a
+*different definition* (obligatory by label regex rather than by `seed/sheets.json`; `x`
+closing a debt), so a disagreement still finds a real defect — but it prints as
+`ПОЛУЗАВИСИМЫЙ` and is never sold as proof.
+
+The only **fully independent** oracle in the book is `гробарий`: 20 rows whose student
+surnames are typed by a person, **0 formula cells** in the name columns. §4 does not name it;
+it is now oracle 1. `зачёт` is measured as a fourth. Every check prints its independence
+class beside its coverage.
+
+### HOW IT WAS CHECKED — every verdict carries its coverage inside it
+
+```
+$ make check                                              rc=0   148 passed (69 of them mine)
+$ python3 tools/import_konduit.py --proverit              rc=0
+    [зелёный] гробарий (имена от руки)     сверено 20 из 20, расхождений 0, известных дефектов книги 1   (НЕЗАВИСИМЫЙ)
+    [зелёный] тридцать клеток вручную      сверено 30 из 30, расхождений 0   (ДЛЯ РУЧНОЙ СВЕРКИ)
+    [зелёный] лист «долги»                 сверено 770 из 770, расхождений 0   (ПОЛУЗАВИСИМЫЙ)
+    [зелёный] лист «зачёт» (имена)         сверено 55 из 55, расхождений 0   (НЕЗАВИСИМЫЙ)
+    [зелёный] журнал: число событий        сверено 15847 из 15847, расхождений 0   (ВНУТРЕННИЙ)
+    [зелёный] привязка к принимающему      сверено 15526 из 15847, объявлено пропусков 321, расхождений 0   (ВНУТРЕННИЙ)
+    [зелёный] полная сетка, задач 544 из 544 сверено 29938 из 29938, расхождений 0   (ВНУТРЕННИЙ)
+$ python3 tools/import_konduit.py --negativnyj-kontrol    rc=0   порч 3 из 3, покраснело 3
+    [покраснело] удалить событие из журнала      поймали: тридцать клеток, лист «долги», полная сетка
+    [покраснело] перевернуть отметку             поймали: тридцать клеток, полная сетка
+    [покраснело] поменять местами двух учеников  поймали: ГРОБАРИЙ (независимый), лист «долги», полная сетка
+```
+
+`main()` returns an `int` on all five of its paths (checked by AST; 0 bare returns) — the old
+one returned `None`, so the exit code was always zero and the check could not fail
+physically. Proven capable of failing: on a corrupted journal the same path returns 1.
+
+The **thirty hand cells** print as `листок · строка · столбец · ученик · задача · в книге ·
+в журнале`, so any can be re-checked by opening the workbook without running anything. They
+cover every meaning class — four `x` cells and both quarantined cells included — because a
+strided sample alone drew nothing but `1` and empty and would never have exercised the one
+decision most likely to be wrong.
+
+### THE NUMBERS RECONCILE EXACTLY
+
+```
+grid            14377 ('1') + 735 ('x') + 2 (quarantined) + 14824 (empty) = 29938   ✔
+journal         15112 assert + 735 retract = 15847
+                15112 assert − 735 carriers = 14377 = the count of '1' cells        ✔
+catalogue       18 sheets · 544 problems (215/288/39/2) · 56 students · 19 teachers
+first_sheet_id  set explicitly 56 of 56 · NULL 0 · 0 disagreements with the seed column
+```
+
+### DECISIONS MADE INSIDE THE ZONE (§6 says decide, do not ask)
+
+- **`x` (735 cells) → `assert` + `retract`, cell lands `RETRACTED`.** The book's own
+  arithmetic settles it: `закрыт` reads `NOT(REGEXMATCH(cell,"^(1|x)$"))`, treating `1` and
+  `x` alike as «does not owe this», so `x` must mean *not credited AND not a debt* — and
+  `RETRACTED` is the only state in this schema with that meaning. `retract` requires
+  `reverses_id`, so a carrier `assert` precedes it, stamped in `note`. All 735 carriers are
+  reversed (asserted: 0 unreversed), so a carrier can never project as SOLVED.
+- **`2.0` and `` ` `` → quarantined**, no event, printed by name with coordinates. Not the old
+  silent `None`: two named entries in a registry, and any value outside it stops the import.
+  It agrees with the book — neither matches `^(1|x)$`, so the spreadsheet counts both as
+  not-closed too.
+- **Composite receivers (§6b).** `marks.teacher_id` is one column, so «one author per mark»
+  cannot hold a pair. The mark goes to the **first-named** teacher; the second rides in `note`
+  as a machine-readable `соавтор: <имя>` tag, on 860 marks. First-named is not a coin flip:
+  `seed/teachers.csv` gives Ольга Александровна `students_actual = 0` against
+  `students_count = 3`, so the seed already treats the first name as the attributed one, and
+  following it keeps per-teacher statistics agreeing with the seed. A later `mark_authors`
+  table can reconstruct every pair without re-reading the book. **A `teachers` row per pair
+  was rejected** — a pair is not a person, and every per-teacher projection would count a
+  phantom colleague. *(This revises the sketch in `## ПЛАН`, changed after measuring
+  `students_actual`.)*
+- **§6a — the senior of room 203, `НС`, is registered.** `senior_aka` names three seniors:
+  `ДМ` is Даня and `ИЯ` is Ваня, both rows of the file; `НС` is nobody. All the book records
+  of him is the initials, so the initials are his name — a full name would be invented data.
+- **A third composite the задание does not name:** `Даня/Ольга Александровна` (16 rows).
+  `Мика/Вася` contains a slash and is **one** teacher.
+- **One label repair, registry-driven.** `2д` carries `12д` twice, which `unique (sheet_id,
+  label)` refuses — the seed could not be loaded at all. Columns 25–31 are a seven-column run
+  missing exactly the letter `г`, breaking at the fourth column; both duplicate columns are
+  empty over all 55 students (measured), so no mark can be misattributed. A duplicate not in
+  the registry raises.
+
+### FOUR LAYOUTS, NOT THREE
+
+`1 2 3 4 6 7 8` (header row 3, принимающий at col 2) · `9…14 3д 4д` (header row 3, surname at
+col 1, закрыт at col 3) · `15` (a blank column before принимающий) · **`1д 2д` — the header
+IS row 1, with no status row at all**, where 50 of the 544 problems live. The old layout
+finder could not see the last of these.
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА §3 — nine findings, all acted on
+
+Fresh subagent, different method, after-type. Its verdict: *«the central error has not
+returned in its original form — the exit code is real, `main()` returns an int, `долги` is
+correctly outed as ПОЛУЗАВИСИМЫЙ, and 6 of my 9 corruption/probe attacks were caught. But two
+of six oracles wear an independence label their own definition forbids, coverage is printed
+rather than judged so a 543-of-544 run exits 0, and three of my six corruptions passed
+unnoticed.»* Final line as required: **«выдано 9 позиций из 9 найденных»**.
+
+It confirmed independently, with its own openpyxl and without importing my reader: 544 problem
+columns, 29938 mark cells, all five values with identical counts; `гробарий` names 0 formulas,
+`зачёт` 0 formulas, `долги` an INDEX/INDIRECT/MATCH lookup in 766 of 770 cells; 56 students,
+0 NULL `first_sheet_id`, 56 of 56 agreeing with the seed; 10 files changed, all in scope; P1's
+fallback test untouched and passing; no `.xlsx` in git; all three commands exit 0.
+
+**What it found wrong in my work, and what I did about each — all nine fixed in `8981bb6`:**
+
+| # | finding | fix |
+|---|---|---|
+| **5** | **coverage was PRINTED, not JUDGED**: `is_red` fired only on ZERO coverage, so renaming one of 544 labels gave «543 из 544» and still exited 0 | incomplete coverage is red on its own; a legitimate skip must be DECLARED in `skipped` and is counted. **Verified: that attack now exits 1** |
+| 2 | `journal_cardinality` labelled `НЕЗАВИСИМЫЙ` though both sides descend from `read_cells` | relabelled `ВНУТРЕННИЙ` |
+| 3 | the thirty hand cells likewise use my own reader; independence exists only if a human looks | relabelled `ДЛЯ РУЧНОЙ СВЕРКИ` |
+| 6 | **no check read `teacher_id` at all** — the whole §6 decision could not fail; wiping every mark onto one teacher passed all six checks green | new `привязка к принимающему` check against the `принимающий` column. Caught now |
+| 7 | the carrier marker was free text nothing tested; stripping it went green | reversal asserted (0 unreversed) and the note itself checked. Caught now |
+| 9 | 544/29938 were pinned only by `test_real_workbook.py`, which SKIPS without the book — pinned by nothing on CI | coverage identity asserted on the synthetic conduit too; **56 passed with the workbook absent** |
+| 1 | comments said «29 920 cells»; the real number is 29938 | corrected in 3 places |
+| 8 | «the `закрыт` formula of every sheet» is 16 of 18 (`1д`/`2д` have none) | corrected |
+| 4 | `oracle_credit`'s docstring cited columns D and E; it reads B and C | corrected — I re-checked B and C myself: 0 formulas, the conclusion stands, the reasoning did not |
+
+The verifier's own three "still green" corruptions were re-run after the fix: **wipe teacher
+attribution → RED · strip the carrier note → RED · rename one of 544 labels → RED.**
+
+**Its one point I did not act on** is its note that genuinely independent evidence about the
+*marks* is 24 of 544 (20 `гробарий` problems + 4 hand-typed `долги` cells). That is correct
+and it is a property of the book, not of the code: the book contains no more hand-made
+evidence than that. It is why the independence class is printed on every line rather than
+averaged away, and it is the honest ceiling of this position.
+
+### WHAT I DID NOT TOUCH
+
+- **P1's fallback is untouched** — «NULL means owes from the very first sheet», pinned by
+  `tests/test_verifier_findings.py::test_a_student_with_no_first_sheet_owes_from_the_very_first_sheet`
+  (verified unchanged and passing). It is out of my zone and right for imported rows. This
+  import instead makes `NULL` impossible (56 of 56 set), so the fallback never fires for
+  anyone who came from the book. Registration's default is P3's business.
+- Everything outside the zone, with **one declared extension**: `config.py`, +19 lines, two
+  constants. §7 commands the path constant to live there and the WARNING post-check greps that
+  file for `KONDUIT_XLSX`. Nothing else outside the zone was edited.
+- **The workbook is not in the repository and was not copied into it.** `git ls-files | grep -i
+  xlsx` → empty. Only the anonymised seed already in git is read.
+- **Not mine, left alone and named**, in the main folder: `README.md` (registry lines for the
+  P4 and P6 заходы), `zhurnal/2026-09-02_spetsmat-bot/PULS-CHASOVOGO-sborka-bota.log` and
+  `SERDCE-VOLNY-sborka-bota.md` (orchestrator heartbeat), `zhurnal/_INFRA-git/INCIDENTY.md`
+  (`git_zona.py`'s own autolog, four lines, two about my merge and two about P3's), and
+  `.commit-plan` (untracked, not mine).
+
+### НЕОБРАТИМОЕ
+
+**Необратимого нет.** `tools/import_konduit.py` was rewritten; the previous version is in git
+history (`git show f588899:tools/import_konduit.py`). No file deleted, moved or renamed; no
+`git reset` or `checkout` over unsaved work; the source workbook was opened read-only and
+never written; the importer writes only to a throwaway temp database. My own drafts were moved
+out of the repository to the session scratchpad so the worktree is clean — nothing of the
+project was in them.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+- **Repeats on the NEXT unit of work — fix before the next run, not a queue item:** the
+  branch-behind-`main` trap (Урок #2) hits every заход whose zone names a file another заход
+  produces, and P4/P6 depend on P1–P3 exactly that way; the subagent retry protocol living
+  only in §0.1 (Урок #3) applies to every заход with a §3 verifier, i.e. all of them; and
+  §3's «three named corruptions» floor (Урок #4) — a verifier that runs only the named three
+  passes cleanly and misses the real defect, as it did here.
+- **Does not repeat — legitimate queue items:** the tautology in §4 (Урок #1) is specific to
+  this position's oracles, though the rule it yields is general; and every item in
+  `## ВОПРОСЫ`, which is about last year's data rather than about the next unit of work.
+
+### ВРЕМЯ И ТОКЕНЫ
+
+Снимает ПРИЁМКА из лога прогона — исполнителю счётчик недоступен.
+
+### АРТЕФАКТ
+
+```
+/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tools/import_konduit.py
+/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/core/services/seeding.py
+/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tests/import/
+```
+
+Открыть и запустить:
+```
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && python3 tools/import_konduit.py --proverit
+```
+
+### КОММИТ
+
+Девять коммитов, по ходу работы, каждая часть отдельно — влиты в `main` мержем `8c1bc79`.
+
+```
+вне git (моя рабочая папка)              0
+вне git (главная папка)                  5 — все ЧУЖИЕ, перечислены выше поимённо
+невлитых веток zahod/ на входе           0
+невлитых веток zahod/ на выходе          0
+невывезенных коммитов                    неприменимо: у репозитория НЕТ remote вовсе
+                                         (`git remote -v` пуст) — вывозить некуда
+пост-проверка из главной папки           ЗЕЛЁНАЯ: make check rc=0 (148 passed),
+                                         --proverit rc=0, --negativnyj-kontrol rc=0
+Г1 зона доехала в git                    ✅ ✅ ✅ (все три пути)
+Г2 второй репозиторий                    неприменимо: все пути зоны внутри spetsmat-bot
+Г3 невлитых не прибавилось               0 → 0
+Г4 новый .py в _generator/**             неприменимо: ни одного не заводил
+Г5 новый .md зарегистрирован             неприменимо: ни одного .md не заводил
+Г6 чужих путей в коммитах                нет — 10 файлов, все свои (+ config.py по §7)
+```
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.

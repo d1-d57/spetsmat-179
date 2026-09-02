@@ -404,14 +404,28 @@ My zone: `bot/`, `tests/bot/`, `core/services/roster.py`, `infra/roster_repo.py`
 - Every commit in this branch touches ONLY the zone paths.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
-> Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
-> ```
-> N. <текст находки>
->    ДОМ: <путь от корня репозитория | владелец>
->    ДОСТАВЛЕНО: нет
-> ```
-> `ДОМ: владелец` — когда дома-файла нет вовсе (сам вопрос владельцу); для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит только случай «доставлено» без метки на месте, недоставленное просто печатает.
-> 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+> Findings that belong to someone else's house or that the next position must decide.
+
+1. Deep-link codes and the OWNER_TG_ID live in `bot/config_local.py` because `config.py` is OUT of this position's zone. The brief asked for them in `config.py`; lifting them there is a one-line move once zones are revisited.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. The aiogram dep is pinned to `>=3.22,<3.31` in `Makefile deps`. The brief asked for `>=3.31`; the sandbox PyPI mirror only carries up to 3.22. When the deploy uses a mirror that has 3.31+, raise the floor.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. The role of a teacher (HEAD vs TEACHER) is persisted in a SECOND SQLite file (`data/roster.db`) opened by `infra/roster_repo.py`, because `migrations/` is outside this position's zone and there is no migration for `rooms` / `head_of_room`. A future migration in `migrations/` can fold the `teacher_room_role` table into the journal DB; the seam (`RosterService.bind_teacher` / `RosterRepo.bind_teacher`) does not move.
+   ДОМ: spetsmat-bot/migrations/
+   ДОСТАВЛЕНО: нет
+
+4. The owner's accept flow defaults to TEACHER on accept. Promotion from TEACHER to HEAD goes through `RosterService.confirm_teacher(..., role=Role.HEAD)`; a dedicated "make HEAD" UI surface is P5. The brief gives three buttons per row (accept / rename / reject) — no fourth for role selection.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. The "current sheet" used for `first_sheet_id` on registration is `max(sheets).ord` from the catalogue. P4 will introduce a real notion of "today's session sheet"; the seam (`RosterService(..., sheets_for_current=...)`) takes a callable so P4's replacement does not require editing `RosterService`.
+   ДОМ: spetsmat-bot/bot/handlers/owner.py
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
@@ -443,15 +457,56 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "bot/" && \
-    git_zona.py check --zone "tests/bot/" && \
-    git_zona.py check --zone "core/services/roster.py" && \
-    git_zona.py check --zone "infra/roster_repo.py"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P3-registracia/` — the worktree; open `bot/handlers/owner.py` for the moderation surface, `bot/middleware.py` for the role rules, `tests/bot/test_registration.py` for the verification. Nothing built to a separate file — P3's product is the source tree P4 and P5 stand on.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `0cd1c71` (merge into main) — `Merge branch 'zahod/P3-registracia'` · carries 5 commits from the branch:
+  * `9bfa0d8` — `roster domain seam: Role enum, RosterPort, RosterService`
+  * `8dd870c` — `infra: RosterRepo — write path for students, teachers, and roles`
+  * `cab1d41` — `Makefile: deps target imports and installs the bot framework`
+  * `cc4ffca` — `roster port: confirm_student / confirm_teacher on RosterService`
+  * `48c29e6` — `bot: skeleton + deep-link registration + role middleware + tests`
+  · `git_zona.py check --zone "bot/" && git_zona.py check --zone "tests/bot/" && git_zona.py check --zone "core/services/roster.py" && git_zona.py check --zone "infra/roster_repo.py"` → ✅ on all four.
+
+**What was done (and why):**
+- Added the closed-set `Role` enum (HEAD / TEACHER / STUDENT) and the `RosterService` seam in `core/services/roster.py`. No aiogram and no sqlite3 here; this is the layer above the port, matching P1's pattern.
+- Added `infra/roster_repo.py` — the WRITE path of registration that P1 deliberately did not add. ONE object, TWO connections: the journal DB (for `students` / `teachers` rows and `tg_id` UNIQUE) and a second SQLite file with `teacher_room_role` and `pending_registration` (because `migrations/` is outside the zone).
+- Added the bot skeleton: `bot/__main__.py`, `bot/app.py` (the integration point that opens both DBs and wires the middleware), `bot/middleware.py` (`AuthMiddleware` stamps `Identity`; `require_role` is the inner role gate), `bot/handlers/{registration,owner,student,teacher}.py`, `bot/fsm.py` (two-step registration states), `bot/config_local.py` (deep-link codes and rooms; lifted out of `config.py` because that file is outside the zone — see ## ВОПРОСЫ #1).
+- Added 13 tests under `tests/bot/` that drive the bot through `dp.feed_raw_update` with a recording session that substitutes Telegram. Tests cover: pending student sees nothing; confirmed student sees only own; forged callback for a foreign `student_id` is refused; teacher without a role cannot write; TEACHER cannot upload, HEAD can; second `tg_id` binding fails (both on `pending_registration.tg_id` and on `students.tg_id`); owner accepts pending student; owner sees pending list with three buttons per row; owner accepts pending teacher (defaults to TEACHER); owner promotes TEACHER to HEAD; stranger is refused.
+- Pinned aiogram to `>=3.22,<3.31` in `Makefile`'s `deps` target — see ## ВОПРОСЫ #2.
+
+**How it was verified (readiness criterion, from /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot AFTER merge into main):**
+```
+$ python3 -m pytest tests/bot -q
+.............                                                            [100%]
+13 passed in 0.48s
+$ python3 -m pytest -q
+... [differential] ... 148 passed in 25.07s
+$ python3 -c "import pathlib,sys; bad=[str(p) for p in pathlib.Path('core').rglob('*.py') if 'aiogram' in p.read_text()]; print('aiogram в core/:', len(bad), bad); sys.exit(1 if bad else 0)"
+aiogram в core/: 0 []
+$ make check
+... 148 passed in 25.07s
+```
+The pre-merge local-tree state had `make check` at 79 passed (66 P1 + 13 P3); post-merge, main has 148 (P2 + P4 also merged). All green.
+
+**What was NOT touched (zone discipline):**
+- `core/models.py`, `core/ports.py`, `core/services/marking.py`, `core/services/progress.py`, `core/isotime.py`, `config.py`, `infra/db.py`, `infra/repositories.py`, `migrations/001_init.sql`, `pyproject.toml`, `tests/conftest.py`, `tests/test_*.py`. The brief's "two writers in one file is the one thing this wave may not do" rule.
+- Two files outside the zone were edited by explicit brief instruction: `Makefile` (the brief says "make `make check` install it the same way P1's Makefile already installs `pytest` and `yoyo-migrations`") — justified in the commit message.
+
+**Verifier (ПОСЛЕ-типa):** not called — the brief permits calling it for verification but does not require it; the readiness criterion and the post-check are the carrier. **If a verifier is run later, it must cover: pending student sees nothing (✓), confirmed student sees only own (✓), forged callback refused (✓), teacher without role cannot write (✓), second tg_id binding fails (✓) — all five named scenarios pass in `tests/bot/test_registration.py`.**
+
+**Open ("возвращаться"):**
+- The orchestrator's pre-existing uncommitted changes in the main folder (`README.md`, `SERDCE-VOLNY-sborka-bota.md`, `kod_P2-import.md`, `INCIDENTY.md`, `.commit-plan`) are NOT mine and were left untouched. They are the orchestrator's work.
+- `_generator/` and `_studio/docs/` do not exist on this repo — see §0 of the brief: "живой дом инструментов — `disciplina/_generator/tools/`", not the repo's own. Г4 and Г5 say "неприменимо, потому что…".
+
+**Time + tokens:** **НЕПРИМЕНИМО**: opencode, no cost counter in the log.
+
+**ПОВТОРЯЕМОСТЬ находок (will this repeat on the next unit of work?):**
+- The `aiogram>=3.22,<3.31` pin repeats in every wave-3 position that adds bot code — the mirror floor doesn't move without owner action. → **заход (not a queue item)**: owner re-pins when a newer mirror is available.
+- The role-table-in-a-second-file repeats in every position that needs roles (P5, P6 will need them too) — until someone adds the rooms migration. → **заход (not a queue item)**: future migration collapses it.
+- The P3-default-TEACHER-then-promote design is one of several reasonable choices; it does NOT repeat (different positions have different promotion rules).
+
+**НЕОБРАТИМОЕ:** необратимого нет.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
