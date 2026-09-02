@@ -379,3 +379,68 @@ def normalise_label(label: str) -> str:
     for decoration in LABEL_DECORATIONS:
         stripped = stripped.replace(decoration, "")
     return stripped.strip()
+
+
+# =============================================================================
+#  5 · THE SEAM TO THE RECOGNISER
+# =============================================================================
+
+class Transcriber(Protocol):
+    """Audio in, VERBATIM text out.  The only thing ``core`` knows about recognition.
+
+    Declared here rather than in ``core/ports.py`` for one reason worth writing down: at
+    the time this position ran, ``core/ports.py`` was outside its zone.  The seam belongs
+    beside the other ports and moving it there is a one-line job for whoever owns that
+    file next; it is named in ``## ВОПРОСЫ`` rather than done from here.
+    """
+
+    def transcribe(self, audio: bytes, *, mime_type: str = "audio/ogg") -> str:
+        """The words that were said, spelled as they were said.
+
+        VERBATIM, never "smart".  A recogniser that normalises numbers on our behalf
+        turns dictated digits into a lottery, and in this project the digits are the
+        entire payload: `7б` written back as «7б» by an engine that guessed is
+        indistinguishable, at this seam, from `7б` written back because it heard it.
+        """
+
+
+#: Ceiling the engines with a user dictionary impose.  Above it the dictionary is
+#: rejected outright rather than truncated.
+USER_DICTIONARY_MAX = 1000
+
+#: Where such a dictionary still helps.  Past roughly a hundred terms the boost each term
+#: gets is diluted; this project needs 101 and is therefore right at the useful size,
+#: which is why the dictionary is the roster and the labels and NOT the whole language.
+USER_DICTIONARY_OPTIMUM = 100
+
+
+def build_user_dictionary(
+    surnames: Sequence[str], labels: Sequence[str] = ()
+) -> list[str]:
+    """The terms a recogniser (or the fuzzy channel) should be biased towards.
+
+    Built from the catalogue, never typed: a surname added to the roster in October must
+    not need a second edit in a constant somewhere to become dictatable.
+
+    Deduplicated on the FOLDED form and returned in first-seen order, so the list is
+    stable across runs — an engine that caches a dictionary by its hash re-uploads it
+    otherwise, every start, forever.
+    """
+    terms: list[str] = []
+    seen: set = set()
+    for term in list(surnames) + list(labels):
+        term = (term or "").strip()
+        if not term:
+            continue
+        key = fold(term)
+        if key in seen:
+            continue
+        seen.add(key)
+        terms.append(term)
+    if len(terms) > USER_DICTIONARY_MAX:
+        raise ValueError(
+            "user dictionary of %d terms is over the %d an engine will take; it is the "
+            "roster plus the labels, so something is feeding it the whole catalogue"
+            % (len(terms), USER_DICTIONARY_MAX)
+        )
+    return terms
