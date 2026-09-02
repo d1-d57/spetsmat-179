@@ -19,8 +19,9 @@ reasons, both measured on this project's own seed rather than imagined:
     costs two of them.  A surname in the payload would also be a surname leaving the
     server, which §5 of the brief forbids outright.
 
-``tests/grid/test_payloads.py`` proves the bound over all 18 seed sheets and all 544
-problems, and prints the coverage it reached.
+``tests/grid/test_layout.py`` proves the bound over all 18 seed sheets and all 544
+problems, and prints the coverage it reached; ``bot/keyboards/grid.button`` enforces it at
+the moment a button is built, so the rule holds for payload shapes no test covers yet.
 """
 
 from __future__ import annotations
