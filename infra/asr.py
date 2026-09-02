@@ -262,7 +262,13 @@ def build_transcriber(
     if key and folder:
         return (
             YandexSpeechKitTranscriber(key, folder, phrases=phrases),
-            "speechkit, verbatim mode, %d terms held for the phrase list" % len(phrases),
+            # THE LINE A TEACHER READS ON A LESSON.  It says what happens, not what was
+            # intended: «held» was literally true and read as «the dictionary works»,
+            # which is how this gap survived unnoticed.  Pinned by
+            # ``test_the_start_line_says_the_dictionary_never_leaves_this_process``.
+            "speechkit, verbatim mode; NO DICTIONARY IN THE REQUEST: %d terms built, "
+            "this engine takes no phrase list, recognition runs with no hint"
+            % len(phrases),
         )
     missing = [
         name

@@ -149,6 +149,46 @@ def test_with_a_key_the_door_hands_back_the_real_client_carrying_the_terms():
     assert "verbatim" in how
 
 
+#: Wordings a teacher reads on a lesson as «the dictionary works».  The first of them
+#: is the line this file shipped with: «held» is literally true — the terms ARE held, in
+#: an attribute nobody reads — and false by implication, which is the class ``P18`` was
+#: written for.  The owner read it as «словарь работает» and was wrong.
+READS_AS_A_WORKING_DICTIONARY = (
+    "terms held for the phrase list",
+    "held for the phrase list",
+    "with the phrase list",
+    "dictionary sent",
+)
+
+
+def test_the_start_line_says_the_dictionary_never_leaves_this_process():
+    """The fact and the sentence about the fact, asserted together in one test.
+
+    Apart they rot apart: a line that describes a request is only honest while the
+    request stays what it describes, and the request is one edit away at all times.
+    """
+    transcriber, how = build_transcriber(
+        phrases=["Петров", "Кахиани", "7б"],
+        environ={"SPETSMAT_ASR_KEY": "k", "SPETSMAT_ASR_FOLDER": "f"},
+    )
+    url, headers, body = transcriber.build_request(b"ogg-bytes")
+
+    # THE FACT.  Nowhere in the request — not the query, not a header, not the body.
+    carried = [
+        term
+        for term in transcriber.phrases
+        if term in url or any(term in value for value in headers.values())
+    ]
+    assert carried == [], "terms reached the request after all: %s" % carried
+    assert transcriber.phrases and b"".join(t.encode() for t in transcriber.phrases) not in body
+
+    # THE SENTENCE.  It has to carry the fact, and it must not read as its opposite.
+    assert "NO DICTIONARY IN THE REQUEST" in how, how
+    for misleading in READS_AS_A_WORKING_DICTIONARY:
+        assert misleading not in how, "the start line reads as a working dictionary: %s" % how
+    assert str(len(transcriber.phrases)) in how, "the line does not say how many terms: %s" % how
+
+
 def test_the_fake_refuses_an_unscripted_recording_instead_of_inventing_one():
     fake = FakeTranscriber({b"a": "Петров три"})
 
