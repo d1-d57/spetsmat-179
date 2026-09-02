@@ -144,3 +144,41 @@ OPEN_END_DATE = "9999-12-31"
 #: kakhiani = vanya on mon, yan on thu).
 WEEKDAY_MIN = 1
 WEEKDAY_MAX = 7
+
+
+# ------------------------------------------------------ deployment and bot identity
+#
+# These arrived in this file from ``bot/config_local.py``, where P3 had to leave them
+# because ``config.py`` was outside her zone; her docstring said so honestly.  The home
+# is single again.  ``bot/config_local.py`` stays as a re-export until its call sites
+# are edited.
+#
+# 🔴 A SECRET NEVER TRAVELS IN GIT.  What lives here is the NAME of the environment
+# variable and an empty default -- never a value.  The values live in ``secrets/bot.env``,
+# which ``.gitignore`` already excludes, and reach the process through the deployment
+# (systemd ``EnvironmentFile=``), not through code reading that file.
+
+#: The token used by ``bot/__main__.py``.  Comes from the deployment env, not from
+#: version control.  Empty by default so a missing env var crashes the bot at startup
+#: rather than silently disabling it.
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+
+#: Telegram id of the owner -- the only account that sees the pending list and the only
+#: one whose accept / rename / reject buttons do anything.  It is the id of a living
+#: person, so it comes from the environment (``OWNER_ID``) too and not as a literal.
+#: Zero by default, which matches no Telegram account and therefore grants nothing.
+OWNER_TG_ID = int(os.environ.get("OWNER_ID", "") or 0)
+
+#: Two deep-link codes that start the registration flow.  ``/start <code>`` in a private
+#: chat routes to the matching handler.  Anything else lands on the no-code welcome.
+DEEPLINK_CODE_STUDENT = "register-student"
+DEEPLINK_CODE_TEACHER = "register-teacher"
+
+#: The three rooms the conduit runs in.  Duplicates ``core.services.roster.ROOMS`` so
+#: handlers can validate a room the user typed without importing core -- but the source
+#: of truth remains the core constant.
+ROOMS = ("203", "302", "303")
+
+#: Length cap on a typed name.  ``Сергеевич`` is the realistic ceiling in Russian --
+#: anything longer is almost certainly a typo, not a name.
+NAME_MAX_LEN = 40
