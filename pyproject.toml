@@ -1,0 +1,13 @@
+# Build metadata is deliberately absent: this is an application run from a checkout by
+# systemd, not a package that anyone installs.  What lives here is the test runner
+# configuration, so that `pytest` behaves the same whether it is called by `make check`
+# or by hand.
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+# `.` on the path so that `import config` and `import core...` work from a bare checkout
+# without an install step.
+pythonpath = ["."]
+addopts = "-q --strict-markers"
+filterwarnings = ["error"]
