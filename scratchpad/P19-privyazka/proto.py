@@ -10,6 +10,9 @@ and the one real tie in the catalogue («Цукунов» sits exactly between �
 «Цуканов»).  Measured result: 56 of 56, zero misses.
 """
 
+# TOOL-CONTRACT: called-by-hand -- the measurement the thresholds in
+# core/services/roster.py were read off.  Re-run it when seed/students.csv changes.
+
 import sys, csv, re
 sys.path.insert(0, '.')
 from core.services.raspoznavanie import ratio, case_forms
