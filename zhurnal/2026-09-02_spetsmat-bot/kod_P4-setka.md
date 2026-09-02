@@ -498,7 +498,11 @@ the zone's own directories and are treated as inside the zone.
    ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_P12-gruppy.md
    ДОСТАВЛЕНО: нет
 
-4. `bot/app.py:16` imports `bot.config_local as cfg` and never uses it; `bot/middleware.py:118-121` has two unreachable lines (a `return await handler(...)` followed by the same two statements again). Both are P3's, both are outside my zone, neither was touched. Found while reading, reported and left.
+4. Three defects in P3's tree, all outside my zone, none touched. (a) `bot/handlers/owner.py:54` draws one button per pending row with `callback_data="noop"` and NO handler claims it — that is failure #4 of my own §3 («вечный спиннер, ни строки в логах») living in an accepted position. My catch-all now answers it, so the spinner stops, but the button is still a control that does nothing and should be a caption. (b) `bot/app.py:16` imports `bot.config_local as cfg` and never uses it. (c) `bot/middleware.py:121-123` are unreachable: a `return await handler(event, data)` is followed by the same three statements again.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_P3-registracia.md
+   ДОСТАВЛЕНО: нет
+
+6. A fourth defect in P3, found by the §3 verifier while feeding rubbish payloads: `bot/handlers/owner.py:103` does `int(callback.data.split(":", 1)[1])` behind the filter `F.data.startswith("accept:")`, so the payload `accept:` — the prefix with an empty tail — passes the filter and raises `ValueError: invalid literal for int() with base 10: ''` inside the handler, before anything answers. Same eternal spinner as my Д2, on the owner's moderation screen, and my catch-all cannot help: the update was claimed by a router above it. Not fixed from here (outside the zone, and `bot/handlers/` is P3's tree).
    ДОМ: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_P3-registracia.md
    ДОСТАВЛЕНО: нет
 

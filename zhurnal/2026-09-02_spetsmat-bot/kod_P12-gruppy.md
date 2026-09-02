@@ -452,6 +452,30 @@ No "current teacher" column anywhere. No room screen — that is P13 and it stan
 No edits to `core/ports.py`, `infra/repositories.py`, `config.py`, or any existing test.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. `git_zona.py check --zone` — the Г1 gate — answers about the MAIN folder on branch `main`, not about the worktree the заход actually works in. Run from the working folder after a legitimate commit, it printed `⚠ зоны ... ещё нет ни на диске, ни в git` and then `✅ работа доехала в git` with rc=0 — a GREEN on a zone that did not exist anywhere. §4 tells the executor to run it after every commit-along-the-way, and until the branch is merged every one of those runs is a meaningless green. It only became a real green after §WARNING step 2. The gate cannot currently tell "committed in my worktree" from "no work at all", and приёмка runs it first.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+2. §2 of this заход says a move closes the interval with "`valid_to` = the day before", while the same §2, `config.OPEN_END_DATE`, `migrations/001_init.sql` and P1's own `test_half_open_intervals_touch_without_overlapping` all require HALF-OPEN intervals, in which the correct value is the effective day itself. Executed literally the phrase leaves one calendar day per handover covered by nobody — and the КРИТЕРИЙ ГОТОВНОСТИ would not catch it, because 112 resolutions on two dates far from any handover stay green. The заход's prose and the schema it points at disagreed, and only the prose was categorical.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+3. §1 says "an `enrollment` row that does not say which weekday it covers cannot express the case at all — decide HOW you express it and say why in the report", but `enrollment.weekday` was already in `migrations/001_init.sql` and `migrations/` is READ-ONLY to this position. The заход asked for a decision it had itself removed the ability to make. The failure mode this creates is specific: an executor who took it at face value would go looking for a way to express the weekday, find the table closed, and either write a migration outside the zone or invent a second expression beside the one already there.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+4. The partial unique index `enrollment_one_open_row` is unreachable on INSERT: SQLite runs the `before insert` trigger first, and two open rows always overlap (both intervals end at the sentinel), so `enrollment_no_overlap_insert` refuses the case before the index is consulted. Measured, not reasoned — `tests/enrollment/test_repo.py::test_two_open_rows_for_one_lesson_day_are_refused` pins the refusal and says which carrier speaks. The index is not thereby decoration (it is the read-time-free half and survives a dropped trigger), but anyone reading the schema will expect its message and never see it. `migrations/` is outside this position's zone, so this is reported, not changed.
+   ДОМ: migrations/001_init.sql
+   ДОСТАВЛЕНО: нет
+
+5. A foreign-key failure from `infra/enrollment_repo.py` — an unknown `teacher_id` or `student_id` — reaches a `core/` caller as a raw `sqlite3.IntegrityError`. This is deliberate (`_as_overlap` re-raises every integrity error that is not an overlap, so an overlap is never mislabelled, and `tests/enrollment/test_repo.py::test_an_integrity_error_that_is_not_an_overlap_is_not_reported_as_one` pins it), but it is still a driver exception crossing the seam `core/` exists to keep sqlite3 behind. Wrapping it in a `NoSuchPerson` domain error is a caller-facing decision that belongs to whoever builds the screen over this service (P13), and inventing it now would be a message with no reader.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+6. Last year's ACTUAL per-weekday grouping cannot be recovered from the seed. `seed/teachers.csv` carries one `room` and one `students_count` per teacher; the counts sum to 57 (`students_actual` sums to 51) against 56 students, and there is no column saying which lesson day a teacher came on. So the 112-resolution test builds a round-robin over the REAL 56 students and REAL 17 teachers rather than reproducing the real Monday/Thursday pairs, and the report says so rather than implying real pairs were checked. If the real grouping matters to P13's screen, it has to come from somewhere else — the workbook or the owner.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -485,20 +509,173 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 **ЧТО СДЕЛАНО** *(с хэшами)*
 <влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да` — заполнено ОРКЕСТРАТОРОМ, а не исполнителем, и вот почему: субагента гит-контура §0.1 отменил оркестратор в промпте запуска (замер соседней волны: четыре захода из десяти умерли ровно на этом вызове), поэтому секцию заполнить было некому. Замена — одна команда, прогнана оркестратором при приёмке: `git --no-optional-locks branch --no-merged main | grep -c zahod/` → **0**. Системная причина закрыта в источнике: промпт запуска (`ZAPUSK-ZAHODA.sh` и `dozapolnit_zahod.py`) теперь ВЕЛИТ заходу заполнить эту строку самому, так что у следующих позиций Г12 краснеть не будет.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "core/services/enrollment.py" && \
-    git_zona.py check --zone "infra/enrollment_repo.py" && \
-    git_zona.py check --zone "tests/enrollment/"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/core/services/enrollment.py` — open in an editor; it is the deliverable, with `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/infra/enrollment_repo.py` beside it and `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tests/enrollment/` proving it. Run it with `cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && python3 -m pytest tests/enrollment -q`.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `45474d7` — `enrollment: refuse the open-end sentinel as a start day — the verifier's three findings, one of which closed a row to the value that means still open` · `git_zona.py check --zone "core/services/enrollment.py" && git_zona.py check --zone "infra/enrollment_repo.py" && git_zona.py check --zone "tests/enrollment/"` → ✅ ✅ ✅ (all rc=0, re-run after the merge; see "the Г1 caveat" below)
+Four commits, one per part, each with only its own paths:
+- `c2883c0` — `core/services/enrollment.py` (the domain service)
+- `bc85dbd` — `infra/enrollment_repo.py` (the SQLite adapter)
+- `290c570` — `tests/enrollment/` (six files)
+- `45474d7` — the verifier's three findings closed
+- `e58bc9a` — `Merge branch 'zahod/P12-gruppy'` into `main`, my own last move
+
+**ПРАВКИ ПРОЧИТАНЫ:** блок `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` пуст (`<правок нет>`) — читать было нечего.
+
+### §0.1 — исполнено по указанию оркестратора, НЕ субагентом
+
+The orchestrator cancelled the §0.1 git-contour subagent outright (four заходы out of ten measured dying on that call) and told me to run one command myself instead. I did, first move, before anything else:
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+
+The снимок in §0.1 said 0 at assembly time and it was still 0 at my run. The git contour therefore stands UNRESOLVED as a separate item, not as silence: no заявки were read or closed, no foreign branches were merged into `main` by me, and `## ГИГИЕНА ВХОДА` is unfilled because its owner — the subagent — was cancelled. The `## ГИГИЕНА ВХОДА` section carries the Г12 gate; it is empty for that stated reason and not from omission.
+
+### What I did, and why
+
+The position is one service and its store: **who works with whom, on which day, in which room — and how that changes during the year without rewriting the past.**
+
+**`core/services/enrollment.py`** — the domain. `EnrollmentPort` is the seam, and its shape is the load-bearing decision: it offers `insert`, `close(id, valid_to=…)` and reads, and it offers **no way to set `teacher_id` on a row that already exists**. The service above it therefore does not *promise* not to rewrite the past; it *cannot*. `assign` opens the first interval for a (student, lesson day); `move` closes the open one and opens its successor inside one transaction; `end` closes without a successor; `teacher_on(student, day)`, `teacher_at(student, instant)` and `resolve_many(students, day)` are the resolution.
+
+**`infra/enrollment_repo.py`** — the SQLite adapter. The whole file contains exactly one `update` statement and it names exactly one column:
+
+```
+$ grep -c 'UPDATE' infra/enrollment_repo.py
+0
+$ grep -rn 'update .* set' infra/enrollment_repo.py
+infra/enrollment_repo.py:193:  "update enrollment set valid_to = ? where id = ?",
+$ grep -rn '9999' core/services/enrollment.py infra/enrollment_repo.py tests/enrollment/ | wc -l
+0          # the sentinel is only ever config.OPEN_END_DATE, never a literal
+```
+
+**HOW THE LESSON DAY IS EXPRESSED, and why there was no choice to make.** §1 asked me to decide how an enrollment row says which weekday it covers. That decision was already on disk and outside my zone: `migrations/001_init.sql` declares `weekday integer not null check (weekday between 1 and 7)`, ISO-8601 with Monday = 1, and both guards are written around it — `enrollment_one_open_row` is unique on `(student_id, weekday)`, and the overlap triggers filter on `e.weekday = new.weekday`. So what was actually left to me was the obligation §1 states next: keep the weekday in the KEY and not in a filter. `teacher_on` takes a DATE, derives the weekday from it in one place (`weekday_of`), and passes it into the lookup; the only SQL that reads intervals is `where weekday = ? and valid_from <= ? and ? < valid_to`. No code path anywhere fetches rows without the weekday and narrows them afterwards — which matters because a lookup that did would find two legal open rows for one student and would have to pick one, a coin toss dressed as an answer. I have written this in `## ВОПРОСЫ` #3 as an input defect of the заход rather than claiming a design decision I did not have to make.
+
+**`valid_to` — WHERE I DEPARTED FROM THE LETTER OF §2, said in `## ПЛАН` before writing code.** §2 says a move closes the interval with "`valid_to` = the day before". Taken literally that is closed-closed arithmetic and it contradicts the half-open convention that the same §2, `config.OPEN_END_DATE`, the schema and P1's own `test_half_open_intervals_touch_without_overlapping` all require. Writing the literal previous date into `valid_to` — which is EXCLUSIVE here and in the triggers — would leave one calendar day per handover covered by nobody. I implemented `valid_to = effective_from`: the outgoing teacher covers through the day before, the incoming one from the day itself, no gap and no overlap. `tests/enrollment/test_service.py::test_the_handover_is_half_open_and_leaves_no_uncovered_day` pins it. `## ВОПРОСЫ` #2 carries this as a factory-level finding, because the readiness criterion could not have caught the literal reading.
+
+### How I checked (each command printed a number)
+
+```
+$ make check
+191 passed in 23.40s              rc=0     # before me: 148 passed — +43, all mine
+
+$ python3 -m pytest tests/enrollment -q
+разрешено 112 из 112, ошибок 0
+43 passed in 0.83s                rc=0
+
+$ python3 -c "import pathlib,sys; bad=[str(p) for p in pathlib.Path('core').rglob('*.py') if 'aiogram' in p.read_text()]; print('aiogram в core/:', len(bad), bad); sys.exit(1 if bad else 0)"
+aiogram в core/: 0 []             rc=0
+```
+
+The 112 is not a synthetic world: `tests/enrollment/test_full_roster_resolution.py` loads the real anonymised catalogue (`seed/students.csv` = 56 students, `seed/teachers.csv` = 18 teachers of whom 17 are people and one is the technical `отсутствует` placeholder), enrolls every student on Monday and on Thursday with a DIFFERENT teacher, and resolves all 112 pairs. The Thursday offset is 7 against 17 teachers — coprime, so all 56 students exercise the "different teacher on the two days" case, not one lucky index. Zero resolutions against a non-empty roster is asserted RED (`assert resolved > 0`), and the verdict carries its denominator by construction.
+⚠ The Monday/Thursday pairing is a round-robin over the REAL people, not last year's real grouping — the seed does not record which lesson day a teacher came on. Stated here rather than implied away; `## ВОПРОСЫ` #6.
+
+**The test that IS this position** is `tests/enrollment/test_history_is_not_rewritten.py`: a student is marked on four October Mondays by teacher A through the real `MarkingService`, moved to teacher B effective 1 December, and every October mark is then asked again through `teacher_at(student, mark.valid_at)`. All four still answer A. It carries a negative control — a December lesson must answer B — because a resolution that always returned the first row it found would otherwise have passed. The schema's overlap refusal is proved rather than assumed, against the real migrated database, in `tests/enrollment/test_repo.py`.
+
+### Верификатор (§3) — ПОСЛЕ-типа, свежий субагент, ДРУГИМ методом
+
+It refused to use my tests or pytest as evidence and wrote its own scripts, driving the service and then checking every answer against its OWN raw SQL — where the two disagreed, the service was to be wrong.
+
+- **Claim 1 (per-lesson-day key) — HOLDS.** 112 resolved, 0 errors, 0 disagreements with raw SQL. 56 of 56 students answered a different teacher on Monday than on Thursday. A Wednesday resolves to `None`, not to a coin toss.
+- **Claim 2 (a move does not rewrite the past) — HOLDS.** Raw SQL after the move showed two rows, the first with its **id unchanged** and still carrying teacher A. All four October marks still attribute to A, and still do after a *second* move. Sweeping all 40 Mondays of the season: 40 covered, **0 gaps, 0 double-covers**.
+- **Claim 3 (coverage) — HOLDS.** On a second clean database: resolved 112 of 112, errors 0, raw-SQL mismatches 0.
+- **Coverage of the negative verdict: 249 checks and probes made, 5 items reported.** Its final line was present and verbatim: `выдано 5 позиций из 5 найденных`.
+
+**It found three real defects, all in the open-end-sentinel corner, and I fixed all three** (`45474d7`):
+1. `end(effective_from='9999-12-31')` returned an `Enrollment` that read as closed while setting `valid_to` to the value that MEANS still open — a student reported as having left stayed enrolled, **silently**. The worst of the three.
+2. `move(effective_from='9999-12-31')` leaked a raw `sqlite3.IntegrityError` across the seam `core/` exists to keep sqlite3 behind.
+3. `assign(valid_from='9999-12-31')` leaked the same way.
+
+One guard closes all three: `as_start_day` refuses the sentinel (and anything past it) on every caller-supplied start day, with `tests/enrollment/test_service.py::test_the_open_sentinel_cannot_open_or_close_an_interval` and `test_repo.py::test_the_open_sentinel_is_refused_on_the_real_store_too` pinning it on both the fake and the real store. Verified directly afterwards, because the verifier's own probe records that finding whenever the row is still open and so could not tell my fix from the bug:
+
+```
+end(effective_from=sentinel)      EnrollmentError (domain, seam held)
+move(effective_from=sentinel)     EnrollmentError (domain, seam held)
+assign(valid_from=sentinel)       EnrollmentError (domain, seam held)
+enrollment rows after the three refusals: [(1, 1, '2025-09-01', '9999-12-31')]
+the student is still with his teacher, unclosed: True
+```
+(`scratchpad/recheck_sentinel.py`; the verifier's own scripts are `scratchpad/verify_enrollment.py` and `scratchpad/verify_extra.py` under `/private/tmp/claude-501/-Users-ivanyakovlev-Documents-GitHub-spetsmat-bot-wt-P12-gruppy/c598c069-d2d0-4876-a5fe-5c15b4650851/`.)
+
+Its two remaining items were **doubts, not defects**, and I left both, each with a reason: the deliberate foreign-key pass-through (`## ВОПРОСЫ` #5), and the theoretical observation that under `[from, to)` the sentinel day 9999-12-31 is itself covered by nobody — observable only for a weekday-5 enrollment, since 9999-12-31 is a Friday. I judged the second not worth code: the repair would be a special case in the hottest read path of the project, paid every lesson for eight thousand years, to fix a day nobody will resolve.
+
+### Что НЕ трогал
+
+No migration — `migrations/` is read-only to me and the schema already carried everything (§1's "something genuinely missing → `## ВОПРОСЫ`" produced #4, not a migration). No "current teacher" column anywhere; `tests/enrollment/test_history_is_not_rewritten.py::test_who_taught_in_october_is_a_query_and_never_a_stored_column` asserts the absence on both tables rather than leaving it to review. No room screen — that is P13 and it stands on me. Not one line changed in `core/ports.py`, `infra/repositories.py`, `config.py`, `core/models.py`, or any pre-existing test. The merge diff is exactly my 8 new files and nothing else.
+
+### §4.1 ГИГИЕНА — Г1–Г6
+
+- **Г1. Зона доехала в git.** All three ✅, rc=0 each, re-run after the merge.
+  🔴 **The Г1 caveat, and it is a finding.** `git_zona.py check --zone` answers about the MAIN folder on branch `main`, not about the worktree the заход works in. Run from my working folder after a real commit it printed `⚠ зоны ... ещё нет ни на диске, ни в git` and then `✅ работа доехала в git`, rc=0 — a GREEN on a zone that existed nowhere it was looking. Every such run before the merge was a meaningless green. The three ✅ above are from AFTER `e58bc9a` and are the real ones. `## ВОПРОСЫ` #1.
+- **Г2. Второй репозиторий.** Неприменимо: every zone path is inside `spetsmat-bot`, and the zone never grew past it. Checked, not assumed — the merge diff `31ab856..e58bc9a` lists 8 paths, all under `core/`, `infra/`, `tests/`.
+- **Г3. Невлитых веток не прибавилось.** Entry: 0. Exit: **1** — `zahod/P4-setka`. Grew by one, and it is not mine: it is a neighbouring заход of this wave that appeared during my run (it did not exist at my entry snapshot). It is legal and it is not mine to merge — §0.1 gives foreign branches to the subagent, and the subagent was cancelled. My own branch is merged: `git branch --merged main` lists `zahod/P12-gruppy`.
+- **Г4. Новый инструмент имеет живую точку вызова.** No new `.py` under `_generator/**` — 0. (`git_zona.py` flagged 4 of my 8 files as "влито, но не встроено"; its heuristic does not recognise pytest fixtures and imports. Measured rather than argued: `core/services/enrollment.py` is imported by `infra/enrollment_repo.py` and by 4 test modules, `infra/enrollment_repo.py` by 4, `tests/enrollment/fakes.py` by all 4 test modules, and `tests/enrollment/conftest.py` is loaded by pytest itself — every one runs on `make check`, which is the readiness criterion. Not a debt.)
+- **Г5. Новый `.md` зарегистрирован.** I created no `.md` — `git diff --name-only 31ab856..e58bc9a | grep -c '\.md$'` → **0**. `register_doc.py` was not needed and `_studio/docs/KARTA.md` was not touched.
+- **Г6. В коммите нет чужих путей.** Each of the four commits `show --stat` lists only its own zone paths; the merge `e58bc9a` brings exactly the 8 files above.
+
+### §WARNING — полная гит-гигиена последним ходом
+
+**1 · ВСЕ КОММИТЫ.**
+```
+$ git -C /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot --no-optional-locks status --porcelain
+ M README.md
+ M zhurnal/2026-09-02_spetsmat-bot/SERDCE-VOLNY-sborka-bota.md
+ M zhurnal/_INFRA-git/INCIDENTY.md
+?? .commit-plan
+$ git -C /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P12-gruppy --no-optional-locks status --porcelain
+(пусто)
+```
+**вне git: рабочая папка 0 · главная папка 4, и НИ ОДИН из четырёх не мой содержательно.** `README.md` (+39 lines) and `SERDCE-VOLNY-sborka-bota.md` (+1) are the wave's registry, written by parallel заходы. `.commit-plan` is untracked and dated 08:31, two hours before my run started. `INCIDENTY.md` has 11 new lines of which exactly ONE is my footprint — the `git_zona.py` autolog entry for my own `--vsyo-ravno` merge at 11:20; the other ten belong to other заходы. I left all four: committing `INCIDENTY.md` to capture my one line would sweep ten other заходы' lines into my commit, which is exactly what pathspec commits exist to prevent, and the other three are foreign content (§4: назвать строкой и оставить).
+⚠ **My own file-заход is already IN git and I did not put it there.** The analyst's process is committing the main folder live and swept my `## ПЛАН` into `2ba4e62` (98 lines) while I worked. Consistent with the zone contract (the analyst commits this file, not me) — recorded because it means the file was not mine to be dirty.
+
+**2 · ВЛИТИЕ СВОЕЙ ВЕТКИ.** `main` before: `31ab856`. `✅ Влито в main без конфликтов: e58bc9a Merge branch 'zahod/P12-gruppy'`. No conflict, so no `README.md` merge decision arose. Merged with `--vsyo-ravno "своя рабочая папка ещё жива — влитие последним ходом захода, штатно"`, as §WARNING step 2 instructs.
+
+**3 · ПОСТ-ПРОВЕРКА ИЗ ГЛАВНОЙ ПАПКИ** — **ЗЕЛЁНАЯ**, no rollback needed. Run from `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`, not from the working folder:
+```
+$ cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && make check
+191 passed in 26.16s        rc=0
+$ python3 -m pytest tests/enrollment -q
+разрешено 112 из 112, ошибок 0
+43 passed in 0.97s          rc=0
+$ grep -c 'UPDATE' infra/enrollment_repo.py
+0
+$ grep -n 'OPEN_END_DATE' core/services/enrollment.py infra/enrollment_repo.py
+8 hits, all `config.OPEN_END_DATE`, zero literals
+$ grep -rn 'weekday' core/services/enrollment.py | head -3
+present from line 9; 61 lines in all
+```
+
+**4 · ГАШЕНИЕ.** `git --no-optional-locks branch --no-merged main` → **1**: `zahod/P4-setka`, named above in Г3 — a live neighbouring заход of this wave, not mine to merge and not mine to kill. No showcase branch was merged into.
+
+**5 · ВЫВОЗ.** **Неприменимо, и это проверено командой, а не предположено:** `git remote -v` prints nothing — the repository has NO remote, so `@{u}` does not resolve (`fatal: no upstream configured for branch 'zahod/P12-gruppy'`) and there is nowhere to push. Невывезенных своей ветки: н/д, вывоз невозможен по устройству репозитория. No заявка was placed for it: a заявка asks a human to perform an operation, and there is no destination for anyone to perform it to.
+
+**6 · ЧИСЛА.** вне git: рабочая папка **0**, главная папка **4** (all foreign, itemised above) · невлитых `zahod/`: вход **0**, выход **1** (`zahod/P4-setka`, foreign) · своя ветка влита: **да**, `e58bc9a` · невывезенных: **н/д** (нет remote) · пост-проверка: **зелёная**, отката не было.
+
+### НЕОБРАТИМОЕ
+
+- **Слияние `zahod/P12-gruppy` в `main`** · репозиторий `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` · merge-коммит `e58bc9a`, приносит 8 новых файлов и не переписывает ни одного существующего.
+  🔴 **Отменять — `git -C /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot --no-optional-locks revert -m 1 e58bc9a`, а НЕ `reset --hard`.** Состояние `main` до моего влития было `31ab856`, но аналитик продолжил коммитить в главную папку ПОСЛЕ него (на момент написания отчёта `main` уже на `2a0efae`), поэтому `reset` на `31ab856` снёс бы вместе с моей работой и его — P7, P13 и всё, что легло следом. Проверять хвост перед откатом: `git --no-optional-locks log --oneline 31ab856..main`.
+- **Одна строка дописана в `zhurnal/_INFRA-git/INCIDENTY.md`** инструментом `git_zona.py` как побочный эффект моего `--vsyo-ravno` · не закоммичена, снимается `git checkout -- zhurnal/_INFRA-git/INCIDENTY.md` (что заодно снимет и десять чужих строк — поэтому я её и не трогал).
+
+Больше ничего необратимого нет: ни удалений, ни перезаписей, ни переименований, ни перемещений, ни `reset`/`checkout` поверх несохранённого, ни одной правки за пределами зоны.
+
+### ПОВТОРЯЕМОСТЬ находок
+
+- **Повторится на СЛЕДУЮЩЕЙ единице работы → заход ДО следующего прогона, не пункт очереди:** `## ВОПРОСЫ` #1, the Г1 false green. It is not about this задание at all — `git_zona.py check --zone` is run by EVERY заход of every wave, after every commit-along-the-way, and by приёмка as its gate 0. Every one of those pre-merge runs is currently a green that proves nothing, and the failure mode it hides is precisely the one §WARNING exists for: work that never reached git. Класс НЕМЕДЛЕННОЕ.
+- **Условно повторится:** `## ВОПРОСЫ` #3 — a задание asking the executor to "decide how to express X" when X is already fixed in a file the zone declares read-only. It recurs wherever a заход is written against an existing schema, which on this arc is most of them (P13 stands on exactly this table). Cheap to prevent at assembly: the generator already knows the zone, so a задание that asks for a decision inside a read-only path is machine-detectable.
+- **Не повторится → законно уходит пунктом очереди:** #2 (the "day before" phrasing is specific to describing SCD2, and P13 does not write intervals), #4 (one observation about one index), #5 and #6 (both are decisions for whoever builds over this service).
+
+### Открытое «возвращаться»
+
+- The four `## ВОПРОСЫ` items with `ДОМ:` outside this заход are undelivered by construction — delivering them is the analyst's move at приёмка, not mine.
+- P13 (экран аудитории) stands on this service. It needs `resolve_many(student_ids, day)`, which is bulk in ONE query precisely so the screen is not an N+1; and it will hit the foreign-key pass-through of `## ВОПРОСЫ` #5 the first time somebody assigns to a teacher who does not exist.
+- `## ГИГИЕНА ВХОДА` is unfilled because its owner, the §0.1 subagent, was cancelled by the orchestrator. Gate Г12 of `priyomka.py` will be red on it, and that is the expected consequence of the cancellation, not an omission by me.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
@@ -512,7 +689,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** принято — прогнано оркестратором ИЗ ГЛАВНОЙ ПАПКИ после влития: `make check` → 220 passed (было 148 до этой полосы), `pytest tests/enrollment -q` → 43 passed, `aiogram в core/` → 0, ветка влита (`git branch --merged main`). Суть позиции закрыта ИМЕНОВАННЫМ тестом, а не словами: `test_moving_a_student_in_december_does_not_change_who_marked_him_in_october` — перевод ученика в декабре не меняет того, кто принимал у него в октябре. Рядом второй: `test_who_taught_in_october_is_a_query_and_never_a_stored_column` — то есть «текущий преподаватель» остался ЗАПРОСОМ по интервалам, а не хранимой колонкой, и класс багов «копия разошлась с журналом» закрыт по построению. Верификатор нашёл три дефекта, один из них закрывал интервал значением `9999-12-31`, которое означает «ещё открыт» — поймано ДО влития. Гейтов приёмки 16 из 18 на входе; Г13 — сам этот вердикт, Г12 закрыт оркестратором с причиной (см. ГИГИЕНА ВХОДА: субагента §0.1 отменил оркестратор, заполнять было некому; системная причина закрыта в источнике — промпт запуска теперь велит заходу заполнить строку самому).
 
 **ВЕТКА РАБОТЫ:** `zahod/P12-gruppy`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -523,6 +700,6 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
 
-- `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
+заявок нет: ни одна из пяти операций не сорвалась. **Влитие** — сделано самим заходом, мерж `e58bc9a`, проверено `git branch --merged main`; **коммит** — по ходу работы, Г1 нашёл каждый хэш; **вывоз** — непроверяем, у `spetsmat-bot` нет ни одного удалённого; **деплой** — вне этой позиции (P10); **гашение** — ветка оставлена живой намеренно, волна идёт.
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
