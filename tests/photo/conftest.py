@@ -38,6 +38,47 @@ from core.services.seeding import seed_catalogue
 from infra.llm import LlmAnswer
 
 
+#: The bytes every flow test "downloads".  FIXED, which is what makes the idempotency
+#: tests mean anything: the same photograph sent twice really is the same bytes and
+#: therefore the same hash.
+PHOTO_BYTES = b"pretend-this-is-a-jpeg"
+
+
+@pytest.fixture(autouse=True)
+def stub_download(monkeypatch):
+    """Telegram's file API, stubbed.  Its branching is unit-tested in ``test_intake.py``.
+
+    Autouse and in the CONFTEST rather than in one test file: every file that drives a
+    real dispatcher needs it, and a fixture that lives in one of them silently does not
+    apply to the next one somebody writes -- which shows up as an ``AttributeError`` from
+    inside aiogram rather than as a missing fixture.
+    """
+    from bot.routers import photo as photo_module
+
+    async def _download(message, bot):
+        return PHOTO_BYTES
+
+    monkeypatch.setattr(photo_module, "_download", _download)
+
+
+@pytest.fixture(autouse=True)
+def stub_prepare(monkeypatch):
+    """``prepare`` without OpenCV: the flow tests are about the flow, not about pixels.
+
+    The hash it reports is the REAL hash of the REAL bytes -- that part IS the flow.  Only
+    ``bot.routers.photo.prepare`` is patched, so anything calling
+    ``core.services.raspoznavanie.prepare`` directly still exercises the real pipeline.
+    """
+    from bot.routers import photo as photo_module
+    from core.services.raspoznavanie import Prepared, sha256_of
+
+    def _prepare(raw):
+        return Prepared(jpeg=raw, sha256=sha256_of(raw), width=1280, height=720,
+                        steps=("stubbed",))
+
+    monkeypatch.setattr(photo_module, "prepare", _prepare)
+
+
 # --------------------------------------------------------------------- the seeded world
 
 @pytest.fixture
@@ -133,9 +174,11 @@ class FakeVision:
         self.answer = answer
         self.error = error
         self.calls = 0
+        self.sheets_offered = []
 
-    def read_sheet(self, jpeg, codes, labels):
+    def read_sheet(self, jpeg, codes, labels, sheets=None):
         self.calls += 1
+        self.sheets_offered = list(sheets or [])
         #: The one assertion that belongs in the double: what leaves this machine.
         assert all(code.startswith("u") and code[1:].isdigit() for code in codes), codes
         if self.error is not None:

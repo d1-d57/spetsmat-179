@@ -16,7 +16,6 @@ import json
 
 import pytest
 
-from bot.routers import photo as photo_module
 from bot.routers.photo import (
     FotoCell,
     FotoFinish,
@@ -33,38 +32,10 @@ from infra.llm import LlmAnswer, LlmTimeout, ModelRefused, SpendLimitReached
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
 from tests.photo.conftest import feed_callback, feed_photo
 
-PHOTO_BYTES = b"pretend-this-is-a-jpeg"
+from tests.photo.conftest import PHOTO_BYTES
 
 
 # ------------------------------------------------------------------------- helpers
-
-@pytest.fixture(autouse=True)
-def stub_download(monkeypatch):
-    """Telegram's download, stubbed.  Its branching is unit-tested in test_intake.py.
-
-    The bytes are FIXED, which is what makes the idempotency test meaningful: the same
-    photograph sent twice really is the same bytes and therefore the same hash.
-    """
-    async def _download(message, bot):
-        return PHOTO_BYTES
-
-    monkeypatch.setattr(photo_module, "_download", _download)
-
-
-@pytest.fixture(autouse=True)
-def stub_prepare(monkeypatch):
-    """``prepare`` without OpenCV: this file is about the flow, not about pixels.
-
-    The hash it reports is the real hash of the real bytes -- that part is the flow.
-    """
-    from core.services.raspoznavanie import Prepared, sha256_of
-
-    def _prepare(raw):
-        return Prepared(jpeg=raw, sha256=sha256_of(raw), width=1280, height=720,
-                        steps=("stubbed",))
-
-    monkeypatch.setattr(photo_module, "prepare", _prepare)
-
 
 def world(dispatcher):
     catalogue = SqliteCatalogue(dispatcher.workflow_data["catalogue"]._connection) \
@@ -76,7 +47,7 @@ def world(dispatcher):
     return catalogue, sheet, problems, students
 
 
-def answer_for(students, problems, *, rows=None, raw_text=None):
+def answer_for(students, problems, *, rows=None, raw_text=None, sheet_number=None):
     """An ``LlmAnswer`` naming real codes and real labels of the seeded world."""
     rows = rows if rows is not None else [
         {"student_code": code_for_student(students[0].id),
@@ -86,7 +57,8 @@ def answer_for(students, problems, *, rows=None, raw_text=None):
     ]
     if raw_text is None:
         raw_text = " ".join(row["student_code"] for row in rows if row.get("student_code"))
-    return LlmAnswer(raw_text=raw_text, rows=tuple(rows), model="fake", latency_s=0.01)
+    return LlmAnswer(raw_text=raw_text, rows=tuple(rows), model="fake", latency_s=0.01,
+                     sheet_number=sheet_number or "")
 
 
 def journal_rows(dispatcher):

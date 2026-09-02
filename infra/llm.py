@@ -64,6 +64,8 @@ import re
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
@@ -163,7 +165,8 @@ class BadModelAnswer(LlmError):
 
 # ------------------------------------------------------------------------ the schema
 
-def build_schema(codes: Sequence[str], labels: Sequence[str]) -> dict:
+def build_schema(codes: Sequence[str], labels: Sequence[str],
+                 sheets: Optional[Sequence[str]] = None) -> dict:
     """The strict JSON schema, with ``raw_text`` first and the closed list split in two.
 
     ``codes`` and ``labels`` are the ONLY vocabularies the model may answer in.  Handed a
@@ -175,7 +178,7 @@ def build_schema(codes: Sequence[str], labels: Sequence[str]) -> dict:
         raise ValueError("the closed list of student codes is empty; nothing to ask about")
     if not labels:
         raise ValueError("the closed list of task labels is empty; nothing to ask about")
-    return {
+    schema = {
         "type": "object",
         "additionalProperties": False,
         # ORDER IS LOAD-BEARING: required fields are emitted in schema order, so the
@@ -210,9 +213,26 @@ def build_schema(codes: Sequence[str], labels: Sequence[str]) -> dict:
             },
         },
     }
+    if sheets:
+        # WHICH SHEET IS ON THE PAPER.  A third field, and a small one -- 18 values -- so
+        # neither of the two big enums grows and §5's ~120 ceiling is untouched.
+        #
+        # It exists because the pipeline used to ASSUME the newest sheet.  The §3 verifier
+        # photographed листок 12 while 13 was current and got nine marks written onto
+        # листок 13's problem ids -- adjacent sheets share 2 to 11 labels -- with the other
+        # thirty-five labels dropped without a word.  ``tools/blank.py`` prints «Листок N»
+        # at the top of every form; nothing was reading it back.
+        schema["properties"]["sheet_number"] = {
+            "type": "string",
+            "enum": list(sheets),
+            "description": "Номер листка, напечатанный сверху бланка.",
+        }
+        schema["required"] = ["raw_text", "sheet_number", "rows"]
+    return schema
 
 
-def build_prompt(codes: Sequence[str], labels: Sequence[str]) -> str:
+def build_prompt(codes: Sequence[str], labels: Sequence[str],
+                 sheets: Optional[Sequence[str]] = None) -> str:
     """What the model is told.  Codes and task labels — nothing about any child.
 
     ``UNKNOWN`` has no place in the closed list of codes, so ambiguity is expressed by
@@ -220,9 +240,16 @@ def build_prompt(codes: Sequence[str], labels: Sequence[str]) -> str:
     then shows to the teacher as two buttons.  Never make a model guess between two
     similar rows -- asked to choose, it will, and it will be confident.
     """
-    return (
+    head = (
         "На фотографии печатный бланк приёма задач. Слева в каждой строке — КОД "
         "(например u17). Столбцы — номера задач.\n\n"
+    )
+    if sheets:
+        head += (
+            "Сверху на бланке напечатано «Листок N». Верни этот номер в sheet_number, "
+            "ровно как он напечатан. Возможные номера: %s\n\n" % ", ".join(sheets)
+        )
+    return head + (
         "Коды строк: %s\n\n"
         "Номера задач: %s\n\n"
         "Сначала запиши в raw_text дословно всё, что видишь на бланке, как есть. "
@@ -246,6 +273,12 @@ class LlmAnswer:
     model: str
     latency_s: float
     attempts: int = 1
+    #: The sheet number the model read off the top of the form, or ``""`` when the caller
+    #: did not ask.  The caller compares it with the sheet it THINKS is current.
+    sheet_number: str = ""
+    #: Task labels the model returned that are not on the sheet.  Reported, never dropped:
+    #: a label that is not on this sheet is evidence about WHICH sheet the paper is.
+    unknown_labels: tuple = field(default_factory=tuple)
     #: Labels the model returned that are not in the closed list.  A schema is a request,
     #: not a guarantee, so the label is validated in code and the strays are reported
     #: rather than silently dropped.
@@ -324,6 +357,8 @@ def parse_answer(payload: dict, labels: Sequence[str], *, model: str, latency_s:
         model=model,
         latency_s=latency_s,
         attempts=attempts,
+        sheet_number=str(parsed.get("sheet_number") or ""),
+        unknown_labels=tuple(dict.fromkeys(rejected)),
         rejected_labels=tuple(rejected),
     )
 
@@ -364,7 +399,8 @@ class VisionModel:
 
     # ------------------------------------------------------------------ the request
 
-    def _body(self, jpeg: bytes, codes: Sequence[str], labels: Sequence[str]) -> dict:
+    def _body(self, jpeg: bytes, codes: Sequence[str], labels: Sequence[str],
+              sheets: Optional[Sequence[str]] = None) -> dict:
         encoded = base64.b64encode(jpeg).decode()
         return {
             "model": self._model,
@@ -377,7 +413,7 @@ class VisionModel:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": build_prompt(codes, labels)},
+                        {"type": "text", "text": build_prompt(codes, labels, sheets)},
                         {
                             "type": "image_url",
                             "image_url": {
@@ -396,7 +432,7 @@ class VisionModel:
                 "json_schema": {
                     "name": "blank",
                     "strict": True,
-                    "schema": build_schema(codes, labels),
+                    "schema": build_schema(codes, labels, sheets),
                 },
             },
         }
@@ -430,7 +466,8 @@ class VisionModel:
 
     # -------------------------------------------------------------------- the call
 
-    def read_sheet(self, jpeg: bytes, codes: Sequence[str], labels: Sequence[str]) -> LlmAnswer:
+    def read_sheet(self, jpeg: bytes, codes: Sequence[str], labels: Sequence[str],
+                   sheets: Optional[Sequence[str]] = None) -> LlmAnswer:
         """Send one prepared image and return the answer, or raise one of §7's failures.
 
         The retry loop retries TRANSIENT failures only, at most ``MAX_ATTEMPTS`` times.
@@ -439,7 +476,7 @@ class VisionModel:
         and retrying a refusal asks the same model the same question and gets the same
         no, three times, while a teacher waits.
         """
-        body = self._body(jpeg, codes, labels)
+        body = self._body(jpeg, codes, labels, sheets)
         last: Optional[LlmError] = None
         for attempt in range(1, MAX_ATTEMPTS + 1):
             started = time.perf_counter()
@@ -474,6 +511,33 @@ class VisionModel:
         return BACKOFF_S[min(attempt - 1, len(BACKOFF_S) - 1)]
 
 
+def _parse_retry_after(raw) -> Optional[float]:
+    """``retry-after`` is EITHER a number of seconds OR an HTTP-date.  Both are legal.
+
+    Reading only the number and treating a failure to parse as «no header» sends an
+    ordinary rate limit down the spend-limit branch, and the teacher is then told the
+    money ran out and stops using photo marking for the term over something that would
+    have cleared in a minute.  Found by the §3 verifier on
+    ``Wed, 02 Sep 2026 10:00:00 GMT``.
+    """
+    if not raw:
+        return None
+    text = str(raw).strip()
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(text)
+    except (TypeError, ValueError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+
+
 def _classify_http_error(error) -> LlmError:
     """Turn an ``HTTPError`` into the failure it actually is.
 
@@ -490,12 +554,7 @@ def _classify_http_error(error) -> LlmError:
     headers = getattr(error, "headers", None)
     retry_after = None
     if headers is not None:
-        raw = headers.get("retry-after") or headers.get("Retry-After")
-        if raw:
-            try:
-                retry_after = float(str(raw).strip())
-            except ValueError:
-                retry_after = None
+        retry_after = _parse_retry_after(headers.get("retry-after") or headers.get("Retry-After"))
 
     if error.code == 429:
         lowered = text.lower()

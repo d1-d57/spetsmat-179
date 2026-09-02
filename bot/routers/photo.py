@@ -30,7 +30,7 @@ WHY THE PAYLOADS ARE DEFINED HERE AND NOT IN ``bot/callbacks.py``.  That file is
 outside this position's zone; two writers in one file is the single thing a wave cannot
 do.  The two LAWS it states are obeyed all the same -- a payload carries the TARGET state
 and only numbers -- and ``_button`` enforces the 64-byte limit at the moment a button is
-built, exactly as ``bot/keyboards/grid.button`` does.  Moving these four classes into
+built, exactly as ``bot/keyboards/grid.button`` does.  Moving these payload classes into
 ``bot/callbacks.py`` is a one-commit tidy for whoever owns that file next.
 """
 
@@ -68,10 +68,16 @@ from infra.llm import LlmError, ModelRefused, SpendLimitReached
 #: Where a mark written by this screen came from.  One of ``config.MARK_SOURCES``.
 SOURCE = "фото"
 
-#: Telegram refuses a keyboard over a hundred buttons, and a teacher refuses one long
-#: before that.  A sheet with more marks than this is drawn up to the cap with a line
-#: saying what was left out -- a silent truncation would read as «that is all there was».
-MAX_CELL_BUTTONS = 80
+#: Telegram refuses a keyboard over a hundred buttons.  Cells past this cap are NOT drawn
+#: and are NOT written: the rule of this screen is that nothing reaches the journal that a
+#: human has not looked at, and a cell nobody could see is a cell nobody confirmed.
+#:
+#: The cap is applied in ``build_draft`` and not in the keyboard, which is the correction
+#: the §3 verifier's fourth finding forced.  Deciding it at render time meant «Записать 94»
+#: on a keyboard showing 80 -- fourteen marks written that the teacher could not inspect or
+#: untick -- and an overflow button that carried ``op=0`` and silently discarded the whole
+#: draft when tapped.
+MAX_CELL_BUTTONS = 90
 
 #: How a cell of the draft is drawn.  A tick or an empty box, and the task label.
 CELL_MARK = {True: "✅", False: "☐"}
@@ -103,6 +109,16 @@ class FotoPick(CallbackData, prefix="pp"):
 
     row: int
     student_id: int
+
+
+class FotoNote(CallbackData, prefix="pn"):
+    """The overflow line: «… ещё N клеток не поместилось».
+
+    A REAL payload with a REAL handler that changes nothing.  It used to carry
+    ``FotoFinish(op=0)``, so a teacher tapping what reads as a caption cancelled the whole
+    draft; and an unhandled payload would fall through to P4's catch-all and be answered
+    «экран устарел», which would be a lie about the screen they are looking at.
+    """
 
 
 class FotoFinish(CallbackData, prefix="pf"):
@@ -143,17 +159,37 @@ def build_draft(answer, catalogue, sheet, *, digest: str) -> dict:
     A plain dict rather than a dataclass because it goes into the FSM store, which
     serialises; and the ONE piece of state that must not be reconstructible from the
     screen -- the hash of the photograph -- is carried in it rather than re-derived.
+
+    TWO THINGS ARE DECIDED HERE AND NOT LATER, both because deciding them later meant
+    writing something nobody saw:
+
+      * the button CAP.  A cell past ``MAX_CELL_BUTTONS`` is marked ``shown: False`` and
+        unticked, so ``checked_cells`` cannot return it and «Записать» cannot write it;
+      * a label the model returned that is NOT on this sheet is collected into
+        ``unknown`` instead of being dropped.  It is the loudest available evidence that
+        the paper is a different sheet from the one the bot assumed.
     """
     problems = {problem.label: problem for problem in catalogue.problems_of_sheet(sheet.id)}
     known = {student.id for student in catalogue.students()}
 
-    rows = []
+    rows, drawn, unknown = [], 0, []
     for row in rows_from_answer(answer, known):
-        cells = [
-            {"problem_id": problems[label].id, "label": label, "checked": True}
-            for label in row.solved
-            if label in problems
-        ]
+        cells = []
+        for label in row.solved:
+            if label not in problems:
+                unknown.append(label)
+                continue
+            shown = drawn < MAX_CELL_BUTTONS
+            drawn += 1 if shown else 0
+            cells.append(
+                {
+                    "problem_id": problems[label].id,
+                    "label": label,
+                    # Not shown means not ticked means not writable.  One rule, one place.
+                    "checked": shown,
+                    "shown": shown,
+                }
+            )
         rows.append(
             {
                 "student_id": row.student_id,
@@ -164,7 +200,14 @@ def build_draft(answer, catalogue, sheet, *, digest: str) -> dict:
                 "cells": cells,
             }
         )
-    return {"sha256": digest, "sheet_id": sheet.id, "rows": rows}
+    unknown.extend(label for label in getattr(answer, "unknown_labels", ()) or ())
+    return {
+        "sha256": digest,
+        "sheet_id": sheet.id,
+        "rows": rows,
+        "unknown_labels": list(dict.fromkeys(unknown)),
+        "hidden": sum(1 for row in rows for cell in row["cells"] if not cell["shown"]),
+    }
 
 
 def checked_cells(draft: dict):
@@ -179,7 +222,9 @@ def checked_cells(draft: dict):
         if student_id is None:
             continue
         for cell in row.get("cells", []):
-            if cell.get("checked"):
+            # ``shown`` is belt AND braces beside ``checked``: a cell the teacher never
+            # saw must not become a mark even if something else ticks it.
+            if cell.get("checked") and cell.get("shown", True):
                 pairs.append((student_id, cell["problem_id"]))
     return pairs
 
@@ -209,6 +254,16 @@ def draft_text(draft: dict, catalogue) -> str:
         % (sheet.number if sheet else "?", len(draft["rows"]), len(checked_cells(draft))),
         "Проверьте и нажмите «Записать» — до этого в журнал ничего не идёт.",
     ]
+    if draft.get("hidden"):
+        lines.append(
+            "⚠️ %d клеток не поместилось на экран — они НЕ будут записаны. "
+            "Отметьте их кнопками: /setka." % draft["hidden"]
+        )
+    if draft.get("unknown_labels"):
+        lines.append(
+            "⚠️ на листке %s нет задач %s — возможно, это фото другого листка."
+            % (sheet.number if sheet else "?", ", ".join(draft["unknown_labels"][:8]))
+        )
     for row in draft["rows"]:
         marks = ", ".join(cell["label"] for cell in row["cells"] if cell["checked"])
         lines.append(
@@ -225,7 +280,7 @@ def draft_text(draft: dict, catalogue) -> str:
 
 def draft_keyboard(draft: dict, catalogue) -> InlineKeyboardMarkup:
     """The whole parsed table, one button per cell, plus the two closing buttons."""
-    rows, drawn = [], 0
+    rows = []
     for row_index, row in enumerate(draft["rows"]):
         if row["state"] == UNKNOWN and row["alternatives"]:
             rows.append([
@@ -237,26 +292,25 @@ def draft_keyboard(draft: dict, catalogue) -> InlineKeyboardMarkup:
             ])
         line = []
         for cell_index, cell in enumerate(row["cells"]):
-            if drawn >= MAX_CELL_BUTTONS:
-                break
+            if not cell.get("shown", True):
+                continue
             line.append(
                 _button(
                     "%s%s" % (CELL_MARK[bool(cell["checked"])], cell["label"]),
                     FotoCell(row=row_index, cell=cell_index).pack(),
                 )
             )
-            drawn += 1
             if len(line) == config.GRID_COLUMNS:
                 rows.append(line)
                 line = []
         if line:
             rows.append(line)
 
-    total = sum(len(row["cells"]) for row in draft["rows"])
-    if total > drawn:
-        # Named out loud: a silent cap reads as «that is all there was».
-        rows.append([_button("… ещё %d клеток не поместилось" % (total - drawn),
-                             FotoFinish(op=OP_CANCEL).pack())])
+    if draft.get("hidden"):
+        # Named out loud, and INERT: a silent cap reads as «that is all there was», and a
+        # cancel hiding behind a caption throws away the draft the teacher just checked.
+        rows.append([_button("… ещё %d клеток не поместилось" % draft["hidden"],
+                             FotoNote().pack())])
 
     rows.append([
         _button("Записать %d" % len(checked_cells(draft)), FotoFinish(op=OP_WRITE).pack()),
@@ -316,10 +370,11 @@ async def receive_photo(message: Message, **data) -> None:
     students = [s for s in catalogue.students() if s.status != "left"]
     codes = [code_for_student(student.id) for student in students]
     labels = [problem.label for problem in catalogue.problems_of_sheet(sheet.id)]
+    sheet_numbers = [existing.number for existing in catalogue.sheets()]
 
     waiting = await message.answer("Разбираю бланк…")
     try:
-        answer = vision.read_sheet(prepared.jpeg, codes, labels)
+        answer = vision.read_sheet(prepared.jpeg, codes, labels, sheet_numbers)
     except SpendLimitReached:
         await _redraw_message(waiting, "Кончился лимит модели. Отметьте кнопками — /setka.")
         return
@@ -330,6 +385,29 @@ async def receive_photo(message: Message, **data) -> None:
         return
     except LlmError as error:
         await _redraw_message(waiting, "Не получилось разобрать фото: %s" % error)
+        return
+
+    # 🔴 WHICH SHEET IS ON THE PAPER, before a single mark is drafted.
+    #
+    # This screen used to assume the newest sheet unconditionally.  The §3 verifier
+    # photographed листок 12 while 13 was current: nine marks landed on листок 13's
+    # problem ids -- adjacent sheets share between two and eleven labels -- and
+    # thirty-five labels were dropped without a word.  ``tools/blank.py`` prints «Листок N»
+    # at the top of every form, and nothing was reading it back.
+    #
+    # Refusing is the whole fix, and it is deliberately not «switch to the sheet the model
+    # read»: the closed list of task labels sent with the request was built for the CURRENT
+    # sheet, so an answer about another one was produced against the wrong vocabulary and
+    # is not trustworthy at any confidence.  Photographing an older sheet is named in
+    # ## ВОПРОСЫ as the next заход's work.
+    read_number = (getattr(answer, "sheet_number", "") or "").strip()
+    if read_number and read_number != sheet.number:
+        await _redraw_message(
+            waiting,
+            "На бланке напечатан листок %s, а сейчас идёт листок %s. "
+            "Фото пока разбирается только для текущего листка — отметьте кнопками /setka."
+            % (read_number, sheet.number),
+        )
         return
 
     draft = build_draft(answer, catalogue, sheet, digest=prepared.sha256)
@@ -390,6 +468,14 @@ async def pick_student(query: CallbackQuery, callback_data: FotoPick, **data) ->
         await _redraw(message, draft_text(draft, catalogue), draft_keyboard(draft, catalogue))
 
 
+async def note(query: CallbackQuery, **data) -> None:
+    """A tap on the overflow line.  Dismiss the spinner, change nothing, explain."""
+    await query.answer(
+        "Эти клетки не поместились на экран и не будут записаны — отметьте их через /setka.",
+        show_alert=True,
+    )
+
+
 async def finish(query: CallbackQuery, callback_data: FotoFinish, **data) -> None:
     """«Записать» or «Отменить».  The ONLY place in this module that touches the journal.
 
@@ -419,7 +505,7 @@ async def finish(query: CallbackQuery, callback_data: FotoFinish, **data) -> Non
         await query.answer("Экран устарел — пришлите фото заново.", show_alert=True)
         return
 
-    written, already = 0, 0
+    written, already, spent = 0, 0, 0
     for student_id, problem_id in checked_cells(draft):
         outcome = marking.set_state(
             student_id,
@@ -432,14 +518,26 @@ async def finish(query: CallbackQuery, callback_data: FotoFinish, **data) -> Non
             # already in the journal and writes nothing.
             idempotency_key="foto:%s:%d:%d" % (draft["sha256"], student_id, problem_id),
         )
-        written += 1 if outcome.written else 0
-        already += 0 if outcome.written else 1
+        if outcome.written:
+            written += 1
+        elif outcome.state is CellState.SOLVED:
+            already += 1
+        else:
+            # WRITTEN=FALSE DOES NOT MEAN «уже стоит».  The key was spent by an earlier
+            # confirmation of THIS photograph and the cell has since been struck or
+            # retracted, so the answer comes back from the journal and the cell stays
+            # empty.  Reporting that as «уже было» tells the teacher a mark is standing
+            # when none is -- found by the §3 verifier, sixth finding.
+            spent += 1
 
     await state.update_data(photo_draft=None)
-    summary = (
-        "Записано отметок: %d." % written if not already
-        else "Записано отметок: %d, уже было: %d." % (written, already)
-    )
+    summary = "Записано отметок: %d." % written
+    if already:
+        summary += " Уже стояло: %d." % already
+    if spent:
+        summary += (
+            " Снято раньше и этим фото не вернуть: %d — отметьте кнопками /setka." % spent
+        )
     await query.answer(summary)
     message = _editable(query)
     if message is not None:
@@ -513,5 +611,6 @@ def build_routers() -> tuple:
     screen.message.register(receive_photo, F.document.mime_type.startswith("image/"))
     screen.callback_query.register(toggle_cell, FotoCell.filter())
     screen.callback_query.register(pick_student, FotoPick.filter())
+    screen.callback_query.register(note, FotoNote.filter())
     screen.callback_query.register(finish, FotoFinish.filter())
     return (screen,)

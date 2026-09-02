@@ -253,19 +253,25 @@ def prepare(raw: bytes) -> Prepared:
     digest = sha256_of(raw)
     steps = []
 
-    try:
-        image = Image.open(io.BytesIO(raw))
-    except Exception as error:  # a corrupt upload is an expected input, not a crash
-        raise IntakeRefused("не смог открыть изображение: %s" % error)
-
     # 1. EXIF.  First, and it is the biggest single win in the whole pipeline: the phone
     #    stored a sideways frame plus a tag, and a reader that ignores the tag hands the
     #    model a table rotated ninety degrees.
-    before = image.size
-    image = ImageOps.exif_transpose(image)
+    #
+    #    THE DECODE IS INSIDE THIS GUARD, not only the open.  ``Image.open`` parses the
+    #    HEADER and returns; the pixels are read later, so a truncated upload -- the most
+    #    ordinary failure a phone on school wifi produces -- opened cleanly and then threw
+    #    a bare ``OSError: image file is truncated`` out of ``exif_transpose``, past every
+    #    ``except IntakeRefused`` in the router.  Found by the §3 verifier at 60% truncation.
+    try:
+        image = Image.open(io.BytesIO(raw))
+        before = image.size
+        image = ImageOps.exif_transpose(image)
+        # ``convert`` forces the decode: a colour space, not a greyscale conversion.
+        image = image.convert("RGB")
+    except Exception as error:  # a corrupt upload is an expected input, not a crash
+        raise IntakeRefused("не смог прочитать изображение (%s) — пришлите снимок заново"
+                            % type(error).__name__)
     steps.append("exif:%s" % ("rotated" if image.size != before else "already-upright"))
-
-    image = image.convert("RGB")  # a colour space, not a greyscale conversion
     frame = numpy.asarray(image)[:, :, ::-1]  # PIL is RGB, OpenCV is BGR
 
     # 2. Downscale, and NEVER up.  ``INTER_AREA`` is the correct kernel for shrinking --
@@ -427,9 +433,16 @@ def _crop_to_sheet(frame):
     # shorter than the near one, and squaring the sheet to its LONGER edge is an
     # enlargement wearing a geometry costume -- the most damaging operation in the
     # benchmark, arriving through a door the shrink guard does not watch.
-    source_long = max(frame.shape[0], frame.shape[1])
-    if max(width, height) > source_long:
-        scale = source_long / float(max(width, height))
+    #
+    # PER AXIS, and that is the whole correction.  This clamp used to compare only
+    # ``max(width, height)`` against ``max(frame.shape)``, which lets a target that is
+    # shorter on the long side and TALLER on the short one through untouched: the §3
+    # verifier drove 1568x1045 -- the shape a real phone photo has after step 2 -- to
+    # 1532x1213, 1,134 times the pixels, and found 1,218 times over random quads.  A
+    # single-number comparison cannot express «no dimension grows»; two do.
+    source_height, source_width = frame.shape[:2]
+    scale = min(1.0, source_width / float(width), source_height / float(height))
+    if scale < 1.0:
         width, height = max(2, int(width * scale)), max(2, int(height * scale))
 
     target = numpy.array(
