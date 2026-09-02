@@ -17,6 +17,8 @@ The brief's five named scenarios are honoured by name in the test docstrings.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from aiogram import Dispatcher
 
@@ -125,8 +127,19 @@ def test_confirmed_student_sees_only_own(dispatcher, roster, seeded_catalogue, b
     recorder = _reset_recorder(dispatcher, recorder)
     feed_message(dispatcher, bot=bot_instance, chat_id=STUDENT_TG, from_id=STUDENT_TG, text="/me")
     sent = messages_sent(recorder)
-    assert any(str(student_id) in t for t in sent), (
-        "confirmed student /me did not echo their id; sent=%r" % sent
+    # 🔴 ПРЕЖНЯЯ ПРОВЕРКА ТРЕБОВАЛА, ЧТОБЫ БОТ НАПЕЧАТАЛ УЧЕНИКУ ЕГО ID, и P18 её
+    # уронила, убрав id из текстов по прямой просьбе владельца («ищи внутренние
+    # имена ролей, английский, id=, None, имена полей и таблиц»). Эхо id не было
+    # свойством приватности — оно было тем самым дефектом, и тест его СТОРОЖИЛ.
+    # Здесь проверяется то, что назван docstring: подтверждённый ученик попадает
+    # на СВОЙ экран. Половину «и не на чужой» держит соседний
+    # test_forged_callback_for_foreign_student_is_refused.
+    assert any("/god" in t and "/dolgi" in t for t in sent), (
+        "confirmed student /me did not reach their own screen; sent=%r" % sent
+    )
+    # И ЗАКРЕПЛЯЕМ ПОЧИНКУ: голого числового идентификатора в ответе быть не должно.
+    assert not any(re.search(r"\b%d\b" % student_id, t) for t in sent), (
+        "internal id leaked back into a message a child reads; sent=%r" % sent
     )
 
 
@@ -200,8 +213,15 @@ def test_head_can_upload_sheet(dispatcher, roster, seeded_catalogue, bot_instanc
     recorder = _reset_recorder(dispatcher, recorder)
     feed_message(dispatcher, bot=bot_instance, chat_id=HEAD_TG, from_id=HEAD_TG, text="/upload_sheet")
     sent = messages_sent(recorder)
-    assert any("P4" in t and "203" in t for t in sent), (
-        "HEAD did not reach the upload stub; sent=%r" % sent
+    # 🔴 ПРЕЖНЯЯ ПРОВЕРКА ТРЕБОВАЛА СЛОВА «P4» В СООБЩЕНИИ ЧЕЛОВЕКУ — внутреннего
+    # имени позиции волны. P18 его убрала, и тест упал: он сторожил мусор, а не
+    # поведение. Проверяется то, что назван docstring: СТАРШИЙ доходит до ответа
+    # про загрузку, то есть не получает отказ по роли.
+    assert any("Загрузка листков" in t for t in sent), (
+        "HEAD did not reach the upload answer; sent=%r" % sent
+    )
+    assert not any("только для старшего" in t for t in sent), (
+        "HEAD was refused by role on his own command; sent=%r" % sent
     )
 
 

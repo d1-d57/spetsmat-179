@@ -172,7 +172,11 @@ def test_a_button_naming_a_sheet_that_is_gone_says_so_instead_of_raising(
     student_id, tg_id = bound_students[0]
     feed_callback(dispatcher, bot=dispatcher.workflow_data["bot"], from_id=tg_id,
                   data=ViewSheet(student_id=student_id, sheet_id=10 ** 6).pack())
-    assert "Такого листка нет." in recorder.alerts()
+    # 🔴 СРАВНЕНИЕ ЦЕЛОЙ СТРОКИ ЗАПРЕЩАЕТ ОТКАЗУ ПОДСКАЗЫВАТЬ, ЧТО ДЕЛАТЬ ДАЛЬШЕ.
+    # P18 дописала «Откройте свой год заново: /god.» — ровно то, чего требовало её
+    # задание, — и тест упал на равенстве. Проверяем вхождение: суть в том, ЧТО
+    # сказано, а не в том, что после этого не сказано больше ничего.
+    assert any("Такого листка нет." in a for a in recorder.alerts()), recorder.alerts()
 
 
 def test_an_id_wider_than_the_store_is_refused_before_it_reaches_a_query(
