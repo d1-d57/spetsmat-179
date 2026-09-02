@@ -16,10 +16,19 @@ python3 ops/proverka_ustanovki.py          # the declaration is sound
 python3 ops/proverka_ustanovki.py --zhivaya   # ... and systemd really has it enabled
 ```
 
-`SPETSMAT_USER` overrides the service account (default `spetsmat`). The script substitutes
-`@CHECKOUT@` and `@USER@` into the units, installs the journal cap, creates
+`SPETSMAT_USER` overrides the service account (default `spetsmat`). The script installs
+**every `.service` and `.timer` file it finds in `deploy/`** — found by looking, never from a
+list — substitutes `@CHECKOUT@` and `@USER@`, installs the journal cap, creates
 `secrets/bot.env` from `bot.env.example` without ever overwriting an existing one, and then
 runs `systemctl enable --now` on every unit that has an `[Install]` section.
+
+The install list used to be hand-written, and it was wrong: `spetsmat-proverka-sredy.service`
+and `spetsmat-proverka-vosstanovlenia.service` have no `[Install]` of their own (their timers
+start them by name) and were in neither list, so on a real server both timers would have
+fired into units that do not exist — silently, forever. The backups would have kept being
+taken and nobody would ever have learnt they could not be restored, which is the one failure
+this whole runbook exists to prevent. `ops/proverka_ustanovki.py` now answers "does the
+script install everything?" by RUNNING its dry run and reading what it says.
 
 **`systemctl enable` is the line this script exists for.** By the owner's own list, the most
 frequent real failure of a deployment is forgetting it: everything works, every check is
@@ -109,13 +118,27 @@ python3 ops/proverka_vosstanovlenia.py --na-porchennom  # PROVE it can go red; r
 ```
 
 Three assertions, all of which must pass before the heartbeat goes out: `pragma
-integrity_check`, at least fifty students in the roster, the newest mark not older than a
-week. **Silence means alarm** — whoever watches the channel watches for the missing pulse,
-because a check that died before it could complain is as loud as one that failed.
+integrity_check`, at least fifty students in the roster, and the newest mark neither older
+than a week **nor in the future**. **Silence means alarm** — whoever watches the channel
+watches for the missing pulse, because a check that died before it could complain is as loud
+as one that failed.
 
-`--na-porchennom` breaks a snapshot three ways, one per assertion, and demands each be
-caught by its own assertion. `rc=1` means every corruption went red, which is the demanded
-outcome; `rc=2` means one slipped through and the check is broken. It never returns 0.
+The future bound is not decoration. With only an upper bound, a single mark dated ahead —
+one teacher's phone with a wrong clock, one import with a bad date — keeps `max(valid_at)`
+in the future forever, and "not older than a week" is then satisfied by a journal that
+stopped months ago. The schema cannot stop it: its `CHECK` on `valid_at` is a glob over the
+ISO shape, and a well-formed 2027 passes. Found by the §3 verifier on a snapshot whose real
+activity had ended 45 days earlier and which was reported GREEN.
+
+`--na-porchennom` breaks a snapshot four ways, and demands each be caught by the assertion
+that exists for it. `rc=1` means every corruption went red, which is the demanded outcome;
+`rc=2` means one slipped through and the check is broken. It never returns 0.
+
+**What this check deliberately cannot do:** it cannot tell OUR database from a different one
+of the same shape. A snapshot of another school's conduit with fifty-six students and a fresh
+mark passes all three. Anchoring on an installation identity would mean writing to the
+schema, which was read-only to the position that built this. The question answered here is
+"is the backup usable?", not "is it ours?".
 
 ## When the alarm fires
 
@@ -137,7 +160,9 @@ recovers from it by itself. So:
 | `systemctl enable` | the enable list is parsed out of `ustanovka.sh` and compared with the units that have `[Install]` |
 | the install script | `--proba` runs for real in the test and the checkout is compared before and after |
 | the backup | a writer connection is left open with data still in the WAL, and the snapshot must carry it |
-| the restore check | `--na-porchennom`: three corruptions, three assertions, and a stub that makes the self-test itself go red |
+| the restore check | `--na-porchennom`: four corruptions, each caught by its own assertion, and a stub that makes the self-test itself go red |
+| the install coverage | the dry run is executed and the units it says it would install are compared with the files in `deploy/` |
+| the unit contents | twelve deliberate breakages of a copied checkout — `ExecStart`, `OnCalendar`, `[Timer]`, a missing target service — each must go red |
 | the deploy refusal | both time scenarios run as real subprocesses against fixed known moments |
 | the timetable | the same instant is checked under three system zones, Berlin included |
 | the pragmas | a `connect` that forgets one pragma, and the check must notice |
