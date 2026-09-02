@@ -32,6 +32,17 @@ schema is a request and not a guarantee.
 cannot invent a child who does not exist, and the image it is looking at carries nothing
 personal either.  See §4 of the brief and ``core/services/raspoznavanie``.
 
+🔴 **A CELL HAS THREE STATES, NOT TWO, AND THE SCHEMA IS WHERE THE THIRD ONE WAS LOST.**
+The form prints its own legend -- «Сдал — крестик в клетке. Снято — прочерк. Пусто — не
+сдавал.» -- and the journal has counted all three for a year (735 ``retract`` events last
+year).  The schema offered ``solved`` and nothing else, and the prompt asked for a row
+with any МЕТКА; a dash is a метка, so «снято» came back as a hand-in.  That failure is
+worse than an empty answer: an empty answer is a refusal a teacher SEES, and a plausible
+wrong value is one they confirm without looking.  ``retracted`` is a third array over the
+SAME 45 labels, and the ~120-value ceiling above is per FIELD rather than per schema --
+``alternatives`` has been carrying a fourth copy of the 56 codes since P7, on the live key,
+which is measurement rather than reassurance.
+
 FAILURES THAT PRETEND TO BE SOMETHING ELSE (§7)
 -----------------------------------------------
 
@@ -108,6 +119,14 @@ DEFAULT_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "minimax/minimax-m3:free"
 
 _FENCE = re.compile(r"^```[a-zA-Z0-9_-]*\s*|\s*```$")
+
+#: The three states of a cell, in the owner's own words, exactly as ``tools/blank.py``
+#: prints them under every grid.  Quoted into the prompt rather than paraphrased: the
+#: paper the teacher is holding and the instruction the model is reading then say the
+#: same sentence, and ``tests/photo/test_snyato.py`` goes red if the two ever differ by
+#: a character.  ``tools/blank.py`` is outside this position's zone, so the link is
+#: carried by a test rather than by an import -- but it IS carried.
+CELL_LEGEND = "Сдал — крестик в клетке. Снято — прочерк. Пусто — не сдавал."
 
 
 # --------------------------------------------------------------------------- failures
@@ -204,6 +223,22 @@ def build_schema(codes: Sequence[str], labels: Sequence[str],
                             "type": "array",
                             "items": {"type": "string", "enum": list(labels)},
                         },
+                        # 🔴 THE THIRD STATE OF A CELL, AND THE SCHEMA IS WHERE IT WAS
+                        # LOST.  The form's own legend names three: «Сдал — крестик в
+                        # клетке. Снято — прочерк. Пусто — не сдавал.»  With only
+                        # ``solved`` on offer and a prompt asking for any МЕТКА, a dash is
+                        # a метка and there is nowhere else to put it, so «снято» arrived
+                        # as a hand-in -- a plausible WRONG value, which a teacher
+                        # confirms without looking, rather than a visible refusal.
+                        # Measured 2026-09-02 against a live model: u5 carried a dash on
+                        # 1а°, ``raw_text`` read «u5  -» correctly, and ``solved`` came
+                        # back ``[1а°]``.  The model was right and the schema had no
+                        # word for what it saw.  The same closed list as ``solved``:
+                        # it is the same vocabulary of task labels, only the verb differs.
+                        "retracted": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": list(labels)},
+                        },
                         "alternatives": {
                             "type": "array",
                             "items": {"type": "string", "enum": list(codes)},
@@ -239,6 +274,13 @@ def build_prompt(codes: Sequence[str], labels: Sequence[str],
     OMITTING the row and listing the candidates in ``alternatives``: a row the pipeline
     then shows to the teacher as two buttons.  Never make a model guess between two
     similar rows -- asked to choose, it will, and it will be confident.
+
+    🔴 THE THREE STATES ARE QUOTED VERBATIM FROM THE FORM'S OWN LEGEND, and the quotation
+    is the point rather than the phrasing.  ``tools/blank.py`` prints «Сдал — крестик в
+    клетке. Снято — прочерк. Пусто — не сдавал.» under every grid, the owner wrote that
+    sentence, and the journal has known the third state for a year (735 ``retract``
+    events).  A paraphrase here would be a second source of truth for a rule the paper
+    already states -- and the two would drift the first time either was edited.
     """
     head = (
         "На фотографии печатный бланк приёма задач. Слева в каждой строке — КОД "
@@ -252,14 +294,18 @@ def build_prompt(codes: Sequence[str], labels: Sequence[str],
     return head + (
         "Коды строк: %s\n\n"
         "Номера задач: %s\n\n"
-        "Сначала запиши в raw_text дословно всё, что видишь на бланке, как есть. "
-        "Потом для каждой строки, в клетках которой есть пометка, верни код строки и "
-        "список номеров задач с пометкой. Пометка — крестик, галочка, любая закраска; "
-        "пустая клетка не считается.\n"
+        "Сначала запиши в raw_text дословно всё, что видишь на бланке, как есть.\n\n"
+        "У клетки ТРИ состояния, и они напечатаны на самом бланке внизу: «%s»\n"
+        "  • крестик, галочка, любая закраска — задача СДАНА: её номер в solved;\n"
+        "  • прочерк — тире, минус, чёрточка — задача СНЯТА: её номер в retracted. "
+        "Это НЕ сдача. Прочерк в solved не кладут никогда;\n"
+        "  • пустая клетка — не сдавал: её номер не идёт никуда.\n\n"
+        "Верни строку, если в её клетках есть хоть одна пометка — крестик или прочерк. "
+        "В строке могут быть и крестики, и прочерки одновременно.\n"
         "Если код строки прочитать нельзя или подходят несколько — НЕ УГАДЫВАЙ: не "
         "включай эту строку в rows, а перечисли подходящие коды в alternatives. "
         "Если пометок нет нигде, верни пустой список rows."
-    ) % (", ".join(codes), ", ".join(labels))
+    ) % (", ".join(codes), ", ".join(labels), CELL_LEGEND)
 
 
 # ------------------------------------------------------------------------- the answer
@@ -344,10 +390,19 @@ def parse_answer(payload: dict, labels: Sequence[str], *, model: str, latency_s:
         rejected.extend(
             label for label in (row.get("solved") or []) if label not in allowed
         )
+        # «Снято» travels in its own list from here to the draft and is never folded into
+        # ``solved``: the two are different facts about the world, they are counted
+        # differently by the journal (``CellState.RETRACTED`` is not credited and is not a
+        # debt either), and folding them is exactly the defect this field was added for.
+        retracted = [label for label in (row.get("retracted") or []) if label in allowed]
+        rejected.extend(
+            label for label in (row.get("retracted") or []) if label not in allowed
+        )
         rows.append(
             {
                 "student_code": row.get("student_code"),
                 "solved": solved,
+                "retracted": retracted,
                 "alternatives": list(row.get("alternatives") or []),
             }
         )
