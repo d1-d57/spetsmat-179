@@ -274,3 +274,32 @@ def build_transcriber(
         "NO RECOGNISER: %s unset — voice notes will be refused, not guessed"
         % ", ".join(missing),
     )
+
+
+# =============================================================================
+#  THE SECOND CHANNEL'S ENVELOPE — P7's, opened here because ``core`` may not
+# =============================================================================
+
+def unfence(text: str) -> str:
+    """Take the markdown fence off a model's JSON.  **P7's function, called.**
+
+    It lives in ``infra/llm.py`` and it carries a measurement: on 02.09, on a live key, a
+    model returned a perfectly valid ``{"rows": []}`` inside a ```` ```json ```` fence
+    UNDER A STRICT SCHEMA, and the naive parser rejected it.  A bot that does not strip
+    the fence drops valid answers and looks broken.
+
+    The one-line wrapper exists because ``core/services/golos.py`` cannot reach
+    ``infra/`` and therefore takes this as an argument.  Rewriting the three lines there
+    would have been quicker and would have made a second home for that measurement: the
+    next model that fences differently gets fixed in one of them.
+    """
+    from infra.llm import strip_fence
+
+    return strip_fence(text)
+
+
+def rows_from_schema_answer(answer: str) -> list:
+    """A schema answer, whatever envelope it arrived in, as rows this screen can use."""
+    from core.services.golos import parse_model_rows
+
+    return parse_model_rows(answer, unfence=unfence)

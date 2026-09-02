@@ -35,6 +35,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Protocol, Sequence
 
+from core.services import raspoznavanie
+
 
 # =============================================================================
 #  1 · THE VOCABULARY, AS DATA
@@ -465,9 +467,13 @@ def build_user_dictionary(
 # methods reached the same child, and DISAGREEMENT IS THE «doubtful» FLAG.  There is no
 # confidence field anywhere below and nothing reads one.
 
-#: How close a fuzzy match has to be before it may name a child at all.  The задание
-#: measures it at about 0,7 and this is that number on ``rapidfuzz``'s 0..100 scale.
-FUZZY_THRESHOLD = 70.0
+#: How close a fuzzy match has to be before it may name a child at all.
+#:
+#: NOT A NUMBER OF OURS.  It is P7's ``CONFIDENCE_THRESHOLD`` — the same 0,7, measured on
+#: the same roster, for the same comparison — expressed on the 0..100 scale the metric is
+#: defined on.  Two screens disagreeing about how close is close enough would be two
+#: screens telling one teacher two different things about one child.
+FUZZY_THRESHOLD = raspoznavanie.CONFIDENCE_THRESHOLD * 100.0
 
 #: How far the best candidate has to stand above the second before the answer is taken as
 #: settled.  Inside this margin the row is UNKNOWN and the teacher gets buttons: «never
@@ -496,66 +502,17 @@ class Verdict(str, Enum):
 
 # ------------------------------------------------------- surnames across their cases
 
-#: Ending -> the endings the same surname takes across the cases, as DATA.  A teacher
-#: says «Петрову три», not «Петров три», and a comparison against the nominative alone
-#: pays for that with a lower score on every oblique case — which is exactly where the
-#: threshold decides.
+#: The declension of a surname is P7's table, not a second copy of it.
 #:
-#: The longest matching key wins, so «ова» is consulted before «а».
-CASE_ENDINGS: dict[str, tuple[str, ...]] = {
-    # Masculine possessive: Петров, Фёдоров, Быков…
-    "ов": ("ов", "ова", "ову", "овым", "ове"),
-    "ев": ("ев", "ева", "еву", "евым", "еве"),
-    "ин": ("ин", "ина", "ину", "иным", "ине"),
-    "ын": ("ын", "ына", "ыну", "ыным", "ыне"),
-    # Feminine of the same: Агаркова, Бочарова, Долгирева…
-    "ова": ("ова", "овой", "ову", "овою"),
-    "ева": ("ева", "евой", "еву", "евою"),
-    "ина": ("ина", "иной", "ину", "иною"),
-    "ына": ("ына", "ыной", "ыну", "ыною"),
-    # Adjectival: Верхошинский, Могилевский…
-    "ский": ("ский", "ского", "скому", "ским", "ском"),
-    "цкий": ("цкий", "цкого", "цкому", "цким", "цком"),
-    "ская": ("ская", "ской", "скую"),
-    "цкая": ("цкая", "цкой", "цкую"),
-}
-
-#: Everything the table above does not name.  A surname ending in a consonant declines
-#: like a noun (Лим, Лиму, Лимом); one ending in ``-а`` declines the other way (Домра,
-#: Домры, Домре); one ending in any other vowel does not decline at all (Кахиани), and
-#: for it the single nominative form is the complete truth.
-_CONSONANT_ENDINGS = ("", "а", "у", "ом", "е")
-_A_ENDINGS = ("а", "ы", "е", "у", "ой")
-_VOWELS = "аеиоуыэюя"
-
-
-def case_forms(surname: str) -> list[str]:
-    """Every folded form of one surname a dictation might carry.
-
-    Generated from the table rather than stored, so that adding a child to the roster
-    costs nothing here.  A hyphenated surname is expanded on its LAST part and rejoined —
-    ``Тухватулин-Йалчын`` declines on ``Йалчын`` and not on both halves.
-    """
-    folded = fold(surname).strip()
-    if not folded:
-        return []
-    if "-" in folded:
-        head, _, tail = folded.rpartition("-")
-        return ["%s-%s" % (head, form) for form in case_forms(tail)] or [folded]
-
-    for ending in sorted(CASE_ENDINGS, key=len, reverse=True):
-        if folded.endswith(ending):
-            stem = folded[: -len(ending)]
-            return [stem + form for form in CASE_ENDINGS[ending]]
-
-    if folded.endswith("а"):
-        return [folded[:-1] + form for form in _A_ENDINGS]
-    if folded[-1] in _VOWELS:
-        # Indeclinable: Кахиани, Домра is not one of these, Ордян is not either.  The
-        # nominative IS the whole paradigm, and pretending otherwise would invent forms
-        # that then compete for the threshold.
-        return [folded]
-    return [folded + form for form in _CONSONANT_ENDINGS]
+#: ``core/services/raspoznavanie.py`` already carries ``case_forms`` — sixteen ending
+#: rules plus the indeclinables — because the photo path needs exactly the same thing:
+#: «нет Петрова» and «Петров» are one child.  A voice path with its own table would be
+#: two homes for one truth, and they diverge in silence: the day somebody adds an ending
+#: for a new child, one screen finds them and the other does not, and nothing goes red.
+#:
+#: Re-exported under this name so that it can be read here as part of this module's
+#: vocabulary, and so that the seam is one line to find when P7's table moves.
+case_forms = raspoznavanie.case_forms
 
 
 @dataclass(frozen=True)
@@ -570,7 +527,13 @@ class Candidate:
 def score_against_roster(said: str, students: Sequence) -> list[Candidate]:
     """Every student, scored against what was said, best first.
 
-    ``fuzz.ratio``, and **never** the token-set variant beside it in the same module.
+    THE METRIC IS P7's ``raspoznavanie.ratio``, called rather than reimplemented: it is
+    ``fuzz.ratio`` when ``rapidfuzz`` is installed and the identical formula
+    (``200 * LCS / (len(a) + len(b))``) when it is not, so this screen keeps working on a
+    machine where the wheel is missing instead of failing to import.  That fallback is
+    P7's measured decision and inheriting it costs one import.
+
+    It is ``ratio``, and **never** the token-set variant beside it in the same library.
     That one returns 100 on containment, so «Лим» would score a perfect match against
     «Лупулешин» the moment the tokens happened to nest, and a perfect score is exactly
     what stops the alternatives from being offered.  Containment is the wrong relation
@@ -583,22 +546,26 @@ def score_against_roster(said: str, students: Sequence) -> list[Candidate]:
     has named one child, and a whole-phrase comparison alone would score that lower than
     the same child said bare.
     """
-    from rapidfuzz import fuzz  # imported here so the module loads on a bare checkout
-
     said = fold(said).strip()
     if not said:
         return []
     words = [word for word in said.split() if word]
     candidates = []
     for student in students:
-        forms = case_forms(student.surname)
+        # The given name as well as the surname, because P7 measured that a teacher of
+        # this school writes «Ирина» as readily as «Агаркова» — and says it as readily too.
+        forms = [
+            fold(form)
+            for source in (student.surname, getattr(student, "name", "") or "")
+            for form in case_forms(source)
+        ]
         if not forms:
             continue
         best = 0.0
         for form in forms:
-            best = max(best, fuzz.ratio(said, form))
+            best = max(best, raspoznavanie.ratio(said, form))
             for word in words:
-                best = max(best, fuzz.ratio(word, form))
+                best = max(best, raspoznavanie.ratio(word, form))
         candidates.append(Candidate(student.id, student.surname, best))
     candidates.sort(key=lambda candidate: (-candidate.score, candidate.student_id))
     return candidates
@@ -646,17 +613,13 @@ def match_surname(said: str, students: Sequence) -> SurnameMatch:
 
 # --------------------------------------------------- the schema call, when it exists
 
-#: The fence a model wraps JSON in when nobody asked it to.  Measured on THIS project on
-#: 02.09: a perfectly valid ``{"rows": []}`` came back inside ```` ```json ```` and the
-#: naive parser rejected it as malformed, which reads downstream as «the model failed»
-#: rather than «the model answered and we could not open the envelope».
-_FENCE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n?(?P<body>.*?)\n?\s*```\s*$", re.DOTALL)
-
-
-def strip_code_fence(text: str) -> str:
-    """The JSON inside a markdown fence, or the text unchanged when there is no fence."""
-    match = _FENCE.match(text or "")
-    return match.group("body") if match is not None else (text or "")
+#: Un-fencing a model's answer is NOT here, and the reason is a rule of this tree rather
+#: than a preference.  ``infra/llm.py`` already carries ``strip_fence`` — measured on this
+#: project on 02.09, when a valid ``{"rows": []}`` came back inside a ```` ```json ````
+#: fence under a strict schema and the naive parser rejected it — but ``core/`` may not
+#: import ``infra/``, so a copy here would be a second home for that measurement.  The
+#: adapter that calls P7's function lives in ``infra/asr.py``; this module receives rows
+#: already parsed.
 
 
 class SchemaExtractor(Protocol):
@@ -675,28 +638,41 @@ class SchemaExtractor(Protocol):
 def load_schema_extractor(
     module_name: str = "core.services.raspoznavanie", factory: str = "build_extractor"
 ) -> tuple:
-    """``(extractor | None, reason)`` — P7's schema call if it is on this branch.
+    """``(extractor | None, reason)`` — P7's schema call, if it offers one for TEXT.
 
     **Imported, never forked.**  A copied schema call is two homes for one truth and they
-    diverge in silence.  When the module is absent — which is the state this position ran
-    in, P7 being a parallel position of the same wave — the second channel is simply not
-    there, the fuzzy channel carries the row alone, and the reason string says so out
-    loud so that «one channel» never gets mistaken for «two channels that agreed».
+    diverge in silence.
+
+    P7's module landed on ``main`` while this position was working and its matching half
+    is now called directly (``ratio``, ``case_forms``, ``CONFIDENCE_THRESHOLD`` above).
+    Its schema half, however, is a VISION pipeline: ``infra.llm.VisionModel`` takes an
+    image, and ``rows_from_answer`` reads codes printed on a sheet.  A transcript is
+    neither.  So this seam looks for a text factory, does not find one, and says which
+    module and which name it wanted — and the fuzzy channel carries the row alone, with
+    ``channels`` saying so out loud, so that «one channel» is never mistaken for «two
+    channels that agreed».  Adding that factory is P7's file to change, not this one's.
     """
     import importlib
 
     try:
         module = importlib.import_module(module_name)
     except ImportError as error:
-        return None, "%s is not on this branch (%s)" % (module_name, error)
+        return None, "%s could not be imported (%s); wanted %s()" % (
+            module_name, error, factory,
+        )
     build = getattr(module, factory, None)
     if build is None:
         return None, "%s has no %s()" % (module_name, factory)
     return build(), "%s.%s()" % (module_name, factory)
 
 
-def parse_model_rows(answer: str) -> list:
+def parse_model_rows(answer: str, *, unfence=None) -> list:
     """The rows out of one schema answer: fence stripped first, then JSON.
+
+    ``unfence`` is injected because the function that does it is P7's and lives under
+    ``infra/`` — see the note above.  Called without one, this does no unfencing at all
+    rather than quietly reimplementing it: a silent second implementation is exactly the
+    thing that diverges.
 
     ``confidence`` is NOT read even when the model volunteers one.  Such a number
     collapses to 0,9/1,0 and stays high while accuracy falls; the thing that carries
@@ -705,7 +681,7 @@ def parse_model_rows(answer: str) -> list:
     """
     import json
 
-    body = strip_code_fence(answer).strip()
+    body = (unfence or (lambda text: text))(answer or "").strip()
     if not body:
         return []
     payload = json.loads(body)
@@ -837,9 +813,9 @@ def build_draft(
     """Transcript in, confirmation table out.  Both channels applied, neither trusted.
 
     ``model_rows`` is channel one — P7's schema call, already parsed by
-    ``parse_model_rows``.  It is optional because on this branch it does not exist; when
-    it is absent the fuzzy channel answers alone and ``channels`` says so, so that a
-    single channel is never read as two channels agreeing.
+    ``parse_model_rows``.  It is optional because P7 exposes no text-schema factory yet
+    (see ``load_schema_extractor``); when it is absent the fuzzy channel answers alone and
+    ``channels`` says so, so that a single channel is never read as two channels agreeing.
 
     **The disagreement rule.**  When both channels answered and picked DIFFERENT students,
     the row is ``DOUBTFUL``: it keeps the fuzzy channel's pick — that is the one whose
@@ -888,5 +864,5 @@ def build_draft(
         transcript=transcript,
         rows=rows,
         audio_sha256=audio_sha256,
-        channels=channels or "fuzzy channel only -- no schema call on this branch",
+        channels=channels or "fuzzy channel only -- no text schema call available",
     )

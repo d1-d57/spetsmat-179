@@ -16,8 +16,10 @@ WHAT IS DELIBERATELY NOT IN THIS FILE
 -------------------------------------
 * **Numeral normalisation and matching.**  ``core/services/golos.py``.  A router that
   parsed Russian numerals would be a router nobody could test without a Telegram update.
-* **The schema call.**  P7's, imported through ``golos.load_schema_extractor`` and absent
-  on this branch; a forked copy is two homes for one truth.
+* **The schema call and the fuzzy metric.**  P7's.  Its matching half is CALLED —
+  ``raspoznavanie.ratio``, ``case_forms`` and ``CONFIDENCE_THRESHOLD`` reach this screen
+  through ``core/services/golos.py`` — and its schema half is a vision pipeline that has
+  no text factory yet, so the second channel is announced as absent rather than forked.
 * **Recognition.**  ``infra/asr.py``, behind a Protocol, injected — so every test below
   drives the real parsing and the real writing with a scripted engine.
 
@@ -379,8 +381,8 @@ async def on_voice(
 
     problems = _problems_in_view(catalogue)
     model_rows = None
-    channels = "только нечёткое сопоставление — схемного разбора на этой ветке нет"
-    if schema_extractor is not None:  # pragma: no cover -- P7 is not on this branch
+    channels = "только нечёткое сопоставление — схемного разбора текста пока нет"
+    if schema_extractor is not None:  # pragma: no cover -- no text schema factory yet
         model_rows = schema_extractor.extract(
             transcript, students=catalogue.students(), problems=problems
         )

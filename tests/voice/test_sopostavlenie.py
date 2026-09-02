@@ -23,8 +23,8 @@ from core.services.golos import (
     parse_model_rows,
     resolve_labels,
     score_against_roster,
-    strip_code_fence,
 )
+from infra.asr import rows_from_schema_answer, unfence
 
 
 # ------------------------------------------------- the sweep over the whole roster
@@ -104,9 +104,26 @@ def test_the_diaeresis_is_not_a_condition_of_being_found(roster):
 
 
 def test_a_full_name_still_names_one_child(roster):
-    """A teacher who says «Кахиани Дмитрий» has named one child, not a phrase."""
-    match = match_surname("кахиани дмитрий", roster)
-    assert next(s.surname for s in roster if s.id == match.student_id) == "Кахиани"
+    """A teacher who says «Кахиани Нино» has named one child, not a phrase.
+
+    The name is taken from the seed rather than invented: since the scoring runs over
+    P7's forms of the surname AND of the given name, a made-up first name is a real
+    second candidate and the row would be ambiguous for a reason that has nothing to do
+    with what is being tested.
+    """
+    child = next(student for student in roster if student.surname == "Кахиани")
+    match = match_surname("%s %s" % (child.surname, child.name), roster)
+
+    assert match.student_id == child.id
+
+
+def test_a_given_name_on_its_own_names_the_child_too(roster):
+    """P7 measured it on the photo path and it holds here: in this school a teacher says
+    «Ирина» as readily as «Агаркова», and a channel that only knew surnames would mark
+    every such row doubtful — a tap each, every lesson, forever."""
+    child = next(student for student in roster if student.surname == "Агаркова")
+
+    assert match_surname(child.name, roster).student_id == child.id
 
 
 # --------------------------------------------------- the ratio that is NOT used
@@ -138,25 +155,45 @@ def test_the_source_does_not_contain_the_containment_ratio_even_in_a_comment():
 
 # ---------------------------------------------- channel one, when it is there at all
 
-def test_the_schema_call_is_absent_on_this_branch_and_says_so_rather_than_being_forked():
-    """P7 owns ``core/services/raspoznavanie.py`` and it is not on this branch.
+def test_the_schema_call_seam_reports_by_name_what_it_could_not_load():
+    """P7 owns ``core/services/raspoznavanie.py``; the voice path imports, never forks it.
 
-    A forked copy of the schema call is two homes for one truth and they diverge in
-    silence, so the second channel is simply absent and the reason is a sentence.
+    P7's module IS on this branch — it landed while this position was working — but it
+    exposes no ``build_extractor()`` factory for a TEXT transcript, only the photo
+    pipeline.  What matters for this test is that the seam says which module and which
+    factory it wanted, so «no second channel» is never mistaken for «two channels that
+    agreed».
     """
     extractor, reason = load_schema_extractor()
 
     assert extractor is None
     assert "core.services.raspoznavanie" in reason
+    assert "build_extractor" in reason
+
+
+def test_the_matching_channel_is_p7s_and_not_a_second_copy_of_it():
+    """The declension table has ONE home.
+
+    Two copies diverge in silence: the day somebody adds an ending for a new child, one
+    screen finds them and the other does not, and nothing goes red.
+    """
+    from core.services import golos, raspoznavanie
+
+    assert golos.case_forms is raspoznavanie.case_forms
+    assert golos.FUZZY_THRESHOLD == raspoznavanie.CONFIDENCE_THRESHOLD * 100.0
 
 
 def test_a_valid_answer_inside_a_markdown_fence_is_read_rather_than_rejected():
     """Measured on this project on 02.09: a valid ``{"rows": []}`` came back fenced and
-    the naive parser rejected it, which reads downstream as «the model failed»."""
+    the naive parser rejected it, which reads downstream as «the model failed».
+
+    The un-fencing is P7's ``infra.llm.strip_fence``, reached through the one-line adapter
+    in ``infra/asr.py`` because ``core/`` may not import ``infra/``.
+    """
     fenced = '```json\n{"rows": [{"raw_text": "петров", "student_id": 7}]}\n```'
 
-    assert json.loads(strip_code_fence(fenced))["rows"][0]["student_id"] == 7
-    assert parse_model_rows(fenced) == [
+    assert json.loads(unfence(fenced))["rows"][0]["student_id"] == 7
+    assert rows_from_schema_answer(fenced) == [
         {"raw_text": "петров", "student_id": 7, "alternatives": [], "problem_ids": []}
     ]
 
@@ -171,13 +208,22 @@ def test_a_valid_answer_inside_a_markdown_fence_is_read_rather_than_rejected():
     ],
 )
 def test_the_fence_is_optional_and_its_language_tag_is_irrelevant(answer):
-    assert parse_model_rows(answer) == []
+    assert rows_from_schema_answer(answer) == []
+
+
+def test_the_parser_in_core_does_no_unfencing_of_its_own():
+    """A silent second implementation is exactly the thing that diverges, so the parser
+    that lives in ``core`` refuses the envelope rather than learning to open it."""
+    with pytest.raises(ValueError):
+        parse_model_rows('```json\n{"rows": []}\n```')
 
 
 def test_a_numeric_confidence_is_not_carried_forward_even_when_volunteered():
     """It collapses to 0,9/1,0 and stays high while accuracy falls.  Nothing reads one,
     so nothing may quietly start to."""
-    rows = parse_model_rows('{"rows": [{"raw_text": "x", "student_id": 1, "confidence": 0.99}]}')
+    rows = rows_from_schema_answer(
+        '{"rows": [{"raw_text": "x", "student_id": 1, "confidence": 0.99}]}'
+    )
 
     assert "confidence" not in rows[0]
 
