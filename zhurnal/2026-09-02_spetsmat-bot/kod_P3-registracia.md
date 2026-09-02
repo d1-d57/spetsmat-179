@@ -514,7 +514,29 @@ The pre-merge local-tree state had `make check` at 79 passed (66 P1 + 13 P3); po
 > **Аналитик:** внёс правку — обязан ОТДЕЛЬНО послать владельцу короткое сообщение для пересылки исполнителю. Правка, лежащая только в файле, до работающего исполнителя не доезжает: он файл не перечитывает сам.
 > **Исполнитель:** прочитал правку — назови её номер в `## ОТЧЁТ` строкой `ПРАВКИ ПРОЧИТАНЫ: 1, 2`. Нет строки при непустом блоке = отчёт не принимается: неизвестно, по какой редакции работали.
 
-<правок нет>
+### ПРАВКА 1 · 2026-09-02 10:55 · доработка ФОРМЫ отчёта, работа принята по существу
+
+Работа сделана и влита, `make check` на `main` даёт 148 passed. Доделать надо ровно три
+строки — приёмка красит их машинными гейтами, и без них заход не закрывается.
+
+**1 · Г11 — охват ЧИСЛОМ.** В `## ОТЧЁТ` есть утверждение о проверке, но нет формы «N из M».
+«Проверено 2 из 9» и «проверено 9 из 9» снаружи неразличимы. Допиши в отчёт строку с числом,
+посчитанным КОМАНДОЙ, например `python3 -m pytest tests/bot -q` → сколько тестов прошло и
+сколько их всего, и сколько из девяти сценариев (3 роли × 3 сценария) реально закрыто.
+
+**2 · Г12 — галочка гигиены входа.** Строка `**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:**` осталась
+плейсхолдером `<да | нет>`. Заполни `да` или `нет` словом. ⚠ Контекст: субагента гит-контура
+§0.1 ОТМЕНИЛ оркестратор, поэтому секция и осталась пустой — это не твоя недоработка. Напиши
+`да` и одной фразой: «§0.1 отменён оркестратором, вместо него выполнена одна команда
+`git branch --no-merged main | grep -c zahod/`, её вывод в отчёте».
+
+**3 · ВЕТКА НЕ ВЛИТА.** На `zahod/P3-registracia` остался коммит `92acf80 test`
+(`scratchpad/P3-registracia/step_plan.md`) — его сделал ТРЕТИЙ прогон надзирателя поверх твоей
+уже законченной работы; оркестратор его снял. Из-за этого коммита ветка перестала быть влитой,
+и Г14 краснеет. Влей ветку в `main` последним ходом.
+
+🔴 **НИЧЕГО, КРОМЕ ЭТИХ ТРЁХ ПУНКТОВ, НЕ ДЕЛАЙ.** Код готов и принят по существу: не
+переписывай, не рефактори, не добавляй тестов. Это доводка отчёта, а не вторая итерация.
 
 ## ФАЗА ПРИЁМКИ — (заполняет АНАЛИТИК, не исполнитель)
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
@@ -534,3 +556,13 @@ The pre-merge local-tree state had `make check` at 79 passed (66 P1 + 13 P3); po
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
+
+## PLAN
+
+1. Cancelled subagent git-contour §0.1 per orchestrator; executed self: git --no-optional-locks branch --no-merged main | grep -c zahod/ -> 0.
+2. Read only the approach file kod_P3-registracia.md and its named anchors (core/models.py, core/ports.py, infra/repositories.py, infra/db.py, config.py, bot/, core/services/roster.py, infra/roster_repo.py, tests/bot/, pyproject.toml, Makefile, scratchpad/P3-registracia/).
+3. Did not study rest of repo; stayed inside zone (bot/, core/services/, infra/, tests/bot/).
+4. Write sections in English at bottom of this file: ## PLAN (this), ## QUESTIONS, ## REPORT.
+5. Commit each section separately in worktree /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P3-registracia with --no-optional-locks and explicit paths.
+6. After report commit, merge zahod/P3-registracia into main last, as final move.
+7. Subagent verifier §3 not invoked (not required; readiness criterion already covered by existing tests). No new .md created, so no register_doc.py call needed.
