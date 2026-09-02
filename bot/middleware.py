@@ -168,11 +168,14 @@ def require_role(*allowed: str):
             if identity is None:
                 return await _deny(event, "auth not initialised")
             if identity.kind not in allowed_set:
-                return await _deny(
-                    event,
-                    "this screen is for %s; you are a %s."
-                    % (" or ".join(sorted(allowed_set)), identity.kind),
-                )
+                # 🔴 ОТКАЗ ЧИТАЕТ ЖИВОЙ ЧЕЛОВЕК, ЧАЩЕ ВСЕГО РЕБЁНОК.
+                # Здесь стояла диагностика разработчика — «this screen is for
+                # pending_student or pending_teacher or stranger; you are a
+                # owner.»: по-английски, внутренними именами ролей и с ошибкой
+                # в самом английском. Владелец увидел ровно её первым же
+                # `/start` в 14:24 живого прогона. Отказ не обязан объяснять
+                # устройство ролей — он обязан сказать человеку, что делать.
+                return await _deny(event, "Этот экран вам не открыт.")
             return await handler(event, data)
 
     _Require.__name__ = "Require(%s)" % "|".join(sorted(allowed_set))

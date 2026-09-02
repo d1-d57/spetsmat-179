@@ -27,7 +27,13 @@ router = Router()
 
 
 # Both roles may start a registration -- the deep-link is the door.
-router.message.middleware(require_role("stranger", "pending_student", "pending_teacher"))
+# 🔴 ВЛАДЕЛЕЦ ТОЖЕ ПРОХОДИТ СЮДА. Без него `/start` для владельца упирался в отказ
+# роли: он единственный человек, который обязан иметь возможность потыкать бота
+# руками, и он же первый, кто это сделал (живой прогон 02.09 14:24). Регистрацию
+# владельцу это не открывает — дальше по коду его ведёт deep link, как и всех.
+router.message.middleware(
+    require_role("stranger", "pending_student", "pending_teacher", "owner")
+)
 
 
 @router.message(CommandStart(deep_link=True))
