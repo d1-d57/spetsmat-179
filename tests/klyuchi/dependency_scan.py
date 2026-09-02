@@ -287,3 +287,71 @@ def middleware_providers(package: Path = BOT_PACKAGE) -> Dict[str, str]:
                             key, "%s:%s" % (path.relative_to(package.parent), inner.lineno)
                         )
     return found
+
+
+# =============================================================================
+#  THE OTHER HALF OF THE SAME CLASS: the TEMPLATE and the CODE naming one thing
+# =============================================================================
+#
+# ``infra/asr.py`` read ``SPETSMAT_ASR_KEY``; ``bot.env.example`` offered ``ASR_API_KEY``.
+# Nothing crashed.  ``build_transcriber`` found neither name, installed the fake, and
+# every dictation came back as the same canned line -- an owner who filled the template in
+# correctly would have had a bot that «worked» and recognised nothing.  Exactly the class
+# above, one layer out: a name that agrees with itself in the tests and with nobody in the
+# field.
+
+#: The repository root, found from this file rather than from the working directory.
+REPO = Path(__file__).resolve().parents[2]
+
+
+def env_names_read(path: Path) -> Dict[str, int]:
+    """``NAME -> line`` for every environment variable this module actually reads.
+
+    Derived from the READ, not from a naming convention: the walk looks for
+    ``environ.get(X)`` / ``os.environ.get(X)`` and resolves ``X`` through the module's own
+    top-level string constants.  A gate keyed on «constants ending in _ENV» would be blind
+    to the first variable somebody read without that suffix.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    constants: Dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            value = _string(node.value)
+            if isinstance(target, ast.Name) and value is not None:
+                constants[target.id] = value
+
+    found: Dict[str, int] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute) or func.attr != "get" or not node.args:
+            continue
+        bag = func.value
+        reads_environ = (
+            _is_name(bag, "environ")
+            or (isinstance(bag, ast.Attribute) and bag.attr == "environ")
+        )
+        if not reads_environ:
+            continue
+        argument = node.args[0]
+        name = _string(argument)
+        if name is None and isinstance(argument, ast.Name):
+            name = constants.get(argument.id)
+        if name is not None:
+            found.setdefault(name, node.lineno)
+    return found
+
+
+def template_names(path: Path) -> Dict[str, int]:
+    """``NAME -> line`` for every ``NAME=`` assignment in an env template."""
+    found: Dict[str, int] = {}
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name = stripped.split("=", 1)[0].strip()
+        if name and name.replace("_", "").isalnum():
+            found.setdefault(name, number)
+    return found
