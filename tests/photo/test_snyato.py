@@ -15,10 +15,10 @@ looking.  Measured against a live model on 2026-09-02: u5 carried a dash on 1а�
 ``raw_text`` read «u5  -» correctly, and ``solved`` came back ``[1а°]``.  The model was
 right about the paper.  The schema had no word for what it saw.
 
-WHAT GOES RED IF THE FIX IS REVERTED.  Take ``retracted`` out of ``build_schema`` and five
-of these tests fail; take it out of ``parse_answer`` and three do; take it out of
-``DraftRow`` and two do.  Nothing here can pass by accident, because nothing here asserts
-that a field is absent.
+WHAT GOES RED IF THE FIX IS REVERTED — measured on 2026-09-02 by actually reverting each
+of the three, not estimated: take ``retracted`` out of ``build_schema`` and 3 of these
+fail, out of ``parse_answer`` and 7 fail, out of ``DraftRow`` and 3 fail.  Nothing here
+can pass by accident, because nothing here asserts that a field is absent.
 """
 
 from __future__ import annotations

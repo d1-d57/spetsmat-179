@@ -134,6 +134,34 @@ JPEG_QUALITY = 90
 #: pure loss, no gain -- so it is gated rather than always applied.
 SKEW_TOLERANCE = 0.06
 
+#: 🔴 THE BAND KEPT OUTSIDE THE DETECTED QUADRILATERAL, AS A FRACTION OF THE FRAME'S LONG
+#: SIDE.  The detector looks for the SHEET; when the edge of the paper is not in the shot
+#: -- and it is not, for anyone who moves in close enough to be legible -- the largest
+#: quadrilateral in the frame is the RULED GRID itself, and the crop follows its lines.
+#: The column of codes ``u1…u18`` and the row of task labels ``1а°…10и*`` are printed
+#: OUTSIDE those lines, so both leave with the crop and the model is handed a bare grid:
+#: it sees every tick, cannot say whose they are, and honestly refuses -- ``rows`` empty,
+#: ``raw_text`` saying «в последней ВИДИМОЙ строке».
+#:
+#: MEASURED ON A REAL FORM (``tools/blank.py``, 2026-09-02), frame 1109x1568 after step 2,
+#: found rectangle 956x560 at (149, 77) — that rectangle IS the grid:
+#:
+#:     needed on the left (codes)   102 px = 10,7 % of the found rect · 6,5 % of the frame
+#:     needed above (task labels)    45 px =  8,0 %                    · 2,9 %
+#:     needed below (the legend)     52 px =  9,3 %                    · 3,3 %
+#:
+#: 🔴 THE FRACTION IS OF THE FRAME, NOT OF THE FOUND RECTANGLE, and the measurement is
+#: what forces that rather than taste: 8 % of the found rectangle is 76 px and loses the
+#: codes, 8 % of the frame is 125 px and keeps all three.  A fraction of the rectangle is
+#: also fragile in the direction that matters -- the same code column beside a shorter
+#: sheet needs a LARGER share, because the rectangle shrinks with the label count while
+#: the printed code column does not.  A fraction of the frame does not move with it.
+#:
+#: Not free and not pretending to be: when the paper edge IS in the shot the band is
+#: background rather than text.  That is the cheap side of the trade -- a strip of desk
+#: costs the model nothing, and it was the missing codes that cost it the whole answer.
+SHEET_MARGIN = 0.08
+
 #: Every operation the benchmark measured a loss on, with that loss, so the number is
 #: visible at the point where somebody would be tempted to add the operation back.
 #: ``prepare`` records what it did, and the guard refuses a step log naming any of these.
@@ -414,8 +442,59 @@ def _skew_of(quad) -> float:
     )
 
 
+def _margin_px(frame) -> int:
+    """``SHEET_MARGIN`` of the frame's long side, in whole pixels.
+
+    One place, so that the rectangular branch and the warping branch cannot drift apart:
+    the text that stands outside the detected quadrilateral is the same text whichever
+    branch the photograph happens to take.
+    """
+    return int(round(SHEET_MARGIN * max(frame.shape[:2])))
+
+
+def _grown_corners(corners, margin):
+    """The four corners pushed OUTWARD by ``margin`` px along both edges meeting at each.
+
+    An offset of the quadrilateral, not a scaling about its centre: scaling moves a
+    corner by an amount that depends on how far it happens to sit from the middle, and
+    the text this band exists to recover stands at a FIXED distance outside the lines.
+
+    🔴 NOTHING IS CLAMPED TO THE FRAME HERE, AND THAT IS DELIBERATE.  The two callers
+    need opposite things.  The rectangular branch takes a bounding box and slices it, and
+    a numpy slice clamps to the array by itself -- an offset that runs off the edge
+    simply stops there, per side, which is exactly right.  The warping branch feeds these
+    four points to ``getPerspectiveTransform``, where moving ONE corner back inside would
+    change the homography and map the sheet onto a quadrilateral it does not have -- a
+    distortion no step log would show.  It would rather sample past the edge and get a
+    black band, which is honest and carries no ticks.
+    """
+    import numpy
+
+    def unit(vector):
+        length = float(numpy.linalg.norm(vector))
+        return vector / length if length > 1e-6 else numpy.zeros(2, dtype="float32")
+
+    # TL away from TR and BL, TR away from TL and BR, and so on around the ring.
+    neighbours = ((1, 3), (0, 2), (3, 1), (2, 0))
+    directions = numpy.array(
+        [unit(corners[i] - corners[a]) + unit(corners[i] - corners[b])
+         for i, (a, b) in enumerate(neighbours)],
+        dtype="float32",
+    )
+    return (corners + directions * float(margin)).astype("float32")
+
+
 def _crop_to_sheet(frame):
-    """Crop to the detected sheet, warping only when it is visibly not rectangular."""
+    """Crop to the detected sheet, warping only when it is visibly not rectangular.
+
+    🔴 AND IT KEEPS A BAND OUTSIDE THE QUADRILATERAL IT FOUND, WHICH IS THE POINT.  What
+    the detector returns is «the largest four-sided thing in the frame», and that is the
+    sheet only when the edge of the paper is in the shot.  Photograph the form close
+    enough to read it -- which is what a teacher does -- and the largest quadrilateral is
+    the RULED GRID.  Cropping to it drops the code column and the task labels, because
+    they are printed outside the lines, and the model is then asked whose ticks these are
+    with nothing on screen that could answer.  See ``SHEET_MARGIN`` for the measurement.
+    """
     cv2 = _cv2()
     import numpy
 
@@ -425,13 +504,25 @@ def _crop_to_sheet(frame):
 
     corners = _ordered(quad)
     skew = _skew_of(quad)
+    margin = _margin_px(frame)
+    corners = _grown_corners(corners, margin)
     if skew <= SKEW_TOLERANCE:
         x, y, w, h = cv2.boundingRect(corners.astype("int32"))
+        # The slice clamps by itself, per side: a band that runs off the top of the frame
+        # stops at the top and leaves the other three at full width.  A shared clamp --
+        # one number reduced until every side fits -- was written here first and measured
+        # WRONG on the very form this заход is about: the grid reaches 5 px from the right
+        # edge of the frame, so a shared clamp cut the margin to 4 px on ALL FOUR sides
+        # and left the codes outside exactly as before.
         cropped = frame[max(0, y):y + h, max(0, x):x + w]
         if cropped.size == 0:
             return frame, ["crop:skipped-empty-rect"]
         return cropped, [
-            "crop:bounding-rect(%dx%d)" % (cropped.shape[1], cropped.shape[0]),
+            # The band is named in the step log with the same honesty as the neighbours:
+            # a crop that silently kept a margin and one that silently did not look
+            # identical from outside, and this line is what tells them apart.
+            "crop:bounding-rect(%dx%d,margin=%dpx)"
+            % (cropped.shape[1], cropped.shape[0], margin),
             "perspective:skipped-rectangular(skew=%.3f)" % skew,
         ]
 
@@ -463,11 +554,23 @@ def _crop_to_sheet(frame):
     target = numpy.array(
         [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype="float32"
     )
+    # 🔴 ``BORDER_REPLICATE`` BECAUSE THE BAND CAN REACH PAST THE FRAME, and here it may
+    # not be clamped: the rectangular branch clamps per side because a bounding box has
+    # sides, but these four points ARE the homography, and pulling one of them back
+    # inside would map the sheet onto a quadrilateral it does not have.  So the warp
+    # samples past the edge instead, and the question is only what it finds there.
+    # Replicate rather than the default black: the pixel at the frame edge of a photo of
+    # a sheet is paper or desk, and a smear of it reads as «nothing here», which is true.
+    # A black wedge reads as an object.  Neither invents a tick, and that is the property
+    # that matters -- but one of them invents an EDGE, and edges are what §2 detects on.
     warped = cv2.warpPerspective(
         frame, cv2.getPerspectiveTransform(corners, target), (width, height),
-        flags=cv2.INTER_AREA,
+        flags=cv2.INTER_AREA, borderMode=cv2.BORDER_REPLICATE,
     )
-    return warped, ["perspective:corrected(skew=%.3f,%dx%d)" % (skew, width, height)]
+    return warped, [
+        "perspective:corrected(skew=%.3f,%dx%d,margin=%dpx)"
+        % (skew, width, height, margin)
+    ]
 
 
 def _encode(frame) -> bytes:
