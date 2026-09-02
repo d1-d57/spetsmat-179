@@ -16,12 +16,16 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import bot.config_local as cfg
 from bot.handlers import owner, registration, student, teacher
 from bot.middleware import AuthMiddleware
-from bot.routers import marking
+from bot.routers import marking, room
 from infra.db import SystemClock
+from infra.enrollment_repo import SqliteEnrollmentRepo
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
+from infra.room_repo import SqliteAttendance, SqliteSessions, SqliteTeachers
 from infra.roster_repo import RosterRepo
+from core.services.enrollment import EnrollmentService
 from core.services.marking import MarkingService
 from core.services.progress import ProgressService
+from core.services.room import RoomService
 from core.services.roster import RosterService
 
 
@@ -58,6 +62,20 @@ def build(
     marking_service = MarkingService(journal, SystemClock())
     progress_service = ProgressService(journal, catalogue)
 
+    # P13's room screen.  It ASKS P1 for debts and P12 for the standing arrangement and
+    # recomputes neither; the today-only row it writes goes into ``attendance``, which is
+    # already keyed per session, so a move for tonight cannot reach an enrollment
+    # interval.  Every port comes from the same journal connection the grid uses.
+    room_service = RoomService(
+        catalogue=catalogue,
+        enrollment=EnrollmentService(SqliteEnrollmentRepo(repo._journal)),  # noqa: SLF001
+        progress=progress_service,
+        attendance=SqliteAttendance(repo._journal),  # noqa: SLF001
+        sessions=SqliteSessions(repo._journal),  # noqa: SLF001
+        teachers=SqliteTeachers(repo._journal),  # noqa: SLF001
+        clock=SystemClock(),
+    )
+
     # Single outer middleware stamps ``identity`` onto every update.
     dp.message.middleware(AuthMiddleware(roster, owner_tg_id=owner_tg_id))
     dp.callback_query.middleware(AuthMiddleware(roster, owner_tg_id=owner_tg_id))
@@ -70,6 +88,9 @@ def build(
     dp.include_router(teacher.router)
     grid_router, stale_router = marking.build_routers()
     dp.include_router(grid_router)
+    # The head's room screen.  Its own payload prefixes, so it claims only its own
+    # buttons; included before the catch-all for the same reason everything else is.
+    dp.include_router(room.build_router())
 
     # LAST, and the order is load-bearing rather than tidy: this catch-all claims every
     # callback query no router above it matched.  Included any earlier it would swallow
@@ -88,6 +109,7 @@ def build(
             "catalogue": catalogue,
             "marking": marking_service,
             "progress": progress_service,
+            "room_service": room_service,
             "owner_tg_id": owner_tg_id,
         }
     )
