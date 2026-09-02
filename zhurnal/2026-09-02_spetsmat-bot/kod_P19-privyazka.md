@@ -356,6 +356,34 @@ grep -c 'token_set_ratio' core/services/roster.py   # должно быть 0
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### The зона of a заход did not contain the test file that pinned the behaviour the заход was ordered to overturn
+`tests/bot/test_registration.py` (P3) asserts, in two tests, that «принять» CREATES a
+student and that two заявки under one name give two rows. Those two assertions ARE the
+bug P19 was opened to remove, and the file is outside the зона. The заход therefore
+contained two mutually exclusive instructions with no way to obey both: «всё вне зоны —
+READ-ONLY» and «`make check` rc=0, N больше того, что было до тебя». There is a general
+rule here for the analyst who writes зоны: **when a заход overturns a behaviour, the
+tests that pin that behaviour belong in its зона**, and a `grep -rl <the call being
+removed> tests/` at assembly time finds them in one command.
+ЦЕНА: two red tests out of 645 on an otherwise finished position, and a fork with no
+lawful branch — either an out-of-zone edit (what I did, reported and committed
+separately) or a position that cannot be merged at all because the post-check of the
+WARNING block refuses a red `make check`. Roughly one круг of my time went on choosing;
+the приёмка now has to judge an out-of-zone file it was not expecting.
+
+### A post-check gate greps for the name of the thing it forbids, so a comment warning against it turns the gate red
+The WARNING block prescribes `grep -c 'token_set_ratio' core/services/roster.py` → 0. I
+had written the forbidden name into two comment lines explaining WHY it is forbidden —
+which is exactly the kind of comment the rule wants written — and the gate went red on
+its own warning. A «must not appear» grep cannot tell a call from a caution, so a gate
+of that shape should either target the call site (`grep -c '\.token_set_ratio('`) or the
+rule should say out loud that the name is allowed in prose. The general form: a gate
+that forbids a STRING punishes documentation of the rule it enforces.
+ЦЕНА: caught here, before handover, at the cost of rewording a comment and one extra
+commit. Uncaught, it is a false red in приёмка on a position that is in fact correct —
+and by the arithmetic of this wave, a round trip.
+
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -424,6 +452,47 @@ tests (one message per заявка, idempotent under a repeated fire).
 Each of the three parts is committed separately.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. The зона of a заход must contain the tests that pin the behaviour the заход
+   overturns. P19 was ordered to stop «принять» from creating a student; two tests in
+   `tests/bot/test_registration.py` assert that it does. A `grep -rl` for the call being
+   removed, run over `tests/` at assembly time, finds them in one command.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+2. A post-check gate of the form «`grep -c <forbidden name> <file>` must be 0» goes red
+   on a comment that warns against that name. Aim such a gate at the call site
+   (`grep -c '\.<name>('`) or state that prose mentions are allowed.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+3. `bot/app.py` is read-only for this position but is where every service is wired, so
+   the заявка notifier had to be installed through an aiogram `@router.startup()` hook
+   in `bot/handlers/owner.py` instead of a constructor argument. It works and it is
+   tested against the real `dp.emit_startup`, but a reader looking for the wiring will
+   look in `app.py` and not find it. Worth one line in `app.py` pointing at the hook,
+   the next time a position owns that file.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+4. The roster SQLite connection in `infra/roster_repo.py` is opened with the default
+   `isolation_level`, and none of the pre-existing writes commit — `create_pending`,
+   `resolve_pending`, `rename_pending`, `bind_teacher` all rely on the next
+   `executescript` or on process exit. I committed explicitly in the one place my own
+   guarantee depends on it (`claim_notification`), and left the rest alone: it is
+   pre-existing and the fix is a one-liner in `RosterRepo.open` that belongs to whoever
+   owns that decision. If the bot is killed rather than stopped, заявки can be lost.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. The matching thresholds are measured against THIS year's 56 names. A new intake can
+   introduce a pair as close as Цикунов/Цуканов, and the two would then reach the owner
+   as buttons rather than as an answer. That is the designed degradation and not a bug,
+   but it means the sweep test's «resolved 56 of 56» is a fact about this catalogue and
+   will need re-measuring when the list changes — the test reads `seed/students.csv`
+   directly, so it will say so itself the day it stops being true.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
