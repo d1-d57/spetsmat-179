@@ -353,6 +353,104 @@ grep -rn 'weekday\|день недели' core/services/enrollment.py | head -3 
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Entry snapshot (§0.1 replacement, run by me on the orchestrator's instruction — the
+git-contour subagent was cancelled by the orchestrator, that cancellation overrides the
+text of §0.1):**
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+$ git rev-parse --abbrev-ref HEAD
+zahod/P12-gruppy
+$ python3 -m pytest -q | tail -1
+148 passed in 27.69s
+```
+
+### What I read (and nothing else)
+
+`migrations/001_init.sql`, `config.py`, `core/models.py`, `core/ports.py`,
+`infra/repositories.py`, `infra/roster_repo.py`, `infra/db.py`, `core/services/marking.py`,
+`core/services/roster.py`, `core/services/seeding.py`, `tests/conftest.py`,
+`tests/test_enrollment_scd2.py`, `Makefile`, `seed/students.csv`, `seed/teachers.csv`.
+
+### Two premises of the задание I contest BEFORE writing code (§1)
+
+**1. §2 says "closing the open interval (`valid_to` = the day before)". Taken literally
+this is wrong and would break the schema's own guard.** The intervals are HALF-OPEN,
+`[valid_from, valid_to)` — stated in `001_init.sql`, in `config.OPEN_END_DATE` and proved
+by P1's `test_half_open_intervals_touch_without_overlapping`. Under half-open semantics
+the clean handover on effective day `D` is `old.valid_to = D` and `new.valid_from = D`;
+the old row then covers through `D - 1 day` inclusive, which is what "the day before"
+*means* — but writing the literal date `D - 1` into `valid_to` would leave day `D - 1`
+uncovered by anybody and is a closed-closed convention the schema does not use.
+**I implement `valid_to = effective_from` and say so here rather than silently.**
+
+**2. §1 says an enrollment row "that does not say which weekday it covers cannot express
+the case — decide HOW you express it".** That decision is already made and already on
+disk: `enrollment.weekday integer not null check (weekday between 1 and 7)`, ISO-8601 with
+Monday = 1, and it is part of both guards (`enrollment_one_open_row` is on
+`(student_id, weekday)`, the overlap triggers filter on `e.weekday = new.weekday`).
+`migrations/` is outside my zone, so there was never a decision left for me to make here —
+only the obligation to key the resolution query on the weekday rather than filter by it
+afterwards. The report will say exactly this instead of claiming a design choice I did not
+have to make.
+
+### The parts, in order — each is its own commit
+
+**Part 1 — `core/services/enrollment.py`** (the domain; no sqlite3, no bot framework).
+- `EnrollmentPort` Protocol: the seam. `transaction()`, `open_row`, `rows_valid_on`,
+  `insert`, `close`, `history`. `rows_valid_on` is bulk on purpose — the readiness
+  criterion resolves 112 pairs and P13 will resolve a whole room at once; 112 single
+  queries would be an N+1 baked into the port shape.
+- `weekday_of(day)` — the derivation `date → ISO weekday`, one place. This is what makes
+  the day of week part of the KEY: `resolve` computes it from the asked-for date and
+  passes it into the lookup, never filters rows after the fact.
+- `Assignment` result object (teacher_id, room, weekday, valid_from, valid_to) and
+  `Resolution` for the "no lesson that day" answer, which is NOT an error.
+- `EnrollmentService.assign(...)` — first row for a (student, weekday).
+- `EnrollmentService.move(...)` — close the open row at `effective_from`, insert a new
+  one from `effective_from`. Both inside ONE `transaction()`. Never writes `teacher_id`
+  onto an existing row.
+- `EnrollmentService.teacher_on(student, date)` / `resolve_many(students, date)` — the
+  resolution query, and the answer to "who received the October marks".
+- `history_of(student, weekday=None)`.
+- Domain errors: `NotEnrolled`, `AlreadyEnrolled`, `MoveNotForward`, `OverlappingHistory`.
+
+**Part 2 — `infra/enrollment_repo.py`** (the SQLite adapter).
+- `SqliteEnrollmentRepo`, styled on `infra/repositories.py`: `begin immediate`
+  transaction that joins an outer one, row → `core.models.Enrollment` mapping,
+  `_in_clause`-style bulk filter, `config.OPEN_END_DATE` by name and never as a literal.
+- The only column it ever writes on an existing row is `valid_to`. `teacher_id` is
+  written by `insert` and by nothing else — that is the defect this position exists to
+  remove, and I make it structurally impossible rather than promising it.
+- Surfaces the schema's `IntegrityError` as `OverlappingHistory` so the bot can print a
+  sentence; the schema stays the carrier.
+
+**Part 3 — `tests/enrollment/`.**
+- `test_service.py` — the service against a FAKE port (dict), so the domain rules are
+  tested without SQLite: move closes and opens, move never rewrites, weekday is in the
+  key, refusals.
+- `test_repo.py` — the adapter against the real migrated database: the Кахиани case
+  (Mon ≠ Thu for one student), the schema's overlap refusal REACHED THROUGH THE SERVICE
+  (§2: prove the refusal, do not assume it), the touching handover.
+- `test_history_is_not_rewritten.py` — **the test that IS this position**: student marked
+  in October by teacher A through the real `MarkingService`, moved to B in December, and
+  the October marks still resolve to A. Fails loudly if it comes back B.
+- `test_full_roster_resolution.py` — the readiness criterion: seed the real catalogue
+  (56 students, 18 teachers from `seed/`), enroll every student on Monday and Thursday,
+  resolve all 112 and print `разрешено 112 из 112, ошибок 0`. Zero resolutions against a
+  non-empty roster is asserted RED, per the задание.
+  *(That one printed string stays Cyrillic: it is the fixed contract string the
+  КРИТЕРИЙ ГОТОВНОСТИ greps for. Every other line of every file I write is English.)*
+
+**Part 4 — verifier (§3, ПОСЛЕ-type, fresh subagent, different method), hygiene Г1–Г6,
+report, merge of my own branch as the last move.**
+
+### What I will not do
+No migration (`migrations/` is read-only to me and the schema already carries everything).
+No "current teacher" column anywhere. No room screen — that is P13 and it stands on me.
+No edits to `core/ports.py`, `infra/repositories.py`, `config.py`, or any existing test.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

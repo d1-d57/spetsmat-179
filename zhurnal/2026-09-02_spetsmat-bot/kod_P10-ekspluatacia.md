@@ -304,8 +304,9 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 виден»: прогон изменённого механизма из `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`, НЕ из рабочей папки `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P10-ekspluatacia` плюс `grep` по ЖИВОМУ файлу,
 который его зовёт (хук, конвейер, генератор):
 ```
-cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && <команда прогона механизма, который заход менял> && echo $?
-grep -n '<как механизм назван в вызывающем коде>' <живая точка вызова>
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && make check && python3 -m pytest tests/ops -q && echo $?
+grep -n 'WatchdogSec' deploy/*.service   # сторожевой таймер объявлен
+grep -rn 'systemctl enable' deploy/   # самая частая реальная поломка — забыть enable
 ```
 🔴 **Красная пост-проверка = ОТКАТ ВЛИТИЯ И СТРОКА В ОТЧЁТ**, а не «доложу, пусть приёмка
 решает»: `git_zona.py vlit-v-osnovnuyu --abort`, если слияние ещё не закоммичено, иначе

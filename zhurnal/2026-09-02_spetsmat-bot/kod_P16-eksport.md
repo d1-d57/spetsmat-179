@@ -9,8 +9,32 @@
 > Это блок для владельца — то, чем тебя запустили. Исполнителю здесь делать нечего, твоё задание ниже.
 
 ```
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add P16-eksport --branch zahod/P16-eksport && cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P16-eksport && python3 /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/_generator/tools/orkestr.py zhurnal/2026-09-02_spetsmat-bot --rezhim progon --dvizhok opencode --rod instrumenty --model openrouter/poolside/laguna-s-2.1:free --zahody kod_P16-eksport.md < /dev/null 2>&1 | tee /tmp/zahod-P16-eksport.log
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add P16-eksport --branch zahod/P16-eksport ; cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P16-eksport && opencode run --auto --model openrouter/poolside/laguna-s-2.1:free '🔴 ОТМЕНА ОДНОГО ПУНКТА ТВОЕГО ЗАХОДА, ЧИТАЙ ЭТО ПЕРВЫМ. СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ — пункт отменён оркестратором, данное указание сильнее текста захода; причина замерена соседней волной: четыре захода из десяти умерли ровно на этом вызове. Вместо всего блока §0.1 выполни САМ одну команду и вставь её вывод в ## ОТЧЁТ: git --no-optional-locks branch --no-merged main | grep -c zahod/ . | Дальше: твой заход — файл /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_P16-eksport.md . Прочитай ТОЛЬКО его и то, что он называет; остальной проект не изучай. План/вопросы/отчёт пиши в этот же файл внизу (## ПЛАН / ## ВОПРОСЫ / ## ОТЧЁТ), НА АНГЛИЙСКОМ. Ничего сверх задачи не трогай. Субагентов не зови ни на что, кроме верификатора §3; коммиты делай САМ, по ходу работы, а не одним последним ходом. Ветку в конце вливаешь САМ, последним ходом, после коммита зоны. 🔴 Частей в задании несколько: делай ПО ПОРЯДКУ, коммить КАЖДУЮ отдельно; не успел — назови несделанные списком в ## ОТЧЁТ, это законный исход.' < /dev/null 2>&1 | tee /tmp/zahod-P16-eksport.log
 ```
+🔴 **СТРОКА ГЕНЕРАТОРА ЗАМЕНЕНА — У НЕЁ ТРИ ИЗМЕРЕННЫХ ДЕФЕКТА** (все три выглядят
+снаружи одинаково: «модель упала», лог 0 байт; замер 02.09, шесть сожжённых прогонов):
+1. путь `spetsmat-bot/_generator/tools/orkestr.py` НЕ СУЩЕСТВУЕТ — генератор подставил
+   объявленный корень владельца в путь чужого инструмента;
+2. строка РЕКУРСИВНА — зовёт `orkestr.py progon`, а тот исполняет стартовую команду
+   из этого же файла: надзиратель запускает надзиратель;
+3. `&&` после `worktree add`, который на существующей папке даёт `rc=1` при живом
+   состоянии — на повторе всё умирает до движка. Здесь `;`.
+
+**Пускать ТОЛЬКО под надзором** (мандат: бесплатное руками не пускают — надзиратель
+различает упал · молчит · потолок · ЛОЖНЫЙ УСПЕХ):
+```
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/orkestr.py /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot \
+  --rezhim progon --rod instrumenty --molchanie 1800 --potolok 14400 --popytok 3 \
+  --zahody kod_P16-eksport.md
+```
+⚠ `--molchanie 0` НЕ значит «не убивать»: `orkestr` читает это как «лог не рос 0 секунд
+⇒ молчит» и убивает прогон мгновенно (замер 02.09 09:54, один сожжённый прогон).
+
+<!-- прежняя строка генератора, сохранена дословно, НЕ исполнять:
+
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add P16-eksport --branch zahod/P16-eksport && cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P16-eksport && python3 /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/_generator/tools/orkestr.py zhurnal/2026-09-02_spetsmat-bot --rezhim progon --dvizhok opencode --rod instrumenty --model openrouter/poolside/laguna-s-2.1:free --zahody kod_P16-eksport.md < /dev/null 2>&1 | tee /tmp/zahod-P16-eksport.log
+
+-->
 
 ── СЧЁТ НЕЗАКРЫТОГО (печать, не гейт) ──
 ГРАНИЦА ОБЛАСТИ: сырые подстроки в `kod_*.md` (пункт 4) — НЕ парсер очереди `dostavit_urok` (который считает только пары ДОМ:/ДОСТАВЛЕНО:). Разница в числах — законна.
@@ -30,8 +54,16 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
        доставлено                               : 2
        🔴 не проверяется машиной: содержательная отработанность записей БЕЗ следа закрытия (метки в доме, строки ✅/ЗАКРЫТО) — нужна ревизия человеком; сырой греп сверх разбора — шаблонные строки формы.
 
-КОНТЕКСТ. <проект в 1–2 фразы>. Прошлый этап: <состояние>. ЦЕЛЬ: <что закрыть>.
-Приёмка — по ОТЧЁТУ, без построчной сверки. <Если стоп до цели: получишь X, но НЕ Y.>
+КОНТЕКСТ. `spetsmat-bot` — телеграм-бот кондуита спецмата 179-й школы: 56 учеников,
+18 преподавателей, три аудитории. Прошлый этап: P1 (ядро), P2 (импорт прошлогоднего
+кондуита — 15 847 событий журнала, семь оракулов зелёные) и P3 (регистрация и три роли)
+приняты и влиты; `make check` на `main` зелёный. В базе лежит целый прошлый год, и
+единственная её копия — файл на этой машине.
+ЦЕЛЬ: выгрузка в Excel и бэкапы, которые действительно восстанавливаются — с проверкой,
+которая умеет покраснеть сама.
+Приёмка — по ОТЧЁТУ, без построчной сверки. Если стоп до цели: получишь экспорт и
+проверку восстановления, но НЕ systemd-расписание — его ставит P10, вы соседи по смыслу
+и НЕ по зоне: ты пишешь инструменты, он — обвязку, файлы у вас разные.
 
 ## ЧТО ФИНАЛИЗИРОВАНО НА ИНТЕРВЬЮ
 
@@ -87,7 +119,72 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 ## 2. ЗАДАЧА
 
 🔴 **WRITE YOUR `## ОТЧЁТ`, `## ПЛАН` AND `## ВОПРОСЫ` IN ENGLISH, AND EVERY FILE AND EVERY COMMIT MESSAGE YOU PRODUCE TOO.** Owner's decision 30.08. It is a каркас-level rule, not a preference — wave 2 lost it twice because the pass text listed the report SECTIONS and never said «every file you create». Fixed Russian addresses stay Cyrillic: `ЦЕНА:` · `ВЕРДИКТ:` · `ДОМ:` · `ДОСТАВЛЕНО:` · `ПОДЪЁМ:` · `[ДОЛГ: …]` · every `## ` heading of this file · every path and command.
-Конкретные шаги — у автора. **КРИТЕРИЙ ГОТОВНОСТИ (может ПРОВАЛИТЬСЯ):** живой прогон на реальном объекте репозитория (не только фикстура) — `python3 -c '<команда прогона>'` на собранном файле или `bash _generator/tools/fixtures/bootstrap_zahod/PROGNAT.sh` → `rc=0` и все ловушки зелёные..
+Two things, and the second matters more than the first.
+
+### 1 · Export to Excel
+
+`tools/export_xlsx.py` — the whole conduit as the owner is used to seeing it: one sheet per
+листок, students down, problems across, the same signs the paper tables used. This is what makes
+the bot's data leaveable: the owner must never be locked in.
+
+- Read through `core/services/progress.py` — the projection already exists, do not recompute it
+  a second, divergent way.
+- 🔴 **Export is a READ. It opens the database read-only** and must be safe to run while teachers
+  are marking.
+- The export file is NOT committed: it carries the surnames of 56 children. Write it to a path
+  from `config.py`, and say in the report that the repository stayed clean (`git status` → the
+  file is not there, or it is ignored).
+
+### 2 · 🔴 BACKUP, AND THE CHECK THAT IT RESTORES — this is the position
+
+**`VACUUM INTO`, never `cp`.** `cp` takes the file mid-transaction and in WAL mode loses the side
+files; the result looks valid and restores "almost". For our size `VACUUM INTO` is milliseconds.
+
+**Restore check is a SEPARATE task, not an appendix to the backup** — `tools/proverka_vosstanovlenia.py`.
+Weekly, three assertions, ALL must pass before anything reports success:
+
+1. the snapshot unpacks and `pragma integrity_check` says `ok`;
+2. there are **no fewer than fifty students**;
+3. the latest mark is **not older than a week**.
+
+Silence means alarm — a check that reports nothing on failure is not a check.
+
+🔴 **The whole point: `--na-porchennom` must go RED.** Corrupt a snapshot (truncate it, flip a
+byte, empty the students table, back-date the last mark) and the check must fail and SAY WHICH of
+the three assertions failed. **A green answer on a corrupted snapshot is the failure of this
+position**, whatever else is done. By the owner's own list of what actually breaks, "backups ran
+for years and did not restore" is the single most expensive failure there is — and it is expensive
+precisely because it is discovered only when it is needed.
+
+🔴 **Backups do NOT go into a Telegram channel.** That is a transfer of children's personal data
+to a third-party operator outside the perimeter, and the best available leak vector. Local file,
+gzip, rotation 14 days.
+
+⚠ **You write the TOOLS; the SCHEDULE is P10's.** Do not write a systemd unit, a timer or a cron
+line — say in `## ВОПРОСЫ` exactly which command P10 should schedule and how often.
+
+### 3 · What you may not touch
+
+`core/`, `infra/`, `bot/`, `migrations/`, `config.py` — read-only. Need a constant → name it in
+the report, do not scatter literals and do not edit `config.py`. *(Two positions of this wave
+already had to edit it out of zone because the задание asked for a constant there and the zone
+forbade it; that was the orchestrator's error, and it is not repeated here.)*
+
+**КРИТЕРИЙ ГОТОВНОСТИ (может ПРОВАЛИТЬСЯ), каждая команда печатает ЧИСЛО:**
+
+    cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P16-eksport
+    make check
+        # rc=0; печатает «N passed», N больше того, что было до тебя
+    python3 tools/export_xlsx.py --proba
+        # rc=0; печатает «листов N, учеников M, клеток K» — все 18 листков, 56 учеников
+    python3 tools/proverka_vosstanovlenia.py
+        # rc=0 на ЦЕЛОМ снимке; печатает все три проверки со значениями
+    python3 tools/proverka_vosstanovlenia.py --na-porchennom
+        # 🔴 rc≠0 ОБЯЗАТЕЛЬНО, и печатает «порч N, покраснело N» с именем каждой
+        # ЗЕЛЁНОЕ ЗДЕСЬ ЕСТЬ ПРОВАЛ ПОЗИЦИИ
+
+🔴 Проверка, которая не умеет покраснеть, — надежда, а не проверка. Отрицательный вердикт несёт
+охват В СЕБЕ: «покраснело 4 из 4 порч», а не «порчи ловятся».
 **Отрицательный вердикт несёт ОХВАТ В СЕБЕ:** не «дыр не найдено», а «дыр не найдено, проверено X из Y». Без охвата вердикт не принимается — «проверено 2 из 9» и «проверено 9 из 9» выглядят одинаково.
 
 ## 3. ВЕРИФИКАТОР (если двигаем/теряем/жмём)
@@ -98,8 +195,10 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 Ты работаешь host-side и в `.git` ПИШЕШЬ — значит коммитишь САМ, никому не передавая. Каждую завершённую часть работы коммить СРАЗУ, теми же двумя ходами — не копи всё к финальному ходу:
 ```
 git --no-optional-locks add -- tools/export_xlsx.py tools/proverka_vosstanovlenia.py tests/export/                     # вводит НОВЫЕ пути в индекс
-git --no-optional-locks commit -m "<зона>: <что сделано>" -- tools/export_xlsx.py tools/proverka_vosstanovlenia.py tests/export/   # отсекает всё чужое
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone <зона>   # из корня репо; должен быть ✅
+git --no-optional-locks commit -m "<что сделано>" -- tools/export_xlsx.py tools/proverka_vosstanovlenia.py tests/export/   # отсекает всё чужое
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone "tools/export_xlsx.py" && \
+    git_zona.py check --zone "tools/proverka_vosstanovlenia.py" && \
+    git_zona.py check --zone "tests/export/"   # из корня репо; должен быть ✅
 git --no-optional-locks show --stat                        # обязаны быть ТОЛЬКО твои пути
 ```
 🔴 **КОММИТЬ ПО ХОДУ — РЕШЕНИЕ ВЛАДЕЛЬЦА 25.08 (В11), ПЕРЕВЕРНУВШЕЕ прежний канон «одним последним ходом».** Цена прежнего канона: за сутки ДВА обрыва — канал `opencode run --auto` односторонний и умирает вместе с сессией (владелец закрыл ноутбук), и незакоммиченная работа пропадала целиком. Закончил кусок — закоммитил его; последний ход только ПРОВЕРЯЕТ, что коммитить нечего (`git status --porcelain` пуст, `git_zona.py check --zone` ✅).
@@ -162,7 +261,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 **1 · ВСЕ КОММИТЫ.** Ничего не осталось вне git — ни в рабочем репозитории, ни в соседних, до
 которых ты дотянулся по ходу работы:
 ```
-for R in <репозитории, которых ты касался>; do
+for R in /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot; do
   echo "== $R"; git -C $R --no-optional-locks status --porcelain
 done
 ```
@@ -172,7 +271,7 @@ done
 **2 · ВЛИТИЕ СВОЕЙ ВЕТКИ В ОСНОВНУЮ.** Только после того, как шаг 1 дал «вне git 0» на своей
 зоне — влитие отказывает на грязном дереве:
 ```
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py vlit-v-osnovnuyu zahod/P16-eksport --zone <своя зона> \
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py vlit-v-osnovnuyu zahod/P16-eksport --zone "tools/export_xlsx.py" --zone "tools/proverka_vosstanovlenia.py" --zone "tests/export/" \
     --vsyo-ravno "своя рабочая папка ещё жива — влитие последним ходом захода, штатно"
 ```
 Конфликт — ЗАКОННЫЙ исход, не повод форсировать: разрешай по существу, если понимаешь обе
@@ -186,8 +285,9 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 виден»: прогон изменённого механизма из `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`, НЕ из рабочей папки `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P16-eksport` плюс `grep` по ЖИВОМУ файлу,
 который его зовёт (хук, конвейер, генератор):
 ```
-cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && <команда прогона механизма, который заход менял> && echo $?
-grep -n '<как механизм назван в вызывающем коде>' <живая точка вызова>
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && make check && python3 tools/proverka_vosstanovlenia.py && echo $?
+grep -c 'VACUUM INTO' tools/proverka_vosstanovlenia.py tools/*.py   # бэкап VACUUM INTO, никогда cp
+grep -c "cp " tools/proverka_vosstanovlenia.py   # должно быть 0
 ```
 🔴 **Красная пост-проверка = ОТКАТ ВЛИТИЯ И СТРОКА В ОТЧЁТ**, а не «доложу, пусть приёмка
 решает»: `git_zona.py vlit-v-osnovnuyu --abort`, если слияние ещё не закоммичено, иначе
@@ -264,7 +364,9 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
 *(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
+**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "tools/export_xlsx.py" && \
+    git_zona.py check --zone "tools/proverka_vosstanovlenia.py" && \
+    git_zona.py check --zone "tests/export/"` → ✅
 *(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)

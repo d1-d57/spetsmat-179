@@ -331,15 +331,127 @@ grep -rn 'valid_at' core/services/sessions.py | head -3   # два времен�
 
 ## ПЛАН — (заполняет исполнитель)
 
+### Approach (one paragraph)
+
+P1 already drew the seam: `core/ports.py` is a Protocol-only file (no SQL, no aiogram) and
+`infra/repositories.py` is its SQLite adapter.  My zone (`core/services/sessions.py` +
+`infra/sessions_repo.py` + `tests/sessions/`) is forbidden to edit either.  The contract
+for P6 is therefore: a `SessionsService` in `core/services/sessions.py` that talks to
+the outside through a new Protocol (`SessionBook` + `AttendanceBook`) defined in the SAME
+file (the заход spells it out: "Your port goes into your own `core/services/sessions.py`"),
+and a SQLite adapter in `infra/sessions_repo.py` that implements it.  Two protocols, not
+one: lessons and attendance are different facts about the world — mixing them behind one
+port would force the service to know which table it is talking to, which is exactly the
+leak the rest of `core/` avoids.
+
+### Predicates and forks (named aloud, no speculation)
+
+- **What already exists I will NOT rebuild**: the `sessions` and `attendance` tables in
+  `migrations/001_init.sql`; the `Session` dataclass in `core/models.py`; the
+  `SESSION_KINDS` / `ATTENDANCE_STATUSES` tuples in `config.py`; `core/isotime.py`.  I read
+  them and reuse them, full stop.
+- **Fork #1 — two Protocol types vs. one**: chose two.  Lesson-shaped operations
+  (`create_lesson`, `find_lesson_on`, `recent_lessons`) and attendance-shaped operations
+  (`mark_attendance`) are different aggregates, the existing `MarkJournal`/`Catalogue` pair
+  follows the same shape, and one port would couple them in a way a future interface
+  cannot undo cheaply.
+- **Fork #2 — `valid_at` for attendance vs. for marks**: P1 already encodes the two times
+  on `Mark`.  Attendance is a single fact ("was here on this lesson") and does not need
+  the second clock; the column that would carry it does not exist on `attendance` and I
+  will not add it.  Lesson date is `held_on` (DATE), the screen reads it through
+  `ZoneInfo(TZ_DISPLAY)`, the service uses `isotime.to_iso` only for `recorded_at` of a
+  future event if one is needed.  No `timedelta(hours=3)`, ever.
+- **Fork #3 — UPDATE on attendance vs. refuse the second tap**: schema has
+  `unique(session_id, student_id)`, so a raw second insert would raise.  The заход
+  explicitly says: "marking attendance twice must UPDATE the existing row, not raise and
+  not duplicate".  So `AttendanceBook.mark` does INSERT-or-UPDATE inside one transaction
+  and returns the standing row's id.  Proven by a test in both directions.
+- **Fork #4 — `valid_at` in the future and earlier than the sheet's `issued_at`**: the
+  заход spells out both refusals for back-dated MARKS.  For lessons the analog is
+  `held_on`: a `held_on` in the future makes no sense for a "past lesson" and is refused;
+  the sheet analog is `issued_at` for a problem and a `held_on` earlier than a problem's
+  sheet's `issued_at` is also refused (you cannot have had a lesson on a problem that
+  was not yet issued).  Both refusals get a test each.
+- **Fork #5 — back-dated mark spread over several days**: P1's `MarkingService` already
+  takes `valid_at` per draft.  P6's service for marks-on-a-lesson takes a list of
+  `(student_id, problem_id, valid_at)` triples, NOT one date for the batch.  Test: a
+  Monday + Thursday batch yields two `valid_at` values that differ and the service does
+  not collapse them.
+
+### What the test surface will look like (the 12 numbers)
+
+4 attendance states × 3 date scenarios = 12, as the criterion spells out, AND the one test
+that IS this position (пришёл без сдачи ≠ прогул).  The 4 states are:
+(a) `был` with marks;
+(b) `был` with NO marks;
+(c) `не был`;
+(d) absent from the session entirely (no row).
+
+The 3 scenarios are:
+1. `valid_at` = lesson day, same-day recording;
+2. `valid_at` = lesson day, recorded the next day (back-dated, the second clock differs);
+3. `valid_at` earlier than the sheet's `issued_at` (refused) + `valid_at` in the future
+   (refused).
+
+The "is the position met" test asserts (b) and (c) come out of the service as DISTINCT
+answers.  That is the named red-line test.
+
+### Order of work (commit granularity)
+
+1. **Commit A — domain + port + adapter skeleton**: dataclass for `Attendance`,
+   `LessonNotFound` / `InvalidLessonDate` exceptions, `SessionBook` and `AttendanceBook`
+   Protocols, `SessionsService` class with `create_lesson` / `find_lesson_on` /
+   `recent_lessons` / `mark_attendance`, `SqliteSessionBook` + `SqliteAttendanceBook` in
+   `infra/sessions_repo.py`.  No tests yet → not green; partial commit on the way to a
+   green step is normal here.
+2. **Commit B — tests/sessions/ scaffolding**: an empty `tests/sessions/__init__.py` and
+   `tests/sessions/conftest.py` with a frozen clock and a small world (one teacher, one
+   lesson, three students) that does NOT touch the existing `tests/conftest.py`.  Plus
+   the first happy-path test (`test_create_lesson_round_trip`).
+3. **Commit C — the position test + 4 states**: the "b ≠ c" test, the "a vs b vs c vs d"
+   test, the UPDATE-on-second-tap test (both directions), the refused-on-second-tap-by-
+   schema fallback test if I go through raw SQL.  At this point the zone is green.
+4. **Commit D — date scenarios**: same-day, back-dated, refused-when-future, refused-when-
+   pre-issued, multi-day batch.  This is where the 12 number is met.
+5. **Commit E — readiness gates**: `make check`, `pytest tests/sessions -q`, the aiogram
+   grep.  No new code; the commit, if anything, is empty.  I do not commit an empty diff:
+   the gates belong in the report, not on the branch.  The commit is whatever I landed
+   in (C) or (D); the gates are run, not committed.
+
+### What I will NOT do
+
+- No aiogram anywhere under `core/`.
+- No `migrations/00X_*.sql` file.
+- No edit of `core/ports.py`, `infra/repositories.py`, `config.py`.
+- No schedule-driven auto-creation of lessons.  A human creates them.
+- No literal `timedelta(hours=3)`, no `datetime.now()` (use `FrozenClock` or
+  `isotime.utc_now`).
+
+### Verification (§3) — only the subagent I am allowed to call
+
+After the zone is green I will launch the §3 verifier: a fresh subagent, OTHER method
+(test on prepared data: "пришёл, не сдавал" vs "отсутствие отметок"; back-dated mark
+gets the right `valid_at` while `recorded_at` is today).  4 attendance states × 3 date
+scenarios = 12 checks, 0 failures.  Final line: "выдано N позиций из M найденных".
+
 ## ВОПРОСЫ — (заполняет исполнитель)
-> Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
-> ```
-> N. <текст находки>
->    ДОМ: <путь от корня репозитория | владелец>
->    ДОСТАВЛЕНО: нет
-> ```
-> `ДОМ: владелец` — когда дома-файла нет вовсе (сам вопрос владельцу); для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит только случай «доставлено» без метки на месте, недоставленное просто печатает.
-> 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+1. The `attendance` table has `teacher_id` as a nullable FK to `teachers(id)`, but the
+   заход text does not say who fills it.  P1's `Mark.teacher_id` is also nullable.  I
+   treat `teacher_id` as optional on `mark_attendance`, mirror P1's signature, and leave
+   a non-null happy path for the future interface (P4/P13) to decide.  A non-blocking
+   note; no decision needed from the owner for the green gate.
+   ДОМ: <эта арка>/kod_P6-zanyatia.md §1
+   ДОСТАВЛЕНО: нет
+
+2. The criterion's "12 tests = 4 states × 3 scenarios" reading is mine — the заход
+   literally says «4 состояния явки × 3 сценария дат, и они печатаются».  State (d) —
+   no attendance row at all — is what `mark_attendance(не был)` produces only if no row
+   was there before; it is a legitimate fourth state, but if the owner reads "4 состояния
+   явки" as `был` vs `не был` × `recorded` vs `not recorded`, the test count and the
+   naming are off by one.  Flagging for the owner's read.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что

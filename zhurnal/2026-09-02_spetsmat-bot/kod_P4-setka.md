@@ -374,6 +374,62 @@ grep -c 'answer()' bot/routers/marking.py   # answer() РАНЬШЕ перери
 
 ## ПЛАН — (заполняет исполнитель)
 
+**BASE OF THE BRANCH — FIRST FINDING, FIXED BEFORE ANY CODE.** `zahod/P4-setka` was cut
+from `main` BEFORE P2 and P3 were accepted: its tree had no `bot/` at all, so «extend
+P3's skeleton» had nothing to extend. `git log main..HEAD` = 0 commits, `HEAD..main` =
+25 — a pure ancestor, so `git merge --ff-only main` was lawful and made no merge commit.
+Done first; `bot/` (P3), `core/services/roster.py`, `tests/bot/` are now on the branch.
+
+**PARTS, EACH COMMITTED SEPARATELY:**
+
+1. `bot/callbacks.py` — typed `CallbackData` factories, NUMBERS ONLY. `Mark(m)`,
+   `OpenGrid(g)`, `Done(d)`, `PickSheet(s)`, `Noop(x)`. No human-typed string ever
+   enters a payload: seed label `10а:)` contains a colon, which is the separator, and
+   Cyrillic costs two bytes per character.
+2. `bot/keyboards/` — `grid.py`: the problem grid in exactly `config.GRID_COLUMNS`
+   columns (constant, never the literal `4`), fixed order by `problems.ord`, tail padded
+   with `Noop` fillers so EVERY problem row is exactly four wide; the student list; the
+   sheet chooser; the nav footer.
+3. `bot/routers/marking.py` — handlers. `answer()` FIRST with a toast, redraw second;
+   `message is not modified` suppressed BY SUBSTRING only; a catch-all router LAST that
+   answers «экран устарел» and redraws.
+4. `bot/app.py` — MINIMAL additive wiring (see the deviation note below).
+5. `tests/grid/` — own conftest (fixtures of `tests/bot/` do not reach another
+   directory), layout test over all 18 seed sheets × 544 problems with the coverage
+   number printed, byte-limit test, double tap, redelivery, stale button, forged
+   `callback_data` for a foreign student.
+
+**DECISIONS TAKEN, WITH THE REASON — challenge them in приёмка if any is wrong:**
+
+- **`op` maps to `EMPTY`, not to `RETRACTED`.** The заход §4 says «a repeat tap is the
+  undo», and the undo of a wrong button is `erratum` → `CellState.EMPTY`. `retract` is a
+  different fact about the world («сдал, не защитил»), and `MarkingService.retract` on an
+  empty cell raises `NothingToReverse`, so binding it to a bare two-state button would
+  turn a double tap into an exception — the opposite of «harmless by construction». One
+  consequence: `retract` has NO button on this screen; recorded in `## ВОПРОСЫ`.
+- **The prev/next buttons carry the NEIGHBOUR'S id, not a delta.** Same law as the mark
+  button: the payload names the target, never an operation to apply to whatever the
+  server finds.
+- **The tail of the grid is padded.** The criterion asks for «рядов не по 4 — 0», and a
+  three-button last row is rendered WIDER by Telegram, which breaks the very thumb-target
+  geometry the four-column rule exists for. The filler answers an empty toast.
+- **Idempotency key = `cb:<callback_query.id>`.** Unique per query, so a redelivered
+  update is answered from the journal; two DIFFERENT taps on the same target are already
+  harmless through the semantic branch of `set_state`.
+
+**DEVIATION FROM THE ZONE CONTRACT, DECLARED BEFORE IT IS MADE.** The zone list is
+`bot/keyboards/ bot/routers/marking.py bot/callbacks.py tests/grid/`, and `bot/app.py` is
+not in it. But §2.0 of this very file says of `bot/app.py`: «Shared: extend by ADDING
+your routers, do not rewrite», and the post-check of the WARNING block greps
+`bot/app.py` for `include_router` to prove the catch-all router is included LAST. A
+router that is not included does not exist in the running bot, so the ready criterion and
+the zone list contradict each other. Resolution: `bot/app.py` is extended ADDITIVELY only
+(router includes + `MarkingService`/`ProgressService` into `workflow_data`), in a
+SEPARATE commit named as an out-of-zone edit, and the deviation is named again in
+`## ОТЧЁТ`. `bot/routers/__init__.py` and `bot/keyboards/__init__.py` are package files of
+the zone's own directories and are treated as inside the zone.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
