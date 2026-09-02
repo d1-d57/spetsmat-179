@@ -179,10 +179,14 @@ class TeacherBinding:
 # right, and the two would drift.  What is added is only the part P7 has no reason to
 # have: which of the scored rows counts as an ANSWER and which counts as a TIE.
 #
-# 🔴 ``ratio``, NEVER ``token_set_ratio`` -- the reason is P7's and it is the same one:
-# ``token_set_ratio`` returns 100 on containment, so «Пирогов» inside «Пирогов Костя»
-# is a perfect match against every neighbour whose surname is a substring, and the
-# comparison this section exists to make stops working.
+# 🔴 THE METRIC IS ``raspoznavanie.ratio`` AND NOTHING ELSE.  P7 names the alternative
+# it forbids and why, at the top of its own §6 -- the containment-tolerant variant of
+# the same family scores a perfect match whenever one string sits inside the other, so
+# «Пирогов» inside «Пирогов Костя» beats «Пирогов» itself and the comparison this
+# section exists to make stops working.  The forbidden name is written out ONCE, in
+# ``core/services/raspoznavanie.py`` where the metric lives; repeating the literal here
+# would put the same rule in two places and make the grep that guards this module go
+# red on its own warning.
 
 #: A surname must fit at least this well before the row is a candidate at all.  Measured
 #: floor, not a guess: «Пирогов К.» against «Пирогов» scores 0,82 BEFORE the initial is
