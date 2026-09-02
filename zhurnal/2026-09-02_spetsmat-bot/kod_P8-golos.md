@@ -364,6 +364,56 @@ grep -rn 'include_router' bot/app.py | tail -2   # роутер голоса р�
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Read first, then measured.** Baseline `make check` -> rc=0, `220 passed`. `rapidfuzz` 3.13.0 is
+importable. Seed carries exactly **56 surnames** and **544 problems over 18 sheets** (243 distinct
+labels). `config.MARK_SOURCES` already contains `голос`, so no constant of mine has to reach
+`config.py`.
+
+**Two facts about the entry that change the shape of the work (both named again in `## ВОПРОСЫ`):**
+
+* `core/services/raspoznavanie.py` and `infra/llm.py` **do not exist on this branch.** P7 is a
+  parallel position of the same wave and has not landed. §5 of the задание says import them, do
+  not fork them — so the schema call becomes an OPTIONAL second channel behind a Protocol, imported
+  lazily and reported as absent, and the fuzzy channel carries the load alone until P7 lands.
+  Nothing of P7's is copied.
+* `bot/app.py` and `bot/callbacks.py` are **outside my zone**, and both are where a voice router
+  would normally be wired and where its payloads would normally live. The ЗАПРЕТ wins: the router
+  is built by a factory `build_router()` ready to be included, its payloads live in
+  `bot/routers/voice.py`, and the missing `include_router` line is a reported item, not an edit.
+
+**Order of parts, each committed on its own:**
+
+1. **Numerals are our own code** — `core/services/golos.py`: the vocabulary as DATA (word forms ->
+   value, tens+units composition, letter suffixes, ranges), `parse_dictation` splitting a line into
+   `(surname phrase, problem labels)`. Tests: every rule with a real dictated line, and the named
+   `test_petrov_...`.
+2. **ASR behind a Protocol** — `infra/asr.py`: `Transcriber` Protocol declared in `core`, a fake, a
+   verbatim-mode user-dictionary client, and `build_transcriber()` that returns the fake when no key
+   is set. The 101-term dictionary (56 surnames + task labels) is built from the seed, not typed.
+3. **Two independent channels** — matching in `core/services/golos.py`: `rapidfuzz.fuzz.ratio`
+   (never `token_set_ratio`) over surnames expanded across cases, threshold 0,7; the optional model
+   channel with the markdown fence stripped before parsing; disagreement -> `doubtful`; ambiguity ->
+   `UNKNOWN` + `alternatives`. Label -> problem id resolution tolerant of `°`, `*`, `:)`.
+4. **The screen** — `bot/routers/voice.py`: voice in, transcript, draft, the confirmation table
+   shown WHOLE, a tap toggles one cell, «Подтвердить» writes through P4's `MarkingService` with
+   `source="голос"` and an idempotency key of SHA-256(bytes)+cell. There is never a direct write.
+5. Gates, hygiene, verifier, report, merge.
+
+**Decisions I am taking rather than asking about** (§3 says say so either way):
+
+* **Ranges ARE supported.** «с третьей по шестой» -> 3, 4, 5, 6. Bare numbers only: a range whose
+  end carries a letter suffix («с седьмой а по седьмую в») has no defined enumeration and is left
+  as two separate labels.
+* **«и» is always a conjunction, never the suffix letter `и`.** «три и пять» must not become `3и`.
+  The letters a teacher actually dictates as a suffix are а · бэ · вэ · гэ · дэ · е · жэ · зэ, and
+  `и`/`й` labels (`10и*`) are reached by tapping, not by voice. Named in the report as a known limit.
+* **«же» is NOT a letter.** It is a particle and would eat «три же» into `3ж`. `жэ` alone stands.
+* **One dictation may carry several students.** A non-numeral word after a run of numbers opens a
+  new row: a teacher dictates a session, not a line.
+* **`ё` is folded to `е` on BOTH sides of every comparison** (`Фёдоров` is in the roster and no ASR
+  is reliable about the diaeresis), and the original spelling is what the table shows.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

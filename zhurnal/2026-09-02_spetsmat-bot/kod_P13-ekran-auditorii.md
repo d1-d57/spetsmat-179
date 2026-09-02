@@ -810,18 +810,17 @@ sorting by achievement, a button over 64 bytes, and any write to `enrollment`.
   `git status --porcelain` → 0 lines.
 - **Г2. Второй репозиторий.** Неприменимо: every path of the zone lies inside `spetsmat-bot`, and
   the zone did not grow outside it. Nothing was written into any other repository.
-- **Г3. Невлитых веток не прибавилось.** It DID grow, from 1 to 3, and here is whose:
+- **Г3. Невлитых веток не прибавилось.** It ended one LOWER than it started, at the last move:
   ```
-  $ git --no-optional-locks branch --no-merged main
-  * zahod/P13-ekran-auditorii
+  $ git --no-optional-locks branch --no-merged main      # after my own merge
   + zahod/P6-zanyatia
-  + zahod/P7-foto
+  count: 1                                              # entry count was also 1
   ```
-  `zahod/P13-ekran-auditorii` is mine and was inside the entry count already — it counted as
-  merged then only because it held zero commits of its own; it is merged by me as the last move of
-  this session, per the owner's decision of 25.08. `zahod/P6-zanyatia` and `zahod/P7-foto` are
-  live parallel заходы of this wave, working right now; P6 in particular was sent back to redo at
-  `0f87e1b`. Neither is mine to merge, and §0.1 — which is where merging somebody else's branch
+  In between it stood at 3, and that is worth naming rather than hiding behind the equal
+  endpoints: mine grew commits of its own (at entry it counted as merged only because it held
+  none) and `zahod/P7-foto` appeared and was accepted and merged by its own приёмка (`8052adb`)
+  while I worked. What remains is `zahod/P6-zanyatia`, a live parallel заход sent back to redo at
+  `0f87e1b`. It is not mine to merge, and §0.1 — the one place merging somebody else's branch
   would have been authorised — was cancelled by the orchestrator.
 - **Г4. Новый инструмент имеет живую точку вызова.** Неприменимо: no `.py` was created anywhere
   under `_generator/**`. Every new file is application code inside `spetsmat-bot`.
@@ -889,6 +888,13 @@ below. It is the consequence of one neighbour being sent back to redo, not of an
 **АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P13-ekran-auditorii/bot/routers/room.py` — открывать текстовым редактором; это точка входа собранного экрана, остальные три файла зоны названы в §4 и лежат рядом.
 **РОД АРТЕФАКТА:** `исходник`
 **КОММИТ:** `cb758c6` — `the six the §3 verifier found: a child taken next door vanished from his own room's distribution, and five smaller ones` · `git_zona.py check --zone "bot/keyboards/room.py" && git_zona.py check --zone "bot/routers/room.py" && git_zona.py check --zone "core/services/room.py" && git_zona.py check --zone "tests/room/"` → ✅
+**ВЛИТО В `main` САМИМ ЗАХОДОМ, ПОСЛЕДНИМ ХОДОМ:** `61b2112` — `Merge branch 'zahod/P13-ekran-auditorii'`, без конфликтов, командой
+`git_zona.py vlit-v-osnovnuyu zahod/P13-ekran-auditorii --vsyo-ravno "…"` (флаг понадобился и его причина уехала в `INCIDENTY`: у ветки ЕСТЬ живая рабочая папка — моя собственная, по устройству этого правила, и других писателей в ней нет; зона чиста).
+**Слитый `main` прогнан целиком, а не предположен:** `make check` → rc=0, **331 passed in 42.75s** — это 300 принятой рядом P7 плюс мои 31, то есть две позиции волны в одном дереве не поссорились.
+
+🔴 **`vlit-v-osnovnuyu` напечатал «ВЛИТО, НО НЕ ВСТРОЕНО (5)» — называю это прямо, а не молчу.** Инструмент ищет живую точку вызова в виде хука, шага сборки или маркера `# TOOL-CONTRACT: called-by-hand`; у всех пяти точка вызова — обычный `import`, которого эвристика не считает. Поимённо, с адресом вызова:
+`bot/keyboards/room.py` ← `bot/routers/room.py:53` · `bot/routers/room.py` ← `bot/app.py:19` и `bot/app.py:102` (`dp.include_router(room.build_router())`) · `core/services/room.py` ← `bot/app.py`, `infra/room_repo.py:28`, роутер и тесты · `infra/room_repo.py` ← `bot/app.py:23` · `tests/room/conftest.py` ← pytest (`pytest tests/room --collect-only` → 31 tests collected). Ни один из пяти не является инструментом без вызова; долга здесь нет, есть расхождение эвристики с видом кода.
+
 *(зона собрана семью коммитами по ходу работы, как велит §4: `0f826e3` сервис · `0a6d099` клавиатура · `66a169e` роутер · `327f025` два файла ВНЕ зоны · `6f370b8` тесты · `cb758c6` шесть находок верификатора · `eaa9ad3` реестр преподавателей аудитории, ВНЕ зоны. Один шов между `cb758c6` и `eaa9ad3` не собирается сам по себе: конструктор `RoomService` получил обязательный порт, а его единственная точка вызова — `bot/app.py`, которую §4 велит коммитить ОТДЕЛЬНО. Названо здесь, а не оставлено находкой для bisect.)*
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
@@ -903,7 +909,7 @@ below. It is the consequence of one neighbour being sent back to redo, not of an
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** принято — прогнано оркестратором ИЗ ГЛАВНОЙ ПАПКИ после влития. `make check` → **331 passed**; `pytest tests/room -q` → 31 passed, и тест печатает замер, а не утверждение: «[постоянное закрепление] интервалов 36 из 36 не изменилось · переводов на сегодня 18 · гостей 18 · возвратов постоянному 18» — то есть смысл позиции (сегодняшняя правка не трогает постоянное) проверен на всех восемнадцати, а не на примере. Роутер аудитории реально подключён и стоит МЕЖДУ сеткой и catch-all (`bot/app.py`: `grid_router` 99, `room` 102, `stale_router` 109) — грепом по живому файлу. 🔴 ГЛАВНЫЙ ЗАПРЕТ ПОЗИЦИИ ПРОВЕРЕН ОТДЕЛЬНО И ДЕРЖИТСЯ В ДВУХ МЕСТАХ. Мандат запрещает рейтинг, а на этом экране восемнадцать детей стоят рядом, и соблазн сильнее всего. `sort_key` — `(surname, name, id)`, с комментарием «единственное на этом экране, что НИКОГДА не должно зависеть от числа долгов»; сортировка продублирована в сервисе И в клавиатуре НАМЕРЕННО, потому что клавиатура может быть позвана мимо сервиса. Проверено чтением `core/services/room.py:352`, не доверием отчёту. ⚠ Греп на запрещённые слова дал ОДНО вхождение, и это ложное срабатывание МОЕГО образца, а не нарушение: `core/services/raspoznavanie.py:77` — комментарий P7 «accuracy loss in percentage points», цитата бенчмарка предобработки. Проверено чтением строки. Гейтов приёмки 17 из 18 на входе; красным был только сам этот вердикт — галочку гигиены заход заполнил сам, промпт запуска после починки её требует.
 
 **ВЕТКА РАБОТЫ:** `zahod/P13-ekran-auditorii`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -914,6 +920,6 @@ below. It is the consequence of one neighbour being sent back to redo, not of an
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
 
-- `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
+заявок нет: ни одна из пяти операций не сорвалась. **Влитие** — сделано самим заходом, проверено `git branch --merged main`; **коммит** — по ходу работы, Г1 нашёл каждый хэш; **вывоз** — непроверяем, у `spetsmat-bot` нет ни одного удалённого; **деплой** — вне позиции (P10); **гашение** — ветка оставлена живой намеренно, волна идёт. ⚠ Заход правил `bot/app.py` вне зоны, чтобы подключить свой роутер, и объявил это ОТДЕЛЬНЫМ коммитом с заголовком «OUT OF ZONE, deliberately and separately». ПРИНЯТО: подключение и есть «механизм встал», зону выдал слишком узкой оркестратор, а форма объявления здесь образцовая — отдельный коммит, а не тихая правка внутри чужого.
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
