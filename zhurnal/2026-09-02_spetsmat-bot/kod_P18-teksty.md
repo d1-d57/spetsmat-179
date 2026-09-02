@@ -483,24 +483,24 @@ $ git --no-optional-locks branch --no-merged main | grep -c zahod/
 ## ОТЧЁТ — (заполняет исполнитель)
 **АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tests/teksty/sobrat.py` — запустить `python3 tests/teksty/sobrat.py` из корня репозитория; печатает КАЖДУЮ строку, доезжающую до живого человека, с адресом `файл:строка`, каналом и текстом. Это тот самый «прочитать все тексты одним заходом», который просил владелец, и он повторяем: следующий заход не начинает с нуля.
 **РОД АРТЕФАКТА:** `исходник`
-**КОММИТ:** `b451c6f` — `тексты, часть 4: сторож tests/teksty — 256 строк из 256 в 16 файлах, нарушений 0…` · `git_zona.py check --zone "bot/handlers/" --zone "bot/routers/" --zone "bot/keyboards/" --zone "bot/middleware.py" --zone "core/services/" --zone "tests/teksty/"` → ✅
+**КОММИТ:** `d049e2f` — `тексты, разбор верификатора: починены семь его находок, из них ЧЕТЫРЕ — ложь, которую внесла моя же правка…` (последний в цепочке из девяти; работа коммитилась по ходу, часть за частью) · `git_zona.py check --zone "bot/handlers/" --zone "bot/routers/" --zone "bot/keyboards/" --zone "bot/middleware.py" --zone "core/services/" --zone "tests/teksty/"` → ✅
 **ПРАВКИ ПРОЧИТАНЫ:** блок пуст, правок не было.
 
 ---
 
 ### THE NUMBERS THE ЗАДАНИЕ ASKS FOR
 
-* **Lines read: 256**, in 16 files (113 by the задание's own predicate, 143 through
+* **Lines read: 257**, in 16 files (114 by the задание's own predicate, 143 through
   a helper the predicate does not see — see COVERAGE below).
 * **Lines changed: 49 occurrences of 35 distinct texts, in 15 files.** Counted
   mechanically, not by hand: the collector was run against `1fe4422` (the tree I
   started from, extracted with `git archive`) and against `HEAD`, and the two sets
   of `(file, text)` pairs were differenced.
 * **Texts that LIED (question 4): 4**, listed in their own section below.
-* Guard coverage, printed by the test itself on GREEN: `строк проверено 256 из
-  256, в 16 файлах, нарушений 0`.
+* Guard coverage, printed by the test itself on GREEN: `строк проверено 257 из
+  257, в 16 файлах, нарушений 0`.
 
-### COVERAGE — WHY 256 AND NOT 91, AND WHY THIS IS THE FINDING, NOT A DISCREPANCY
+### COVERAGE — WHY 257 AND NOT 91, AND WHY THIS IS THE FINDING, NOT A DISCREPANCY
 
 The задание measured 91 and told me to say so honestly if I diverged. I diverge,
 and the reason is not a tuning difference — **the predicate as written misses whole
@@ -524,7 +524,7 @@ So `sobrat.py` has two channels, both named in its docstring:
 * **channel A — the задание's predicate**, made stricter in one place: only the TEXT
   argument counts. `callback_data="accept:%d"` is not read by a human and inflated
   the первый прогон by six lines. `python3 tests/teksty/sobrat.py --kanal a` prints
-  channel A alone: **113 lines in 13 files.**
+  channel A alone: **114 lines in 13 files.**
 * **channel B — text a helper builds and its caller shows.** A function joins the
   showing set when its call stands in a text position, when its result is assigned
   to a name later shown, or when a showing function returns it. Iterated to a fixed
@@ -620,7 +620,7 @@ teacher to do something other than what they were doing.
 
 ### THE GUARD, AND THE PROOF THAT IT CAN GO RED
 
-`tests/teksty/test_teksty.py`, three tests, taking its lines from `sobrat.py` — one
+`tests/teksty/test_teksty.py`, four tests, taking its lines from `sobrat.py` — one
 source for reading and for checking, so the two cannot drift apart.
 
 Coverage prints **on green**, not only on failure, through
@@ -629,9 +629,9 @@ Coverage prints **on green**, not only on failure, through
 
 ```
 $ python3 -m pytest tests/teksty -q
-...                                                                      [100%]
-строк проверено 256 из 256, в 16 файлах, нарушений 0
-3 passed in 0.66s
+....                                                                     [100%]
+строк проверено 257 из 257, в 16 файлах, нарушений 0
+4 passed in 0.61s
 ```
 
 **REDNESS PROVED BY EXPERIMENT, as required.** `TEACHER` put back into
@@ -639,13 +639,13 @@ $ python3 -m pytest tests/teksty -q
 
 ```
 $ python3 -m pytest tests/teksty -q
-E       Failed: внутреннее состояние доехало до человека в 1 строках из 256:
+E       Failed: внутреннее состояние доехало до человека в 1 строках из 257:
 E         bot/handlers/owner.py:316 [A] 'Преподаватель подтверждён как TEACHER.' — внутреннее имя «teacher»; латиница «TEACHER»
-строк проверено 256 из 256, в 16 файлах, нарушений 1
+строк проверено 257 из 257, в 16 файлах, нарушений 1
 1 failed, 2 passed in 0.67s
 ```
 
-Reverted; back to `3 passed`, `нарушений 0`. The file is byte-identical to before
+Reverted; back to `4 passed`, `нарушений 0`. The file is byte-identical to before
 the experiment (`git diff` on it is empty).
 
 **The guard does one thing the задание did not ask for, because the live defect
@@ -671,22 +671,22 @@ refusal that must say «what to do next» cannot say it without one.
 
 ```
 $ python3 tests/teksty/sobrat.py | tail -2
-строк, доезжающих до человека: 256, в 16 файлах (прямых A: 113, через посредника B: 143)
+строк, доезжающих до человека: 257, в 16 файлах (прямых A: 114, через посредника B: 143)
 
 $ python3 tests/teksty/sobrat.py --kanal a | tail -2
-строк, доезжающих до человека: 113, в 13 файлах (прямых A: 113, через посредника B: 0)
+строк, доезжающих до человека: 114, в 13 файлах (прямых A: 114, через посредника B: 0)
 
 $ python3 -m pytest tests/teksty -q
-строк проверено 256 из 256, в 16 файлах, нарушений 0
-3 passed in 0.66s
+строк проверено 257 из 257, в 16 файлах, нарушений 0
+4 passed in 0.61s
 
 $ python3 -m pytest -q
-строк проверено 256 из 256, в 16 файлах, нарушений 0
-3 failed, 910 passed in 57.80s
+строк проверено 257 из 257, в 16 файлах, нарушений 0
+3 failed, 911 passed in 59.65s
 ```
 
-**910 passed** — ровно то число, которое требует критерий, и оно достигнуто с ТРЕМЯ
-новыми тестами сверху: 910 = 910 базовых − 3 закреплявших старый текст + 3 моих.
+**911 passed**, при требуемых «910 и больше»: 911 = 910 базовых − 3, закреплявших
+старый текст, + 4 новых моих.
 
 Both runs are against the LIVE tree — `sobrat.py` reads `bot/` and `core/` from
 disk, and its module fixture asserts it found something, so a scan that reads
@@ -694,7 +694,7 @@ nothing cannot pass quietly.
 
 ### 🔴 THE FULL RUN IS NOT GREEN, AND THIS IS THE ONE THING TO READ BEFORE ACCEPTING
 
-`python3 -m pytest -q` gives **907 passed, 3 failed**, against 910 passed at
+`python3 -m pytest -q` gives **911 passed, 3 failed**, against 910 passed at
 `1fe4422`. **Not one of the three is a broken screen. All three are tests OUTSIDE
 this заход's zone that pin the OLD text as their assertion**, and one of them pins
 the very defect this position exists to remove:
@@ -784,6 +784,79 @@ either way (the three commits between were journal files only).
 **Урок для приёмки, а не оправдание:** «дописать следующий шаг» — операция того же
 риска, что и любая другая правка текста. Вопрос 4 надо задавать своей правке тоже,
 и первым.
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА (§3) — И ЧТО ОН ИЗМЕНИЛ
+
+Свежий субагент, независимый обход другим методом, `sobrat.py` не запускал.
+Его собственный охват: **762 строки** в `bot/`, `core/` **и `infra/`** — папке,
+которую мой сборщик не смотрит вовсе. Финальная строка на месте: **«выдано 17
+позиций из 762 найденных»**.
+
+**Он нашёл семь настоящих дефектов, и ЧЕТЫРЕ из них внесла моя собственная
+правка.** Все семь починены в коммите `d049e2f`; ни одна не оспорена.
+
+| № | что | чьё |
+|---|---|---|
+| 3 | `core/services/room.py:721` — моя замена ключа преподавателя в `bot/keyboards/room.py` была **мёртвой**: словарь приходит уже заполненным `"преподаватель %d"`, и запасной текст не доживал никогда. `teacher_id` по-прежнему стоял на экране старшего | моё |
+| 4 | `owner.py` ×3 — «список ниже обновится сам» **ложь**: все три ветки уходят в `return` до `_refresh_pending_list` | моё |
+| 6 | `owner.py` — «снимите старую привязку» советует действие, **которого в боте нет**: ни `unbind` в `roster`, ни кнопки | моё |
+| 7 | `teacher.py` — «Отметки за вашу аудиторию (203)» обещает область видимости, которой нет: `/setka` показывает весь список школы | моё |
+| 1 | `photo.py` — `"Не получилось разобрать фото: %s" % error` печатал преподавателю `LlmError` из `infra/llm.py`: «ответ не разобрался как JSON: Expecting value: line 1 column 1», «модель отказала в доступе (401): {"error"…}». По открытой заявке `2026-09-02T1733` это читалось бы на КАЖДОМ снимке | чужое, я не увидел |
+| 9 | `photo.py` ×2 — «это не изображение», «снимок слишком большой» без следующего шага | чужое |
+| 14 | `marking.py` — соседние отказы получили `/setka`, эти два нет | чужое |
+| 2 | `uvedomlenia.py` ×3 — совет `/auditoria` неверен | моё, найдено мной же на час раньше |
+
+**Позиция 2 совпала с моей собственной находкой** — я нашёл её сам, читая гейты
+ролей, и починил до того, как верификатор ответил. Независимое схождение двух
+методов на одной строке.
+
+**Разобрано и НЕ починено, с причиной:**
+
+* **№5** — владелец на `/start` без ссылки читает «Попросите у владельца ссылку».
+  Верно, и правится только логикой (ветка по `identity` в обработчике), а ЧАСТЬ 3
+  логику запрещает. В отчёт, не в код.
+* **№8** — универсальный отказ `middleware` советует ждать подтверждения заявки
+  тем, у кого её нет. Фраза **условная** («если вы недавно отправили заявку»), то
+  есть ни для кого не ложна. Я переписал её и **откатил**: правка ломала ещё два
+  чужих теста (`tests/views/test_views_privacy.py` закрепляет её как
+  `ROLE_REFUSAL`), а оттенок того не стоит.
+* **№12, 13, 15, 16, 17** — придирки, разобраны и оставлены. №16 (английские
+  `reason` в `golos.py`) подтверждает мой собственный вывод: сейчас не
+  показывается. №17 нашёл настоящий баг ВНЕ моей темы — `_current_sheet_id` кидает
+  `RuntimeError`, которого `except (RosterError, TelegramIdAlreadyBound)` не ловит,
+  и владелец получил бы крутящуюся кнопку. Это логика, не текст; названо здесь.
+
+**Две дыры охвата он назвал поимённо, обе закрыты:**
+
+* `_replace` не был объявлен показывающим — `uvedomlenia.py:280` «Записали: %s.
+  Спасибо.» сборщик не видел. Добавлен; охват вырос 256 → 257.
+* Моя докстрока обещала проверку, которой нет («сторож краснеет на команде,
+  которую бот не регистрирует»). Переписана на то, что сторож делает **и чего не
+  делает** — и второе стоило этому заходу ошибки №2.
+
+**Третью дыру он назвал структурной, и она закрыта не расширением обхода, а
+гейтом на весь класс.** `PAPKI = ("bot", "core")`: `infra/` не сканируется, и
+именно оттуда пришли тексты находок 1, и `voice.py`, и `asr.py`. Расширять обход
+на `infra/` бессмысленно — там сотни строк, законно английских и адресованных
+разработчику. Вместо этого добавлен
+**`test_tekst_isklyucheniya_ne_uhodit_na_ekran`**: в `bot/**` имя пойманного
+исключения не имеет права попасть в аргумент показа. Решение о том, что читает
+человек, принимает слой `bot/`, и переложить его на чужое исключение он не может.
+Исключение, ОБЪЯВЛЕННОЕ человеческим (`IntakeRefused`, чьи литералы стоят под тем
+же гейтом), разрешено; перевод через функцию (`_pochemu_ne_vyshlo(exc)`) разрешён;
+`str()` и `repr()` переводом не считаются.
+
+**Краснота этого гейта тоже доказана возвратом:**
+
+```
+$ # вернул "Не разобрал запись: %s" % refusal в bot/routers/voice.py
+$ python3 -m pytest tests/teksty -q
+E  AssertionError: текст пойманного исключения уходит человеку на экран:
+E    bot/routers/voice.py:398 (`refusal`) — положите его в `log.warning`…
+1 failed, 3 passed
+$ # откат
+4 passed, нарушений 0
+```
 
 ### ГИГИЕНА ВЫХОДА — ЧИСЛА КОМАНДОЙ, НЕ ПАМЯТЬЮ
 
