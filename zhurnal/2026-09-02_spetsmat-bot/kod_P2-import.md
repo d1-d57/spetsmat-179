@@ -655,6 +655,32 @@ fatal: no upstream configured for branch 'zahod/P2-import'
 
 ## ОТЧЁТ — (заполняет исполнитель)
 
+**RESTART.** The previous run stopped after the work itself was finished: all nine parts were
+committed one by one, `zahod/P2-import` was merged into `main` (merge `8c1bc79`), and this report
+was written — but it stopped before `ПРАВКА 1` was added to the file, so the framework lines
+`АРТЕФАКТ` / `КОММИТ` were never written in their machine-read form. This run resumes exactly
+there and does only what `ПРАВКА 1` orders: the three framework lines below. No code, no test,
+no refactor was touched — verified: `git status --porcelain` in the worktree is EMPTY, and in
+the main folder it shows only this заход `.md` (mine to write, the analyst's to commit) plus four
+foreign items already named in `### WHAT I DID NOT TOUCH` (`README.md`, the orchestrator's
+`PULS-CHASOVOGO-*.log`, the autolog `INCIDENTY.md`, someone else's `.commit-plan`).
+
+The one command the orchestrator ordered in place of §0.1, re-run on this restart:
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+```
+
+The one branch is `zahod/P3-registracia` — a neighbouring position's, not mine. `zahod/P2-import`
+is merged (`git branch --merged main` lists it), so my own count is still 0, as on the first run.
+
+ПРАВКИ ПРОЧИТАНЫ: 1
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/tools/import_konduit.py` — `cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && python3 tools/import_konduit.py --proverit`
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `8981bb6` — `import: judge coverage instead of printing it, and make the §6 attribution falsifiable` · `git_zona.py check --zone tools/import_konduit.py` → ✅, `--zone core/services/seeding.py` → ✅, `--zone tests/import/` → ✅ (re-run 2026-09-02 on `main`, all three green; branch merged into `main` by `8c1bc79`)
+
 ### §0.1 — CANCELLED BY THE ORCHESTRATOR; WHAT WAS RUN INSTEAD
 
 The git-contour subagent was NOT launched — the orchestrator cancelled that clause in the
@@ -939,7 +965,7 @@ cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && python3 tools/import_kon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** принято — прогнано оркестратором ИЗ ГЛАВНОЙ ПАПКИ после влития, все три команды критерия зелёные. `make check` → 148 passed. `--proverit`: семь оракулов, из них ДВА НЕЗАВИСИМЫХ от проверяемых ячеек — гробарий по именам от руки «20 из 20, расхождений 0» и лист «зачёт» «55 из 55, расхождений 0»; плюс тридцать клеток вручную «30 из 30», лист «долги» «770 из 770», полная сетка «29938 из 29938, задач 544 из 544». 🔴 ГЛАВНОЕ — `--negativnyj-kontrol`: «порч 3 из 3, покраснело 3», каждая порча названа теми оракулами, которые её поймали. Тавтология прошлой проверки закрыта: строка 2 листа Excel в оракулах не участвует. Число отметок СОШЛОСЬ и объяснено: 15847 = 15112 assert + 735 retract — ровно мандатные 15112 плюс снятия под 'x', которые старый импорт молча выбрасывал. Заход нашёл ЧЕТЫРЕ дефекта в самой книге владельца (недосчёт гробария по 16б*, дубль метки 12д в листке 2д, нулевой листок 4д, третий составной принимающий) — все разобраны и внесены в реестр, а не обойдены. Ветка влита, Г16 подтверждает пост-прогон механизма после влития. Гейтов приёмки 17 из 18, красным был только сам этот вердикт. ⚠ ОТКЛОНЕНИЕ ПРИНЯТО: заход правил `config.py` вне своей зоны. Вина ЗОНЫ, а не захода — §7 задания прямо велел положить туда константу пути к книге, а зону выдал слишком узкой оркестратор. То же самое случилось у P3 с `bot/config_local.py`; общий долг «поднять константы в config.py» вынесен отдельной позицией.
 
 **ВЕТКА РАБОТЫ:** `zahod/P2-import`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -950,6 +976,6 @@ cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && python3 tools/import_kon
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
 
-- `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
+заявок нет: ни одна из пяти операций не сорвалась. Пять операций: **влитие** — сделано самим заходом, мерж `8c1bc79`, проверено `git branch --merged main`; **коммит** — 9 коммитов по ходу, Г1 нашёл каждый; **вывоз** — не понадобился и непроверяем: у `spetsmat-bot` нет ни одного удалённого (`git remote` пуст); **деплой** — вне этой позиции (P10); **гашение** — ветка оставлена живой намеренно, волна идёт, гасить будет закрытие волны.
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
