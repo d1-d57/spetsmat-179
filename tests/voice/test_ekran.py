@@ -376,3 +376,44 @@ def test_the_source_this_screen_writes_is_one_the_schema_accepts():
     from bot.routers.voice import SOURCE
 
     assert SOURCE in config.MARK_SOURCES
+
+
+# ------------------------------------------------------- reuse rather than rebuild
+
+def test_what_would_be_written_is_p7s_function_and_not_a_second_copy():
+    """One rule, one home: «a row with no student writes nothing, however many of its
+    cells are ticked».  It has to hold on the photo screen and on this one, and two
+    implementations of it is one implementation and one accident."""
+    from bot.routers import photo, voice
+
+    assert voice._writable is photo.checked_cells  # noqa: SLF001
+
+
+def test_the_draft_this_screen_stores_has_the_shape_p7s_table_reads(
+    voice_dispatcher, bot_instance, teacher_tg_id, transcript_script, current_labels,
+):
+    """The reuse above is only legal because the two drafts are the same shape.  Asserted
+    on a draft that really went through the handler, not on a hand-built dict."""
+    from bot.routers.photo import checked_cells
+
+    _problem, label = current_labels[0]
+    dictate(voice_dispatcher, bot_instance, teacher_tg_id, transcript_script,
+            "Кахиани %s" % label)
+
+    loop = __import__("asyncio").get_event_loop()
+    from aiogram.fsm.context import FSMContext
+    from aiogram.fsm.storage.base import StorageKey
+
+    key = StorageKey(bot_id=bot_instance.id, chat_id=teacher_tg_id, user_id=teacher_tg_id)
+    context = FSMContext(storage=voice_dispatcher.storage, key=key)
+    stored = loop.run_until_complete(context.get_data())["voice_draft"]
+
+    assert stored["rows"][0]["cells"][0].keys() >= {"problem_id", "checked", "shown"}
+    assert len(checked_cells(stored)) == 1
+
+
+def test_the_matching_metric_reaches_this_screen_from_p7_and_not_from_a_local_table():
+    """The screen must not acquire its own idea of how close two surnames are."""
+    from core.services import golos, raspoznavanie
+
+    assert golos.case_forms is raspoznavanie.case_forms

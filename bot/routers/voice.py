@@ -50,6 +50,7 @@ from bot.callbacks import ids_are_storable
 from bot.keyboards.grid import button, rows_of
 from bot.middleware import require_role
 from bot.routers.marking import MARKING_ROLES, NOT_MODIFIED
+from bot.routers.photo import checked_cells
 from core.models import CellState
 from core.services.golos import (
     Verdict,
@@ -153,12 +154,16 @@ def _draft_to_state(draft) -> dict:
                 "verdict": row.verdict.value,
                 "alternatives": list(row.alternatives),
                 "reason": row.reason,
+                # ``checked`` and ``shown``, spelled P7's way ON PURPOSE: this dict is
+                # the same confirmation-table shape the photo screen builds, which is what
+                # lets ``checked_cells`` below be one function instead of two.
                 "cells": [
                     {
                         "label": cell.label,
                         "problem_id": cell.problem_id,
                         "printed_label": cell.printed_label,
-                        "ticked": bool(cell.ticked),
+                        "checked": bool(cell.ticked),
+                        "shown": True,
                     }
                     for cell in row.cells
                 ],
@@ -168,16 +173,14 @@ def _draft_to_state(draft) -> dict:
     }
 
 
-def _writable(stored: dict) -> list:
-    """Every ``(student_id, problem_id)`` this draft would write if confirmed now."""
-    pairs = []
-    for row in stored.get("rows", []):
-        if row.get("student_id") is None:
-            continue
-        for cell in row.get("cells", []):
-            if cell.get("ticked") and cell.get("problem_id") is not None:
-                pairs.append((row["student_id"], cell["problem_id"]))
-    return pairs
+# WHAT «ЗАПИСАТЬ» WOULD WRITE IS P7's FUNCTION, NOT A SECOND COPY OF IT.
+#
+# ``bot.routers.photo.checked_cells`` carries a rule that has to hold on both screens and
+# is invisible when it does: a row with no student resolved contributes NOTHING, however
+# many of its cells are ticked — a mark has to land on a child, and «probably Petya» is
+# not a child.  Two implementations of that rule is one implementation and one accident
+# waiting to be written; the shape of the draft dict above is what makes the reuse legal.
+_writable = checked_cells
 
 
 # =============================================================================
@@ -202,7 +205,7 @@ def _cell_text(cell: dict) -> str:
     label = cell.get("printed_label") or cell.get("label")
     if cell.get("problem_id") is None:
         return "✗ %s" % label
-    return "%s %s" % ("✓" if cell.get("ticked") else "·", label)
+    return "%s %s" % ("✓" if cell.get("checked") else "·", label)
 
 
 def render(stored: dict, catalogue) -> tuple:
@@ -453,11 +456,11 @@ async def toggle_cell(
         await query.answer("«%s» — такой задачи нет на листках." % cell.get("label"))
         return
 
-    cell["ticked"] = not cell.get("ticked")
+    cell["checked"] = not cell.get("checked")
     await state.update_data(**{DRAFT_SLOT: stored})
     # The toast BEFORE the redraw, always: the redraw is an API round-trip and the query
     # expires in fifteen seconds; at 800 ms a person cannot tell whether the tap counted.
-    await query.answer("%s %s" % ("✓" if cell["ticked"] else "снял",
+    await query.answer("%s %s" % ("✓" if cell["checked"] else "снял",
                                   cell.get("printed_label") or cell.get("label")))
     message = _editable(query)
     if message is not None:
