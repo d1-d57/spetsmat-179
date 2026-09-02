@@ -312,6 +312,12 @@ grep -rn 'confirm' core/services/sheets.py | head -3   # запись тольк
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### Критерий готовности требовал напечатанного числа, и ровно эта строка была единственной несделанной — а передача числила позицию готовой
+ЦЕНА: приёмка объявила `доработка` из-за ненаписанного отчёта и не увидела, что критерий тоже не выполнен: строка «печатает «сверено N задач из M»» была невыполнима грепом (`pytest -q -s | grep 'сверено'` пусто), но проверялась глазами по числу зелёных тестов. Стоило это не переделки, а того, что тавтология на `kind` — 178 строк из 544 — прожила бы приёмку: она пряталась ровно за отсутствием напечатанного охвата. Критерий, требующий ЧИСЛА, обязан требовать и команду, которой это число снимается, иначе «12 passed» читается как выполнение.
+
+### Отмена §0.1 оркестратором сделала гейт Г12 невыполнимым по форме, и заход обязан был чинить его сам
+ЦЕНА: секция `## ГИГИЕНА ВХОДА` подписана «заполняет СУБАГЕНТ гит-контура, не исполнитель», а субагент отменён распоряжением сильнее текста захода. Без письменного указания «заполни её сам» заход, читающий только свой файл, оставил бы секцию пустой и покраснел бы на Г12 по вине отмены. Здесь указание было — но оно пришло в стартовой строке, а не в файле, и следующая волна с той же отменой его не получит, если строку не сохранят. Цена: один гейт приёмки, красный не по работе.
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -360,6 +366,26 @@ gap above is exactly what it was designed to catch.
 
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. `has_header` не пропускает ни одной строки и никогда не пропускал: разборщику отдают ЯЧЕЙКИ, а не таблицу, поэтому шапка снимается на стороне вызывающего. Флаг остался проверкой согласия «что вызывающий думает о листке» с «что модуль про него знает», и теперь краснеет в обе стороны. Вопрос владельцу: экран загрузки будет отдавать сюда уже очищенные ячейки — или сырой лист, и тогда снятие шапки принадлежит этому модулю, а флаг обязан пропускать строку?
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. `°` и `●` — задание называет 102 и 113, вместе 215. В `seed/sheets.json` ЖИВЁТ ТОЛЬКО `°`: `grep -c '●' seed/sheets.json` даёт 0, а 215 обязательных все несут `°`. Значит импорт P2 свёл два знака в один при записи, и разборщик, читающий свежий листок из рабочей книги, `●` встретит, а сверить его с оракулом не сможет — оракул этой разницы уже не хранит. Разборщик оба знака принимает и оба даёт `обязательная`; проверить это на реальных данных нечем.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. `✘` покрыт только синтетикой: в оракуле его нет вовсе (`grep -c '✘' seed/sheets.json` → 0), в рабочей книге он на 88 задачах, из них все 26 на листке `4д`. То есть путь «кладбищенской» пометки на РЕАЛЬНЫХ данных этим заходом не проверен ни разу, и проверить его можно только против книги, а не против оракула. Две докстроки, утверждавшие обратное, исправлены.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+4. Две аномалии, названные в задании, — значение `2` на листке 9 (Фёдоров, `−4б`) и обратная кавычка на листке 15 (Искеева, `1°д`) — до `seed/sheets.json` не доехали: обратных кавычек в метках 0, и все 544 метки проходят грамматику разборщика без единого исключения (обе цифры сняты командой, не по памяти). Обе аномалии были в ЯЧЕЙКАХ отметок, а не в метках задач, и импорт P2 их разобрал. Разборщик свежего листка встретит такую ячейку снова — и обязан покраснеть, а не проглотить; проверить это на оракуле нечем, он этой разницы уже не хранит.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. Класс дефекта «проверку кормят ответом, который она проверяет» — второй случай за волну (P2, потом P9). Починка вычислима и стоит одну строку в критерии готовности каждой позиции с оракулом: прогнать проверку ещё раз с ОТНЯТЫМ ответом оракула и напечатать оба числа; расходятся — зелёное меряло фикстуру. Здесь цена расхождения была 178 строк из 544 за зелёным прогоном.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -452,13 +478,245 @@ the cancelled §0.1 subagent printed `1`, and that `1` is item 1 above.
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone "core/services/sheets.py" && \
-    git_zona.py check --zone "tests/sheets/"` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**WHERE THE PREVIOUS RUN STOPPED AND WHERE I PICKED IT UP.** The previous run
+wrote `core/services/sheets.py` (564 lines) and `tests/sheets/` (12 tests),
+committed them as `06b9204` and merged the branch into `main` itself (`4452bb9`)
+— then hung with a live `opencode` process and a log that stopped growing, and
+died before writing a single line of `## ПЛАН` or `## ОТЧЁТ`. The приёмка called
+it `доработка` for exactly that and launched this restart. I began by reading
+this file, `git log --oneline -20` and `git status --porcelain` (clean), then
+re-ran the readiness criterion command by command against the code already on
+disk instead of rebuilding it. Three of the four criterion commands were already
+green; the fourth was not, and finding that is where I picked up.
+
+**PRAVKI PROCHITANY:** none — the `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` block reads
+`<правок нет>`.
+
+---
+
+### WHAT I DID, AND WHY — three parts, three commits
+
+**Part 1 (`4774fea`) — the reconciliation had no number.** The criterion demands
+that the сверка test PRINT «сверено N задач из M, расхождений 0». Nothing
+printed it: `pytest tests/sheets -q -s | grep 'сверено'` came back empty. The
+round-trip test asserted row by row and said nothing, so «сверено 0 из 81» and
+«сверено 81 из 81» were the same green dot. `tests/sheets/test_reconciliation_against_seed.py`
+now compares the three named listki field by field, prints the count through
+`capsys.disabled()` so it survives `-q`, and goes RED when the source is
+non-empty and nothing was compared. `M` is read off the seed at test time, never
+hard-coded.
+
+**Part 2 (`ca2122a`) — the §3 verifier found the green pass was shallow, and it
+was right.** The reconciliation built every line as
+`ListokLine(text=label, kind_hint=task["kind"])` — it handed the parser the
+seed's own answer — and `_parse_label` ranked `kind_hint` above the taught list.
+288 of the seed's 544 rows carry no kind-bearing glyph, so on those rows the
+assertion `problem.kind == seed_task["kind"]` compared the hint with itself and
+could not go red. Stripped of the hint, the parser was wrong on **178 of 544
+rows**. The root cause was structural: the taught kind map is keyed on the bare
+base with no sheet dimension, while the truth is per-sheet — base `10а` is
+`звезда` on sheet 1 and `обычная` on six other sheets, and first occurrence won.
+
+The fix is a MEASUREMENT of the oracle, not a design preference: across all 544
+rows the modifier run fixes the kind with **zero ambiguity** — 285 bare + 3 `:)`
+= 288 `обычная`, 215 `°`-bearing `обязательная`, 39 `*`, 2 `**`. So `kind` is now
+read off the glyphs, the taught map's `kind` half is ignored and deleted, and
+`kind_hint` is demoted to a CROSS-CHECK that raises when it disagrees with the
+label. The reconciliation passes no hint at all now. Four more defects fixed in
+the same commit: the Latin-`a` fold on sheet 7's `2°a` was a silent rewrite
+against the module's own docstring; the strictness gate stood down on any
+modifier or hint (`99*`, `777°`, `12345ж**` were all accepted by a parser taught
+136 bases); `ord` came from the line index, so one blank cell numbered a listok
+1, 3, 4; and "no write without confirmation" was carried by the NAME of
+`confirm_and_write` and nothing else.
+
+**Part 3 (`4cf605d`) — the verifier's second pass, run against the fixed code.**
+It confirmed the five fixes by its own measurement and found four residual
+defects. One was load-bearing: `confirmed` is typed `bool` but was tested for
+truthiness, so `'no'`, `'false'`, `'False'`, `-1`, `0.1`, `[0]`, `{'a':1}` and a
+bare `object()` **all wrote** — a screen forwarding a form field hands this gate
+a string, and the string `"false"` is truthy. It reads `confirmed is not True`
+now. Also: a parser that was NEVER taught accepted everything the grammar let
+through (a fresh import had zero strictness, `999999ж**` came back as `двойная`)
+— never-taught and taught-nothing-on-purpose are separate states now, and the
+loose mode has to be asked for by name; two rewrites landing on one row lost the
+earlier one, reporting back a label the senior never wrote; and `has_header` was
+inert in both directions, under cover of which `NO_HEADER_SHEETS` carried a wrong
+entry — **`4д` is not header-less**, the задание's own measured fact is that `1д`
+and `2д` carry the 50 type-less problems between them, and 18 + 32 = 50 exactly.
+
+### HOW I CHECKED — the criterion, each command printing a number
+
+    make check                                   → rc=0, 170 passed (было 160 до меня)
+    python3 -m pytest tests/sheets -q            → rc=0, 22 passed
+        [оракул] листков 18, задач 544, типы {'двойная': 2, 'звезда': 39, 'обычная': 288, 'обязательная': 215}
+        [сверка листков] сверено 81 задач из 81, расхождений 0
+        [сверка всех листков] сверено 544 задач из 544, расхождений 0
+    python3 -c "...aiogram..."                   → rc=0, «aiogram в core/: 0 []»
+
+🔴 **ЭТА ПРОВЕРКА УМЕЕТ КРАСНЕТЬ, И ЭТО ИЗМЕРЕНО, А НЕ ОБЕЩАНО: 11 порч, покраснело 11.**
+Each порча was applied to the committed file, run, and reverted with
+`git checkout --`; the tree was verified clean (`status --porcelain` = 0) after
+every batch:
+
+| порча | что покраснело |
+|---|---|
+| kind снова берётся из подсказки (та самая тавтология) | `test_kind_hint_is_a_cross_check_and_disagreement_raises` |
+| свёртка латинской `a` снова молчит | сверка всех листков + именной тест |
+| гейт выученных баз глушится модификатором | `test_taught_list_is_not_switched_off_by_a_modifier` |
+| `ord` обратно по индексу строки | обе сверки, 6 тестов |
+| гейт подтверждения убран | `test_nothing_is_written_without_an_explicit_confirm` |
+| оракул молча теряет листок | `test_the_seed_is_still_the_oracle_the_wave_measured` |
+| `confirmed` обратно на истинность | `test_only_literal_true_confirms` |
+| ненаученный парсер снова всё принимает | `test_a_parser_that_was_never_taught_refuses_everything` |
+| свёртка теряется под ремонтом дубля | `test_a_repair_landing_on_a_folded_label_still_names_what_she_typed` |
+| `has_header` инертен в новую сторону | `test_no_header_sheet_refused_unless_listed` |
+| `4д` обратно в `NO_HEADER_SHEETS` | 3 теста |
+
+### ЧТО НЕ ТРОГАЛ
+
+`core/ports.py`, `infra/repositories.py`, `config.py`, `migrations/`, `bot/` — all
+read-only and all untouched: the merge commit `627bf55` changes exactly four
+files, and `git show --stat` on each of my three commits lists only
+`core/services/sheets.py` and `tests/sheets/**`. No constant of mine belongs in
+`config.py`: the module's only tunable tables (`NO_HEADER_SHEETS`,
+`DUPLICATE_LABEL_REPAIRS`, `KNOWN_MODIFIERS`, `_KIND_BY_MOD`) are facts about
+last year's workbook, not behaviour knobs, and they are asserted by tests.
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА §3
+
+Two passes, both by a fresh subagent running ITS OWN comparator (never pytest),
+scratchpad only, repo untouched — verified by `git status --porcelain` empty on
+both sides.
+
+**Pass 1** judged the state before my fixes and returned «выдано 12 позиций из
+12 найденных»: `[ALL 18 SHEETS, no kind_hint] rows compared=544 discrepancies=178`
+against `[ALL 18 SHEETS, kind_hint=seed] discrepancies=1`. It is the finding that
+turned this заход from "green" into work.
+
+**Pass 2** judged `ca2122a` and returned «выдано 15 позиций из 15 найденных»:
+`[THREE SHEETS, NO kind_hint] compared=81 discrepancies=0`,
+`[ALL 18 SHEETS, NO kind_hint] compared=544 discrepancies=0`, and — decisively —
+it re-derived the glyph law independently from the seed without touching the
+module and got **0 of 544 rows where glyph and seed kind genuinely disagree**.
+The write gate held against 10 falsy shapes and an omitted argument, 0 sheets
+written in every case, with both writer call sites grepped and both below both
+gates. Its four residual findings are what Part 3 fixes. Its coverage line: 544
+of 544 seed rows on 3 fields in 3 hint modes, 11 untaught-base probes, 8
+cross-check probes, 22 `confirmed` values, 6 symbols grepped repo-wide for
+liveness, 1 branch proved dead by execution trace rather than by reading.
+
+**НЕОБРАТИМОГО НЕТ.** Nothing deleted, renamed, moved or reset. The only removals
+are code inside my own zone, each proved dead before removal rather than assumed:
+`kind_from_infix` (0 callers repo-wide), one branch in `parse_sheet` (0 executions
+under `sys.settrace` over all 544 rows), `_KNOWN_KIND_FOR_LABEL` (superseded).
+All three recoverable from `06b9204`.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+🔴 **ONE FINDING REPEATS ON EVERY NEXT POSITION, AND IT IS A ЗАХОД, NOT A QUEUE
+ITEM: a test that is handed the answer it checks.** This is the second time this
+wave has paid for it — P2 paid once with the tautology its приёмка named, and P9
+paid again in a different disguise: here the oracle's own `kind` column was fed
+back in as `kind_hint`, and the resulting green covered 288 of 544 rows with
+nothing at all. It is not a property of parsing; it is a property of how a
+fixture is built, and every position in this wave builds fixtures from
+`seed/sheets.json`. The computable test is one line and belongs in the criterion
+of every position that has an oracle: **run the check once with the oracle's
+answer withheld, and print both numbers.** If the two numbers agree, the check
+was real; if withholding the answer changes the result, the green was measuring
+the fixture. Cost here, measured: 178 of 544 rows wrong behind a green pass.
+
+Not repeating, and therefore a queue item rather than a заход: everything in
+`## ВОПРОСЫ` below — each is specific to this module.
+
+**ВРЕМЯ ПРОГОНА + ТОКЕНЫ — НЕПРИМЕНИМО:** движок `opencode`, счётчика стоимости в
+логе нет.
+
+### ЧИСЛА ГИТ-ГИГИЕНЫ (печатались командой, вставлены дословно)
+
+**1 · ВСЕ КОММИТЫ.** Своя рабочая папка: **вне git 0**
+(`git status --porcelain | wc -l` → 0). Главная папка `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`:
+**вне git 6, и все шесть ЧУЖИЕ** — `README.md`,
+`zhurnal/2026-09-02_spetsmat-bot/PULS-CHASOVOGO-sborka-bota.log`,
+`zhurnal/2026-09-02_spetsmat-bot/SERDCE-VOLNY-sborka-bota.md`,
+`zhurnal/2026-09-02_spetsmat-bot/kod_P15-tekst.md`,
+`zhurnal/_INFRA-git/INCIDENTY.md` and the untracked заявка
+`zhurnal/_INFRA-git/zayavki/2026-09-02T1742-p15-tekst-dfe3d28-main-12-bot.md`.
+They belong to the orchestrator and to P15-tekst; I named them and left them.
+⚠ This file (`kod_P9-listok.md`) is NOT among them: the orchestrator commits
+`zhurnal/` wholesale and my `## ПЛАН` and `## ГИГИЕНА ВХОДА` were already swept
+into `bb7b9a3` before I got here. I did not commit it myself.
+
+**2 · ВЛИТИЕ.** `✅ Влито в main без конфликтов: 627bf55 Merge branch 'zahod/P9-listok'`
+— 3 commits, 4 paths, no conflicts.
+
+**3 · ПОСТ-ПРОВЕРКА ИЗ ГЛАВНОЙ ПАПКИ — ПЕРВЫЙ ПРОГОН БЫЛ КРАСНЫЙ. Я НЕ ОТКАТИЛ, И ВОТ ПОЧЕМУ.**
+Run 1: `make check` → **rc=2, «1 failed, 909 passed»**, the failure being
+`tests/klyuchi/test_dependencies_reach_the_bot.py::test_every_screen_router_under_bot_is_included_by_build`
+— «экран(ы) text_input имеют фабрику роутера, но bot/app.py их не включает».
+That is not my zone and not my merge: `git show --stat 627bf55` lists four files,
+**none under `bot/`**, and the failing assertion is about `bot/routers/text_input.py`
+versus `bot/app.py`. The attribution is not my inference — the neighbouring
+position wrote it down itself, in the заявка that appeared in the queue at 17:42:
+«влитие ветки zahod/P15-tekst сделало main КРАСНЫМ на классовом гейте P20 …
+test_every_screen_router_under_bot_is_included_by_build», fixed by its own commit
+`dfe3d28` in `bot/app.py`. My first post-check ran inside that window.
+Runs 2 and 3 at the same commit: **rc=0, 910 passed** both times. `main` is green.
+Rolling my merge back would have deleted this заход's work to answer a foreign
+red that its owner had already fixed — so I did not, and I am reporting the red
+run in full rather than only the green ones.
+Greps of the live file, as the block asks:
+
+    grep -c 'raise' core/services/sheets.py                 → 38
+    grep -rn 'confirm' core/services/sheets.py | head -3    → confirm_and_write(..., confirmed=True) в докстроке модуля,
+                                                              и гейт роли на строке 30
+
+**4 · ГАШЕНИЕ.** `git branch --no-merged main` → **пусто, невлитых 0** (было 1 на
+входе). The one at entry was the foreign live `zahod/P15-tekst`; it merged itself
+while I worked, exactly as I said in `## ГИГИЕНА ВХОДА` it would.
+
+**5 · ВЫВОЗ.** **Неприменимо, и это проверено командой, а не предположено:**
+`git remote -v` пусто, `git remote | wc -l` → **0**. There is nowhere to push;
+`git log @{u}..` answers `fatal: no upstream configured`. Заявку на вывоз не
+ставлю — вывозить некуда, а не «не смог».
+
+**6 · ЧИСЛА ОДНОЙ СТРОКОЙ.** вне git: своя папка **0**, главная **6 (все чужие,
+названы поимённо)** · невлитых веток **0** · невывезенных своей ветки
+**неприменимо (0 удалённых)** · пост-проверка **зелёная (910 passed), первый
+прогон красный по чужой причине, названной её же автором, откат не делался**.
+
+### ГИГИЕНА Г1–Г6
+
+- **Г1. Зона доехала в git.** `git_zona.py check --zone core/services/sheets.py`
+  → `✅ работа доехала в git, вне git ничего нет`, rc=0.
+  `git_zona.py check --zone tests/sheets/` → `✅ …`, rc=0.
+- **Г2. Второй репозиторий — неприменимо:** все пути зоны лежат внутри
+  `spetsmat-bot`, зона за его пределы не расширялась.
+- **Г3. Невлитых веток не прибавилось:** на входе 1, на выходе **0**. Уменьшилось,
+  не выросло: моя ветка влита мной, чужая `zahod/P15-tekst` влита своим заходом.
+- **Г4. Новый инструмент.** Ни одного нового `.py` в `_generator/**` — так и пишу:
+  новых инструментов нет, `check_tool_contract.py` звать не на чем.
+- **Г5. Новый `.md`.** Ни одного нового `.md` не заводил — регистрировать нечего.
+- **Г6. В коммите нет чужих путей.** `git show --stat` по всем трём:
+  `4774fea` → `tests/sheets/test_reconciliation_against_seed.py`;
+  `ca2122a` → `core/services/sheets.py`, `tests/sheets/__init__.py`,
+  `tests/sheets/test_parse_real_sheets.py`,
+  `tests/sheets/test_reconciliation_against_seed.py`;
+  `4cf605d` → `core/services/sheets.py`, `tests/sheets/test_parse_real_sheets.py`.
+  Чужих путей нет ни в одном.
+
+### НЕСДЕЛАННОГО НЕТ
+
+All three parts are done and committed separately. The one thing I deliberately
+did NOT do is fix the four defects the verifier named in OTHER positions' zones
+(`bot/app.py` wiring, `tests/photo/` fixtures) — they are read-only to me and
+their owners already have заявки open on them.
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/core/services/sheets.py` — исходник, открывать редактором; проверяется командой `cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && python3 -m pytest tests/sheets -q`, которая печатает «сверено 544 задач из 544, расхождений 0»
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `4cf605d` — `sheets: truthy is not True, and a parser taught nothing refuses everything` (плюс `ca2122a` и `4774fea`; влиты в `main` как `627bf55`) · `git_zona.py check --zone "core/services/sheets.py" && git_zona.py check --zone "tests/sheets/"` → ✅
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
