@@ -244,3 +244,60 @@ def test_imena_expansion_offers_every_reading_of_an_ambiguous_short_name():
 def test_imena_expansion_of_a_name_the_table_does_not_know_is_a_no_op():
     """A name with no entry produces the phrase and nothing else -- no invented forms."""
     assert tekst.expand_diminutives("Нино Кахиани") == ["Нино Кахиани"]
+
+
+# =============================================================================
+#  ONE WORD IS HALF THE EVIDENCE -- found by the §3 verifier, after the module was written
+# =============================================================================
+
+def test_imena_a_lone_surname_of_a_stranger_asks_instead_of_picking(students):
+    """«Чебышёв» written alone used to become Чапышев at 71: CERTAIN, and the wrong child.
+
+    Red when written.  The module's own comment claimed the sum-of-both-halves rule refused
+    these three, and it does — but only when both halves are written.  All three of the
+    strangers it named are ONE word, and one word cannot be added to anything, so the claim
+    covered exactly the cases it was measured on and none of the cases it was written for.
+
+    A refusal is not a failure here: the row draws buttons and a tap costs a second.
+    """
+    for stranger, wrongly in (("Чебышёв", "Чапышев"), ("Манин", "Исанин"),
+                              ("Лобачевский", "Николаева")):
+        match = tekst.match_student(stranger, students)
+        assert match.student_id is None, (
+            "«%s» was accepted as %s on one word" % (stranger, wrongly)
+        )
+        assert match.verdict is Verdict.UNKNOWN
+        assert match.alternatives, "a refusal must still offer buttons"
+
+
+def test_imena_a_lone_surname_of_a_real_child_still_resolves(students):
+    """The floor must not cost the owner his own four names written short.
+
+    Measured over both groups and not over the tidy one.  The owner's own spellings score
+    88.9 («Долкирева», his `к` for `г`) to 100; eight strangers score 42.9 to 72.7.  The
+    floor stands in the middle of that sixteen-point gap.
+
+    ⚠ This case is why the list below includes «Долкирева» as well as «Долгирева».  A
+    first floor was placed at 90 on the strength of the correctly-spelled surnames alone,
+    and the owner's own misspelling — the entire reason this position exists — fell
+    straight through it.
+    """
+    for lone, expected in (("Санин", 23), ("Быков", 11), ("Бочарова", 9),
+                           ("Долгирева", 18), ("Долкирева", 18)):
+        match = tekst.match_student(lone, students)
+        assert match.student_id == expected, (lone, match.reason)
+        assert match.verdict is Verdict.CERTAIN
+
+
+def test_imena_the_floor_applies_to_one_word_and_not_to_two(students):
+    """It is a statement about how much evidence there is, not about how close is close.
+
+    «Пафнутий Чебышёв» is refused by the ordinary threshold on the summed score, and
+    «Лёня Санин» is accepted at 95 — neither of them goes anywhere near the floor.  If the
+    floor were applied to two-word input it would start refusing the owner's own lines.
+    """
+    assert tekst.LONE_WORD_FLOOR > 0
+    assert tekst.match_student("Пафнутий Чебышёв", students).student_id is None
+    two_words = tekst.match_student("Лёня Санин", students)
+    assert two_words.student_id == 23
+    assert two_words.score < 100, "the score is a real measurement, not a constant"

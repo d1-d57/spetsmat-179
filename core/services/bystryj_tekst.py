@@ -199,11 +199,40 @@ def expand_diminutives(phrase: str) -> list:
 # real children with no doubt shown -- «Чебышёв» became Чапышев at 71, «Лобачевский» became
 # Николаева at 82, «Манин» became Исанин at 73.  Each of those is a plus landing on a child
 # who did not earn it, and the child it went missing from is the only person who would ever
-# notice.  Adding the two halves instead of maximising them refuses all three, because a
+# notice.  Adding the two halves refuses all three WHEN BOTH ARE WRITTEN, because a
 # stranger matches one field by accident and never both.
 #
-# The THRESHOLD and the MARGIN are still P8's constants, imported and not re-chosen: what
-# changes is the score handed to them, not how close is close enough.
+# ⚠ AND THAT LAST CLAUSE IS THE WHOLE OF THE PROTECTION -- a sentence this comment used to
+# leave out, which is how the hole below survived its own measurement.  The three numbers
+# above were produced by ONE-WORD input, and one word cannot be added to anything.  Written
+# alone, «Чебышёв» still scored 71 against Чапышев with the runner-up at 50: over the
+# threshold, clear of the margin, CERTAIN, wrong child.  Neither the threshold nor the
+# margin can catch it -- it is not a close call, it is half the evidence being judged by a
+# whole-evidence rule.  ``LONE_WORD_FLOOR`` below is the answer, and it is a statement about
+# HOW MUCH EVIDENCE THERE IS rather than a re-opening of «how close is close enough»: the
+# THRESHOLD and the MARGIN are still P8's constants, imported and not re-chosen.
+#
+# The owner writes both halves every time (§1 rule 5 and the whole of §2), so the floor
+# costs his own format nothing: «Санин» alone still resolves at 91, «Быков» at 100, and
+# «Лёня» at 100 through the dictionary, and «Долкирева» -- his own misspelling -- at 89.
+
+#: What a name written as ONE word must score before it may name a child on its own.
+#: Eighty, and the number is MEASURED against the real 56-child roster rather than chosen:
+#:
+#:   * the owner's own four surnames, spelled the way HE spells them -- Санин 90.9,
+#:     Долкирева 88.9 (his `к` for `г`), Бочарова 100, Быков 100;
+#:   * eight strangers who are not in this school -- Чебышёв 71.4, Манин 72.7,
+#:     Лобачевский 63.6, Колмогоров 62.5, Пуанкаре 58.8, Пафнутий 55.6, Эйлер 54.5,
+#:     Гильберт 42.9.
+#:
+#: The two groups are separated by sixteen points with nothing in between, and the floor
+#: stands in the middle of that gap rather than on either edge.  ⚠ A first attempt put it
+#: at 90 «because the true ones score 91 and 100» -- and «Долкирева» at 88.9 fell through
+#: it.  The owner's own misspelling is the case this whole position exists for, so the
+#: measurement has to include the way he actually writes, not the way the roster does.
+#: ⚠ Below the floor a lone word does not FAIL -- it draws buttons, and a tap costs one
+#: second.
+LONE_WORD_FLOOR = 80.0
 
 
 def _surname_score(token: str, student) -> float:
@@ -246,8 +275,9 @@ def score_student(said: str, student) -> float:
     are the same child written by two people -- and any further words (a patronymic, a
     stray) are ignored rather than allowed to drag the average down.
 
-    One word: P8's rule unchanged, the better of the two fields.  A teacher who writes only
-    «Быков» has given one piece of evidence and must be judged on one.
+    One word: the better of the two fields, as P8 does -- but ``match_student`` then holds
+    it to ``LONE_WORD_FLOOR`` rather than to the ordinary threshold, because one word is
+    half the evidence and the ordinary threshold was chosen for both halves.
     """
     words = [word for word in re.split(r"\s+", (said or "").strip()) if word]
     if not words:
@@ -289,11 +319,17 @@ def match_student(said: str, students: Sequence):
     best = scored[0]
     alternatives = [candidate.student_id for candidate in scored[: golos.MAX_ALTERNATIVES]]
 
-    if best.score < golos.FUZZY_THRESHOLD:
+    # One word written is half the evidence, so it is held to a higher bar.  See
+    # ``LONE_WORD_FLOOR``: without it «Чебышёв» typed alone becomes Чапышев at 71 --
+    # over the threshold, clear of the margin, and wrong.
+    lone_word = len(re.split(r"\s+", said.strip())) == 1
+    floor = max(golos.FUZZY_THRESHOLD, LONE_WORD_FLOOR) if lone_word else golos.FUZZY_THRESHOLD
+
+    if best.score < floor:
         return golos.SurnameMatch(
             None, Verdict.UNKNOWN, best.score, alternatives,
-            "лучшее совпадение %.0f ниже порога %.0f"
-            % (best.score, golos.FUZZY_THRESHOLD),
+            "лучшее совпадение %.0f ниже порога %.0f%s"
+            % (best.score, floor, " (написано одно слово)" if lone_word else ""),
         )
 
     runner_up = scored[1].score if len(scored) > 1 else 0.0
@@ -405,11 +441,79 @@ def _opens_a_block(line: str) -> bool:
     return bool(tokens) and _classify_token(tokens[0]) == "name"
 
 
+#: One token: a bracket group taken whole, or a run of non-space.  The bracket comes
+#: FIRST in the alternation so that `[3д]` is one atomic thing and never mistaken for a
+#: word -- it is neither a name nor a label, and the splitter below must not cut on it.
+_TOKEN = re.compile(r"\[[^\[\]]*\]|\S+")
+
+#: The shortest word that may END one child's record and begin the next one.  Three, and
+#: the number is not a guess: no Russian given name or surname is shorter, while «и»,
+#: «а», «но» and «да» all are.  Without the floor, «Петров 3, 5 и 7» would cut at the
+#: conjunction and hand задача 7 to a child called «и».
+_NAME_MIN = 3
+
+
+def _cuts_a_block(token: str, value_seen: bool) -> bool:
+    """Does this token END the record being read and OPEN the next child's?
+
+    §1 rule 1 states the boundary once and it is positional: «блок кончается там, где
+    начинается следующее ИМЯ».  The rule is about NAMES, not about newlines -- so it has
+    to hold inside a line as well as across lines, and this is the half that does.
+
+    🔴 THE PRICE OF NOT HAVING THIS, measured on the owner's own strings before it existed:
+    «Лёня Санин 7, 9а Катя Долкирева 2а, 2б» came back as ONE row -- Исанин, carrying all
+    four labels, with `2а` and `2б` PRE-TICKED, and Долгирева absent from the table
+    altogether.  Nothing on the screen said a word had been dropped.  That is precisely
+    the failure the задание forbids by name: «плюс, поставленный чужому ребёнку», and
+    «заметит её только тот, у кого он пропал».
+    """
+    return (
+        value_seen
+        and _classify_token(token) == "name"
+        and not token.startswith("[")
+        and len(token.strip(_TRIM)) >= _NAME_MIN
+    )
+
+
+def _split_at_names(text: str) -> list:
+    """One line's worth of text -> one string per student written on it.
+
+    Cutting rather than dropping, and that choice is the whole point.  A word after the
+    labels is either the next child or noise; treating it as noise silently moves that
+    child's marks onto the child above, while treating it as a name at worst produces a
+    row the teacher SEES and answers with a tap.  The задание settles the trade in one
+    line -- «при сомнении — КНОПКИ, а не догадка» -- and the two errors are not
+    symmetric: a spurious «кто это?» costs one tap, a swallowed name costs a plus on the
+    wrong child that only the child who lost it will ever notice.
+    """
+    segments: list = []
+    current: list = []
+    value_seen = False
+
+    for token in _TOKEN.findall(text):
+        if _cuts_a_block(token, value_seen):
+            segments.append(current)
+            current = []
+            value_seen = False
+        current.append(token)
+        if _classify_token(token) in ("label", "dash") and not token.startswith("["):
+            value_seen = True
+
+    if current:
+        segments.append(current)
+    return [" ".join(segment) for segment in segments if segment]
+
+
 def split_blocks(text: str) -> list:
     """A typed message -> one ``TextBlock`` per student.  No catalogue, no database.
 
     Blank lines and horizontal rules separate but do not terminate: a rule between two
     children is the paper's own divider and carries nothing this parser needs.
+
+    TWO boundaries, and both are the same rule seen from different sides.  Across lines: a
+    line opens a block iff it starts with a name, so a record that wraps stays one child.
+    Inside a line: a name that follows a label opens the next block, so two children typed
+    on one line stay two.  Neither half is enough on its own.
     """
     chunks: list = []
     for raw_line in (text or "").splitlines():
@@ -420,7 +524,12 @@ def split_blocks(text: str) -> list:
             chunks.append([line])
         else:
             chunks[-1].append(line)
-    return [_parse_block(" ".join(chunk)) for chunk in chunks if chunk]
+
+    return [
+        _parse_block(segment)
+        for chunk in chunks
+        for segment in _split_at_names(" ".join(chunk))
+    ]
 
 
 def _parse_block(text: str) -> TextBlock:
@@ -447,10 +556,10 @@ def _parse_block(text: str) -> TextBlock:
         elif kind == "dash":
             dashes += 1
         elif not labels and dashes == 0:
-            # A word BEFORE the first label is part of the name.  A word after it is not:
-            # the block is over as far as this line is concerned, and the next name opens
-            # its own block anyway -- so a stray word here is dropped rather than glued
-            # onto a name it does not belong to.
+            # A word BEFORE the first label is part of the name.  A word after it reaches
+            # here only when ``_split_at_names`` declined to cut on it -- i.e. it is
+            # shorter than any real name -- so it is a conjunction or a stray, and gluing
+            # it onto the name would corrupt the very thing being matched.
             name_words.append(token.strip(_TRIM))
 
     return TextBlock(

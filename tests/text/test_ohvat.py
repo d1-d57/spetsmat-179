@@ -323,3 +323,87 @@ def test_an_empty_message_produces_no_rows_rather_than_one_empty_one(students, c
     and a «Записать (0)» button is an invitation to press it."""
     for nothing in ("", "   ", "\n\n", "---"):
         assert rows_of(nothing, students, catalogue) == [], nothing
+
+
+# =============================================================================
+#  THE BOUNDARY INSIDE A LINE -- found by the §3 verifier, after the parser was written
+# =============================================================================
+#
+# These are REGRESSION tests in the strict sense: every one of them was red when it was
+# written.  The parser implemented §1 rule 1 across lines only; inside a line a name that
+# followed a label was DROPPED, and the child it belonged to disappeared while their marks
+# stayed behind on the child above.  The отчёт carries the numbers.
+
+def test_two_children_on_one_line_are_two_children(students, catalogue):
+    """The defect, exactly as the verifier found it, as its own named test.
+
+    «Лёня Санин 7, 9а Катя Долкирева 2а, 2б» used to come back as ONE row: Исанин, holding
+    all four labels, with `2а` and `2б` pre-ticked — and Долгирева nowhere on the screen.
+    That is «плюс, поставленный чужому ребёнку», the one error the задание forbids by name,
+    and it was invisible: the table showed a resolved child and four tidy buttons.
+    """
+    rows = rows_of("Лёня Санин 7, 9а Катя Долкирева 2а, 2б", students, catalogue)
+
+    assert [row.student_id for row in rows] == [23, 18]
+    assert [cell.label for cell in rows[0].cells] == ["7", "9а"]
+    assert [cell.label for cell in rows[1].cells] == ["2а", "2б"]
+
+
+def test_a_whole_evening_typed_on_one_line_still_separates(students, catalogue):
+    """The same message as the owner's four lines, pasted with the newlines lost.
+
+    Copying out of a note, out of a chat, off a phone — the newlines are the first thing to
+    go, and the format must not depend on them for its most important boundary.
+    """
+    rows = rows_of(" ".join(line for line, _, _, _ in OWNER_LINES), students, catalogue)
+
+    assert [row.student_id for row in rows] == [
+        student_id for _, student_id, _, _ in OWNER_LINES
+    ]
+    assert rows[2].sheet_marker == "3д"
+    assert all(row.sheet_marker is None for row in rows if row.student_id != 9), (
+        "the bracket of one block leaked onto another when the line was not broken"
+    )
+    assert rows[3].present_no_marks is True, "the явка was lost when the newlines were"
+
+
+@pytest.mark.parametrize("separator", ["; ", ", ", " · ", " "])
+def test_the_everyday_separators_a_teacher_types_all_divide(separator, students, catalogue):
+    """Semicolon, comma, dot, plain space — a teacher divides children however they like.
+
+    None of these can be the rule, and that is the point: the boundary is the NAME, so it
+    holds whatever punctuation happens to be around it.
+    """
+    text = separator.join(["Санин 7, 9а", "Долкирева 2а, 2б", "Бочарова 5"])
+    rows = rows_of(text, students, catalogue)
+
+    assert [row.student_id for row in rows] == [23, 18, 9]
+    assert [len(row.cells) for row in rows] == [2, 2, 1]
+
+
+def test_a_conjunction_after_the_labels_does_not_become_a_child(students, catalogue):
+    """«Долгирева 2а, 2б и 4» — «и» is not a name, and задача 4 stays with Долгирева.
+
+    The floor that decides this is a LENGTH: no Russian given name or surname is under
+    three letters, and «и», «а», «но», «да» all are.  Without it the cut that fixes the
+    test above would hand задача 4 to a child called «и» — a fix that swapped one silent
+    loss for another.
+    """
+    rows = rows_of("Долгирева 2а, 2б и 4", students, catalogue)
+
+    assert len(rows) == 1, [row.said for row in rows]
+    assert rows[0].student_id == 18
+    assert [cell.label for cell in rows[0].cells] == ["2а", "2б", "4"]
+
+
+def test_a_bracket_is_never_mistaken_for_the_next_childs_name(students, catalogue):
+    """`[3д]` stands between a name and its labels and must not cut the block in two.
+
+    It is neither a name nor a label, and a splitter that read it as a word would break
+    every line the owner writes a sheet marker on — which is every line about a доплисток.
+    """
+    rows = rows_of("Аня Бочарова [3д] 5, 12 Влад Быков —", students, catalogue)
+
+    assert [row.student_id for row in rows] == [9, 11]
+    assert rows[0].sheet_marker == "3д"
+    assert rows[1].present_no_marks is True
