@@ -688,6 +688,13 @@ class DraftRow:
     score: float = 0.0
     #: Student ids the model could not choose between.  The bot draws one button each.
     alternatives: tuple = ()
+    #: 🔴 THE CELLS THE FORM SAYS WERE TAKEN BACK -- «Снято — прочерк» in the legend the
+    #: owner printed.  A SEPARATE tuple, and never merged into ``solved``: a dash and a
+    #: tick are different facts, the journal counts them differently
+    #: (``CellState.RETRACTED`` is not credited and is not a debt), and merging them was
+    #: the defect this field exists to close.  Empty on every answer that carries no
+    #: dash, which is most of them.
+    retracted: tuple = ()
 
     @property
     def needs_a_human(self) -> bool:
@@ -706,6 +713,11 @@ def rows_from_answer(answer, known_student_ids) -> tuple:
       * a row the model would not commit to, carrying ``alternatives`` -> ``UNKNOWN``
         with the candidates, drawn as one button each.
 
+    🔴 AND THE THIRD STATE OF A CELL TRAVELS BESIDE THE FIRST.  ``solved`` and
+    ``retracted`` are two tuples on the same row and are never added together here: the
+    form's legend names three states, the journal has counted three for a year, and the
+    one place they were collapsed into two was the schema this function reads.
+
     Nothing here writes anything.  The whole table goes to a human first.
     """
     known = set(known_student_ids)
@@ -721,11 +733,15 @@ def rows_from_answer(answer, known_student_ids) -> tuple:
             if candidate in known
         )
         solved = tuple(row.get("solved") or ())
+        # The dash rides in its own tuple the whole way.  Read with ``.get`` and defaulted
+        # to empty rather than required, because every answer built before the schema grew
+        # this field -- a stored draft, a fixture, an older test -- must still parse.
+        retracted = tuple(row.get("retracted") or ())
 
         if student_id is None or student_id not in known:
             rows.append(
                 DraftRow(code=code, student_id=None, solved=solved, state=UNKNOWN,
-                         score=0.0, alternatives=alternatives)
+                         score=0.0, alternatives=alternatives, retracted=retracted)
             )
             continue
 
@@ -736,6 +752,6 @@ def rows_from_answer(answer, known_student_ids) -> tuple:
             state = "confident"
         rows.append(
             DraftRow(code=code, student_id=student_id, solved=solved, state=state,
-                     score=score, alternatives=alternatives)
+                     score=score, alternatives=alternatives, retracted=retracted)
         )
     return tuple(rows)

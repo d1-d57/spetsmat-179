@@ -301,6 +301,81 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Measurement first, both defects reproduced on this machine before a line was changed.**
+
+DEFECT 2 REPRODUCED, exact numbers (`tools/blank.py --out scratchpad/R1-foto/b.png`, then
+`prepare()`):
+
+    steps: exif:already-upright · resize:INTER_AREA(1654x2339->1109x1568)
+           · crop:bounding-rect(956x560) · perspective:skipped-rectangular(skew=0.004) · jpeg:q90
+    quad found     : (149,77) (1103,79) (1104,636) (150,636)
+    code column ink: x 52..104   -> LEFT of the crop's x=149.  CUT.
+    header labels  : y 58..73    -> ABOVE the crop's y=77.     CUT.
+    legend line    : y 652       -> BELOW the crop's y=637.    CUT.
+
+So the quadrilateral the detector calls «the sheet» is the ruled grid itself, and every
+string that identifies a row or a column stands outside it.  The model is handed a bare
+grid.
+
+**PART 1 — «СНЯТО» (first, it is the dangerous one).**
+1. `infra/llm.py` `build_schema`: a `retracted` array beside `solved`, same closed list of
+   labels.  Today the dash has nowhere to go but `solved`.
+2. `infra/llm.py` `build_prompt`: the three states quoted verbatim from the legend the
+   owner printed on the form — «Сдал — крестик в клетке. Снято — прочерк. Пусто — не
+   сдавал.» — plus which field each one lands in.
+3. `infra/llm.py` `parse_answer`: `retracted` validated against the closed list exactly as
+   `solved` is, strays reported and not dropped.
+4. `core/services/raspoznavanie.py` `rows_from_answer`/`DraftRow`: `retracted` carried
+   through as its own tuple, never merged into `solved`.
+
+**PART 2 — CROP.**  Of the two options the задание offers I take the second — grow the
+found rectangle — because it is the one the measurement supports: the codes and the header
+stand at a FIXED distance outside the ruled lines (`tools/blank.py`: `CODE_W`, `top - 34`),
+so a margin recovers them whatever the label count.
+
+🔴 THE 6–8 % BAND IS MEASURED AGAINST THE FRAME'S LONG SIDE, NOT AGAINST THE FOUND
+RECTANGLE, and that is a decision the measurement forces rather than a preference:
+
+    needed on the left  : 97 px = 10,1 % of the found rect's width (956)  -> 8 % FAILS
+                               =  6,2 % of the frame's long side  (1568) -> 8 % holds
+    needed above        : 19 px =  3,4 % / 1,2 %
+    needed below        : 33 px =  5,9 % / 2,1 %
+
+A fraction of the found rectangle is also fragile in the direction that matters: the same
+code column beside a ten-task sheet would need 23 % rather than 10 %, because the rectangle
+shrinks while the code column does not.  A fraction of the frame does not move with the
+label count.  `SHEET_MARGIN = 0.08`, applied to all four sides and clamped to the frame.
+
+The same growth is applied in the perspective branch as well as in the bounding-rect
+branch: it is one defect (text outside the quadrilateral), and the perspective branch is
+the one a real hand-held photograph reaches.
+
+**GATES THAT MUST BE ABLE TO GO RED** — both shown by output, not by word:
+`tests/photo/test_snyato.py` (dies without `retracted`), `tests/photo/test_polya.py`
+(dies without the margin), on a form built by the real `tools/blank.py`.
+
+**LIVE RUN.**  `prepare()` + `read_sheet()` against `LLM_API_KEY`/`LLM_MODEL`, on a form
+carrying ticks and at least one dash that I drew and therefore know.
+
+### 🔴 ОСПАРИВАЮ ОДНО МЕСТО ЗАДАНИЯ — ДО РАБОТЫ, КАК ВЕЛИТ §1
+
+Part 1 says «конвейер обязан довести «снято» до отдельного состояния клетки, а не свести
+его к «не сдавал»».  The only place a cell of the draft is built is `build_draft` in
+`bot/routers/photo.py`, and that file is **not in the zone** — the КОНТРАКТ ЗОНЫ names
+`core/services/raspoznavanie.py`, `infra/llm.py`, `tests/photo/` and this file, and says
+everything else is READ-ONLY, «нашёл проблему вне зоны → в отчёт, не трогай».  Two
+instructions in one document disagree; I obey the zone contract, because it is the more
+specific one, it is marked «обязателен — не удалять», and because a parallel заход of this
+wave may hold that file.
+
+WHAT THAT COSTS, STATED HONESTLY RATHER THAN DISCOVERED BY THE ПРИЁМКА: after this заход a
+dash stops arriving as a hand-in (the dangerous half is closed inside the zone), but it
+stops arriving at all — the cell falls back to `EMPTY`, which is «не сдавал», the very
+outcome the задание calls insufficient.  The last leg is four lines in `build_draft` and
+one in `finish`; I write them out verbatim in `## ВОПРОСЫ` as a queue item, the way P7
+handed over the two lines of `bot/app.build` it could not write either.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
