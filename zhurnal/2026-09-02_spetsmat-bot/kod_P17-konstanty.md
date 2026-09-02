@@ -326,6 +326,47 @@ grep -rn 'OWNER_TG_ID\|DEEP_LINK' config.py | head -3   # константы р�
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### The заход's own copy-paste merge command is rejected by the tool the заход names
+`## WARNING` step 2 ships `git_zona.py vlit-v-osnovnuyu ... --zone "./config.py"`. The tool
+answers `⛔ Слияние выходит за зоны (./config.py, bot/config_local.py) — не сливаю НИЧЕГО`
+and lists `config.py` as the offender: it compares zone strings literally, and `./config.py`
+never equals `config.py`. The SAME tool's `check --zone "./config.py"` accepts the `./` form
+and prints ✅, so the two subcommands of one tool disagree about one path spelling — and
+`## ОТЧЁТ`'s own КОММИТ line is generated with the `./` form too.
+ЦЕНА: one refused merge on the last move of the заход, when the working folder is already
+being torn down and a merge is the one step that cannot be postponed. Worse than the retry:
+the refusal printed `rc=0` next to the ⛔, which is exactly the failure §1 was written
+against — an executor that reads the return code first, as ordered, concludes the merge
+succeeded and reports a merged branch that is not merged. The command is machine-generated
+into every заход of the wave, so it misfires identically everywhere.
+
+### `timeout` does not exist on this machine, and the criterion's proof of life depends on it
+The готовности criterion's central step is `timeout 25 python3 -m bot` with `rc=124` declared
+to be success. `which timeout gtimeout` → both not found (macOS ships neither; `gtimeout`
+needs coreutils from Homebrew). Run as written the step yields `rc=127 command not found`.
+ЦЕНА: the one step that proves the bot ACTUALLY RISES — the entire point of this position
+after it stopped being cosmetic — is unrunnable as written. `rc=127` is neither the declared
+success `124` nor the declared failure `2`, so an executor following the text literally has
+no branch to take and would most plausibly record the position as failed while the bot works.
+I substituted `perl -e 'alarm 25; exec @ARGV' -- python3 -m bot` (rc=142 = SIGALRM = the same
+"was alive, killed by the clock"). Every criterion in this factory that proves liveness by
+`timeout` has the same hole on this owner's machine.
+
+### The criterion's test count belongs to the main folder, not to the worktree it is run in
+The criterion says «`N passed` РОВНО ТАКОЕ ЖЕ, как до тебя (486)» and orders it run from
+`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/P17-konstanty`. In that worktree the
+baseline is `300 passed`; `486 passed` is what the MAIN folder gives, because the worktree
+branched from snapshot `6e4e3fa` and the 186 newer tests of the neighbouring positions are
+not in it.
+ЦЕНА: a number that fails by 186 on the untouched tree, in the one check whose whole purpose
+is "the same as before you". I recorded the mismatch in `## ПЛАН` before working and it cost
+me a round to resolve; an executor who trusts the number instead has two wrong moves in front
+of it — hunt for 186 lost tests it never had, or start pulling in neighbours' commits to
+reach 486, which is foreign work by definition. The number was true when the analyst measured
+it and became false the moment the worktree was cut from an older snapshot, so it will lie in
+every заход whose worktree branches off anything but current `main`.
+
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -333,6 +374,44 @@ grep -rn 'OWNER_TG_ID\|DEEP_LINK' config.py | head -3   # константы р�
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
 ## ПЛАН — (заполняет исполнитель)
+
+**Measured before touching anything (baseline, not assumed):**
+- `make check` -> rc=0, `300 passed in 37.94s`. **The готовности criterion says 486; the
+  real number in this worktree is 300.** I do not chase 486 -- the rule that can actually
+  fail is "the same as before you", and before me it is 300. Named here before the work,
+  as §1 requires, not explained away afterwards.
+- `python3 -m bot` -> rc=2, `BOT_TOKEN is empty.  Set the environment variable and try
+  again.` -- the blocker is confirmed live.
+- `timeout` and `gtimeout` do not exist on this machine (`which` -> not found). The
+  criterion's `timeout 25 python3 -m bot` is unrunnable as written; I substitute
+  `perl -e 'alarm 25; exec @ARGV' -- python3 -m bot`, where **rc=142 (SIGALRM) is the
+  exact analogue of the criterion's rc=124**: the bot stayed up for 25s and was killed by
+  the clock. Substitution named here in advance, not silently.
+- `bot/config_local.py` holds **six** constants, not the four the task text names:
+  `BOT_TOKEN`, `OWNER_TG_ID`, `DEEPLINK_CODE_STUDENT`, `DEEPLINK_CODE_TEACHER`, `ROOMS`,
+  `NAME_MAX_LEN`. The §3 verifier demands "all constants of bot/config_local.py, moved
+  100%, left 0", so I move all six. Nothing is renamed.
+
+**Parts, in order, each its own commit:**
+
+1. **config.py gets the constants.** Explanatory comments carried over verbatim in
+   meaning. `BOT_TOKEN = os.environ.get("BOT_TOKEN", "")` and
+   `OWNER_TG_ID = int(os.environ.get("OWNER_ID", "") or 0)` -- name of the env var and an
+   empty default only, never a value. This commit alone changes no behaviour:
+   `config_local.py` still holds its own copies, so the tree stays green between commits.
+2. **bot/config_local.py becomes a thin re-export** (`from config import ...` + `__all__`),
+   docstring saying in one line that it is kept for backwards compatibility and is deleted
+   together with the edit of its call sites. This is the commit that makes the home single
+   and, through it, makes the bot able to read the token from the environment -- the five
+   call sites (`bot/__main__.py`, `bot/app.py`, `bot/middleware.py`,
+   `bot/handlers/owner.py`, `bot/handlers/registration.py`) are untouched and keep working
+   because they read attributes of the module.
+3. **Proof of rise:** `make check` still 300 passed, the bot actually starts under the
+   real token from `secrets/bot.env`, the constant count in `config.py` grew by exactly
+   six, `secrets/` is git-ignored, no secret literal anywhere in `config.py` or `bot/`.
+
+**Not touched:** `bot/app.py`, routers, `core/`, `infra/`, `migrations/`, tests. No logic
+refactor, no renames, no new constants, `bot/config_local.py` not deleted.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
@@ -368,10 +447,39 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 **ЧТО СДЕЛАНО** *(с хэшами)*
 <влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**СНИМОК ВХОДА, РЕАЛЬНО СНЯТЫЙ** *(§0.1 отменён оркестратором; исполнена одна назначенная взамен команда, её вывод дословно)*
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+```
+Остальные три команды снимка (`status --porcelain`, `log @{u}..`, `zayavki`) на входе НЕ
+снимались: весь блок §0.1 отменён, взамен назначена ровно одна команда выше. Пишу это прямо,
+а не выдаю задним числом снятое за входное.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+
+**Список поимённо — что осталось и почему непроходимо моими правами:**
+1. `zahod/P10-ekspluatacia` — невлита. Чужой ЖИВОЙ заход: его файл-заход
+   `zhurnal/2026-09-02_spetsmat-bot/kod_P10-ekspluatacia.md` прямо сейчас лежит изменённым и
+   незакоммиченным в главной папке. Влить работающего соседа = забрать его работу в
+   недописанном виде.
+2. `zahod/P9-listok` — невлита, по той же причине: соседняя позиция той же волны.
+3. Незакоммиченное в ГЛАВНОЙ папке, всё чужое: `README.md`,
+   `zhurnal/.../PULS-CHASOVOGO-sborka-bota.log`, `kod_P10-ekspluatacia.md`,
+   `kod_P5-ekrany.md`, `?? .commit-plan`. Чужая содержательная работа — по §WARNING шаг 1
+   называется строкой и оставляется. (`kod_P17-konstanty.md` в этом списке — мой, и он не
+   коммитится намеренно: контракт зоны отдаёт его аналитику при приёмке.)
+4. Заявок открыто 5 (`git_zona.py zayavki`), все чужие и заведены до меня — в том числе
+   блокирующая `2026-09-02T1346-orkestr-py-45-489-porog-45` про порог живости в `orkestr.py`
+   и дефекты зоны P6. Ни одна не в моей зоне.
+
+🔴 Главная причина `нет` над всем этим: **работа по закрытию входных долгов отменена
+оркестратором целиком** («СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ… вместо всего блока §0.1
+выполни САМ одну команду»). Первой из двух независимых работ захода в этом прогоне не было —
+не потому, что я её пропустил.
 
 ## ОТЧЁТ — (заполняет исполнитель)
 **АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`

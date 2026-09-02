@@ -339,6 +339,94 @@ grep -rn 'include_router' bot/app.py | tail -2   # роутер просмотр
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Read, and nothing else:** `core/services/progress.py`, `core/ports.py`, `core/models.py`,
+`config.py`, `bot/app.py`, `bot/callbacks.py`, `bot/keyboards/grid.py`, `bot/routers/marking.py`,
+`bot/middleware.py`, `bot/handlers/{student,teacher}.py`, `infra/repositories.py`,
+`core/services/{roster,seeding,enrollment,marking}.py`, `core/isotime.py`, `migrations/001_init.sql`,
+`Makefile`, `tests/conftest.py`, `tests/bot/conftest.py`, `tests/grid/conftest.py`.
+
+### Premises I am challenging BEFORE writing code (§1 asks for this, and §2 asks it of the КРИТЕРИЙ too)
+
+1. **`core/services/sessions.py` (P6) does not exist on disk.** §0 of the task names it as the
+   source of attendance. There is no P6 in this repository: `find . -name '*.py'` lists no
+   `sessions.py`, and no port, repository or service reads the `sessions` / `attendance` tables the
+   migration creates. So "не сдавал ничего 3 занятия подряд" has to be computed from the only
+   time-bearing source that exists — the journal itself. **A lesson day is a distinct date part of
+   `Mark.valid_at`** over the whole journal; the sequence of lesson days is global (derived from
+   everybody's marks), because a day on which one particular group handed in nothing is still a day
+   that happened. Silence = no `assert` and no `retract` of this student on any of the last
+   `config.SILENT_SESSIONS` lesson days. `erratum` does not count as activity — the record should
+   never have existed. This is written down in the service, not guessed per call site.
+2. **`marks.session_id` is NULL everywhere.** P2's importer inserts without it and P4's grid router
+   does not pass it, so a silence rule keyed on `session_id` would report all 56 students silent on
+   day one. This is the second reason the day comes from `valid_at`.
+3. **P2's import is ONE lump.** All 15 847 imported events share a single `IMPORT_VALID_AT`, so last
+   year collapses into one lesson day. That is honest rather than lossy — the imported book has no
+   per-session dates anywhere — but it means the silent list only becomes meaningful once the bot
+   has been writing marks for `SILENT_SESSIONS` real days. The screen says so out loud instead of
+   printing an empty list that reads like good news (§«Ноль проверенных при непустом составе»).
+4. **`bot/app.py` is named read-only in §5 AND the КРИТЕРИЙ greps it for `include_router`.** I read
+   the two together the way §5 spells it: *«Роутер подключается добавлением, а не переписыванием»* —
+   app.py may be ADDED to, never rewritten. I add exactly four lines and modify none, and I list the
+   file as an out-of-zone edit in `## ОТЧЁТ` under НЕОБРАТИМОЕ. The router must be included BEFORE
+   `stale_router`, which is the catch-all that claims every unmatched callback; included after it,
+   every view button would answer «экран устарел».
+5. **`config.py` is read-only, and two numbers of this task are not in it yet.** «просроченное больше
+   двух листков — свернуть» and «graveyard over the recent sheets» are both bare numbers that decide
+   behaviour, and `config.py`'s own rule says they belong there. I cannot put them there from this
+   position, so they become named module constants in `core/services/spiski.py` with the debt written
+   into their docstring, and a queue item in `## ВОПРОСЫ` to move them.
+6. **`EnrollmentService` (P12) is not wired into `bot/app.build`.** `workflow_data` carries roster,
+   catalogue, marking, progress — no enrollment port. So the teacher's two lists cover every ACTIVE
+   student rather than the teacher's own group. The brief and the interview both say «два списка»
+   and neither says «мои ученики»; scoping by P12 is a wiring decision for the owner, and it goes to
+   `## ВОПРОСЫ` rather than being invented here.
+7. **The КРИТЕРИЙ wants the privacy test to PRINT its coverage under `pytest -q`.** `-q` captures
+   stdout, so a bare `print` is invisible on a green run. This project already has the idiom —
+   `capsys.disabled()` in `tests/test_differential.py`, `tests/grid/test_layout.py` — and I use it.
+   Not a fault in the criterion; naming it so the next reader does not rediscover it.
+8. **User-facing Telegram text stays Russian.** The English rule covers what I WRITE — code,
+   comments, docstrings, report, commit messages. The bot speaks to children in Russian, every
+   existing screen does, and translating it would be a change to the product nobody asked for.
+
+### Design
+
+**`core/services/spiski.py` — the lists, and it computes nothing P1 already computes.**
+`SpiskiService(journal, catalogue, progress)`.
+- `lesson_days()` — the distinct `valid_at` dates of the journal, ascending.
+- `silent(sessions=config.SILENT_SESSIONS)` → `SilentList(students, days, considered, enough_days)`.
+  The result CARRIES ITS COVERAGE: «молчат 3 из 56 за 3 занятия», never a bare list.
+- `graveyard(sheets=None)` → `GraveyardList`; delegates to `progress.graveyard` and keeps
+  `GraveyardRow.is_graveyard`, so `config.GRAVEYARD_THRESHOLD` is read in P1's one place and never
+  re-spelled as a literal here.
+- `debts(student_id)` → `DebtList(near, older_problems, older_sheets)`; wraps `progress.debts` and
+  splits it at `DEBT_HORIZON_SHEETS`. Near sheets are enumerated, older ones collapse to one line.
+- `year(student_id)` → per-sheet `(sheet, solved, total)` in ONE `states_for` call, not 18 grids.
+
+**`bot/keyboards/views.py` — payloads and pure text, no database and no journal.** Prefixes `vy`,
+`vh`, `vd`, `vl`, `vt` (`m g d s x` are taken). The sheet table goes out as `<pre>` with
+`parse_mode="HTML"`, because the default parse mode of this bot is `None` and a proportional font
+cannot hold a 56 × 44 table in line.
+
+**`bot/routers/views.py` — two child routers under one root**, so `bot/app.py` gains one
+`include_router` call and no restructuring. Student child gated to `confirmed_student`, teacher child
+to `teacher | head | owner`.
+
+**Privacy, and it is two independent carriers rather than one check.** Every student payload carries
+`student_id`; the handler REFUSES when it differs from `identity.student_id`, *and* every read is
+made with `identity.student_id` and never with the number from the payload. Removing either carrier
+still leaks nothing. The field is present precisely so the forgery has something to aim at — a screen
+whose payload has no id makes the refusal untestable rather than strong.
+
+### Order of work, one commit each
+
+1. `core/services/spiski.py` + `tests/views/test_spiski.py` (incl. the named silent test).
+2. `bot/keyboards/views.py` + `tests/views/test_render.py`.
+3. `bot/routers/views.py` + the four additive lines in `bot/app.py` + `tests/views/test_screens.py`.
+4. `tests/views/test_privacy.py` — the 56 × 3 forged-callback sweep with printed coverage.
+5. КРИТЕРИЙ in full, then the §3 verifier, then git hygiene and the merge.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

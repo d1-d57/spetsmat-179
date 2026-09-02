@@ -339,6 +339,57 @@ grep -rn 'systemctl enable' deploy/   # самая частая реальная
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Baseline measured before any edit:** `make check` -> rc=0, `148 passed`. Unmerged
+`zahod/*` branches at entry: `1` (`zahod/P9-listok`, checked out in a neighbour worktree).
+
+### Premise I dispute BEFORE working (as §1 requires)
+
+The КРИТЕРИЙ ГОТОВНОСТИ names `python3 tools/proverka_vosstanovlenia.py --na-porchennom`,
+but `tools/` is NOT in my zone (`deploy/ ops/ tests/ops/`) and the ЗАПРЕТ is categorical:
+"ничего за пределами зоны". Two rules of the same заход contradict each other. I resolve
+it in favour of the zone contract, because the zone contract is the one whose violation is
+irreversible for other people's work, and I say the corrected command here, before working:
+
+    python3 ops/proverka_vosstanovlenia.py --na-porchennom     # instead of tools/...
+
+Everything else in the criterion is unchanged and I run it verbatim.
+
+### Order of parts (each committed separately)
+
+1. **`ops/raspisanie.py`** — the one place that knows lesson days and hours. Everything
+   else (deploy refusal, backup timers) reads it, so "when is a lesson" has a single
+   answer. System clock is UTC, Moscow is obtained through `ZoneInfo(config.TZ_DISPLAY)`,
+   never `timedelta(hours=3)` (§5 of the task).
+2. **`ops/rezervnaya_kopia.py`** — `VACUUM INTO` + gzip + 14-day rotation, never `cp`.
+3. **`ops/proverka_vosstanovlenia.py`** — the SEPARATE restore check: unpack the latest
+   snapshot, `pragma integrity_check`, >= 50 students, latest mark not older than a week.
+   All three must pass before a ping; silence is alarm. `--na-porchennom` is the mode that
+   PROVES the check can go red.
+4. **`ops/proverka_pragm.py`** — asserts WAL and `busy_timeout` are actually applied on a
+   live connection, not merely written in `config.py` (§6 of the task).
+5. **`ops/opoveshchenie.py`** — the alerter through a SECOND bot token; it has no code of
+   its own to crash with, and it refuses to send the database anywhere.
+6. **`deploy/*.service`, `*.timer`, `deploy/journald.conf`** — the unit with
+   `Restart=always`, `RestartSec=5`, `StartLimitBurst=5` per 5 min, `WatchdogSec`,
+   `OnFailure=`, `Environment=TZ=UTC`, plus the backup/restore-check timers.
+7. **`deploy/ustanovka.sh`** — installs and, above all, runs `systemctl enable`; and
+   **`ops/proverka_ustanovki.py`** — proves `enable` and `WatchdogSec` are there WITHOUT a
+   VPS, by parsing the unit files (and, when systemd is present, by asking systemd).
+8. **`deploy/vykatka.sh`** — `git pull` + `yoyo apply` + `systemctl restart`, graceful
+   stop, pending updates never dropped, and the refusal to deploy on lesson days/hours.
+   `--proba` is a dry run so the refusal is provable on this machine.
+9. **`tests/ops/`** — at least 6 checks: 3 snapshot corruptions x 2 deploy-time scenarios,
+   plus the pragma and unit-file assertions.
+10. Verifier subagent (§3), then git hygiene, then merge my own branch last.
+
+### What I do NOT touch
+
+`bot/`, `core/`, `infra/`, `config.py`, `migrations/`, `tools/`, `tests/` outside
+`tests/ops/`. The watchdog ping belongs inside the polling loop, i.e. inside `bot/`, which
+is read-only to me: I write the unit and the check and name the exact one-line hook in
+`## ВОПРОСЫ` for the next position, and I do NOT edit `bot/` to make my own check pass.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
