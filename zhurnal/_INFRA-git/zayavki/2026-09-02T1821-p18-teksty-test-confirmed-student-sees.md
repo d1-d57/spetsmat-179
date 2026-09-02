@@ -1,0 +1,6 @@
+ЗАЯВКА: 2026-09-02T18:21 · автор: host · арка: не названа
+СРОЧНОСТЬ: obychnaya
+РОД: pravka-koda
+АДРЕСАТ: tests/bot/test_registration.py
+
+P18-teksty: два теста ВНЕ зоны захода закрепляют тексты, которые заход признал браком и починил. test_confirmed_student_sees_only_own требует, чтобы /me ЭХОМ ПЕЧАТАЛ РЕБЁНКУ его student_id (assert str(student_id) in t) — это ровно то внутреннее состояние, ради которого позиция открыта. test_head_can_upload_sheet требует подстроку 'P4' — имя позиции волны в тексте для преподавателя. Правки по одной строке: (1) assert any('Вы в списке' in t for t in sent); (2) assert any('листк' in t and '203' in t for t in sent). Зона захода — только tests/teksty/, поэтому не тронуто.
