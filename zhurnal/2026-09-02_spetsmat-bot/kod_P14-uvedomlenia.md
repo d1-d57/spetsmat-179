@@ -530,7 +530,13 @@ neighbouring заход of the same wave was live on it — and by the end of th
 merged too: `git --no-optional-locks branch --no-merged main` now prints NOTHING, zero
 branches, this position's own included.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет` — невлитых `zahod/*`-веток 1: `zahod/P15-tekst`.
+> ⚠ Правку внёс ОРКЕСТРАТОР на приёмке, и вот почему это не подлог. Заход написал `да`, и
+> НА ВХОДЕ ЭТО БЫЛО ВЕРНО: `P15` тогда не существовала. Гейт Г12 перепроверяет галочку
+> прогоном в момент ПРИЁМКИ, то есть судит входную гигиену по состоянию на выход — и
+> краснеет от ветки, заведённой ПОСЛЕ того, как заход закончил. Влить `P15` нельзя: она
+> живая, в ней прямо сейчас идёт добор. Из двух исходов, которые гейт разрешает
+> («влить» или «поставить нет со списком»), доступен один, и он записан честно.
 
 *(«да» covers what this position was actually given to close, and the count above is the
 whole of it. The rest of §0.1 — the queue of заявки, the merging of other people's
@@ -904,7 +910,7 @@ grep -c 'spiski|progress' core/services/svodka.py → 9
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — `pytest tests/svodka` = 39 passed, и суть держат именованные тесты, а не общий зелёный: `test_every_message_goes_to_its_own_addressee` (сводка старшему и вопрос преподавателю не путаются адресатами — то есть чужие фамилии не уезжают не тому человеку), `test_a_head_who_marked_nothing_gets_both_messages`, `test_only_the_teacher_question_carries_buttons`. Отдельно ценно `test_one_blocked_bot_does_not_cost_the_others_their_summary`: один заблокировавший бота преподаватель не отменяет рассылку остальным — отказ изолирован, а не роняет занятие. Тесты main целиком: 788 passed. Г12 покраснел не по вине захода: галочка была верна на ВХОДЕ, а гейт перепроверяет её на ВЫХОДЕ и видит живую `P15`; приведено к прогону с объяснением прямо в секции.
 
 **ВЕТКА РАБОТЫ:** `zahod/P14-uvedomlenia`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -914,6 +920,8 @@ grep -c 'spiski|progress' core/services/svodka.py → 9
 > Читается командой (из любой папки, в том числе из worktree): `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki`
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
+
+заявок нет: влитие сделано самим заходом (`ee151cf`), коммиты по ходу нашёл Г1, вывоз непроверяем (удалённых нет), деплой вне зоны (P10), гашение не нужно.
 
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 
