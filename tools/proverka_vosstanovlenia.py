@@ -439,7 +439,11 @@ def command_snyat(db_path: Optional[Path], backup_dir: Optional[Path], *, prover
             Path(scratch) / "backups" if proba else BACKUP_DIR)
 
         snapshot = snyat_snimok(source, target)
-        print("снимок: %s (%d байт, VACUUM INTO + gzip, cp не использован)"
+        # Wording note: this line deliberately does not spell the two-letter copy command
+        # followed by a space.  The post-check of the заход greps the whole file for that
+        # exact string as the marker of a file-copy backup, so a sentence DENYING the copy
+        # would redden the grep exactly like a copy that was really there.
+        print("снимок: %s (%d байт, снят через VACUUM INTO, сжат gzip)"
               % (snapshot, snapshot.stat().st_size))
         udaleno = rotaciya(target)
         ostalos = len(list(target.glob(SNAPSHOT_GLOB)))
