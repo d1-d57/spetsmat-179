@@ -125,7 +125,13 @@ class ViewDebts(CallbackData, prefix="vd"):
 
 
 class ViewLists(CallbackData, prefix="vl"):
-    """Back to the teacher's two lists: ``vl:``."""
+    """Back to the teacher's two lists: ``vl``.
+
+    No fields, so ``pack()`` renders the bare prefix with no separator after it -- the
+    same shape ``bot/callbacks.Noop`` has.  Written down because ``vl:`` is the plausible
+    guess, it does not match the filter, and a payload spelled that way in a log or a test
+    falls through to the catch-all and reads as a stale screen.
+    """
 
 
 class ViewTable(CallbackData, prefix="vt"):
@@ -299,22 +305,27 @@ def lists_text(silent, graveyard) -> str:
     """
     lines = []
 
+    # The window length is read off the VALUE and never out of ``config`` again.  The list
+    # was measured with ``silent.sessions``; printing the config number beside
+    # ``silent.days`` lets the two halves of one sentence disagree -- «3 занятия подряд»
+    # over five dates -- which is exactly the failure "a value carries its own coverage"
+    # exists to prevent.
     if not silent.enough_days:
         lines.append(
             "Не сдавал ничего %d занятия подряд: занятий в журнале пока меньше %d — "
             "считать не из чего (учеников %d)"
-            % (config.SILENT_SESSIONS, config.SILENT_SESSIONS, silent.considered)
+            % (silent.sessions, silent.sessions, silent.considered)
         )
     elif not silent.students:
         lines.append(
-            "Не сдавал ничего %d занятия подряд: никто, проверено %d из %d"
-            % (config.SILENT_SESSIONS, silent.considered, silent.considered)
+            "Не сдавал ничего %d занятия подряд (%s): никто, проверено %d из %d"
+            % (silent.sessions, ", ".join(silent.days), silent.considered, silent.considered)
         )
     else:
         lines.append(
             "Не сдавал ничего %d занятия подряд (%s): %s"
             % (
-                config.SILENT_SESSIONS,
+                silent.sessions,
                 ", ".join(silent.days),
                 ", ".join(entry.student.surname for entry in silent.students),
             )

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import config
 from core.models import CellState
-from core.services.spiski import DEBT_HORIZON_SHEETS, RECENT_SHEETS
+from core.services.spiski import DEBT_HORIZON_SHEETS, IMPORTED_SOURCE, RECENT_SHEETS
 
 #: Three consecutive lesson days plus one older one.  Spelled out rather than generated,
 #: because the whole question is what falls inside the window and what falls outside it.
@@ -153,6 +153,91 @@ def test_a_day_nobody_in_the_group_worked_still_counts_as_a_lesson_day(
     assert spiski.lesson_days() == list(DAYS)
     quiet_ids = [entry.student.id for entry in spiski.silent().students]
     assert others[1].id in quiet_ids
+
+
+def test_last_years_import_is_not_a_lesson_day(spiski, seeded_catalogue, mark_on):
+    """The lump P2 loaded must not slide into the silence window.
+
+    Every one of the 15 847 imported rows carries a single ``valid_at`` -- the paper book
+    records no per-session dates anywhere.  Counted as a day of school it fills a third of
+    a three-session window that nobody sat through, ``enough_days`` turns True on the
+    SECOND real evening of the year, and every student with any mark in last year's book
+    reads as speaking.  The screen would print «никто» on exactly the run it was built for.
+    """
+    students = seeded_catalogue.students()
+    import_day = "2026-06-30"
+    for index, student in enumerate(students):
+        mark_on(
+            student.id,
+            _problem_of(seeded_catalogue, 1, index % 18).id,
+            import_day,
+            source=IMPORTED_SOURCE,
+        )
+    for index, day in enumerate(DAYS[:2]):
+        mark_on(students[0].id, _problem_of(seeded_catalogue, 0, index).id, day)
+
+    assert import_day not in spiski.lesson_days()
+    assert spiski.lesson_days() == list(DAYS[:2])
+
+    result = spiski.silent()
+    assert result.enough_days is False, (
+        "two real evenings plus the import must not pass for three sessions"
+    )
+    assert result.considered == 56
+
+    # And once a third real evening exists, the answer is the true one: fifty-five quiet.
+    mark_on(students[0].id, _problem_of(seeded_catalogue, 0, 2).id, DAYS[2])
+    third = spiski.silent()
+    assert third.enough_days is True
+    assert third.days == list(DAYS)
+    assert third.found == 55
+
+
+def test_an_erratum_cannot_delete_a_lesson_day_from_under_other_students(
+    spiski, seeded_catalogue, mark_on
+):
+    """The day sequence is «когда были занятия», not «что уцелело».
+
+    One teacher fixing one typo used to erase the whole day when the struck row was the
+    last one standing on it: the window slid an evening back and the screen changed its
+    mind about students who had done nothing either way.  A day somebody was marking on is
+    a day that happened.
+    """
+    students = seeded_catalogue.students()
+    typo_day = DAYS[1]
+    for index, day in enumerate(DAYS):
+        if day == typo_day:
+            continue
+        mark_on(students[0].id, _problem_of(seeded_catalogue, 0, index).id, day)
+    # The only event of the middle day, written and then struck out.
+    problem = _problem_of(seeded_catalogue, 0, 9)
+    mark_on(students[1].id, problem.id, typo_day)
+    before = [entry.student.id for entry in spiski.silent().students]
+    assert spiski.lesson_days() == list(DAYS)
+
+    mark_on(students[1].id, problem.id, typo_day, state=CellState.EMPTY)
+
+    assert spiski.lesson_days() == list(DAYS), "the day survives its only mark being struck"
+    after = spiski.silent()
+    assert after.days == list(DAYS)
+    assert students[1].id in [entry.student.id for entry in after.students], (
+        "the student whose mark was struck is silent again"
+    )
+    assert set(before) - {students[1].id} == set(
+        entry.student.id for entry in after.students
+    ) - {students[1].id}, "nobody else's verdict moved"
+
+
+def test_the_silent_list_carries_the_window_it_was_measured_with(
+    spiski, seeded_catalogue, mark_on
+):
+    """«3 занятия подряд» over five dates is a value that lost its own coverage."""
+    for index, day in enumerate(DAYS + ("2026-09-29", "2026-10-06")):
+        mark_on(seeded_catalogue.students()[0].id, _problem_of(seeded_catalogue, 0, index).id, day)
+
+    assert spiski.silent().sessions == config.SILENT_SESSIONS
+    wide = spiski.silent(sessions=5)
+    assert wide.sessions == 5 and len(wide.days) == 5
 
 
 # --------------------------------------------------------------------- graveyard

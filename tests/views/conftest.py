@@ -120,13 +120,19 @@ def mark_on(seeded_journal):
     clock = DayClock()
     service = MarkingService(seeded_journal, clock)
 
-    def write(student_id: int, problem_id: int, day: str, state: CellState = CellState.SOLVED):
+    def write(
+        student_id: int,
+        problem_id: int,
+        day: str,
+        state: CellState = CellState.SOLVED,
+        source: str = "кнопка",
+    ):
         clock.tick()
         return service.set_state(
             student_id,
             problem_id,
             state,
-            source="кнопка",
+            source=source,
             valid_at="%sT10:00:00Z" % day,
         )
 

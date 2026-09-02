@@ -19,15 +19,28 @@ taken from the WHOLE journal rather than from the students being looked at.  A d
 which one particular group handed in nothing is still a day that happened, and a
 per-group day sequence would quietly hide precisely the group that went quiet.
 
-TWO CONSEQUENCES, WRITTEN DOWN BECAUSE THEY ARE VISIBLE ON THE REAL DATA.
+THREE RULES FOLLOW FROM THAT, AND EACH ONE IS A MEASURED FAILURE RATHER THAN A TASTE.
 
-* Last year's import is ONE lesson day.  All 15 847 events share a single ``valid_at``
-  because the paper book records no per-session dates anywhere.  Nothing is lost that was
-  ever there -- but it means the silent list only starts saying something once the bot
-  itself has been writing marks for ``config.SILENT_SESSIONS`` real days.  The result
-  object says so through ``enough_days`` rather than returning an empty list, because an
-  empty list of silent students reads like good news and would be a lie.
-* An ``erratum`` is not activity, AND NEITHER IS THE EVENT IT STRIKES OUT.  It is the
+* **AN IMPORTED MARK IS NOT A LESSON DAY.**  All 15 847 rows of last year's book share a
+  single ``valid_at`` -- the paper book records no per-session dates anywhere -- so the
+  import is one lump, and counting it as a day puts it INSIDE the window.  Measured: with
+  the import loaded and the bot having worked two real evenings, the window becomes
+  ``[день импорта, вечер 1, вечер 2]``, ``enough_days`` turns True, and every student who
+  has any mark at all in last year's book is reported as speaking.  The screen would then
+  print «никто» on precisely the second evening of the year -- the run it was built for.
+  So a lesson day is a day THIS BOT wrote on: rows whose ``source`` is the import are left
+  out of the day sequence entirely.  The silent list stays honestly unmeasurable
+  (``enough_days=False``) until the bot has worked ``config.SILENT_SESSIONS`` evenings,
+  which is the true state of the world and not a defect to paper over.
+* **THE DAY SEQUENCE COMES FROM EVERY EVENT; ACTIVITY COMES ONLY FROM SURVIVING ONES.**
+  They are two different questions.  «Когда были занятия» is answered by the fact that
+  somebody was marking; «кто что сдал» is answered by what still stands.  Deriving both
+  from the survivors couples them, and the coupling is visible: a teacher fixing one typo
+  with an ``erratum`` erases the last surviving row of a day, the day drops out of the
+  sequence, the window slides one evening back, and the screen changes its verdict about
+  OTHER students who did nothing at all.  Measured on a prepared journal: one erratum
+  moved one student off the list and another onto it.
+* **AN ``erratum`` IS NOT ACTIVITY, AND NEITHER IS THE EVENT IT STRIKES OUT.**  It is the
   statement that a record should never have existed, and the record is a separate row:
   discounting only the erratum would leave a teacher's mistyped button standing as this
   student's activity for the day, which takes the one student the screen exists to
@@ -55,6 +68,21 @@ from core.services.progress import ProgressService
 #: of ``zhurnal/2026-09-02_spetsmat-bot/kod_P5-ekrany.md``; it is a named constant rather
 #: than a literal so that moving it is one edit and not a search.
 RECENT_SHEETS = 2
+
+#: The ``marks.source`` last year's book arrives under.  Rows carrying it are left out of
+#: the LESSON DAY sequence: the import is one lump with a single ``valid_at``, so treating
+#: it as a day of school puts a day inside the silence window that nobody sat through.
+#:
+#: Checked against ``config.MARK_SOURCES`` at import time rather than trusted.  A rename in
+#: ``config.py`` would otherwise turn this filter into a no-op in silence, and the failure
+#: it guards against -- «никто не молчит» on the second evening of the year -- is invisible
+#: on a green run.
+IMPORTED_SOURCE = "импорт"
+assert IMPORTED_SOURCE in config.MARK_SOURCES, (
+    "core/services/spiski.py filters lesson days by the import source %r, and config.py no "
+    "longer lists it among %r: the filter has become a no-op"
+    % (IMPORTED_SOURCE, config.MARK_SOURCES)
+)
 
 #: How many sheets of debt are shown problem by problem.  Everything older collapses into
 #: a single line with no enumeration: a long list of what you owe is a message about the
@@ -95,6 +123,10 @@ class SilentList:
     students: list = field(default_factory=list)
     #: The lesson days the silence was measured over, ascending.
     days: list = field(default_factory=list)
+    #: How many sessions were ASKED for.  Carried rather than looked up again by the
+    #: screen: a caller may pass its own window, and «3 занятия подряд» printed over five
+    #: dates is the shape of a value that does not carry its own coverage.
+    sessions: int = field(default_factory=lambda: config.SILENT_SESSIONS)
     #: How many students were examined.  Without it "нашлось ноль" is unreadable.
     considered: int = 0
     #: False when the journal holds fewer lesson days than were asked for.  The list is
@@ -123,7 +155,7 @@ class GraveyardList:
     #: How many students the counts were taken over.
     considered: int = 0
     #: The threshold that decided what counts as a graveyard, so the screen can state it.
-    threshold: int = config.GRAVEYARD_THRESHOLD
+    threshold: int = field(default_factory=lambda: config.GRAVEYARD_THRESHOLD)
 
     @property
     def found(self) -> int:
@@ -212,23 +244,42 @@ class SpiskiService:
     # --------------------------------------------------------------------- silence
 
     def _activity_by_day(self) -> tuple:
-        """``(all_days, days_by_student)`` -- one pass over the journal, one query.
+        """``(lesson_days, days_by_student)`` -- one pass over the journal, one query.
 
-        The whole journal is read because the DAY SEQUENCE is a property of the school and
+        TWO DIFFERENT QUESTIONS, ANSWERED FROM TWO DIFFERENT SUBSETS, and keeping them
+        apart is the whole correctness of this method.
+
+        **When were there lessons** -- every event this BOT wrote, whatever became of it
+        afterwards.  A day somebody was marking on is a day that happened; a typo fixed an
+        hour later does not un-happen it.  Derived from the survivors instead, the sequence
+        would move whenever anyone corrected anything: one erratum on the only surviving
+        row of a day drops that day, slides the window one evening back, and changes the
+        verdict about students who did nothing at all.
+
+        **Who handed anything in** -- only events that still stand.  An erratum says the
+        record should never have existed, so the erratum AND the row it strikes are both
+        out; leaving the struck row in would let a mistyped button stand as this student's
+        activity, which takes the one student the screen exists to surface off the list.
+        An ``assert`` and a ``retract`` both count -- a retract is a hand-in that was not
+        defended, which is a conversation that happened.
+
+        Imported rows are in NEITHER subset.  Last year's book is one lump under a single
+        ``valid_at``, so counting it as a day of school puts a day inside the window that
+        nobody sat through -- and every student with any mark in the book then reads as
+        speaking.  See the module docstring for the measurement.
+
+        The whole journal is read because the day sequence is a property of the school and
         not of any one group.  Fifteen thousand rows out of SQLite on the connection the
         bot already holds is a few tens of milliseconds, which is inside the budget of a
-        screen that opens once per lesson -- and it is named here rather than measured
-        again by whoever reads this next.
+        screen that opens once per lesson -- named here rather than measured again by
+        whoever reads this next.
         """
-        events = self._journal.events()
+        events = [
+            mark for mark in self._journal.events() if mark.source != IMPORTED_SOURCE
+        ]
 
-        # An erratum strikes its target OUT, and the target is a separate row that would
-        # otherwise still be counted: the erratum says the record should never have
-        # existed, so BOTH rows have to go.  Skipping only the erratum itself would leave
-        # a teacher's mistyped button standing as this student's activity for the day --
-        # which is precisely the student the screen exists to surface.  The schema allows
-        # one reversal per event (``marks_reverses_once``), so this set cannot grow a
-        # second claim on the same row.
+        # The schema allows one reversal per event (``marks_reverses_once``), so this set
+        # cannot grow a second claim on the same row.
         struck = {
             mark.reverses_id
             for mark in events
@@ -238,10 +289,10 @@ class SpiskiService:
         all_days: set = set()
         days_by_student: dict = {}
         for mark in events:
-            if mark.event is MarkEvent.ERRATUM or mark.id in struck:
-                continue
             day = mark.valid_at[:10]
             all_days.add(day)
+            if mark.event is MarkEvent.ERRATUM or mark.id in struck:
+                continue
             days_by_student.setdefault(mark.student_id, set()).add(day)
         return all_days, days_by_student
 
@@ -271,6 +322,7 @@ class SpiskiService:
             return SilentList(
                 students=[],
                 days=sorted(window),
+                sessions=wanted,
                 considered=len(students),
                 enough_days=False,
             )
@@ -289,6 +341,7 @@ class SpiskiService:
         return SilentList(
             students=quiet,
             days=sorted(window),
+            sessions=wanted,
             considered=len(students),
             enough_days=True,
         )

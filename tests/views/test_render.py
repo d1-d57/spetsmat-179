@@ -155,6 +155,23 @@ def test_not_enough_lesson_days_is_not_reported_as_everybody_is_fine(spiski):
     assert "учеников 56" in text
 
 
+def test_the_headline_reads_the_window_off_the_value_and_not_off_config():
+    """«3 занятия подряд» printed over five dates is a sentence disagreeing with itself.
+
+    The list was measured with ``SilentList.sessions``; the screen must say that number
+    and not look ``config.SILENT_SESSIONS`` up again.  A caller CAN ask for another window
+    -- ``SpiskiService.silent`` takes one -- and this is the one place where the two could
+    part company without anything going red.
+    """
+    days = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05"]
+    wide = SilentList(students=[], days=days, sessions=5, considered=56, enough_days=True)
+    text = lists_text(wide, GraveyardList(considered=56))
+
+    assert "Не сдавал ничего 5 занятия подряд" in text
+    assert "Не сдавал ничего %d занятия подряд" % config.SILENT_SESSIONS not in text
+    assert ", ".join(days) in text, "«никто» must still say over which days"
+
+
 # --------------------------------------------------------------------------- table
 
 def test_the_whole_class_table_fits_one_telegram_message_on_every_seed_sheet(
