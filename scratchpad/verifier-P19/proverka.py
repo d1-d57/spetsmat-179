@@ -5,6 +5,9 @@ Builds a real migrated SQLite database, loads the live seed of 56 students, give
 does to the catalogue.  Counts rows with SQL after every step.
 """
 
+# TOOL-CONTRACT: called-by-hand -- the AFTER-type verifier's independent harness for
+# this position.  Kept as the evidence; run by hand, never from a hook.
+
 from __future__ import annotations
 
 import csv
