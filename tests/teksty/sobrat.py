@@ -1,16 +1,33 @@
 #!/usr/bin/env python3
 """Собирает СТРОКИ, ДОЕЗЖАЮЩИЕ ДО ЧЕЛОВЕКА, из живого дерева репозитория.
 
-Признак «доезжает до человека» — строковый литерал внутри вызова, который
-показывает текст в Telegram: answer / reply / edit_text / send_message /
-answer_callback_query / InlineKeyboardButton / KeyboardButton / _deny.
+Два канала, и второй найден по ходу работы — прямой признак из задания
+пропускает целые экраны.
+
+КАНАЛ A — ПРЯМОЙ (признак из задания). Литерал стоит в ТЕКСТОВОЙ позиции
+вызова, который показывает текст в Telegram: `answer`, `reply`, `edit_text`,
+`send_message`, `answer_callback_query`, `InlineKeyboardButton`,
+`KeyboardButton`, `_deny`. Текстовая позиция названа поимённо для каждого
+вызова, потому что `callback_data="accept:%d"` человек не читает никогда, а
+`InlineKeyboardButton` берёт оба одинаково.
+
+КАНАЛ B — ЧЕРЕЗ ПОСРЕДНИКА. Экран собирается функцией, а показывается уже её
+результат: `await message.answer(draft_text(draft, catalogue))`. Тогда ВСЕ
+литералы `draft_text` доезжают до человека, а прямой признак не видит ни
+одного. Так устроены обе таблицы подтверждения (`render` в `voice.py` и
+`text_input.py`), черновик фото, список заявок владельца и все клавиатуры.
+Канал находится неподвижной точкой: функция попадает в «показывающие», если
+её вызов стоит в текстовой позиции показывающего вызова; повторяем, пока
+множество растёт. Имена разрешаются внутри одного файла и по импортам вида
+`from ... import name`.
 
 Считаем по AST, а не грепом: греп считает докстроки, регулярки и сообщения
-ValueError, которые читает разработчик, а не ученик. Разница измерена
+`ValueError`, которые читает разработчик, а не ученик. Разница измерена
 оркестратором 02.09: греп дал 25 находок там, где их 1.
 
 Запуск:
     python3 tests/teksty/sobrat.py            # печать «файл:строка · текст»
+    python3 tests/teksty/sobrat.py --kanal a  # только прямой признак задания
     python3 tests/teksty/sobrat.py --json     # то же машинно
 """
 from __future__ import annotations
@@ -27,20 +44,29 @@ KOREN = Path(__file__).resolve().parents[2]
 # Где живут тексты, обращённые к человеку.
 PAPKI = ("bot", "core")
 
-# Имена вызовов, которые показывают текст человеку. Для атрибутов сверяем
-# ТОЛЬКО последнюю часть (message.answer, cb.message.edit_text, bot.send_message).
-POKAZYVAYUT = frozenset(
-    {
-        "answer",
-        "reply",
-        "edit_text",
-        "send_message",
-        "answer_callback_query",
-        "InlineKeyboardButton",
-        "KeyboardButton",
-        "_deny",
-    }
-)
+#: Показывающие вызовы и их ТЕКСТОВЫЕ позиции: (номера позиционных аргументов,
+#: имена ключевых). Всё остальное — `callback_data`, `reply_markup`,
+#: `show_alert`, `chat_id` — человек не читает и в счёт не идёт.
+POKAZYVAYUT: dict[str, tuple[tuple[int, ...], tuple[str, ...]]] = {
+    "answer": ((0,), ("text",)),
+    "reply": ((0,), ("text",)),
+    "edit_text": ((0,), ("text",)),
+    "answer_callback_query": ((0,), ("text",)),
+    "send_message": ((1,), ("text",)),
+    "InlineKeyboardButton": ((0,), ("text",)),
+    "KeyboardButton": ((0,), ("text",)),
+    # `_deny(event, "…")` и `_redraw(message, "…", markup)` — первый аргумент
+    # адресат, текст второй.
+    "_deny": ((1,), ("text",)),
+    "_redraw": ((1,), ("text",)),
+    "_redraw_message": ((1,), ("text",)),
+    # Отказ приёма файла показывается ДОСЛОВНО: `answer(str(refusal))`
+    # в `bot/routers/photo.py`. Значит его текст — текст для человека.
+    "IntakeRefused": ((0,), ()),
+}
+
+#: Latinица в этих словах законна: их читает человек и они не внутренние.
+BELYJ_SPISOK = ("Telegram", "Excel", "setka", "spetsmat")
 
 
 def _imya_vyzova(uzel: ast.Call) -> str | None:
@@ -52,11 +78,25 @@ def _imya_vyzova(uzel: ast.Call) -> str | None:
     return None
 
 
+def _tekstovye_vyrazhenia(uzel: ast.Call, pozicii) -> list[ast.AST]:
+    """Только те аргументы вызова, которые человек читает."""
+    nomera, klyuchi = pozicii
+    vyrazhenia: list[ast.AST] = []
+    for nomer in nomera:
+        if nomer < len(uzel.args) and not isinstance(uzel.args[nomer], ast.Starred):
+            vyrazhenia.append(uzel.args[nomer])
+    for klyuch in uzel.keywords:
+        if klyuch.arg in klyuchi:
+            vyrazhenia.append(klyuch.value)
+    return vyrazhenia
+
+
 def _literaly(uzel: ast.AST):
     """Строковые литералы внутри выражения, включая куски f-строк.
 
-    Вложенные вызовы НЕ обходим: их разберёт собственная итерация walk —
-    иначе текст кнопки внутри answer(...) посчитается дважды.
+    НЕ спускаемся: во вложенные вызовы (их разберёт собственная итерация —
+    иначе текст кнопки внутри `answer(...)` посчитается дважды) и в индекс
+    подписки (`cell["label"]` — это имя поля словаря, а не текст на экране).
     """
     if isinstance(uzel, ast.Constant):
         if isinstance(uzel.value, str):
@@ -71,35 +111,239 @@ def _literaly(uzel: ast.AST):
         return
     if isinstance(uzel, ast.Call):
         return
+    if isinstance(uzel, ast.Subscript):
+        yield from _literaly(uzel.value)
+        return
     for potomok in ast.iter_child_nodes(uzel):
         yield from _literaly(potomok)
 
 
-def sobrat(koren: Path = KOREN) -> list[dict]:
-    """Все строки, доезжающие до человека, отсортированные по адресу."""
-    najdeno: list[dict] = []
+def _funkcii(derevo: ast.AST) -> dict[str, ast.AST]:
+    """Функции файла по имени — цели, в которые может уйти сборка экрана."""
+    najdeno: dict[str, ast.AST] = {}
+    for uzel in ast.walk(derevo):
+        if isinstance(uzel, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            najdeno[uzel.name] = uzel
+    return najdeno
+
+
+def _vse_literaly_tela(uzel: ast.AST):
+    """Все строковые литералы тела функции, кроме докстроки и подписок."""
+    telo = list(getattr(uzel, "body", []))
+    if (
+        telo
+        and isinstance(telo[0], ast.Expr)
+        and isinstance(telo[0].value, ast.Constant)
+        and isinstance(telo[0].value.value, str)
+    ):
+        telo = telo[1:]
+    for shag in telo:
+        for vnutri in ast.walk(shag):
+            if isinstance(vnutri, ast.Subscript):
+                continue
+            if isinstance(vnutri, ast.Constant) and isinstance(vnutri.value, str):
+                # Индексы подписок отсеиваем ниже, по родителю.
+                yield vnutri
+            elif isinstance(vnutri, ast.JoinedStr):
+                for kusok in vnutri.values:
+                    if isinstance(kusok, ast.Constant) and isinstance(kusok.value, str):
+                        yield kusok
+
+
+#: Вызовы, чей строковый аргумент — ИМЯ ПОЛЯ или образец сравнения, а не текст:
+#: `row.get("label")`, `data.startswith("accept:")`, `state.update_data(...)`.
+NE_TEKST_VYZOVY = frozenset(
+    {"get", "setdefault", "pop", "startswith", "endswith", "split", "rsplit",
+     "strip", "lstrip", "rstrip", "join", "count", "index", "replace",
+     "getattr", "hasattr", "setattr", "update_data", "set_data", "encode",
+     "decode", "debug", "info", "warning", "error", "exception"}
+)
+
+
+def _ne_tekst(derevo: ast.AST) -> set[int]:
+    """id() литералов, которые человек не читает при всём желании.
+
+    Три источника: индекс подписки (`cell["label"]`), аргумент служебного
+    вызова (`row.get("label")`, `log.warning("…")`) и операнд сравнения
+    (`match.kind == "ambiguous"`). Все три — имена полей и образцы состояния,
+    и все три давали ложные находки на первом прогоне сборщика.
+    """
+    najdeno: set[int] = set()
+
+    def pomet(uzel: ast.AST) -> None:
+        for vnutri in ast.walk(uzel):
+            if isinstance(vnutri, ast.Constant):
+                najdeno.add(id(vnutri))
+
+    for uzel in ast.walk(derevo):
+        if isinstance(uzel, ast.Subscript):
+            pomet(uzel.slice)
+        elif isinstance(uzel, ast.Compare):
+            pomet(uzel.left)
+            for sravnenie in uzel.comparators:
+                pomet(sravnenie)
+        elif isinstance(uzel, ast.Call) and _imya_vyzova(uzel) in NE_TEKST_VYZOVY:
+            for dovod in uzel.args:
+                pomet(dovod)
+            for klyuch in uzel.keywords:
+                pomet(klyuch.value)
+    return najdeno
+
+
+def _kanal_b_funkcii(
+    derevo: ast.AST,
+    imena: dict[str, ast.AST],
+    cherez_imya: dict[str, set[str]],
+    izvne: set[str] = frozenset(),
+) -> set[str]:
+    """Функции файла, чей результат уходит на экран. Неподвижная точка.
+
+    `izvne` — показывающие имена, найденные в других файлах: их вызов здесь
+    тоже открывает экран.
+    """
+    pokazyvayushie: set[str] = set(izvne)
+    rosli = True
+    while rosli:
+        rosli = False
+        for uzel in ast.walk(derevo):
+            if not isinstance(uzel, ast.Call):
+                continue
+            imya = _imya_vyzova(uzel)
+            if imya in POKAZYVAYUT:
+                pozicii = POKAZYVAYUT[imya]
+            elif imya in pokazyvayushie:
+                # Результат уже показывающей функции — тоже экран; текст в ней
+                # стоит в любом аргументе, сузить нечем.
+                pozicii = (tuple(range(len(uzel.args))), tuple(
+                    k.arg for k in uzel.keywords if k.arg
+                ))
+            else:
+                continue
+            for vyrazhenie in _tekstovye_vyrazhenia(uzel, pozicii):
+                for vnutri in ast.walk(vyrazhenie):
+                    if isinstance(vnutri, ast.Call):
+                        vlozhennoe = _imya_vyzova(vnutri)
+                        if vlozhennoe in imena and vlozhennoe not in pokazyvayushie:
+                            pokazyvayushie.add(vlozhennoe)
+                            rosli = True
+                    elif isinstance(vnutri, ast.Name) and vnutri.id in cherez_imya:
+                        for vlozhennoe in cherez_imya[vnutri.id]:
+                            if vlozhennoe in imena and vlozhennoe not in pokazyvayushie:
+                                pokazyvayushie.add(vlozhennoe)
+                                rosli = True
+    return pokazyvayushie
+
+
+def _cherez_imya(derevo: ast.AST) -> dict[str, set[str]]:
+    """Переменная → функции, чей результат в неё кладут.
+
+    Экран сплошь и рядом собирается в два хода: `text, markup = render(…)`,
+    и только потом `_redraw(message, text, markup)`. Без этого шага канал B
+    не видит ни одной таблицы подтверждения — а это два главных экрана
+    завтрашнего занятия.
+    """
+    svyazi: dict[str, set[str]] = {}
+    for uzel in ast.walk(derevo):
+        if isinstance(uzel, ast.Assign):
+            celi, znachenie = uzel.targets, uzel.value
+        elif isinstance(uzel, ast.AnnAssign) and uzel.value is not None:
+            celi, znachenie = [uzel.target], uzel.value
+        else:
+            continue
+        istochniki = {
+            _imya_vyzova(v)
+            for v in ast.walk(znachenie)
+            if isinstance(v, ast.Call) and _imya_vyzova(v)
+        }
+        if not istochniki:
+            continue
+        for cel in celi:
+            for imya in ast.walk(cel):
+                if isinstance(imya, ast.Name):
+                    svyazi.setdefault(imya.id, set()).update(istochniki)
+    return svyazi
+
+
+def _fajly(koren: Path):
     for papka in PAPKI:
         for put in sorted((koren / papka).rglob("*.py")):
-            derevo = ast.parse(put.read_text(encoding="utf-8"), filename=str(put))
+            yield put, ast.parse(put.read_text(encoding="utf-8"), filename=str(put))
+
+
+def _pokazyvayushie_vsyudu(derevya: dict) -> set[str]:
+    """Имена показывающих функций, собранные ПО ВСЕМ файлам сразу.
+
+    Экран собирает один файл (`bot/keyboards/views.py`), а показывает другой
+    (`bot/routers/views.py`), и внутри одного файла эта связь невидима.
+    Имя — единственный мост, который у сканера есть: разрешать импорты
+    по-настоящему значит писать половину интерпретатора. Цена приближения —
+    одноимённая функция в чужом файле попадёт в охват лишней; цена точного
+    разрешения — экраны клавиатур не проверяются вовсе.
+    """
+    obshie: set[str] = set()
+    rosli = True
+    while rosli:
+        rosli = False
+        for derevo in derevya.values():
+            imena = _funkcii(derevo)
+            cherez = _cherez_imya(derevo)
+            svoi = _kanal_b_funkcii(derevo, imena, cherez, obshie)
+            novye = (svoi | (obshie & set(imena))) - obshie
+            if novye:
+                obshie |= novye
+                rosli = True
+    return obshie
+
+
+def sobrat(koren: Path = KOREN, *, tolko_kanal_a: bool = False) -> list[dict]:
+    """Все строки, доезжающие до человека, отсортированные по адресу."""
+    najdeno: list[dict] = []
+    derevya = {put: derevo for put, derevo in _fajly(koren)}
+    obshie = set() if tolko_kanal_a else _pokazyvayushie_vsyudu(derevya)
+    for put, derevo in derevya.items():
+            adres = str(put.relative_to(koren))
+            vidno: dict[tuple[int, str], dict] = {}
+
+            # --- канал A: литерал прямо в текстовой позиции показа
             for uzel in ast.walk(derevo):
                 if not isinstance(uzel, ast.Call):
                     continue
                 imya = _imya_vyzova(uzel)
                 if imya not in POKAZYVAYUT:
                     continue
-                vyrazhenia = list(uzel.args) + [k.value for k in uzel.keywords]
-                for vyrazhenie in vyrazhenia:
+                for vyrazhenie in _tekstovye_vyrazhenia(uzel, POKAZYVAYUT[imya]):
                     for stroka, tekst in _literaly(vyrazhenie):
-                        if not tekst.strip():
+                        if tekst.strip():
+                            vidno.setdefault(
+                                (stroka, tekst),
+                                {"kanal": "A", "vyzov": imya},
+                            )
+
+            # --- канал B: литерал внутри функции, чей результат показывают
+            if not tolko_kanal_a:
+                imena = _funkcii(derevo)
+                indeksy = _ne_tekst(derevo)
+                cherez_imya = _cherez_imya(derevo)
+                svoi = _kanal_b_funkcii(derevo, imena, cherez_imya, obshie)
+                for imya_f in sorted((svoi | obshie) & set(imena)):
+                    for uzel in _vse_literaly_tela(imena[imya_f]):
+                        if id(uzel) in indeksy or not uzel.value.strip():
                             continue
-                        najdeno.append(
-                            {
-                                "fajl": str(put.relative_to(koren)),
-                                "stroka": stroka,
-                                "vyzov": imya,
-                                "tekst": tekst,
-                            }
+                        vidno.setdefault(
+                            (uzel.lineno, uzel.value),
+                            {"kanal": "B", "vyzov": imya_f},
                         )
+
+            for (stroka, tekst), pro in vidno.items():
+                najdeno.append(
+                    {
+                        "fajl": adres,
+                        "stroka": stroka,
+                        "kanal": pro["kanal"],
+                        "vyzov": pro["vyzov"],
+                        "tekst": tekst,
+                    }
+                )
     najdeno.sort(key=lambda z: (z["fajl"], z["stroka"], z["tekst"]))
     return najdeno
 
@@ -107,24 +351,41 @@ def sobrat(koren: Path = KOREN) -> list[dict]:
 def main() -> int:
     razbor = argparse.ArgumentParser(description=__doc__)
     razbor.add_argument("--json", action="store_true", help="машинный вывод")
+    razbor.add_argument(
+        "--kanal",
+        choices=("a", "ab"),
+        default="ab",
+        help="a — только прямой признак задания; ab — оба канала (по умолчанию)",
+    )
     dovody = razbor.parse_args()
 
-    najdeno = sobrat()
+    najdeno = sobrat(tolko_kanal_a=dovody.kanal == "a")
     if dovody.json:
         json.dump(najdeno, sys.stdout, ensure_ascii=False, indent=1)
         print()
         return 0
 
-    fajly = []
+    fajly: list[str] = []
     for zapis in najdeno:
         if zapis["fajl"] not in fajly:
             fajly.append(zapis["fajl"])
         print(
-            "%s:%s · %s() · %s"
-            % (zapis["fajl"], zapis["stroka"], zapis["vyzov"], zapis["tekst"])
+            "%s:%s · %s · %s() · %s"
+            % (
+                zapis["fajl"],
+                zapis["stroka"],
+                zapis["kanal"],
+                zapis["vyzov"],
+                zapis["tekst"],
+            )
         )
+    a = sum(1 for z in najdeno if z["kanal"] == "A")
     print()
-    print("строк, доезжающих до человека: %d, в %d файлах" % (len(najdeno), len(fajly)))
+    print(
+        "строк, доезжающих до человека: %d, в %d файлах "
+        "(прямых A: %d, через посредника B: %d)"
+        % (len(najdeno), len(fajly), a, len(najdeno) - a)
+    )
     return 0
 
 
