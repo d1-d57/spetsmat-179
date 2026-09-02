@@ -40,7 +40,13 @@ from bot.keyboards.room import (
     room_keyboard,
     teachers_keyboard,
 )
-from conftest import ROOM, ROOM_SIZE, TODAY
+# 🔴 ИМПОРТ ТОЛЬКО МОДУЛЬНЫЙ, НЕ ВНУТРИ ФУНКЦИИ. Тот же `from conftest import ...`,
+# выполненный внутри теста, берёт `sys.modules['conftest']` в момент ПРОГОНА, а к тому
+# времени он перевязан на `tests/sessions/conftest.py` (обе папки без `__init__.py`
+# уезжают в sys.path, имя модуля у них одно). Замер 02.09 12:57 на main:
+# `ImportError: cannot import name 'HEAD_TG_ID' from 'conftest' (tests/sessions/conftest.py)`,
+# 1 failed из 347 — поломка появилась, когда P6 влила свой conftest рядом.
+from conftest import HEAD_TG_ID, ROOM, ROOM_SIZE, TODAY, feed_callback
 
 #: «✅Агаркова 3» and «Аникина 0», and nothing else at all.  The surname may carry a
 #: hyphen or a space; the number is a count of obligatory problems and is the last thing
@@ -178,7 +184,6 @@ def test_the_button_names_the_state_it_will_produce(dispatcher, bot_instance, ro
     same world, and the second writes what the first already wrote.
     """
     from bot.keyboards.room import OP_AWAY, OP_CAME
-    from conftest import HEAD_TG_ID, feed_callback
 
     room_service = dispatcher.workflow_data["room_service"]
     head = room_world.head_teacher_id
