@@ -161,11 +161,16 @@ class YandexSpeechKitTranscriber:
 
     THE THREE THINGS THE REQUEST MUST GET RIGHT, each with a test:
 
-    * ``raw_results=true`` — the engine writes numbers AS WORDS and leaves them alone.
+    * ``rawResults=true`` — the engine writes numbers AS WORDS and leaves them alone.
       This is the verbatim mode the interview finalised.  With it off the engine returns
       digits it decided on, and «семь бэ» comes back as whatever its normaliser preferred;
       our own normaliser then has nothing to normalise and no way to tell that it was
-      overruled.
+      overruled.  **It WAS off until 02.09**, because this parameter was spelled
+      ``raw_results`` — the protobuf field name, which this HTTP endpoint does not know
+      and therefore ignores in silence.  What it cost is not academic: «минус один», the
+      way problems ``-1``…``-5`` are dictated, came back normalised as «- 1», and
+      ``core.services.golos.tokenise`` splits that into an unrecognised «-» and the
+      number ``1`` — the teacher says problem -1 and the draft offers problem 1.
     * ``format=oggopus`` and **NO sample rate at all.**  Android moved voice notes from
       16 to 48 kHz in March 2024 and older cached messages still exist in the wild, so a
       hardcoded rate is wrong for a message whose age nobody controls.  An ogg container
@@ -226,7 +231,17 @@ class YandexSpeechKitTranscriber:
                 # ``sampleRateHertz``: see the class docstring.
                 "format=oggopus",
                 # VERBATIM.  Numbers stay words and our own normaliser does the work.
-                "raw_results=true",
+                # THE SPELLING IS THE WHOLE FEATURE, and it is camelCase.  Until 02.09
+                # this read ``raw_results`` — the name of field 9 of v2's protobuf
+                # ``RecognitionSpec``, which is why it looked right and survived review.
+                # The v1 HTTP endpoint reads ``rawResults``, and it IGNORES a parameter
+                # it does not know instead of refusing it: the request came back 200,
+                # normalised, with no complaint, and verbatim mode had never once been
+                # on.  Measured live, same audio, same key: ``raw_results=true`` and no
+                # parameter at all returned the identical string, ``rawResults=true``
+                # returned the words.  Pinned by
+                # ``test_the_verbatim_flag_is_spelled_the_way_the_http_endpoint_reads_it``.
+                "rawResults=true",
             ]
         )
         headers = {

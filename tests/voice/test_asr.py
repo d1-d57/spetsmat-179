@@ -35,9 +35,18 @@ def client():
 
 def test_the_request_asks_for_verbatim_mode(client):
     """«Smart» normalisation turns dictated digits into a lottery, and the digits are the
-    whole payload.  ``raw_results=true`` is the switch that leaves them as words."""
+    whole payload.  ``rawResults=true`` is the switch that leaves them as words.
+
+    THIS TEST WAS GREEN FOR THE WHOLE TIME THE SWITCH WAS OFF, and that is worth a
+    sentence, because it is how the defect survived: it asserted the same misspelling
+    the code made — ``raw_results``, the protobuf field name — so it compared the file
+    to itself and never to the endpoint.  A test that copies its expectation out of the
+    implementation cannot fail on a wrong implementation.  What settled it was a live
+    call, not a green suite; the measurement is in
+    ``test_the_verbatim_flag_is_spelled_the_way_the_http_endpoint_reads_it``.
+    """
     url, _headers, _body = client.build_request(b"ogg-bytes")
-    assert "raw_results=true" in url
+    assert "rawResults=true" in url
 
 
 def test_the_request_names_the_container_and_no_sample_rate(client):
@@ -204,6 +213,35 @@ def test_an_unreachable_engine_becomes_a_refusal_the_screen_can_say_out_loud():
     with pytest.raises(TranscriptionUnavailable) as refusal:
         client.transcribe(b"ogg-bytes")
     assert "unreachable" in str(refusal.value)
+
+
+def test_the_verbatim_flag_is_spelled_the_way_the_http_endpoint_reads_it():
+    """The one word that decides whether «минус один» becomes -1 or 1.
+
+    ``raw_results`` is the PROTOBUF field name — it is real, it is field 9 of v2's
+    ``RecognitionSpec``, and it is why this spelling looks right.  The v1 HTTP endpoint
+    this file talks to takes ``rawResults``, and an unknown query parameter is IGNORED,
+    not refused: the wrong spelling returns 200 with a normalised transcript and no
+    complaint anywhere.  Measured live on 02.09 with the owner's key, same audio,
+    three calls differing only here:
+
+        raw_results=true  -> «Санин с 3 по 6 - 1 петров 7 б 10 а»
+        rawResults=true   -> «санин с третьей по шестую минус один петров семь б десять а»
+        no parameter      -> «Санин с 3 по 6 - 1 петров 7 б 10 а»
+
+    The first and the third are the same string: the flag was doing nothing.  The cost
+    is a wrong mark — the sheet has problems -1..-5, dictated «минус один», and
+    engine-side normalisation writes them «- 1» with a space, which
+    ``core.services.golos.tokenise`` splits into an unrecognised «-» and the number 1.
+    The teacher says problem -1 and the draft offers problem 1.
+    """
+    client = YandexSpeechKitTranscriber("k", "f")
+    url, _, _ = client.build_request(b"ogg-bytes")
+
+    assert "rawResults=true" in url, url
+    # The protobuf spelling must not come back: it is silently ignored, so nothing
+    # else in this suite would ever notice its return.
+    assert "raw_results" not in url, "the ignored protobuf spelling is back: %s" % url
 
 
 def test_the_fake_refuses_an_unscripted_recording_instead_of_inventing_one():
