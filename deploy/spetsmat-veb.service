@@ -15,6 +15,10 @@ WorkingDirectory=@CHECKOUT@
 ExecStart=/usr/bin/python3 -m veb.${SPETSMAT_VEB_ENTRY}
 Restart=always
 RestartSec=5
+# A unit that gives up must say so out loud, like every other unit here: a stop nobody
+# hears is no stop.  Missing from this file when it landed -- ops/proverka_ustanovki.py
+# caught it, which is the whole reason that check exists.
+OnFailure=spetsmat-alert@%n.service
 KillSignal=SIGTERM
 KillMode=mixed
 TimeoutStopSec=30

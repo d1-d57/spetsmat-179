@@ -18,9 +18,23 @@ from typing import Optional
 
 # ------------------------------------------------------------------ env keys
 
-SPETSMAT_VEB_PAROL_PREPOD = os.environ.get("SPETSMAT_VEB_PAROL_PREPOD", "")
-SPETSMAT_VEB_PAROL_ORG = os.environ.get("SPETSMAT_VEB_PAROL_ORG", "")
-SPETSMAT_VEB_SECRET = os.environ.get("SPETSMAT_VEB_SECRET", "")
+# READ AT USE, NOT AT IMPORT.  These were module-level constants, and that is what made
+# the guard below unfixable on its own: whichever test module imported veb.vhod FIRST
+# froze the values, so a later module setting the variables changed nothing.  Import
+# order decided whether the suite passed -- and pytest collects alphabetically, so
+# test_server.py (no secrets) always froze them before test_vhod.py (which sets them).
+# Functions cost one dict lookup per call and remove the ordering entirely.
+
+def _parol_prepod() -> str:
+    return os.environ.get("SPETSMAT_VEB_PAROL_PREPOD", "")
+
+
+def _parol_org() -> str:
+    return os.environ.get("SPETSMAT_VEB_PAROL_ORG", "")
+
+
+def _secret() -> str:
+    return os.environ.get("SPETSMAT_VEB_SECRET", "")
 
 # ------------------------------------------------------------------ cookie constants
 
@@ -29,12 +43,23 @@ COOKIE_MAX_AGE_DAYS = 30
 COOKIE_MAX_AGE_SECONDS = COOKIE_MAX_AGE_DAYS * 24 * 3600
 
 
-def _raise_missing_env() -> None:
+def proverit_okruzhenie() -> None:
+    """Refuse to START without the secrets.  Called by the server, not by import.
+
+    The demand this satisfies is "a missing env variable must stop the server with a
+    clear message, never default silently".  It says STARTUP -- and importing a module
+    is not starting a server.  Calling this at import time made the guard fire for
+    every reader of the module: pytest COLLECTING tests/veb/test_server.py has no
+    secrets in its environment and never intends to serve a request, so the whole web
+    suite stopped being collected (945 passed -> 1 collection error).  A guard that
+    takes the test suite down with it protects nothing.
+
+    So the check lives at the one place that actually starts a server -- veb/server.py
+    main() -- and the tests that exercise signing pass the secret in explicitly.
+    """
     missing: list[str] = []
-    if not SPETSMAT_VEB_SECRET:
+    if not _secret():
         missing.append("SPETSMAT_VEB_SECRET")
-    # The entry file explicitly demands that missing env variables cause
-    # a clear startup refusal rather than a silent default.
     if missing:
         raise RuntimeError(
             "veb/vhod.py: missing required environment variable(s): "
@@ -108,10 +133,10 @@ def obrabotchik_vyhoda() -> bytes:
 # ------------------------------------------------------------------ cookie helpers
 
 def _sign(value: str) -> str:
-    if not SPETSMAT_VEB_SECRET:
+    if not _secret():
         raise RuntimeError("SPETSMAT_VEB_SECRET is not set: cookie signature impossible")
     sig = hmac.new(
-        SPETSMAT_VEB_SECRET.encode("utf-8"),
+        _secret().encode("utf-8"),
         value.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
@@ -123,7 +148,7 @@ def _verify_cookie(raw: str) -> Optional[str]:
         return None
     value, sig = raw.rsplit(".", 1)
     expected = hmac.new(
-        SPETSMAT_VEB_SECRET.encode("utf-8"),
+        _secret().encode("utf-8"),
         value.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
@@ -155,17 +180,18 @@ def _make_cookie(role: str) -> str:
 
 
 def _check_password(submitted: str) -> Optional[str]:
-    if not SPETSMAT_VEB_PAROL_PREPOD or not SPETSMAT_VEB_PAROL_ORG:
+    if not _parol_prepod() or not _parol_org():
         # If env passwords are missing, the server must refuse startup clearly,
         # but we must not expose which is which in error messages.
         return None
-    if submitted == SPETSMAT_VEB_PAROL_PREPOD:
+    if submitted == _parol_prepod():
         return "prepod"
-    if submitted == SPETSMAT_VEB_PAROL_ORG:
+    if submitted == _parol_org():
         return "organizator"
     return None
 
 
 # ------------------------------------------------------------------ guard
-
-_raise_missing_env()
+#
+# Deliberately NOT called here.  See proverit_okruzhenie() for why an import-time
+# guard took the whole web test suite down.  The call site is veb/server.py main().

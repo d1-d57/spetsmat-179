@@ -28,6 +28,7 @@ DRY_RUN=0
 # ops/proverka_ustanovki.py, which compares it with the set of units that have [Install].
 ENABLE_UNITS=(
   spetsmat-bot.service
+  spetsmat-veb.service
   spetsmat-rezervnaya-kopia-pered-zanyatiem.timer
   spetsmat-rezervnaya-kopia-posle-zanyatia.timer
   spetsmat-rezervnaya-kopia-sutochnyj.timer

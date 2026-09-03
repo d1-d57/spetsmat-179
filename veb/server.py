@@ -400,6 +400,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--bind", default="127.0.0.1")
     args = parser.parse_args(argv)
 
+    # Refuse to serve without the signing secret.  This is the STARTUP guard that used
+    # to sit at import time in veb/vhod.py, where it broke test collection instead.
+    vhod.proverit_okruzhenie()
+
     connection = connect()
     try:
         server = ThreadingHTTPServer((args.bind, args.port), Handler)

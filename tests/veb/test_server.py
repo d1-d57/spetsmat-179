@@ -8,6 +8,7 @@ random localhost port picked by the OS (``port=0`` to ``ThreadingHTTPServer``).
 from __future__ import annotations
 
 import json
+import os
 import threading
 import urllib.error
 import urllib.request
@@ -17,7 +18,16 @@ import config
 import pytest
 from infra.db import apply_migrations, connect
 
+# The entry glue landed after these tests were written: every page below /vhod now
+# answers an ANONYMOUS request with the login form, which is correct behaviour and made
+# five assertions here fail against the old contract.  So the tests authenticate the
+# way a browser does -- a signed cookie in the request -- instead of asserting the
+# pre-auth contract.  A signing secret must exist before that cookie can be minted; any
+# value does, this is not the production one.
+os.environ.setdefault("SPETSMAT_VEB_SECRET", "test-secret-key-32bytes!")
+
 import veb.server as server
+from veb import vhod
 
 
 @pytest.fixture
@@ -66,8 +76,14 @@ def running_server(tmp_path):
         connection.close()
 
 
+def _kuka() -> str:
+    """A valid organiser cookie, exactly as /vhod would hand one to a browser."""
+    return f"{vhod.COOKIE_NAME}={vhod._make_cookie('organizator')}"
+
+
 def _http_get(url: str) -> tuple[int, bytes]:
-    with urllib.request.urlopen(url) as r:
+    req = urllib.request.Request(url, headers={"Cookie": _kuka()})
+    with urllib.request.urlopen(req) as r:
         return r.status, r.read()
 
 
@@ -75,7 +91,7 @@ def _http_post(url: str, payload: dict) -> tuple[int, bytes]:
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url, data=body, method="POST",
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "Cookie": _kuka()},
     )
     try:
         with urllib.request.urlopen(req) as r:
