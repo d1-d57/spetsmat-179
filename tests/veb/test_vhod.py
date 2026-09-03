@@ -24,8 +24,15 @@ class FakeHeaders:
 
 
 def test_cookie_signature_and_verify():
+    import base64
+    import json as _json
+
     cookie_raw = vh._make_cookie("prepod")
-    assert cookie_raw.startswith('{"')
+    payload_part, _sig = cookie_raw.rsplit(".", 1)
+    assert not payload_part.startswith('{"')  # payload is base64url-encoded now
+    padding = "=" * (-len(payload_part) % 4)
+    payload = _json.loads(base64.urlsafe_b64decode(payload_part + padding).decode("utf-8"))
+    assert payload["r"] == "prepod"
     full_cookie = f"{vh.COOKIE_NAME}={cookie_raw}"
     role = vh.rol(FakeHeaders(cookie=full_cookie))
     assert role == "prepod"
@@ -46,20 +53,17 @@ def test_cookie_forgery_fails():
 
 def test_cookie_expiry_refuses_old_cookie(monkeypatch):
     import time
+    import base64
+    import json
+
     cookie_raw = vh._make_cookie("organizator")
     # Force the payload timestamp to be in the past beyond 30 days
     payload_part, sig = cookie_raw.rsplit(".", 1)
-    import json
-    payload = json.loads(payload_part)
+    padding = "=" * (-len(payload_part) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(payload_part + padding).decode("utf-8"))
     payload["t"] = int(time.time()) - vh.COOKIE_MAX_AGE_DAYS * 24 * 3600 - 1
-    new_payload_part = json.dumps(payload)
-    old_cookie = vh._sign(new_payload_part)  # Actually _sign takes value string
-    # Rebuild properly
-    import hmac, hashlib
-    new_sig = hmac.new(
-        vh.SPETSMAT_VEB_SECRET.encode("utf-8"),
-        new_payload_part.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-    old_cookie_str = f"{new_payload_part}.{new_sig}"
+    new_payload_part = base64.urlsafe_b64encode(
+        json.dumps(payload).encode()
+    ).decode().rstrip("=")
+    old_cookie_str = vh._sign(new_payload_part)
     assert vh.rol(FakeHeaders(cookie=f"{vh.COOKIE_NAME}={old_cookie_str}")) is None
