@@ -1,0 +1,13 @@
+/* Скромно, без внешних загрузок: страница обязана открываться там, где интернета нет. */
+body { font-family: -apple-system, "Helvetica Neue", sans-serif;
+       background: #f2ede2; color: #1a1714; padding: 24px 32px; line-height: 1.5; }
+header { border-bottom: 1px solid #d8cfbe; padding-bottom: 12px; margin-bottom: 18px; }
+h1 { font-size: 26px; font-weight: 500; }
+form { max-width: 320px; }
+label { display: block; margin: 12px 0 4px; font-weight: 600; }
+input[type="password"] { width: 100%; padding: 8px 10px; border: 1px solid #d8cfbe;
+                         border-radius: 4px; font: inherit; background: #fff; }
+button { margin-top: 14px; padding: 8px 16px; border: none; border-radius: 4px;
+         background: #1a1714; color: #f2ede2; font: inherit; cursor: pointer; }
+.note, .stale { color: #8a8075; font-size: 14px; margin-top: 16px; }
+.stale { border-top: 1px solid #d8cfbe; padding-top: 12px; }
