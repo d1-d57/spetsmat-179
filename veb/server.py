@@ -311,7 +311,8 @@ class Handler(BaseHTTPRequestHandler):
         cookie_value = vhod._make_cookie(role)
         self.send_header(
             "Set-Cookie",
-            f"{cookie_value}; Path=/; HttpOnly; Max-Age={vhod.COOKIE_MAX_AGE_SECONDS}",
+            f"{vhod.COOKIE_NAME}={cookie_value}; Path=/; HttpOnly; SameSite=Lax; "
+            f"Max-Age={vhod.COOKIE_MAX_AGE_SECONDS}",
         )
         self.end_headers()
 
