@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Распределение</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:        #f2ede2;
+    --paper-shade:  #ebe4d5;
+    --ink:          #1a1714;
+    --ink-soft:     #4a443d;
+    --muted:        #8a8075;
+    --faded:        #b8aea0;
+    --rule:         #d8cfbe;
+    --rule-soft:    #e3dac8;
+    --accent:       #a8502a;
+    --accent-soft:  #c9693f;
+    --present:      #3d5a3a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Manrope', sans-serif;
+    font-size: 15px;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    padding: 28px 40px 24px;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 22px;
+  }
+
+  .title-line { display: flex; align-items: baseline; gap: 16px; }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 32px;
+    font-variation-settings: "opsz" 72;
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+
+  .meta { font-size: 14px; color: var(--muted); letter-spacing: 0.02em; }
+  .meta .dot { margin: 0 8px; color: var(--faded); }
+
+  .header-right { display: flex; align-items: center; gap: 14px; }
+
+  .view-switch {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    background: var(--paper-shade);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .view-switch:hover { background: var(--ink); color: var(--paper); }
+
+  .day-toggle {
+    display: inline-flex;
+    background: var(--paper-shade);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 3px;
+  }
+  .day-toggle button {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 7px 16px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 999px;
+    transition: all 0.15s;
+  }
+  .day-toggle button.active { background: var(--ink); color: var(--paper); }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
+    gap: 40px;
+    min-height: 0;
+  }
+
+  .panel { display: flex; flex-direction: column; min-height: 0; }
+
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .panel-title {
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .panel-count {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 16px;
+    color: var(--ink-soft);
+    font-variation-settings: "opsz" 14;
+  }
+  .panel-count b { font-weight: 500; color: var(--ink); }
+
+  .list {
+    flex: 1;
+    display: grid;
+    gap: 0;
+    align-content: start;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .students-list {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 28px;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(11, auto);
+  }
+
+  .teachers-list { grid-template-columns: 1fr; }
+
+  .row {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: "opsz" 48;
+    font-weight: 400;
+    font-size: 23px;
+    line-height: 1;
+    padding: 13px 2px 13px 14px;
+    border-bottom: 1px solid var(--rule-soft);
+    cursor: pointer;
+    color: var(--ink);
+    position: relative;
+    transition: all 0.18s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+  }
+
+  .row:hover { background: var(--paper-shade); padding-left: 18px; }
+
+  .row.absent {
+    color: var(--faded);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    text-decoration-color: var(--faded);
+  }
+
+  .row .first-name {
+    color: var(--muted);
+    font-size: 18px;
+    margin-left: 8px;
+    font-variation-settings: "opsz" 14;
+  }
+  .row.absent .first-name { color: var(--faded); }
+
+  .row.extra::before {
+    content: '+';
+    position: absolute;
+    left: -2px;
+    color: var(--accent);
+    font-size: 14px;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+  }
+
+  .remove-extra {
+    display: none;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--faded);
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 50%;
+    line-height: 1;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .row.extra:hover .remove-extra,
+  .assign-row.extra:hover .remove-extra,
+  .load-row.extra:hover .remove-extra { display: inline-flex; }
+  .remove-extra:hover { color: var(--accent); background: var(--paper-shade); }
+  .load-row.extra { position: relative; }
+  .load-row .remove-extra {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    font-size: 14px;
+  }
+
+  .add-row {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--rule);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+  }
+
+  .add-row label {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .add-row input {
+    flex: 1;
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-variation-settings: "opsz" 48;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--rule);
+    padding: 6px 2px;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .add-row input:focus { border-bottom-color: var(--accent); }
+  .add-row input::placeholder { color: var(--faded); font-style: italic; }
+
+  .add-row.small label { font-size: 10px; }
+  .add-row.small input { font-size: 16px; }
+
+  .suggestions {
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 60px;
+    right: 0;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    box-shadow: 0 -4px 16px rgba(26, 23, 20, 0.08);
+    max-height: 260px;
+    overflow-y: auto;
+    z-index: 20;
+  }
+  .suggestions div {
+    padding: 8px 12px;
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--rule-soft);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .suggestions div:last-child { border-bottom: none; }
+  .suggestions div:hover, .suggestions div.active {
+    background: var(--paper-shade);
+    color: var(--accent);
+  }
+  .suggestions div .first-name {
+    color: var(--muted);
+    font-size: 15px;
+    margin-left: 6px;
+  }
+  .suggestions div .tag {
+    font-family: 'Manrope', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faded);
+    padding: 2px 6px;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    margin-left: 10px;
+  }
+  .suggestions.top {
+    bottom: auto;
+    top: calc(100% + 2px);
+    box-shadow: 0 4px 16px rgba(26, 23, 20, 0.08);
+  }
+
+  .footer {
+    margin-top: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .footer .hint { font-size: 13px; color: var(--muted); }
+
+  .primary {
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 14px 28px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .primary:hover { background: var(--accent); }
+
+  .ghost {
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 2px;
+  }
+  .ghost:hover { color: var(--accent); }
+
+  /* Screen 2 */
+  .assign-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 11px 4px 11px 12px;
+    border-bottom: 1px solid var(--rule-soft);
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .assign-row:hover { background: var(--paper-shade); }
+
+  .assign-row .name {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: "opsz" 48;
+    font-size: 20px;
+    line-height: 1.1;
+  }
+  .assign-row .name .last { font-weight: 500; }
+  .assign-row .name .first { color: var(--ink-soft); font-weight: 400; }
+  .assign-row.extra { position: relative; }
+  .assign-row.extra::before {
+    content: '+';
+    position: absolute;
+    left: -2px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    font-size: 14px;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+  }
+
+  .teacher-select {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 6px 24px 6px 10px;
+    background: var(--paper-shade);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--ink);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='none' stroke='%238a8075' stroke-width='1.5' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    min-width: 170px;
+  }
+  .teacher-select.unassigned {
+    border-color: var(--accent);
+    color: var(--accent);
+    background-color: rgba(168, 80, 42, 0.05);
+  }
+
+  .absent-strip {
+    margin-top: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+    border-top: 1px dashed var(--rule);
+  }
+  .absent-strip .label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    margin-right: 10px;
+  }
+  .absent-strip .pill {
+    display: inline-block;
+    cursor: pointer;
+    color: var(--faded);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: 'Fraunces', serif;
+    font-variation-settings: "opsz" 14;
+    font-size: 15px;
+    transition: all 0.15s;
+  }
+  .absent-strip .pill:hover {
+    color: var(--accent);
+    background: var(--paper-shade);
+    text-decoration-color: var(--accent);
+  }
+  .absent-strip .sep { color: var(--faded); margin: 0 2px; }
+
+  .load-panel {
+    background: var(--paper-shade);
+    border: 1px solid var(--rule);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .load-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .load-row:last-of-type { border-bottom: none; }
+  .load-row:hover .tname { color: var(--accent); }
+  .load-row .tname {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: "opsz" 24;
+    font-size: 18px;
+    font-weight: 400;
+    transition: color 0.15s;
+  }
+  .load-row .tcount {
+    font-weight: 600;
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .load-row.absent-teacher .tname {
+    color: var(--faded);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+  .load-row.absent-teacher .tcount { color: var(--faded); }
+  .load-row.extra .tname::before {
+    content: '+ ';
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .load-sum {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .load-sum .label {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .load-sum .num {
+    font-weight: 700;
+    font-size: 28px;
+    font-variant-numeric: tabular-nums;
+  }
+  .load-sum .num.zero { color: var(--present); }
+  .load-sum .num.nonzero { color: var(--accent); }
+
+  .screen { display: none; flex-direction: column; flex: 1; min-height: 0; }
+  .screen.active { display: flex; }
+
+  /* === Config screen === */
+  .config-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .config-hint {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .config-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    border-top: 1px solid var(--rule);
+  }
+
+  .config-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .config-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--paper);
+    font-family: 'Manrope', sans-serif;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    z-index: 5;
+  }
+  .config-table thead th.day-col { width: 24%; }
+  .config-table thead th.action-col { width: 80px; text-align: right; }
+
+  .config-table tbody tr {
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .config-table tbody tr:hover { background: var(--paper-shade); }
+
+  .config-table td {
+    padding: 10px 14px;
+    vertical-align: middle;
+  }
+
+  .config-table td.name {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: "opsz" 24;
+    font-size: 19px;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+  .config-table td.name .first {
+    color: var(--muted);
+    font-size: 15px;
+    margin-left: 6px;
+  }
+  .config-table td.name .cls-tag {
+    display: inline-block;
+    font-family: 'Manrope', sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faded);
+    padding: 2px 6px;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .config-table td.name.added::before {
+    content: '+';
+    color: var(--accent);
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+
+  .config-table td.cell {
+    position: relative;
+  }
+
+  .config-select {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 6px 24px 6px 10px;
+    background: var(--paper-shade);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--ink);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='none' stroke='%238a8075' stroke-width='1.5' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    min-width: 180px;
+  }
+  .config-select.modified {
+    border-color: var(--accent);
+    background-color: rgba(168, 80, 42, 0.06);
+  }
+  .config-select.muted {
+    color: var(--faded);
+    font-style: italic;
+    background-color: var(--paper-shade);
+  }
+
+  .config-action-cell {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .config-reset {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 2px;
+    visibility: hidden;
+  }
+  tr.has-overrides .config-reset { visibility: visible; }
+  .config-reset:hover { color: var(--accent); }
+
+  .config-delete {
+    font-family: 'Manrope', sans-serif;
+    font-size: 18px;
+    line-height: 1;
+    background: none;
+    border: none;
+    color: var(--faded);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    vertical-align: middle;
+    transition: all 0.15s;
+  }
+  .config-delete:hover {
+    color: var(--accent);
+    background: var(--paper-shade);
+  }
+
+  .config-add-row {
+    margin-top: 14px;
+    padding: 14px 14px 6px;
+    border-top: 1px dashed var(--rule);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+  }
+  .config-add-row label {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .config-add-row input {
+    flex: 1;
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    font-variation-settings: "opsz" 24;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--rule);
+    padding: 6px 2px;
+    color: var(--ink);
+    outline: none;
+    max-width: 400px;
+  }
+  .config-add-row input:focus { border-bottom-color: var(--accent); }
+  .config-add-row input::placeholder { color: var(--faded); font-style: italic; }
+
+  .config-link {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 2px;
+  }
+  .config-link:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="screen active" id="screen-1">
+  <header>
+    <div class="title-line">
+      <h1>Распределение</h1>
+      <span class="meta" id="meta-1"></span>
+    </div>
+    <div class="header-right">
+      <button class="config-link" id="config-btn-1" title="Редактор закреплений">закрепления</button>
+      <button class="ghost" id="reset-btn-1" title="Сбросить текущую сессию">сбросить</button>
+      <div class="day-toggle">
+        <button data-day="mon">Пн</button>
+        <button data-day="thu">Чт</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Школьники</span>
+        <span class="panel-count" id="students-count"></span>
+      </div>
+      <div class="list students-list" id="students-list"></div>
+      <div class="add-row">
+        <label>Гость</label>
+        <input type="text" id="add-guest" placeholder="фамилия из класса…" autocomplete="off">
+        <div class="suggestions" id="guest-suggestions" style="display:none;"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Преподаватели</span>
+        <span class="panel-count" id="teachers-count"></span>
+      </div>
+      <div class="list teachers-list" id="teachers-list"></div>
+      <div class="add-row">
+        <label>Замена</label>
+        <input type="text" id="add-sub" placeholder="имя или фамилия…" autocomplete="off">
+      </div>
+    </section>
+  </main>
+
+  <div class="footer">
+    <span class="hint">Нажми на имя, чтобы отметить отсутствие</span>
+    <button class="primary" id="go-distribute">К распределению →</button>
+  </div>
+</div>
+
+<div class="screen" id="screen-2">
+  <header>
+    <div class="title-line">
+      <h1>Распределение</h1>
+      <span class="meta" id="meta-2"></span>
+    </div>
+    <div class="header-right">
+      <button class="config-link" id="config-btn-2" title="Редактор закреплений">закрепления</button>
+      <button class="ghost" id="reset-btn-2" title="Сбросить текущую сессию">сбросить</button>
+      <button class="view-switch" id="back-btn">← Крупный вид</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Кому достался</span>
+        <span class="panel-count" id="assign-count"></span>
+      </div>
+      <div class="list students-list" id="assign-list"></div>
+      <div class="absent-strip" id="absent-strip" style="display:none;"></div>
+      <div class="add-row small">
+        <label>+ Школьник</label>
+        <input type="text" id="add-late" placeholder="фамилия из класса…" autocomplete="off">
+        <div class="suggestions" id="late-suggestions" style="display:none;"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Загрузка</span>
+      </div>
+      <div class="load-panel" id="load-panel"></div>
+      <div class="add-row small">
+        <label>+ Замена</label>
+        <input type="text" id="add-sub-2" placeholder="имя или фамилия…" autocomplete="off">
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="screen" id="screen-config">
+  <header>
+    <div class="title-line">
+      <h1>Закрепления</h1>
+      <span class="meta">Постоянный состав и кто к кому идёт по умолчанию</span>
+    </div>
+    <div class="header-right">
+      <button class="ghost" id="reset-all-btn" title="Вернуть состав и закрепления к исходным">сбросить всё</button>
+      <button class="view-switch" id="config-back-btn">← Назад</button>
+    </div>
+  </header>
+
+  <div class="config-main">
+    <div class="config-hint">
+      <span>Нажми на ячейку, чтобы изменить. «— не ходит —» — замьютить день.</span>
+      <span id="overrides-count"></span>
+    </div>
+    <div class="config-table-wrap">
+      <table class="config-table">
+        <thead>
+          <tr>
+            <th>Школьник</th>
+            <th class="day-col">Понедельник · 309</th>
+            <th class="day-col">Четверг · 412</th>
+            <th class="action-col"></th>
+          </tr>
+        </thead>
+        <tbody id="config-tbody"></tbody>
+      </table>
+    </div>
+    <div class="config-add-row">
+      <label>+ Школьник</label>
+      <input type="text" id="add-student-config" placeholder="начни вводить фамилию из класса…" autocomplete="off">
+      <div class="suggestions" id="config-suggestions" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   СПРАВОЧНИКИ (хардкод)
+   ========================================================================= */
+
+// Полный список обоих классов (К и Л) — единственный источник имён школьников.
+const CLASS_ROSTER = [
+  // Класс К
+  { id: 'anikina',        last: 'Аникина',      first: 'Анастасия',  cls: 'К' },
+  { id: 'afanasieva',     last: 'Афанасьева',   first: 'Полина',     cls: 'К' },
+  { id: 'biryukov',       last: 'Бирюков',      first: 'Василий',    cls: 'К' },
+  { id: 'bolotin',        last: 'Болотин',      first: 'Фёдор',      cls: 'К' },
+  { id: 'borisov',        last: 'Борисов',      first: 'Дмитрий',    cls: 'К' },
+  { id: 'bykov',          last: 'Быков',        first: 'Владислав',  cls: 'К' },
+  { id: 'verkhoshinsky',  last: 'Верхошинский', first: 'Марк',       cls: 'К' },
+  { id: 'glebova',        last: 'Глебова',      first: 'Елизавета',  cls: 'К' },
+  { id: 'dolgireva',      last: 'Долгирева',    first: 'Екатерина',  cls: 'К' },
+  { id: 'domra',          last: 'Домра',        first: 'Евгений',    cls: 'К' },
+  { id: 'emelyantsev',    last: 'Емельянцев',   first: 'Всеволод',   cls: 'К' },
+  { id: 'isanin',         last: 'Исанин',       first: 'Леонид',     cls: 'К' },
+  { id: 'kakhiani',       last: 'Кахиани',      first: 'Нино',       cls: 'К' },
+  { id: 'levchenko',      last: 'Левченко',     first: 'Дмитрий',    cls: 'К' },
+  { id: 'lim',            last: 'Лим',          first: 'Владислав',  cls: 'К' },
+  { id: 'lupuleshin',     last: 'Лупулешин',    first: 'Иван',       cls: 'К' },
+  { id: 'mogilevsky',     last: 'Могилевский',  first: 'Дмитрий',    cls: 'К' },
+  { id: 'ordian',         last: 'Ордян',        first: 'Леонид',     cls: 'К' },
+  { id: 'pirogov',        last: 'Пирогов',      first: 'Константин', cls: 'К' },
+  { id: 'ponomarev',      last: 'Пономарев',    first: 'Алексей',    cls: 'К' },
+  { id: 'saveliev',       last: 'Савельев',     first: 'Михаил',     cls: 'К' },
+  { id: 'simonova',       last: 'Симонова',     first: 'Анастасия',  cls: 'К' },
+  { id: 'tarakanov',      last: 'Тараканов',    first: 'Роман',      cls: 'К' },
+  { id: 'tukhvatulin',    last: 'Тухватулин',   first: 'Дэвин',      cls: 'К' },
+  { id: 'fedorov',        last: 'Фёдоров',      first: 'Михаил',     cls: 'К' },
+  { id: 'fefelov',        last: 'Фефелов',      first: 'Иван',       cls: 'К' },
+  { id: 'tsukanov',       last: 'Цуканов',      first: 'Александр',  cls: 'К' },
+  // Класс Л
+  { id: 'agarkova',       last: 'Агаркова',     first: 'Ирина',      cls: 'Л' },
+  { id: 'belevantseva',   last: 'Белеванцева',  first: 'Елизавета',  cls: 'Л' },
+  { id: 'bocharova',      last: 'Бочарова',     first: 'Анна',       cls: 'Л' },
+  { id: 'budylin',        last: 'Будылин',      first: 'Михаил',     cls: 'Л' },
+  { id: 'vilyaev',        last: 'Виляев',       first: 'Максим',     cls: 'Л' },
+  { id: 'danilova',       last: 'Данилова',     first: 'Вера',       cls: 'Л' },
+  { id: 'dobromyslov',    last: 'Добромыслов',  first: 'Георгий',    cls: 'Л' },
+  { id: 'egorov',         last: 'Егоров',       first: 'Ярослав',    cls: 'Л' },
+  { id: 'zhukov',         last: 'Жуков',        first: 'Иван',       cls: 'Л' },
+  { id: 'iskeeva',        last: 'Искеева',      first: 'Софья',      cls: 'Л' },
+  { id: 'konevnik',       last: 'Коневник',     first: 'Фёдор',      cls: 'Л' },
+  { id: 'kudishin',       last: 'Кудишин',      first: 'Андрей',     cls: 'Л' },
+  { id: 'kudryashov',     last: 'Кудряшов',     first: 'Виктор',     cls: 'Л' },
+  { id: 'leonovich',      last: 'Леонович',     first: 'Матвей',     cls: 'Л' },
+  { id: 'mayorov',        last: 'Майоров',      first: 'Вячеслав',   cls: 'Л' },
+  { id: 'nikolaeva',      last: 'Николаева',    first: 'Елизавета',  cls: 'Л' },
+  { id: 'pogoreltsev',    last: 'Погорельцев',  first: 'Александр',  cls: 'Л' },
+  { id: 'romanchuk',      last: 'Романчук',     first: 'Тимофей',    cls: 'Л' },
+  { id: 'rybakov',        last: 'Рыбаков',      first: 'Никита',     cls: 'Л' },
+  { id: 'savkov',         last: 'Савков',       first: 'Андрей',     cls: 'Л' },
+  { id: 'sukhov',         last: 'Сухов',        first: 'Данил',      cls: 'Л' },
+  { id: 'ustinina',       last: 'Устинина',     first: 'Полина',     cls: 'Л' },
+  { id: 'khramchenko',    last: 'Храмченко',    first: 'Эльдар',     cls: 'Л' },
+  { id: 'tsikunov',       last: 'Цикунов',      first: 'Александр',  cls: 'Л' },
+  { id: 'chapyshev',      last: 'Чапышев',      first: 'Марк',       cls: 'Л' },
+  { id: 'shevelev',       last: 'Шевелев',      first: 'Константин', cls: 'Л' },
+  { id: 'yusufov',        last: 'Юсуфов',       first: 'Арон',       cls: 'Л' },
+];
+
+// Исходный состав моего кабинета — «заводские настройки», используется для
+// кнопки «сбросить всё» и для per-row индикатора модификации.
+const INITIAL_CABINET = [
+  { studentId: 'bocharova',     days: ['mon','thu'], teacher: { mon: 'vanya',   thu: 'vanya'   } },
+  { studentId: 'bykov',         days: ['mon','thu'], teacher: { mon: 'vanya',   thu: 'vanya'   } },
+  { studentId: 'dolgireva',     days: ['mon','thu'], teacher: { mon: 'vanya',   thu: 'vanya'   } },
+  { studentId: 'isanin',        days: ['mon','thu'], teacher: { mon: 'vanya',   thu: 'vanya'   } },
+  { studentId: 'kakhiani',      days: ['mon','thu'], teacher: { mon: 'vanya',   thu: 'yan'     } },
+  { studentId: 'domra',         days: ['mon','thu'], teacher: { mon: 'elena',   thu: 'elena'   } },
+  { studentId: 'ponomarev',     days: ['mon','thu'], teacher: { mon: 'elena',   thu: 'elena'   } },
+  { studentId: 'shevelev',      days: ['mon','thu'], teacher: { mon: 'elena',   thu: 'elena'   } },
+  { studentId: 'verkhoshinsky', days: ['mon','thu'], teacher: { mon: 'mikhail', thu: 'mikhail' } },
+  { studentId: 'pirogov',       days: ['mon','thu'], teacher: { mon: 'mikhail', thu: 'mikhail' } },
+  { studentId: 'yusufov',       days: ['mon','thu'], teacher: { mon: 'mikhail', thu: 'mikhail' } },
+  { studentId: 'sukhov',        days: ['mon','thu'], teacher: { mon: 'mikhail', thu: 'yan'     } },
+  { studentId: 'glebova',       days: ['mon','thu'], teacher: { mon: 'sasha',   thu: 'sasha'   } },
+  { studentId: 'saveliev',      days: ['mon','thu'], teacher: { mon: 'sasha',   thu: 'sasha'   } },
+  { studentId: 'chapyshev',     days: ['mon','thu'], teacher: { mon: 'sasha',   thu: 'sasha'   } },
+  { studentId: 'kudishin',      days: ['mon','thu'], teacher: { mon: 'olga',    thu: 'sasha'   } },
+  { studentId: 'fedorov',       days: ['mon','thu'], teacher: { mon: 'vasya',   thu: 'mika'    } },
+  { studentId: 'rybakov',       days: ['mon','thu'], teacher: { mon: 'vasya',   thu: 'mika'    } },
+  { studentId: 'tsikunov',      days: ['mon','thu'], teacher: { mon: 'vasya',   thu: 'mika'    } },
+  { studentId: 'tukhvatulin',   days: ['mon'],       teacher: { mon: 'olga'   } },
+  { studentId: 'fefelov',       days: ['mon'],       teacher: { mon: 'elena'  } },
+  { studentId: 'iskeeva',       days: ['mon'],       teacher: { mon: 'olga'   } },
+];
+
+const TEACHERS = [
+  { id: 'vanya',   name: 'Ваня',                days: ['mon','thu'] },
+  { id: 'elena',   name: 'Елена Юрьевна',       days: ['mon','thu'] },
+  { id: 'mikhail', name: 'Михаил Анатольевич',  days: ['mon','thu'] },
+  { id: 'sasha',   name: 'Саша Оревкова',       days: ['mon','thu'] },
+  { id: 'vasya',   name: 'Вася',                days: ['mon'] },
+  { id: 'mika',    name: 'Мика',                days: ['thu'] },
+  { id: 'olga',    name: 'Ольга Александровна', days: ['mon'] },
+  { id: 'yan',     name: 'Ян Маршалл',          days: ['thu'] },
+];
+
+const ROOM_BY_DAY = { mon: 309, thu: 412 };
+const DAY_NAME    = { mon: 'Понедельник', thu: 'Четверг' };
+const MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+
+/* =========================================================================
+   КОНФИГ КАБИНЕТА (localStorage)
+   ========================================================================= */
+
+const CABINET_KEY = 'raspred-cabinet-v2';
+
+function cloneInitialCabinet() {
+  return INITIAL_CABINET.map(e => ({
+    studentId: e.studentId,
+    days: [...e.days],
+    teacher: { ...e.teacher }
+  }));
+}
+
+let cabinetConfig = loadCabinet();
+
+function loadCabinet() {
+  try {
+    const raw = localStorage.getItem(CABINET_KEY);
+    if (!raw) return cloneInitialCabinet();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return cloneInitialCabinet();
+    // defensive: ensure each entry has required fields and references a known student
+    return parsed.filter(e =>
+      e && typeof e.studentId === 'string' &&
+      Array.isArray(e.days) &&
+      e.teacher && typeof e.teacher === 'object' &&
+      CLASS_ROSTER.find(r => r.id === e.studentId)
+    );
+  } catch(e) { return cloneInitialCabinet(); }
+}
+function saveCabinet() {
+  localStorage.setItem(CABINET_KEY, JSON.stringify(cabinetConfig));
+}
+
+// Мутации кабинета
+function cabinetEntryOf(studentId) {
+  return cabinetConfig.find(e => e.studentId === studentId);
+}
+function initialEntryOf(studentId) {
+  return INITIAL_CABINET.find(e => e.studentId === studentId);
+}
+function setTeacherForDay(studentId, day, teacherId) {
+  const e = cabinetEntryOf(studentId);
+  if (!e) return;
+  if (!e.days.includes(day)) e.days.push(day);
+  e.teacher[day] = teacherId;
+  saveCabinet();
+  invalidateSessionFor(studentId);
+}
+function muteDayForStudent(studentId, day) {
+  const e = cabinetEntryOf(studentId);
+  if (!e) return;
+  e.days = e.days.filter(d => d !== day);
+  delete e.teacher[day];
+  saveCabinet();
+  invalidateSessionFor(studentId);
+}
+function removeStudentFromCabinet(studentId) {
+  cabinetConfig = cabinetConfig.filter(e => e.studentId !== studentId);
+  saveCabinet();
+  // также чистим session state на обоих днях
+  ['mon','thu'].forEach(d => {
+    const st = state.byDay[d];
+    st.absentStudents = st.absentStudents.filter(id => id !== studentId);
+    delete st.assignments[studentId];
+  });
+}
+function addStudentToCabinet(studentId) {
+  if (cabinetEntryOf(studentId)) return; // уже есть
+  // Если школьник был в INITIAL — восстанавливаем его исходные закрепления
+  const initial = initialEntryOf(studentId);
+  if (initial) {
+    cabinetConfig.push({
+      studentId,
+      days: [...initial.days],
+      teacher: { ...initial.teacher }
+    });
+  } else {
+    // Новый — по умолчанию оба дня, без преподавателя
+    cabinetConfig.push({
+      studentId,
+      days: ['mon', 'thu'],
+      teacher: { mon: null, thu: null }
+    });
+  }
+  saveCabinet();
+}
+function resetStudentToInitial(studentId) {
+  const initial = initialEntryOf(studentId);
+  if (!initial) return; // добавленный — нечего сбрасывать
+  const i = cabinetConfig.findIndex(e => e.studentId === studentId);
+  if (i < 0) return;
+  cabinetConfig[i] = {
+    studentId,
+    days: [...initial.days],
+    teacher: { ...initial.teacher }
+  };
+  saveCabinet();
+  invalidateSessionFor(studentId);
+}
+function resetAllCabinet() {
+  cabinetConfig = cloneInitialCabinet();
+  saveCabinet();
+  // все session assignments — в ноль
+  ['mon','thu'].forEach(d => {
+    state.byDay[d].assignments = {};
+  });
+}
+function invalidateSessionFor(studentId) {
+  // При смене закрепления — сбрасываем кешированное session-assignment
+  // на ОБОИХ днях, чтобы пересчиталось от нового дефолта.
+  ['mon','thu'].forEach(d => {
+    if (state.byDay[d].assignments[studentId] !== undefined) {
+      delete state.byDay[d].assignments[studentId];
+    }
+  });
+}
+
+// Статус модификации
+function isCabinetEntryModified(studentId) {
+  const cur = cabinetEntryOf(studentId);
+  const init = initialEntryOf(studentId);
+  if (!cur) return true; // вырезан
+  if (!init) return true; // добавлен вручную
+  // compare days
+  if (cur.days.length !== init.days.length) return true;
+  for (const d of init.days) if (!cur.days.includes(d)) return true;
+  // compare teacher per day
+  for (const d of init.days) {
+    if ((cur.teacher[d] ?? null) !== (init.teacher[d] ?? null)) return true;
+  }
+  return false;
+}
+function isCabinetEntryAdded(studentId) {
+  return !initialEntryOf(studentId) && !!cabinetEntryOf(studentId);
+}
+
+/* =========================================================================
+   ПРОИЗВОДНЫЕ АКСЕССОРЫ (замена прежнего STUDENTS[])
+   ========================================================================= */
+
+function rosterEntry(studentId) {
+  return CLASS_ROSTER.find(r => r.id === studentId);
+}
+
+// Возвращает объект школьника в «прежней форме» (с last/first/days/teacher)
+// для конкретного дня — или null если не в кабинете / не ходит в этот день.
+function getCabinetStudentFor(studentId, day) {
+  const cab = cabinetEntryOf(studentId);
+  if (!cab || !cab.days.includes(day)) return null;
+  const r = rosterEntry(studentId);
+  if (!r) return null;
+  return {
+    id: r.id, last: r.last, first: r.first, cls: r.cls,
+    days: cab.days,
+    teacher: cab.teacher
+  };
+}
+
+// Все кабинетные школьники, кто ходит в указанный день.
+function cabinetStudentsForDay(day) {
+  return cabinetConfig
+    .filter(e => e.days.includes(day))
+    .map(e => {
+      const r = rosterEntry(e.studentId);
+      if (!r) return null;
+      return {
+        id: r.id, last: r.last, first: r.first, cls: r.cls,
+        days: e.days,
+        teacher: e.teacher
+      };
+    })
+    .filter(Boolean);
+}
+
+// «Все школьники дня» = кабинетные на этот день + разовые гости.
+function allStudentsForDay(day) {
+  return cabinetStudentsForDay(day).concat(state.byDay[day].extraStudents);
+}
+
+function allTeachersForDay(day) {
+  return TEACHERS.filter(t => t.days.includes(day)).concat(state.byDay[day].extraTeachers);
+}
+
+function presentStudents() {
+  const absent = new Set(ds().absentStudents);
+  return allStudentsForDay(state.currentDay).filter(s => !absent.has(s.id));
+}
+function absentStudentObjs() {
+  const absent = new Set(ds().absentStudents);
+  return allStudentsForDay(state.currentDay).filter(s => absent.has(s.id));
+}
+function presentTeachers() {
+  const absent = new Set(ds().absentTeachers);
+  return allTeachersForDay(state.currentDay).filter(t => !absent.has(t.id));
+}
+
+function getAssignedTeacher(studentId, day) {
+  const e = cabinetEntryOf(studentId);
+  if (!e || !e.days.includes(day)) return null;
+  return e.teacher[day] ?? null;
+}
+
+/* =========================================================================
+   СЕССИОННОЕ СОСТОЯНИЕ (localStorage)
+   ========================================================================= */
+
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+function defaultDay() {
+  const wd = new Date().getDay();
+  if (wd === 1) return 'mon';
+  if (wd === 4) return 'thu';
+  return 'thu';
+}
+
+function emptyDayState() {
+  return {
+    absentStudents: [],
+    absentTeachers: [],
+    extraStudents: [],
+    extraTeachers: [],
+    assignments: {},
+    screen: 1,
+  };
+}
+
+const STORE_KEY = 'raspred-session-v3';
+
+function freshState() {
+  return {
+    date: todayStr(),
+    currentDay: defaultDay(),
+    view: 'session',
+    byDay: { mon: emptyDayState(), thu: emptyDayState() },
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return freshState();
+    const parsed = JSON.parse(raw);
+    if (parsed.date !== todayStr()) return freshState();
+    if (!parsed.byDay || !parsed.byDay.mon || !parsed.byDay.thu) return freshState();
+    ['mon','thu'].forEach(d => {
+      const st = parsed.byDay[d];
+      st.absentStudents = st.absentStudents || [];
+      st.absentTeachers = st.absentTeachers || [];
+      st.extraStudents  = st.extraStudents  || [];
+      st.extraTeachers  = st.extraTeachers  || [];
+      st.assignments    = st.assignments    || {};
+      if (typeof st.screen !== 'number') st.screen = 1;
+    });
+    if (!parsed.view) parsed.view = 'session';
+    return parsed;
+  } catch(e) { return freshState(); }
+}
+
+function saveState() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+
+let state = loadState();
+function ds() { return state.byDay[state.currentDay]; }
+
+/* =========================================================================
+   ХЕЛПЕРЫ
+   ========================================================================= */
+
+function formatDate() {
+  const d = new Date();
+  return `${DAY_NAME[state.currentDay]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+function pluralize(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m100 >= 11 && m100 <= 14) return many;
+  if (m10 === 1) return one;
+  if (m10 >= 2 && m10 <= 4) return few;
+  return many;
+}
+function matchesQuery(rosterItem, q) {
+  const ql = q.toLowerCase();
+  return rosterItem.last.toLowerCase().startsWith(ql)
+      || (rosterItem.first && rosterItem.first.toLowerCase().startsWith(ql));
+}
+
+/* =========================================================================
+   РЕНДЕР
+   ========================================================================= */
+
+function render() {
+  const cur = state.view || 'session';
+  document.getElementById('screen-1').classList.toggle('active', cur === 'session' && ds().screen === 1);
+  document.getElementById('screen-2').classList.toggle('active', cur === 'session' && ds().screen === 2);
+  document.getElementById('screen-config').classList.toggle('active', cur === 'config');
+
+  document.querySelectorAll('.day-toggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.day === state.currentDay);
+  });
+
+  const metaText = `${formatDate()} · Кабинет ${ROOM_BY_DAY[state.currentDay]}`;
+  document.getElementById('meta-1').textContent = metaText;
+  document.getElementById('meta-2').textContent = metaText;
+
+  if (cur === 'config') renderConfig();
+  else if (ds().screen === 1) renderScreen1();
+  else renderScreen2();
+
+  saveState();
+}
+
+function renderScreen1() {
+  const all = allStudentsForDay(state.currentDay);
+  const absent = new Set(ds().absentStudents);
+  const extras = new Set(ds().extraStudents.map(s => s.id));
+  const list = document.getElementById('students-list');
+  list.innerHTML = '';
+  const rowCount = Math.max(11, Math.ceil(all.length / 2));
+  list.style.gridTemplateRows = `repeat(${rowCount}, auto)`;
+  all.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'row' + (absent.has(s.id) ? ' absent' : '') + (extras.has(s.id) ? ' extra' : '');
+    row.innerHTML = `${s.last}${s.first ? ` <span class="first-name">${s.first}</span>` : ''}`;
+    row.onclick = () => toggleStudentAbsent(s.id);
+    if (extras.has(s.id)) {
+      const rm = document.createElement('button');
+      rm.className = 'remove-extra';
+      rm.textContent = '×';
+      rm.title = 'Удалить разового школьника';
+      rm.onclick = (e) => { e.stopPropagation(); removeExtraStudent(s.id); };
+      row.appendChild(rm);
+    }
+    list.appendChild(row);
+  });
+  const present = all.filter(s => !absent.has(s.id));
+  document.getElementById('students-count').innerHTML = `<b>${present.length}</b> из ${all.length}`;
+
+  const allT = allTeachersForDay(state.currentDay);
+  const absentT = new Set(ds().absentTeachers);
+  const extrasT = new Set(ds().extraTeachers.map(t => t.id));
+  const tList = document.getElementById('teachers-list');
+  tList.innerHTML = '';
+  allT.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'row' + (absentT.has(t.id) ? ' absent' : '') + (extrasT.has(t.id) ? ' extra' : '');
+    row.textContent = t.name;
+    row.onclick = () => toggleTeacherAbsent(t.id);
+    if (extrasT.has(t.id)) {
+      const rm = document.createElement('button');
+      rm.className = 'remove-extra';
+      rm.textContent = '×';
+      rm.title = 'Удалить разового преподавателя';
+      rm.onclick = (e) => { e.stopPropagation(); removeExtraTeacher(t.id); };
+      row.appendChild(rm);
+    }
+    tList.appendChild(row);
+  });
+  const presentT = allT.filter(t => !absentT.has(t.id));
+  document.getElementById('teachers-count').innerHTML = `<b>${presentT.length}</b> из ${allT.length}`;
+}
+
+function renderScreen2() {
+  const present = presentStudents();
+  const absentList = absentStudentObjs();
+  const presentT = presentTeachers();
+  const presentTIds = new Set(presentT.map(t => t.id));
+  const extrasSIds = new Set(ds().extraStudents.map(s => s.id));
+  const extrasTIds = new Set(ds().extraTeachers.map(t => t.id));
+  const all = allStudentsForDay(state.currentDay);
+
+  document.getElementById('assign-count').innerHTML =
+    `<b>${present.length}</b> из ${all.length}`;
+
+  const asg = ds().assignments;
+  present.forEach(s => {
+    if (!(s.id in asg)) {
+      const def = getAssignedTeacher(s.id, state.currentDay);
+      asg[s.id] = (def && presentTIds.has(def)) ? def : null;
+    } else if (asg[s.id] && !presentTIds.has(asg[s.id])) {
+      asg[s.id] = null;
+    }
+  });
+  Object.keys(asg).forEach(sid => {
+    if (!present.find(s => s.id === sid)) delete asg[sid];
+  });
+
+  const list = document.getElementById('assign-list');
+  list.innerHTML = '';
+  const rowCount = Math.max(10, Math.ceil(present.length / 2));
+  list.style.gridTemplateRows = `repeat(${rowCount}, auto)`;
+
+  present.forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'assign-row' + (extrasSIds.has(s.id) ? ' extra' : '');
+    const currentAssign = asg[s.id];
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'name';
+    nameEl.innerHTML = `<span class="last">${s.last}</span>${s.first ? ` <span class="first">${s.first}</span>` : ''}`;
+    nameEl.title = 'Нажми на фамилию, чтобы отметить отсутствие';
+    nameEl.onclick = () => toggleStudentAbsent(s.id);
+
+    const select = document.createElement('select');
+    select.className = 'teacher-select' + (currentAssign ? '' : ' unassigned');
+    const optEmpty = document.createElement('option');
+    optEmpty.value = '';
+    optEmpty.textContent = '— выбрать —';
+    if (!currentAssign) optEmpty.selected = true;
+    select.appendChild(optEmpty);
+    presentT.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      if (t.id === currentAssign) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.onchange = e => {
+      asg[s.id] = e.target.value || null;
+      render();
+    };
+    select.onclick = e => e.stopPropagation();
+
+    row.appendChild(nameEl);
+    row.appendChild(select);
+    if (extrasSIds.has(s.id)) {
+      const rm = document.createElement('button');
+      rm.className = 'remove-extra';
+      rm.textContent = '×';
+      rm.title = 'Удалить разового школьника';
+      rm.onclick = (e) => { e.stopPropagation(); removeExtraStudent(s.id); };
+      row.appendChild(rm);
+      row.style.gridTemplateColumns = '1fr auto auto';
+    }
+    list.appendChild(row);
+  });
+
+  const strip = document.getElementById('absent-strip');
+  if (absentList.length === 0) {
+    strip.style.display = 'none';
+  } else {
+    strip.style.display = 'block';
+    strip.innerHTML = '';
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = `Отсутствуют · ${absentList.length}`;
+    strip.appendChild(label);
+    absentList.forEach((s, i) => {
+      if (i > 0) {
+        const sep = document.createElement('span');
+        sep.className = 'sep';
+        sep.textContent = '·';
+        strip.appendChild(sep);
+      }
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.textContent = s.last;
+      pill.title = 'Нажми, чтобы вернуть';
+      pill.onclick = () => toggleStudentAbsent(s.id);
+      strip.appendChild(pill);
+    });
+  }
+
+  const loadPanel = document.getElementById('load-panel');
+  loadPanel.innerHTML = '';
+  const counts = {};
+  presentT.forEach(t => counts[t.id] = 0);
+  Object.values(asg).forEach(tid => { if (tid && tid in counts) counts[tid]++; });
+
+  const allT = allTeachersForDay(state.currentDay);
+  const presentTOrdered = allT.filter(t => presentTIds.has(t.id));
+  const absentTOrdered  = allT.filter(t => !presentTIds.has(t.id));
+
+  presentTOrdered.forEach(t => {
+    const r = document.createElement('div');
+    r.className = 'load-row' + (extrasTIds.has(t.id) ? ' extra' : '');
+    r.innerHTML = `<span class="tname">${t.name}</span><span class="tcount">${counts[t.id]}</span>`;
+    r.title = 'Нажми, чтобы отметить отсутствие';
+    r.onclick = () => toggleTeacherAbsent(t.id);
+    if (extrasTIds.has(t.id)) {
+      const rm = document.createElement('button');
+      rm.className = 'remove-extra';
+      rm.textContent = '×';
+      rm.title = 'Удалить разового преподавателя';
+      rm.onclick = (e) => { e.stopPropagation(); removeExtraTeacher(t.id); };
+      r.appendChild(rm);
+    }
+    loadPanel.appendChild(r);
+  });
+  absentTOrdered.forEach(t => {
+    const r = document.createElement('div');
+    r.className = 'load-row absent-teacher' + (extrasTIds.has(t.id) ? ' extra' : '');
+    r.innerHTML = `<span class="tname">${t.name}</span><span class="tcount">—</span>`;
+    r.title = 'Нажми, чтобы вернуть';
+    r.onclick = () => toggleTeacherAbsent(t.id);
+    if (extrasTIds.has(t.id)) {
+      const rm = document.createElement('button');
+      rm.className = 'remove-extra';
+      rm.textContent = '×';
+      rm.title = 'Удалить разового преподавателя';
+      rm.onclick = (e) => { e.stopPropagation(); removeExtraTeacher(t.id); };
+      r.appendChild(rm);
+    }
+    loadPanel.appendChild(r);
+  });
+
+  const unassigned = present.filter(s => !asg[s.id]).length;
+  const sum = document.createElement('div');
+  sum.className = 'load-sum';
+  sum.innerHTML = `<span class="label">Не распределено</span><span class="num ${unassigned === 0 ? 'zero' : 'nonzero'}">${unassigned}</span>`;
+  loadPanel.appendChild(sum);
+}
+
+function renderConfig() {
+  const tbody = document.getElementById('config-tbody');
+  tbody.innerHTML = '';
+
+  const monTeachers = TEACHERS.filter(t => t.days.includes('mon'));
+  const thuTeachers = TEACHERS.filter(t => t.days.includes('thu'));
+
+  // Sort cabinet config entries alphabetically by last name for stable display
+  const sorted = cabinetConfig
+    .map(e => ({ entry: e, roster: rosterEntry(e.studentId) }))
+    .filter(x => x.roster)
+    .sort((a, b) => a.roster.last.localeCompare(b.roster.last, 'ru'));
+
+  let modifiedCount = 0;
+
+  sorted.forEach(({ entry, roster }) => {
+    const tr = document.createElement('tr');
+    const modified = isCabinetEntryModified(roster.id);
+    const added = isCabinetEntryAdded(roster.id);
+    if (modified) modifiedCount++;
+    if (modified && !added) tr.classList.add('has-overrides');
+
+    // Name
+    const nameTd = document.createElement('td');
+    nameTd.className = 'name' + (added ? ' added' : '');
+    nameTd.innerHTML = `${roster.last}${roster.first ? ` <span class="first">${roster.first}</span>` : ''}<span class="cls-tag">${roster.cls}</span>`;
+    tr.appendChild(nameTd);
+
+    // Mon cell
+    const monTd = document.createElement('td');
+    monTd.className = 'cell';
+    monTd.appendChild(buildConfigSelect(roster.id, 'mon', monTeachers));
+    tr.appendChild(monTd);
+
+    // Thu cell
+    const thuTd = document.createElement('td');
+    thuTd.className = 'cell';
+    thuTd.appendChild(buildConfigSelect(roster.id, 'thu', thuTeachers));
+    tr.appendChild(thuTd);
+
+    // Action cell: reset (if original + modified) and delete
+    const actionTd = document.createElement('td');
+    actionTd.className = 'config-action-cell';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'config-reset';
+    resetBtn.textContent = 'сброс';
+    resetBtn.title = 'Вернуть строку к исходному';
+    resetBtn.onclick = () => {
+      resetStudentToInitial(roster.id);
+      render();
+    };
+    actionTd.appendChild(resetBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'config-delete';
+    delBtn.textContent = '×';
+    delBtn.title = 'Удалить школьника из кабинета';
+    delBtn.onclick = () => {
+      if (!confirm(`Удалить ${roster.last} ${roster.first} из состава кабинета?`)) return;
+      removeStudentFromCabinet(roster.id);
+      render();
+    };
+    actionTd.appendChild(delBtn);
+
+    tr.appendChild(actionTd);
+    tbody.appendChild(tr);
+  });
+
+  const countEl = document.getElementById('overrides-count');
+  if (modifiedCount === 0) {
+    countEl.textContent = 'всё по умолчанию';
+    countEl.style.color = 'var(--muted)';
+  } else {
+    countEl.innerHTML = `<b style="color:var(--ink);font-weight:600;">${modifiedCount}</b> ${pluralize(modifiedCount,'изменение','изменения','изменений')}`;
+    countEl.style.color = 'var(--ink-soft)';
+  }
+}
+
+function buildConfigSelect(studentId, day, teachers) {
+  const sel = document.createElement('select');
+  const e = cabinetEntryOf(studentId);
+  const isAttending = e && e.days.includes(day);
+  const current = isAttending ? (e.teacher[day] ?? null) : null;
+
+  // modified flag: current effective value differs from INITIAL
+  const init = initialEntryOf(studentId);
+  let modified = false;
+  if (!init) {
+    modified = isAttending; // any non-mute is a modification for an added student
+  } else {
+    const initAttending = init.days.includes(day);
+    const initTeacher = initAttending ? (init.teacher[day] ?? null) : null;
+    if (initAttending !== isAttending) modified = true;
+    else if (isAttending && initTeacher !== current) modified = true;
+  }
+
+  sel.className = 'config-select'
+    + (modified ? ' modified' : '')
+    + (!isAttending ? ' muted' : '');
+
+  const optMute = document.createElement('option');
+  optMute.value = '__mute__';
+  optMute.textContent = '— не ходит —';
+  if (!isAttending) optMute.selected = true;
+  sel.appendChild(optMute);
+
+  const optNone = document.createElement('option');
+  optNone.value = '__none__';
+  optNone.textContent = '— никто —';
+  if (isAttending && current === null) optNone.selected = true;
+  sel.appendChild(optNone);
+
+  teachers.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name;
+    if (isAttending && current === t.id) opt.selected = true;
+    sel.appendChild(opt);
+  });
+
+  sel.onchange = ev => {
+    const v = ev.target.value;
+    if (v === '__mute__') {
+      muteDayForStudent(studentId, day);
+    } else if (v === '__none__') {
+      setTeacherForDay(studentId, day, null);
+    } else {
+      setTeacherForDay(studentId, day, v);
+    }
+    render();
+  };
+  return sel;
+}
+
+/* =========================================================================
+   ДЕЙСТВИЯ
+   ========================================================================= */
+
+function toggleStudentAbsent(id) {
+  const arr = ds().absentStudents;
+  const i = arr.indexOf(id);
+  if (i >= 0) arr.splice(i, 1); else arr.push(id);
+  render();
+}
+
+function toggleTeacherAbsent(id) {
+  const arr = ds().absentTeachers;
+  const i = arr.indexOf(id);
+  if (i >= 0) arr.splice(i, 1); else arr.push(id);
+  render();
+}
+
+// Добавляет школьника из CLASS_ROSTER как разового на текущий день.
+function addGuestFromRoster(rosterItem) {
+  // Если он в кабинете и просто отмечен отсутствующим сегодня — снимаем отсутствие.
+  if (ds().absentStudents.includes(rosterItem.id)) {
+    const cab = cabinetEntryOf(rosterItem.id);
+    if (cab && cab.days.includes(state.currentDay)) {
+      toggleStudentAbsent(rosterItem.id);
+      return;
+    }
+  }
+  // Иначе — добавляем как extra
+  ds().extraStudents.push({
+    id: 'guest_' + rosterItem.id + '_' + Date.now(),
+    last: rosterItem.last,
+    first: rosterItem.first,
+    cls: rosterItem.cls,
+    days: [state.currentDay],
+    teacher: { [state.currentDay]: null }
+  });
+  render();
+}
+
+function addSubstitute(name) {
+  name = name.trim();
+  if (!name) return;
+  const id = 'sub_' + Date.now();
+  ds().extraTeachers.push({ id, name, days: [state.currentDay] });
+  render();
+}
+
+function removeExtraStudent(id) {
+  const st = ds();
+  st.extraStudents = st.extraStudents.filter(s => s.id !== id);
+  const ai = st.absentStudents.indexOf(id);
+  if (ai >= 0) st.absentStudents.splice(ai, 1);
+  if (st.assignments[id] !== undefined) delete st.assignments[id];
+  render();
+}
+function removeExtraTeacher(id) {
+  const st = ds();
+  st.extraTeachers = st.extraTeachers.filter(t => t.id !== id);
+  const ai = st.absentTeachers.indexOf(id);
+  if (ai >= 0) st.absentTeachers.splice(ai, 1);
+  Object.keys(st.assignments).forEach(sid => {
+    if (st.assignments[sid] === id) st.assignments[sid] = null;
+  });
+  render();
+}
+
+function changeDay(day) {
+  if (day === state.currentDay) return;
+  state.currentDay = day;
+  render();
+}
+
+function resetSession() {
+  if (!confirm('Сбросить текущую сессию? Отсутствия, гости и распределение обнулятся.')) return;
+  const keepScreen = ds().screen;
+  state.byDay[state.currentDay] = emptyDayState();
+  state.byDay[state.currentDay].screen = keepScreen;
+  render();
+}
+
+function goToScreen2() { ds().screen = 2; state.view = 'session'; render(); }
+function goToScreen1() { ds().screen = 1; state.view = 'session'; render(); }
+function goToConfig()  { state.view = 'config'; render(); }
+function goBackFromConfig() { state.view = 'session'; render(); }
+
+/* =========================================================================
+   АВТОКОМПЛИТ
+   ========================================================================= */
+
+function setupAutocomplete(inputId, suggestBoxId, getCandidates, onChoose, onFreeEnter, topBox) {
+  const input = document.getElementById(inputId);
+  const box = suggestBoxId ? document.getElementById(suggestBoxId) : null;
+  if (box && topBox) box.classList.add('top');
+  let activeIdx = -1;
+  let currentCandidates = [];
+
+  function closeBox() {
+    if (box) box.style.display = 'none';
+    activeIdx = -1;
+  }
+
+  function refresh() {
+    if (!box) return;
+    const q = input.value.trim();
+    if (!q) { closeBox(); return; }
+    currentCandidates = getCandidates(q);
+    if (!currentCandidates.length) { closeBox(); return; }
+    box.innerHTML = '';
+    currentCandidates.forEach((c, i) => {
+      const d = document.createElement('div');
+      const name = c.first
+        ? `${c.last} <span class="first-name">${c.first}</span>`
+        : c.last;
+      const tag = c.cls ? `<span class="tag">${c.cls}</span>` : '';
+      d.innerHTML = `<span>${name}</span>${tag}`;
+      if (i === activeIdx) d.classList.add('active');
+      d.onmousedown = (e) => {
+        e.preventDefault();
+        onChoose(c);
+        input.value = '';
+        closeBox();
+      };
+      box.appendChild(d);
+    });
+    box.style.display = 'block';
+  }
+
+  input.addEventListener('input', () => { activeIdx = -1; refresh(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' && box) {
+      activeIdx = Math.min(activeIdx + 1, currentCandidates.length - 1);
+      refresh(); e.preventDefault();
+    } else if (e.key === 'ArrowUp' && box) {
+      activeIdx = Math.max(activeIdx - 1, 0);
+      refresh(); e.preventDefault();
+    } else if (e.key === 'Enter') {
+      if (box && activeIdx >= 0 && currentCandidates[activeIdx]) {
+        onChoose(currentCandidates[activeIdx]);
+        input.value = '';
+        closeBox();
+      } else if (box && currentCandidates.length === 1) {
+        // Единственный вариант — подтверждаем
+        onChoose(currentCandidates[0]);
+        input.value = '';
+        closeBox();
+      } else if (onFreeEnter) {
+        const val = input.value.trim();
+        if (val) onFreeEnter(val);
+        input.value = '';
+        closeBox();
+      }
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      input.value = '';
+      closeBox();
+    }
+  });
+  input.addEventListener('blur', () => setTimeout(closeBox, 200));
+}
+
+/* =========================================================================
+   ИНИЦИАЛИЗАЦИЯ
+   ========================================================================= */
+
+document.querySelectorAll('.day-toggle button').forEach(b => {
+  b.addEventListener('click', () => changeDay(b.dataset.day));
+});
+document.getElementById('go-distribute').addEventListener('click', goToScreen2);
+document.getElementById('back-btn').addEventListener('click', goToScreen1);
+document.getElementById('reset-btn-1').addEventListener('click', resetSession);
+document.getElementById('reset-btn-2').addEventListener('click', resetSession);
+document.getElementById('config-btn-1').addEventListener('click', goToConfig);
+document.getElementById('config-btn-2').addEventListener('click', goToConfig);
+document.getElementById('config-back-btn').addEventListener('click', goBackFromConfig);
+document.getElementById('reset-all-btn').addEventListener('click', () => {
+  if (!confirm('Вернуть состав кабинета и все закрепления к исходным? Добавленные вручную школьники удалятся, удалённые вернутся, все изменения закреплений откатятся. Текущая сессия тоже обнулится.')) return;
+  resetAllCabinet();
+  render();
+});
+
+// Кандидаты для «Гость» (экраны 1, 2):
+// все из CLASS_ROSTER, кого сейчас нет в сегодняшнем активном списке.
+function guestCandidates(q) {
+  const presentIds = new Set(presentStudents().map(s => s.id));
+  return CLASS_ROSTER
+    .filter(r => !presentIds.has(r.id))
+    .filter(r => matchesQuery(r, q))
+    .slice(0, 8);
+}
+
+setupAutocomplete('add-guest', 'guest-suggestions',
+  guestCandidates,
+  (c) => addGuestFromRoster(c),
+  null // свободный ввод для школьников запрещён
+);
+
+setupAutocomplete('add-late', 'late-suggestions',
+  guestCandidates,
+  (c) => addGuestFromRoster(c),
+  null
+);
+
+// Замены — свободный ввод, автокомплита нет
+setupAutocomplete('add-sub',   null, () => [], () => {}, (val) => addSubstitute(val));
+setupAutocomplete('add-sub-2', null, () => [], () => {}, (val) => addSubstitute(val));
+
+// Добавление в кабинет (экран закреплений):
+// кандидаты из CLASS_ROSTER, кого нет в cabinetConfig
+function cabinetAddCandidates(q) {
+  const inCabinet = new Set(cabinetConfig.map(e => e.studentId));
+  return CLASS_ROSTER
+    .filter(r => !inCabinet.has(r.id))
+    .filter(r => matchesQuery(r, q))
+    .slice(0, 8);
+}
+setupAutocomplete('add-student-config', 'config-suggestions',
+  cabinetAddCandidates,
+  (c) => {
+    addStudentToCabinet(c.id);
+    render();
+  },
+  null,
+  true // suggestions box под инпутом, а не над
+);
+
+render();
+</script>
+
+</body>
+</html>

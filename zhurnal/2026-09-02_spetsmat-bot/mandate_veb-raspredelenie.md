@@ -1,0 +1,197 @@
+# MANDATE — veb-raspredelenie
+
+<!-- assembled by bootstrap_mandate.py; two halves, two authors; do not merge them -->
+
+**STATUS:** `OPEN`
+**TOP_HALF_STATUS:** `COMPLETE`
+**BOTTOM_HALF_STATUS:** `PENDING`
+**ARC:** `/sessions/epic-laughing-bardeen/mnt/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot`
+**ASSEMBLED:** `2026-09-03`
+
+> Status is one of `OPEN` · `CLOSED` · `REFUSED`. `REFUSED` is a LAWFUL outcome and
+> needs a written reason in the bottom half — refusing is not the same as stopping.
+> The one outcome forbidden to the orchestrator is to stop and leave the wave
+> untouched: a tool's refusal is a task, not an outcome
+> (`skills/disciplina-orkestrator/SKILL.md`).
+
+> Phase markers — `TOP_HALF_STATUS: COMPLETE` (this tool always writes the top
+> half) and `BOTTOM_HALF_STATUS: PENDING` / `COMPLETE` (the orchestrator flips it
+> on return). The linter REFUSES mismatch with STATUS: OPEN ↔ PENDING, CLOSED ↔
+> COMPLETE. A reader without context can tell which half is done.
+
+## HALF ONE — WRITTEN BY COWORK, BEFORE THE WAVE
+
+### GOAL
+
+A site reachable from other people's computers, over the bot's own database, where the three room heads change the distribution behind a password and everyone else reads it - plus the past year's conduit and a first place to record acceptance - so that tonight there is somewhere to do the distribution that is not one person's browser.
+
+### INTERVIEW — RENDERED IN ENGLISH FROM A RUSSIAN CONVERSATION — 2026-09-03
+
+> **ИНТЕРВЬЮ ПРОВЕДЕНО** (flag `--intervyu da` at assembly). ⚠ The flag proves the
+> assembler was asked, not that the conversation happened — same honest limit
+> `bootstrap_zahod.py --intervyu` already prints. ⚠ The interview was held in
+> Russian and what is recorded here is the ENGLISH RENDERING of the settled
+> meaning, not a quotation. A rendering can be wrong, and only the owner can
+> say so.
+
+- **Q1** — Q: Q1
+  — M: The goal is a site other people can open and edit tonight; shared state is the point, not the pages.
+- **Q2** — Q: Q2
+  — M: Boundaries complete; reachability moved IN, the VPS moved OUT in favour of a tunnel, live sync moved OUT explicitly.
+- **Q3** — Q: Q3
+  — M: Failure is concrete and its first clause is a second machine opening the page.
+- **Q4** — Q: Q4
+  — M: Eight finalized items, each checkable against the database, the running site or the wave's own files.
+  — note: Two items added after the interview reopened: free models everywhere with paid as escalation, and the orchestrator's autonomy to refuse, re-run and write follow-up zahody without asking.
+- **Q5** — Q: Q5
+  — M: The owner alone reads the bottom half, at acceptance, tonight.
+- **Q6** — Q: Q6
+  — M: Goal and boundaries are in English.
+
+### FINALIZED AT INTERVIEW — 2026-09-03
+
+- [F1] The distinguishing property of this wave over the owner's existing prototype is shared state on a server. Everything else he already had in a browser.
+- [F2] P1 delivers what was promised for tonight and runs first, alone.
+- [F3] Recording acceptance of problems is IN, in a basic form, and never as a second journal - through the existing marking and progress services.
+- [F4] Two password levels this wave: teacher and organiser. Shared passwords from the environment, signed cookie, no usernames. The password also opens the past year's conduit.
+- [F5] P4 is the past year's conduit for reading - 15 847 events already in the database - not the worksheet catalogue, which is done.
+- [F6] Free models everywhere by owner's decision 2026-09-03: on measured work they beat the paid mid-tier. Paid is an escalation after failure, never a pre-assignment. The one exception is acceptance, which is never given to a free model.
+- [F7] The orchestrator is autonomous and judged on the wave being DONE, not on rounds performed: it refuses positions, re-runs them, writes follow-up zahody itself, and reorders. It stops for the owner only on a costed fork, or on its own breakdown signal from the instruction.
+- [F8] The orchestrator obeys INSTRUKCIYA-ORKESTRATORU-2026-09-03.md and the lift sheet PODYOM-VOLNY-sajt.md: state on disk every round, liveness by commits, verdicts by running the lever, UROKI written as it goes.
+
+### BOUNDARIES AND WHAT IS ALREADY CLOSED
+
+- IN, newly: the site must be reachable over HTTPS from another machine this wave. Shared editing is the whole point; a page that only runs on one laptop is the prototype the owner already has.
+- OUT: buying and configuring the Russian VPS - blocked on a VPN problem and not on tonight's path; a tunnel from the owner's machine gives the same URL in minutes.
+- OUT: pupil self-service accounts and pupil passwords - deferred 2026-09-03.
+- OUT: live multi-user sync. Refreshing shows what others changed; saying so in the interface is part of the work.
+- OUT: the teachers' attendance-share ledger kept by Natalia Pavlovna.
+- OUT: the year's lesson schedule as a feature - a placeholder the organiser fills.
+- CLOSED 2026-09-03: publishing 56 pupil surnames is not a concern.
+- CLOSED 2026-09-03: rooms are 203 (NS), 302 (DM), 303 (IYa).
+- CLOSED 2026-09-03: a teacher seeing the whole school is wanted behaviour; own pupils are highlighted, never filtered out.
+- CLOSED 2026-09-03: compound acceptors are two weekday-keyed rows, not a modelling gap.
+- CLOSED: the worksheet catalogue is built and deployed as the spetsmat-179 repository. This wave neither rebuilds nor restyles it.
+
+### CLOSING PHASE — KNOWLEDGE
+
+**The orchestrator runs this phase AFTER the last pass is ACCEPTED and BEFORE the
+bottom half is written.** It is not optional and not a report: `--lint` refuses a
+bottom half that does not answer it with numbers.
+
+**a. HARVEST.** Collect every lesson, debt and incident born in THIS wave — from the
+`kod_*` files of the wave and from the wave journal. Count them.
+
+**b. JUDGE.** Every harvested lesson gets a verdict, from a FRESH free-model pass, in
+batches of about ten, and NEVER from the model that wrote it — the author is the
+wrong judge, and that is the structural reason this phase exists at all. Three
+lawful verdicts: it becomes a **RULE** in a named skill · it becomes a **DEBT** at a
+named address · it is **dismissed** with a reason. A lesson with no `ЦЕНА:` is not
+judged at all: it goes back to its author as `доработка`, because a lesson without a
+price is an observation.
+
+**c. RULES TO CARRIERS.** For every lesson promoted to a rule, name what goes RED when
+it is violated. If nothing can, the rule is declared a **hope**, in writing, by our own
+law (`skills/disciplina-kachestvo/SKILL.md`). Each new carrier — a gate, a phase, an
+artifact field — becomes a NAMED follow-up pass, written now: run in this wave if the
+clock allows, carried into the next mandate if not.
+
+**d. BALANCE.** Print the four numbers below. That single delta is what tells us
+whether we are winning.
+
+**COST.** All of it on free models, judging batched, and each judging pass reads only
+the lesson text, its price and its named home — never the repository. The phase is
+bounded by the CLOCK, not by a number of tries: when time runs out, unjudged lessons
+are listed BY NAME in the bottom half and carried into the next mandate as an explicit
+debt. They may never be dropped silently.
+
+### RESPONSIBILITIES — fixed here so they stop being re-decided every wave
+
+| what | whose |
+|---|---|
+| MERGING a branch | the pass itself, as its last move |
+| ACCEPTANCE of a returned pass | the orchestrator, per pass, in parallel |
+| COMMITS ALONG THE WAY | the pass, by path, as it goes |
+| THE FINAL COMMITS AND THE PUSH | the orchestrator |
+| THE CLOSING PHASE | the orchestrator, before the mandate is closed |
+
+### SCALE
+
+One evening, five positions, all of them on free models. P1 runs first and alone because it creates veb/; P2-P5 fan out afterwards on disjoint files. A paid model is never assigned in advance - it is an escalation the orchestrator applies to a position that came back empty, died on context, or shipped defective twice.
+
+### WHAT COUNTS AS FAILURE
+
+The wave has failed if by the end of the evening the owner cannot open the distribution from a second machine and change it; if an edit made on one computer is invisible on another; if editing is not behind a password; if a pupil's debt is not on the same row as who accepts him; if a second store of standing assignments or a second journal of marks appears; or if UROKI-VOLNY-sajt.md comes back empty or written from memory.
+
+## HALF TWO — WRITTEN BY THE ORCHESTRATOR, ON RETURN
+
+> Not written yet: the wave has not returned. STATUS stays `OPEN` until it has, and
+> `--lint` says so out loud instead of passing in silence.
+
+### WHAT WAS ASSEMBLED AND LAUNCHED
+
+<NOT FILLED>
+
+### WHAT IT REPAIRED ITSELF AND WHY IT WAS BROKEN
+
+<NOT FILLED>
+
+### VERDICTS
+
+<NOT FILLED>
+
+### WHAT WAS EXCLUDED AND WHY
+
+<NOT FILLED>
+
+### IRREVERSIBLE ACTIONS
+
+<NOT FILLED>
+
+### QUESTIONS TO THE OWNER — ANSWER IN PLACE, UNDER EACH
+
+> 🔴 **A QUESTION HERE IS NOT A COMPLAINT — IT IS THE ONLY LAWFUL FORM OF
+> «I could not do this because the decision is not mine».** An item excluded
+> with a written reason that amounts to «I lacked the owner's decision» is not
+> an outcome: it is a question that was never asked, and the orchestrator
+> quietly decided for two people that there was no time to ask.
+>
+> **Form:** one `[Vn]` item per question. Each carries WHAT is blocked,
+> WHAT was measured about it already, and the SHAPE of a usable answer — so the
+> owner can reply in one line rather than reconstruct the problem. The owner
+> writes the answer directly underneath, in place.
+>
+> **Empty is lawful** and means «nothing was blocked by a missing decision» —
+> which is a claim, not a default, and `--lint` will not let it hide a REFUSED
+> or a partially delivered wave.
+
+<NOT FILLED>
+
+### CLOSING PHASE — KNOWLEDGE BALANCE
+
+> The four numbers below are the point of this section. `DELTA` is not
+> stored, it is CHECKED: `--lint` recomputes `BORN` minus `CLOSED` and
+> refuses a mismatch. `CARRIED` above zero REQUIRES the unjudged lessons
+> to be listed BY NAME underneath — carried is lawful, silent is not.
+
+**BORN:** `<NOT FILLED>`
+**CLOSED:** `<NOT FILLED>`
+**CARRIED:** `<NOT FILLED>`
+**DELTA:** `<NOT FILLED>`
+
+_Carried by name (one line each, or the single word `none`):_
+<NOT FILLED>
+
+### LINE-BY-LINE ANSWER TO EVERY FINALIZED ITEM
+
+<NOT FILLED>
+
+> One line per finalized item, and every item of the top half must get one: `done` or `not done` with the reason. This field is the point of the whole artifact.
+- [F1] <NOT FILLED>
+- [F2] <NOT FILLED>
+- [F3] <NOT FILLED>
+- [F4] <NOT FILLED>
+- [F5] <NOT FILLED>
+- [F6] <NOT FILLED>
+- [F7] <NOT FILLED>
+- [F8] <NOT FILLED>
