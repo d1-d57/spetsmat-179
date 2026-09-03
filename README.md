@@ -41,12 +41,24 @@
 
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/DIAGNOZ-huka-2026-09-04.md`** (диагноз stop-хука: почему глобальная регистрация была ошибкой, для аналитика фабрики)
+
 **`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-03.md`** (Хэндофф в сессию 2026-09-03)
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-04.md`** (Хэндофф в сессию 2026-09-04)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-05.md`** (Хэндофф в сессию 2026-09-05)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/NADEZHNOST-zakaz-na-resyorch.md`** (надёжность: разбор топологии, оффлайн-очередь тапов, бэкапы и заказ на ресёрч Р1-Р7)
+
 **`zhurnal/2026-09-02_spetsmat-bot/NAVIGATOR.md`** (навигатор арки 2026-09-02_spetsmat-bot (ориентация, читается первым): Кондуит спецмата в телеграме)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/PLAN-RAZNOSA-sessii-veb.md`** (план разноса длинной сессии «сайт» по домам: выгрузка машинно, три захода по третям, сведение, список вопросов под ресёрч)
 
 **`zhurnal/2026-09-02_spetsmat-bot/PLAN.md`** (план арки 2026-09-02_spetsmat-bot)
 
@@ -54,10 +66,16 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/PODYOM-VOLNY-sajt.md`** (подъёмный лист волны «сайт»: две строки инструкции оркестратору, порядок позиций, модели, запреты)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/RESHENIA-2026-09-05.md`** (решения сессии 04.09: постоянная ссылка через Pages, вход преподавателя через Telegram, slot вместо weekday в enrollment)
+
 **`zhurnal/2026-09-02_spetsmat-bot/SESSIYA.md`** (дневник арки 2026-09-02_spetsmat-bot)
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/SOSTOYANIE.md`** (состояние арки 2026-09-02_spetsmat-bot — что сделано/осталось, чем измерено, дом разведки)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/SVERKA-2026-09-04.md`** (сверка волны «сайт» с реальностью: что заявлено против того, что снято командами)
 
 **`zhurnal/2026-09-02_spetsmat-bot/TZ.md`** (контракт арки 2026-09-02_spetsmat-bot)
 
@@ -66,6 +84,9 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/VHOD-2026-09-04.md`** (Вход без закрытия предыдущей сессии 2026-09-04)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VHOD-2026-09-05.md`** (Вход в сессию 2026-09-05: волна ОСНОВАНИЕ собрана, семь заходов готовы, ждёт починки хука)
 
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-02.md`** (Выгрузка сессии 2026-09-02 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
@@ -77,7 +98,43 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-03-3.md`** (Выгрузка сессии 2026-09-03 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-03-4.md`** (Выгрузка сессии 2026-09-03 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-03.md`** (Выгрузка сессии 2026-09-03 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+
+
+
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-04-2.md`** (Выгрузка сессии 2026-09-04 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-04-3.md`** (Выгрузка сессии 2026-09-04 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-04.md`** (Выгрузка сессии 2026-09-04 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_N0-dovezti-rabotu-noch-0904.md`** (довезти в git работу ночи 04.09: две регрессии и вся волна ОСНОВАНИЕ, двумя коммитами)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_N1-slot-vmesto-weekday.md`** (enrollment переводится с weekday на slot 1|2, room выносится в отдельную таблицу)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_N2-chelovek-bez-klassa.md`** (инструмент, называющий подозрительные строки состава и НЕ удаляющий ничего сам)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_N3-vhod-cherez-telegram.md`** (вход преподавателя по одноразовой ссылке от бота, преподавательского пароля больше нет)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_N4-priyom-zadach.md`** (сетка «ученик x задачи листка», отметка ставится тапом через существующий сервис)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_N5-konduit-proshlogo-goda.md`** (чтение архива прошлого года: 18 листков, 56 учеников, 15847 событий)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_N6-stranica-pages-i-zaglushka.md`** (страница Pages со снимком распределения и честной заглушкой, когда туннель молчит)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_N7-repozitorii-pages-tunnel.md`** (репозитории, Pages, origin и постоянный туннель — исполняется на машине владельца под его учёткой gh)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_P1-yadro.md`** (P1 волны sborka-bota: ядро — схема, миграции, журнал отметок append-only)
 
@@ -149,6 +206,9 @@
 
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_sklejka-vhoda-s-serverom.md`** (Склейка: вход veb/vhod.py приделывается к серверу veb/server.py — единственный файл, которого не было ни в одной зоне)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_veb-konduit-proshlogo-goda.md`** (Кондуит прошлого года на чтение: 18 листков на 56 учеников, 15847 событий, уже лежащих в базе)
 
 
@@ -162,7 +222,10 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_vykatka-tunnel-i-storozh.md`** (Выкатка сайта распределения наружу по HTTPS через туннель с машины владельца плюс сторож продукта)
 
+
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_sborka-bota.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_veb-raspredelenie.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
+
+**`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-OSNOVANIE.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
