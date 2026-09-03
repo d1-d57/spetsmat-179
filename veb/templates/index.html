@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Распределение</title>
+<style>
+  :root { --ink: #1a1714; --paper: #f2ede2; --rule: #d8cfbe;
+         --muted: #8a8075; --accent: #a8502a; --alert: #b53a2a; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 15px/1.4 -apple-system, "Helvetica Neue", sans-serif;
+         color: var(--ink); background: var(--paper);
+         padding: 24px 32px; }
+  header { display: flex; align-items: baseline; justify-content: space-between;
+           border-bottom: 1px solid var(--rule); padding-bottom: 12px;
+           margin-bottom: 18px; }
+  h1 { font-size: 26px; font-weight: 500; }
+  .view-toggle { display: inline-flex; border: 1px solid var(--rule);
+                 border-radius: 999px; padding: 3px; background: #ebe4d5; }
+  .view-toggle button { border: 0; background: transparent; padding: 6px 14px;
+                       font: inherit; color: var(--muted); cursor: pointer;
+                       border-radius: 999px; }
+  .view-toggle button.active { background: var(--ink); color: var(--paper); }
+  .weekday-toggle { display: inline-flex; gap: 4px; margin-left: 12px;
+                    border: 1px solid var(--rule); border-radius: 999px;
+                    padding: 3px; background: #ebe4d5; }
+  .weekday-toggle button { border: 0; background: transparent; padding: 6px 10px;
+                          font: inherit; color: var(--muted); cursor: pointer;
+                          border-radius: 999px; }
+  .weekday-toggle button.active { background: var(--ink); color: var(--paper); }
+  main { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 32px; }
+  h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.18em;
+       text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .row { display: flex; justify-content: space-between; align-items: center;
+         padding: 9px 4px; border-bottom: 1px solid var(--rule); }
+  .row.alert { background: rgba(181, 58, 42, 0.06); border-bottom-color: var(--alert); }
+  .row .who { font-weight: 500; }
+  .row .who .cls { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .row .meta { color: var(--muted); font-size: 13px; }
+  .row .debt { color: var(--accent); font-weight: 600; margin-left: 8px; }
+  select { font: inherit; padding: 4px 10px; border: 1px solid var(--rule);
+           background: var(--paper); border-radius: 4px; color: var(--ink); }
+  .teacher-card { padding: 14px 16px; border: 1px solid var(--rule);
+                  margin-bottom: 12px; background: #ebe4d5; border-radius: 2px; }
+  .teacher-card.alert { border-color: var(--alert); background: rgba(181, 58, 42, 0.06); }
+  .teacher-card h3 { font-size: 17px; font-weight: 500; margin-bottom: 6px; }
+  .teacher-card .load { color: var(--muted); font-size: 13px; }
+  .teacher-card ul { list-style: none; margin-top: 8px; }
+  .teacher-card li { padding: 3px 0; font-size: 14px; color: var(--ink); }
+  #status { position: fixed; right: 24px; bottom: 24px; padding: 10px 16px;
+           background: var(--ink); color: var(--paper); border-radius: 4px;
+           opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  #status.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Распределение</h1>
+  <div>
+    <span class="view-toggle" id="view-toggle">
+      <button data-view="students" class="active">Школьники</button>
+      <button data-view="teachers">Преподаватели</button>
+    </span>
+    <span class="weekday-toggle" id="weekday-toggle">
+      <button data-day="1" class="active">Пн</button>
+      <button data-day="4">Чт</button>
+    </span>
+  </div>
+</header>
+
+<main>
+  <section id="students-view">
+    <h2 id="students-count">Школьники</h2>
+    <div id="students-list"></div>
+  </section>
+  <section id="teachers-view" hidden>
+    <h2 id="teachers-count">Преподаватели</h2>
+    <div id="teachers-list"></div>
+  </section>
+</main>
+
+<div id="status"></div>
+
+<script>
+const STUDENTS_LIMIT = 5;
+
+let state = {
+  view: 'students',
+  weekday: 1,
+  data: null,
+};
+
+async function fetchView(weekday) {
+  const r = await fetch(`/api/view?weekday=${weekday}`);
+  if (!r.ok) { toast(`Ошибка: ${r.status}`); return; }
+  state.data = await r.json();
+  render();
+}
+
+async function fetchTeachers() {
+  const r = await fetch('/api/teachers');
+  if (!r.ok) return [];
+  return await r.json();
+}
+
+function render() {
+  if (!state.data) return;
+  const studentsEl = document.getElementById('students-view');
+  const teachersEl = document.getElementById('teachers-view');
+  studentsEl.hidden = state.view !== 'students';
+  teachersEl.hidden = state.view !== 'teachers';
+
+  if (state.view === 'students') {
+    renderStudents();
+  } else {
+    renderTeachers();
+  }
+}
+
+function renderStudents() {
+  const list = document.getElementById('students-list');
+  list.innerHTML = '';
+  let withDebt = 0;
+  for (const s of state.data.students) {
+    const row = document.createElement('div');
+    row.className = 'row' + (!s.teacher_id ? ' alert' : '');
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = `${s.surname} ${s.name}`;
+    if (s.class) {
+      const cls = document.createElement('span');
+      cls.className = 'cls';
+      cls.textContent = s.class;
+      who.appendChild(cls);
+    }
+    const right = document.createElement('div');
+    const sel = document.createElement('select');
+    sel.appendChild(option('', '— выбрать —'));
+    for (const t of state.data.teachers) {
+      sel.appendChild(option(t.id, t.name));
+    }
+    sel.value = s.teacher_id == null ? '' : String(s.teacher_id);
+    sel.onchange = () => changeTeacher(s, sel.value);
+    right.appendChild(sel);
+    if (s.teacher_id == null) {
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = ' без закрепления';
+      right.prepend(meta);
+    }
+    row.appendChild(who);
+    row.appendChild(right);
+    list.appendChild(row);
+  }
+  document.getElementById('students-count').textContent =
+    `Школьники (${state.data.students.length})`;
+}
+
+function renderTeachers() {
+  const list = document.getElementById('teachers-list');
+  list.innerHTML = '';
+  for (const t of state.data.teachers) {
+    const card = document.createElement('div');
+    card.className = 'teacher-card' +
+      (t.load === 0 || t.load > STUDENTS_LIMIT ? ' alert' : '');
+    const h = document.createElement('h3');
+    h.textContent = t.name;
+    const load = document.createElement('div');
+    load.className = 'load';
+    load.textContent = `нагрузка: ${t.load}` +
+      (t.load === 0 ? ' ⚠ нет детей'
+       : t.load > STUDENTS_LIMIT ? ' ⚠ слишком много'
+       : '');
+    card.appendChild(h);
+    card.appendChild(load);
+    if (t.students.length) {
+      const ul = document.createElement('ul');
+      for (const s of t.students) {
+        const li = document.createElement('li');
+        li.textContent = `${s.surname} ${s.name}`;
+        ul.appendChild(li);
+      }
+      card.appendChild(ul);
+    }
+    list.appendChild(card);
+  }
+  document.getElementById('teachers-count').textContent =
+    `Преподаватели (${state.data.teachers.length})`;
+}
+
+function option(value, text) {
+  const o = document.createElement('option');
+  o.value = value;
+  o.textContent = text;
+  return o;
+}
+
+async function changeTeacher(student, teacherIdRaw) {
+  const teacherId = parseInt(teacherIdRaw, 10);
+  if (!teacherId) {
+    toast('выберите преподавателя');
+    return;
+  }
+  const r = await fetch('/api/enrollment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      student_id: student.student_id,
+      teacher_id: teacherId,
+      weekday: state.weekday,
+    }),
+  });
+  if (r.ok) {
+    toast('сохранено');
+    fetchView(state.weekday);
+  } else {
+    const err = await r.json().catch(() => ({}));
+    toast(`ошибка: ${err.error || r.status}`);
+  }
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+document.getElementById('view-toggle').addEventListener('click', e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  for (const b of e.currentTarget.children) b.classList.remove('active');
+  e.target.classList.add('active');
+  state.view = e.target.dataset.view;
+  render();
+});
+
+document.getElementById('weekday-toggle').addEventListener('click', e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  for (const b of e.currentTarget.children) b.classList.remove('active');
+  e.target.classList.add('active');
+  state.weekday = parseInt(e.target.dataset.day, 10);
+  fetchView(state.weekday);
+});
+
+fetchView(state.weekday);
+</script>
+
+</body>
+</html>
