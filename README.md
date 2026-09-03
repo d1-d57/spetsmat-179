@@ -51,6 +51,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/PLAN.md`** (план арки 2026-09-02_spetsmat-bot)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/PODYOM-VOLNY-sajt.md`** (подъёмный лист волны «сайт»: две строки инструкции оркестратору, порядок позиций, модели, запреты)
+
 **`zhurnal/2026-09-02_spetsmat-bot/SESSIYA.md`** (дневник арки 2026-09-02_spetsmat-bot)
 
 
@@ -144,5 +147,22 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_R3-istochniki.md`** (сверка живого кода с ИСХОДНЫМИ документами владельца, а не с мандатом)
 
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_veb-konduit-proshlogo-goda.md`** (Кондуит прошлого года на чтение: 18 листков на 56 учеников, 15847 событий, уже лежащих в базе)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_veb-priyom-zadach.md`** (Сетка «ученик x задачи листка»: отметка о сдаче ставится тапом, только через marking.py и progress.py)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_veb-raspredelenie-mvp.md`** (MVP веб-распределения: импорт базы прошлого года в enrollment и страница с двумя разрезами, где правка сохраняется в базу, а не в браузер)
+
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_veb-vhod-i-obshchee-sostoyanie.md`** (Два пароля из окружения в подписанной куке и общее состояние: правка с одного компьютера видна на другом)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_vykatka-tunnel-i-storozh.md`** (Выкатка сайта распределения наружу по HTTPS через туннель с машины владельца плюс сторож продукта)
+
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_sborka-bota.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
+
+**`zhurnal/2026-09-02_spetsmat-bot/mandate_veb-raspredelenie.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
