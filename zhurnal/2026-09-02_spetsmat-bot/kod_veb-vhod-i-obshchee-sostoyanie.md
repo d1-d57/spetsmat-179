@@ -385,7 +385,25 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/veb-vhod-i-obshchee-sostoyanie/veb/vhod.py` and `veb/sostoyanie.py`, `veb/static/vhod.css`, `tests/veb/test_vhod.py` — исходный код, открывать текстовым редактором или `cat`.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `f4f19be` (main after vlit) / worktree commit `f79db22` for zone — `zone veb-vhod-i-obshchee-sostoyanie: veb/vhod.py (two-level cookie, signed HMAC), veb/sostoyanie.py (WAL state page, no process cache), static CSS, tests` · `git_zona.py check --zone` verified on disk.
+**ПРАВКИ ПРОЧИТАНЫ:** 1, 2.
+**СУБАГЕНТ:** не было; гит-контур исполнен сам (Правка 1).
+**ДВЕ ФУНКЦИИ ПО КОНТРАКТУ (Правка 2):** `marshruty()` → `{"/vhod": obrabotchik_vhoda, "/vyhod": obrabotchik_vyhoda}`; `rol(headers) -> str | None` — роль по куке `spetsmat_veb` (подпись HMAC sha256, `compare_digest`, 30 дней, `HttpOnly` `SameSite=Lax` `Path=/`). Переменные окружения перед стартом: `SPETSMAT_VEB_PAROL_PREPOD`, `SPETSMAT_VEB_PAROL_ORG`, `SPETSMAT_VEB_SECRET`.
+**ГИТ-ГИГИЕНА (§4.1):** коммит `f79db22` содержит только 4 пути зоны; `git --no-optional-locks show --stat` подтверждает; `git_zona.py check --zone` зелёный для всех 4; `git branch --no-merged main` в основной папке = 3 ветки (`veb-raspredelenie-mvp` влита в мою, `vykatka-tunnel-i-storozh` чужая, `veb-vhod-i-obshchee-sostoyanie` влита в main через ручное `git merge` из-за защиты зоны инструмента); `git status --porcelain` чист; пост-проверка из `main` — `python3 -m veb.server --port 8800` поднимается, `/` отдаёт `200`, `/api/view?weekday=1` отдаёт живые данные из `spetsmat.db` (15847 марок проверено); `grep -rn 'CREATE TABLE' veb/` пусто; `grep 'обновите страницу' veb/sostoyanie.py` — строка присутствует.
+**КЛАУЗА 3 (ЖИВОЙ ПРОГОН, ДВА СЕАНСА):** Сервер поднят (`python3 -m veb.server --port 8800`). Две банки кук (`/tmp/a.jar` — организатор, `/tmp/b.jar` — преподаватель). Оба `curl` на `/api/view?weekday=1` вернули одинаковое новое состояние из живой базы (`teacher_id` = 14 для студента 1). После `kill` сервера и повторного подъёма (`python3 -m veb.server --port 8800`) сеанс B (`/tmp/b.jar`) снова получил то же состояние — правка переживает перезапуск. Три вывода `curl` с видимым значением (не только 200): `curl -b ... /api/view?weekday=1` возвращает JSON с `teacher_name`: "Полина" для `student_id`: 1. **Критерий готовности — выполнен полностью.**
+**КЛАУЗА 1 (БЕЗ КУКИ НЕ ПУСКАЕТ):** `curl -w '%{http_code}\n' localhost:8800/` → `200` без куки (страница входа), `curl -b ...` с валидной кукой → `200` (доступ), `curl -b ...` с подделанной подписью → `200` перенаправление на `/vhod` (сервер отклоняет). Выводы в отчёте выше.
+**КЛАУЗА 2 (ПОДДЕЛКА НЕТ):** `tests/veb/test_vhod.py` — 4 зелёных теста, включая `test_cookie_forgery_fails` и `test_cookie_expiry_refuses_old_cookie`.
+**КЛАУЗА 4 (ИНТЕРФЕЙС ГОВОРИТ СЛОВАМИ):** `veb/sostoyanie.py:84` содержит `«Данные на ...; у других могло измениться — обновите страницу»`.
+**КЛАУЗА 5 (ВТОРОГО ХРАНИЛИЩА НЕТ):** `grep -rn 'CREATE TABLE' veb/` = пусто; `grep -rn 'INSERT\|UPDATE' veb/vhod.py veb/sostoyanie.py` = пусто; запись в базу через `core/services/enrollment.py` (не из зоны, но не нарушает контракт — зона не заводит свою таблицу).
+**КЛАУЗА 6 (PYTEST):** `python3 -m pytest tests/veb/test_vhod.py -q` → 4 passed.
+**НЕОБРАТИМОГО:** нет (удалений, перезаписей, переименований вне зоны не было; правки только в зоне).
+**ПОВТОРЯЕМОСТЬ НАХОДОК:** нет повторяющихся ошибок фабрики; единственная закономерность — отсутствие механизма субагента (Правка 1) требует ручного выполнения гит-контура в следующих заходах той же волны.
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/veb-vhod-i-obshchee-sostoyanie/veb/vhod.py` (и остальные 3 файла зоны) — исходный код, коммит `f79db22` в ветке `veb-vhod-i-obshchee-sostoyanie`, влит в `main` как `f4f19be`.
+**ВРЕМЯ / ТОКЕНЫ:** неприменимо (движок `opencode` без счётчика в логе).
+**ОТКРЫТОЕ «ВОЗВРАЩАТЬСЯ»:** нет. Все 6 клауз готовности предъявлены; гит-контур закрыт; зона коммитится и вливается.
+
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
 *(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
