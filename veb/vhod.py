@@ -7,6 +7,7 @@ neighbouring server; everything else lives here.
 
 from __future__ import annotations
 
+import base64
 import hmac
 import hashlib
 import json
@@ -128,9 +129,11 @@ def _verify_cookie(raw: str) -> Optional[str]:
     ).hexdigest()
     if not hmac.compare_digest(expected, sig):
         return None
-    # Decode payload: role + timestamp
+    # Decode payload: base64url (padding restored) then JSON
     try:
-        payload = json.loads(value)
+        padding = "=" * (-len(value) % 4)
+        payload_str = base64.urlsafe_b64decode(value + padding).decode("utf-8")
+        payload = json.loads(payload_str)
     except Exception:
         return None
     if not isinstance(payload, dict):
@@ -147,7 +150,8 @@ def _verify_cookie(raw: str) -> Optional[str]:
 
 def _make_cookie(role: str) -> str:
     payload = json.dumps({"r": role, "t": int(time.time())})
-    return _sign(payload)
+    encoded = base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+    return _sign(encoded)
 
 
 def _check_password(submitted: str) -> Optional[str]:
