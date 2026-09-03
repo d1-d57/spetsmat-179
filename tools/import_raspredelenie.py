@@ -11,12 +11,13 @@ INTERVAL MODEL.
 The store keeps ``enrollment`` as a half-open interval per ``(student_id, weekday)``
 with ``valid_to = config.OPEN_END_DATE`` for the open row.  The source has no weekday
 column and no explicit start date: last year ran two lesson days (Mon and Thu) per
-student.  Three reasons make weekday = Monday (ISO 1) the one interval we open here:
+student.  A composite teacher ("Саша Оревкова / Ольга Александровна" and two more)
+becomes TWO intervals, one per lesson day, with the same ``valid_from``:
 
-  * the source lists one teacher per child, not two — there is no way to write two
-    rows from a single source row;
+  * the source names two people behind one slash — each one IS a lesson day, and the
+    school runs two days a week;
   * the schema forbids two OPEN rows for the same ``(student_id, weekday)``, so
-    opening two of them would either fail or, worse, fail to fail;
+    opening two of them on DIFFERENT weekdays does not collide;
   * the page (``veb/``) lets the owner fix the day of the week interactively, which
     is the point of having a web surface instead of a static export.
 
@@ -24,6 +25,12 @@ VALID_FROM defaults to the first business day of the current school year — the
 earlier of 1 September of the calendar year or today.  The owner can move it through
 the page; ``move`` closes the old interval and opens a new one, so the choice here
 only seeds the picture.
+
+One source trap to disarm before the slash test: "Мика/Вася" is ONE teacher's name in
+``teachers``, and the source writes it with a slash because the owner writes it that
+way.  A naive split would invent two non-existent people.  The script looks up the
+full string in the catalogue FIRST; only if it does not resolve does it split on
+``/``.
 
 IDEMPOTENCY.
 
@@ -41,12 +48,12 @@ guarantees no duplicate open row sneaks past them.
 
 OUT OF SCOPE.
 
-Composite teachers ("Саша Оревкова / Ольга Александровна" and two more) cannot be
-expressed by a single ``teacher_id`` and are skipped with an explicit reason.  Missing
-students (a typo in the source, a child who left) are skipped likewise.  Missing
-teachers are skipped with a reason — the brief says the staff changed and gaps are
-expected.  Nothing here invents a name that was not in ``students`` or ``teachers``
-to begin with.
+Missing students (a typo in the source, a child who left) are skipped with a reason.
+Missing teachers are skipped with a reason — the brief says the staff changed and
+gaps are expected.  A composite name where NONE of the parts resolve to a teacher is
+also skipped: the FK would refuse the row, and inventing a placeholder would not help
+the owner — the gap is named and the page is the path back.  Nothing here invents a
+name that was not in ``students`` or ``teachers`` to begin with.
 """
 
 from __future__ import annotations
@@ -72,6 +79,21 @@ SOURCE_DEFAULT = Path("_studio/veb-raspredelenie/baza-2025-26.json")
 
 # ISO weekday Monday = 1.  See module docstring for the why.
 WEEKDAY_MONDAY = 1
+# The school runs two lesson days a week.  A composite teacher in the source is
+# mapped to the same person on each day; the owner splits them through the page.
+WEEKDAY_THURSDAY = 4
+
+# A composite teacher is written with this separator.  The catalogue has ONE name
+# with a slash in it ("Мика/Вася"); see module docstring for the disarm.
+COMPOSITE_SEP = "/"
+
+# Status strings printed in the report.  Kept module-level so the test can match.
+STATUS_ASSIGNED = "assigned"
+STATUS_ALREADY = "already correct"
+STATUS_MOVED = "moved"
+STATUS_SKIPPED = "skipped"
+STATUS_WOULD_ASSIGN = "would assign"
+STATUS_WOULD_MOVE = "would move"
 
 
 @dataclass(frozen=True)
@@ -135,6 +157,55 @@ def _room_for_teacher(source: dict, teacher_name: str) -> Optional[str]:
     return None
 
 
+# --------------------------------------------------------- composite-teacher parsing
+
+def _resolve_teacher_name(
+    raw_name: str,
+    teachers: dict[str, tuple[int, str]],
+    source: dict,
+) -> tuple[list[tuple[str, int, str]], list[str]]:
+    """Split a slash-bearing source name into ``(part, teacher_id, room)`` triples.
+
+    Returns ``(resolved, missing_parts)``:
+
+    * ``resolved``  -- every part that mapped to a catalogue teacher, with its id and
+      room from the source.  The caller opens one interval per entry.
+    * ``missing_parts`` -- names from the slash split that did NOT resolve to a
+      catalogue teacher; the report names each one so the owner can fix the source or
+      the catalogue.
+
+    Disarming: "Мика/Вася" IS one teacher's name in ``teachers`` and the source writes
+    it with a slash.  If the full string resolves, it is treated as a SINGLE teacher,
+    not as a composite.
+    """
+    def _room_for(name: str) -> str:
+        return _room_for_teacher(source, name) or ""
+
+    if COMPOSITE_SEP not in raw_name:
+        entry = teachers.get(raw_name.strip().lower())
+        if entry is None:
+            return ([], [])
+        teacher_id, _ = entry
+        return ([(raw_name, teacher_id, _room_for(raw_name))], [])
+
+    full = teachers.get(raw_name.strip().lower())
+    if full is not None:
+        teacher_id, _ = full
+        return ([(raw_name, teacher_id, _room_for(raw_name))], [])
+
+    parts = [p.strip() for p in raw_name.split(COMPOSITE_SEP) if p.strip()]
+    resolved: list[tuple[str, int, str]] = []
+    missing: list[str] = []
+    for part in parts:
+        entry = teachers.get(part.strip().lower())
+        if entry is None:
+            missing.append(part)
+            continue
+        teacher_id, _ = entry
+        resolved.append((part, teacher_id, _room_for(part)))
+    return resolved, missing
+
+
 # --------------------------------------------------------------- one-row outcome
 
 def _apply_one(
@@ -165,10 +236,10 @@ def _apply_one(
         except AlreadyEnrolled:
             # Race: someone else opened between our read and our write.  Re-read and
             # fall through to the move branch by reporting it the same way.
-            return ("skipped", "open row appeared between read and write")
-        return ("assigned", "")
+            return (STATUS_SKIPPED, "open row appeared between read and write")
+        return (STATUS_ASSIGNED, "")
     if open_row.teacher_id == teacher_id and open_row.room == room:
-        return ("already correct", "")
+        return (STATUS_ALREADY, "")
     try:
         service.move(
             student_id=student_id,
@@ -178,8 +249,8 @@ def _apply_one(
             room=room,
         )
     except EnrollmentError as exc:
-        return ("skipped", f"move refused: {exc}")
-    return ("moved", "")
+        return (STATUS_SKIPPED, f"move refused: {exc}")
+    return (STATUS_MOVED, "")
 
 
 # --------------------------------------------------------------------- driver
@@ -210,59 +281,77 @@ def run(
         first_name = row.get("name", "")
         teacher_name = row.get("teacher", "")
 
-        if "/" in teacher_name:
-            outcomes.append(
-                Outcome(surname, first_name, teacher_name,
-                        "skipped",
-                        "composite teacher, single-id model cannot express it")
-            )
-            continue
-
         student_id = students.get((surname, first_name))
         if student_id is None:
             outcomes.append(
                 Outcome(surname, first_name, teacher_name,
-                        "skipped", "no student with this surname+name in the catalogue")
+                        STATUS_SKIPPED, "no student with this surname+name in the catalogue")
             )
             continue
 
-        teacher_entry = teachers.get(teacher_name.strip().lower())
-        if teacher_entry is None:
+        resolved, missing = _resolve_teacher_name(teacher_name, teachers, source)
+        if not resolved:
             outcomes.append(
                 Outcome(surname, first_name, teacher_name,
-                        "skipped", "no teacher with this name in the catalogue")
-            )
-            continue
-        teacher_id, _ = teacher_entry
-
-        room = _room_for_teacher(source, teacher_name)
-        if not room:
-            outcomes.append(
-                Outcome(surname, first_name, teacher_name,
-                        "skipped", "no room in source for this teacher")
+                        STATUS_SKIPPED,
+                        "no teacher with this name in the catalogue")
             )
             continue
 
-        open_row = repo.open_row(student_id, WEEKDAY_MONDAY)
-        if dry_run:
-            if open_row is None:
-                outcomes.append(Outcome(surname, first_name, teacher_name, "would assign", ""))
-            elif open_row.teacher_id == teacher_id and open_row.room == room:
-                outcomes.append(Outcome(surname, first_name, teacher_name, "already correct", ""))
-            else:
-                outcomes.append(Outcome(surname, first_name, teacher_name, "would move", ""))
-            continue
+        # Decide the weekday(s): one entry → Monday; two entries → Monday AND Thursday.
+        # The page lets the owner fix the day later; the seed opens both so the owner
+        # does not start from a half-distribution.
+        weekdays = [WEEKDAY_MONDAY]
+        if len(resolved) > 1:
+            weekdays.append(WEEKDAY_THURSDAY)
 
-        status, reason = _apply_one(
-            service,
-            student_id=student_id,
-            teacher_id=teacher_id,
-            room=room,
-            weekday=WEEKDAY_MONDAY,
-            effective_from=effective_from,
-            open_row=open_row,
-        )
-        outcomes.append(Outcome(surname, first_name, teacher_name, status, reason))
+        first_outcome: Optional[Outcome] = None
+        # Pair each resolved slot with its weekday; the order in ``weekdays`` matches
+        # the order in ``resolved`` by construction (Monday first).
+        for weekday, slot in zip(weekdays, resolved):
+            slot_name, teacher_id, room = slot
+            if not room:
+                outcomes.append(
+                    Outcome(surname, first_name, teacher_name,
+                            STATUS_SKIPPED, "no room in source for this teacher")
+                )
+                continue
+
+            open_row = repo.open_row(student_id, weekday)
+            if dry_run:
+                if open_row is None:
+                    outcome = Outcome(surname, first_name, slot_name, STATUS_WOULD_ASSIGN, "")
+                elif open_row.teacher_id == teacher_id and open_row.room == room:
+                    outcome = Outcome(surname, first_name, slot_name, STATUS_ALREADY, "")
+                else:
+                    outcome = Outcome(surname, first_name, slot_name, STATUS_WOULD_MOVE, "")
+                if first_outcome is None:
+                    first_outcome = outcome
+                outcomes.append(outcome)
+                continue
+
+            status, reason = _apply_one(
+                service,
+                student_id=student_id,
+                teacher_id=teacher_id,
+                room=room,
+                weekday=weekday,
+                effective_from=effective_from,
+                open_row=open_row,
+            )
+            outcome = Outcome(surname, first_name, slot_name, status, reason)
+            if first_outcome is None:
+                first_outcome = outcome
+            outcomes.append(outcome)
+
+        if missing:
+            # One row per missing part so the owner can fix each one independently.
+            for part in missing:
+                outcomes.append(
+                    Outcome(surname, first_name, part,
+                            STATUS_SKIPPED,
+                            "composite teacher, part not in catalogue; assign through the page")
+                )
 
     return outcomes
 
@@ -278,13 +367,17 @@ def _print_report(
     outcomes: list[Outcome], *, y_total: int, dry_run: bool
 ) -> int:
     counts = _summarise(outcomes)
-    x_open = counts.get("assigned", 0) + counts.get("already correct", 0) + counts.get("moved", 0)
+    x_open = (
+        counts.get(STATUS_ASSIGNED, 0)
+        + counts.get(STATUS_ALREADY, 0)
+        + counts.get(STATUS_MOVED, 0)
+    )
     print(f"Source rows Y = {y_total}")
     print(f"Net enrolled X = {x_open} (assigned + already correct + moved)")
-    print(f"Skipped        = {counts.get('skipped', 0)}")
+    print(f"Skipped        = {counts.get(STATUS_SKIPPED, 0)}")
     if dry_run:
-        print(f"Would move     = {counts.get('would move', 0)}")
-        print(f"Would assign   = {counts.get('would assign', 0)}")
+        print(f"Would move     = {counts.get(STATUS_WOULD_MOVE, 0)}")
+        print(f"Would assign   = {counts.get(STATUS_WOULD_ASSIGN, 0)}")
     print()
     by_status: dict[str, list[Outcome]] = {}
     for outcome in outcomes:

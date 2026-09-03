@@ -43,6 +43,7 @@ from typing import Optional
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
+import config
 from core.services.enrollment import (
     EnrollmentError,
     EnrollmentService,
@@ -162,9 +163,23 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _connection(self) -> sqlite3.Connection:
-        # The server holds ONE connection, opened at boot.  ``enrollment_repo``
-        # wraps it; ``infra.db.connect`` already turned foreign keys on.
-        return self.server.connection  # type: ignore[attr-defined]
+        # ``ThreadingHTTPServer`` handles every request on its own thread, and
+        # SQLite objects created in one thread cannot be used in another.  The
+        # clean answer is to open a per-request connection with
+        # ``check_same_thread=False`` and apply the project's pragmas on top of
+        # it.  WAL lets readers and the writer run side by side; the test
+        # fixture substitutes ``server.db_path`` for a tmp file.
+        db_path = getattr(self.server, "db_path", config.DB_PATH)  # type: ignore[attr-defined]
+        raw = sqlite3.connect(
+            str(db_path), check_same_thread=False,
+            isolation_level=None,  # we drive transactions explicitly via the repo
+        )
+        raw.execute("pragma foreign_keys = on")
+        raw.execute("pragma journal_mode = WAL")
+        raw.execute("pragma synchronous = normal")
+        raw.execute("pragma busy_timeout = %d" % config.BUSY_TIMEOUT_MS)
+        raw.row_factory = sqlite3.Row
+        return raw
 
     # --------------------------------------------------------------- GET routes
 
