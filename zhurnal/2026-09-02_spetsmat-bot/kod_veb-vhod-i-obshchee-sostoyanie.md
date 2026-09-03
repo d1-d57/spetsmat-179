@@ -9,7 +9,7 @@
 > Это блок для владельца — то, чем тебя запустили. Исполнителю здесь делать нечего, твоё задание ниже.
 
 ```
-cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/veb-vhod-i-obshchee-sostoyanie && GIT_ZONA_REPO=/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot opencode run --auto --model openrouter/minimax/minimax-m3:free 'Модель: openrouter/minimax/minimax-m3:free — решение владельца 03.09: бесплатная везде, платная только эскалацией после провала.
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/veb-vhod-i-obshchee-sostoyanie && GIT_ZONA_REPO=/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot opencode run --auto --model openrouter/thinkingmachines/inkling:free 'Модель: openrouter/minimax/minimax-m3:free — решение владельца 03.09: бесплатная везде, платная только эскалацией после провала.
 
 Ты исполнитель в репозитории /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/veb-vhod-i-obshchee-sostoyanie.
 
@@ -331,6 +331,19 @@ grep -n '<как механизм назван в вызывающем коде>
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
 ## ПЛАН — (заполняет исполнитель)
+
+Plan (in English, per contract):
+1. Read anchor files: veb/server.py, core/services/enrollment.py, _studio/veb-raspredelenie/TZ.md, config.py.
+2. Apply correction Правка 2: declare `marshruty()` and `rol()` in veb/vhod.py with signatures matching server.py handlers; use SPETSMAT_VEB_PAROL_PREPOD, SPETSMAT_VEB_PAROL_ORG, SPETSMAT_VEB_SECRET from env.
+3. Build veb/vhod.py (two-level password, signed cookie HttpOnly SameSite=Lax Path=/, hmac sha256, compare_digest, 30d, redirect without cookie) and veb/sostoyanie.py (WAL mode, per-request read, no process cache, user-facing stale-data message).
+4. Style veb/static/vhod.css (offline-capable, no external loads).
+5. Tests in tests/veb/test_vhod.py for signature, no-cookie redirect, cookie forgery.
+6. Verify data symlink and 15847 marks.
+7. Commit zone blocks as work completes; final commit after all 4 files.
+8. Final hygiene (§4.1): git_zona.py check on all 4 paths, no external repo, no unmerged branches growth, no new unregistered .md, no foreign paths in commit, full post-check from main repo after merge of own branch.
+9. Live run clause 3: two curl jar sessions (A=organizer changes assignment, B reads new value without server restart; then kill/restart, B reads again). Three curl outputs with visible new value into report.
+10. No subagent (Правка 1); git contour executed manually in this session (branch already clean, nothing to merge from zahod/).
+11. Report sections: ARTIFACT (absolute path), COMMIT (hash + message), REPEATABILITY, CORRECTIONS READ (Правка 1, 2), GIT HYGIENE numbers.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
