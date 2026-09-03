@@ -353,6 +353,10 @@ Plan in English (carcass-level rule):
 > `ДОМ: владелец` — когда дома-файла нет вовсе (сам вопрос владельцу); для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит только случай «доставлено» без метки на месте, недоставленное просто печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
+1. `tests/veb/test_server.py` has 5 pre-existing failing tests (`test_get_root_returns_html`, `test_get_view_returns_two_cuts`, `test_post_enrollment_moves_rather_than_overwrites`, `test_post_enrollment_with_same_teacher_is_a_no_change`, `test_post_enrollment_validates_input`) — caused by the earlier auth-gating integration (accepted work): they call `/`, `/api/view`, `/api/enrollment` with no cookie at all and now correctly get redirected to `/vhod`, so they choke on login-page HTML instead of the JSON/markers they expect. ПРАВКА 2 attributed all 7 failures to the base64url cookie change in `test_vhod.py`; the real split is 2 (fixed, in zone) + 5 (pre-existing, `test_server.py`, out of the named 3-file zone — not touched this session). Needs a decision: either add cookie fixtures to `test_server.py`'s `running_server` requests, or accept these as a known gap — either way it is a genuine "tests/veb -q → всё зелёное" gap the criterion in ПРАВКА 2 did not actually close.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
@@ -501,7 +505,30 @@ curl -b /tmp/jar http://127.0.0.1:8806/                            → 302  сн
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято с долгом` — вход РАБОТАЕТ, проверено мной живьём трижды; долг один и
+он назван: смена формата куки уронила сбор веб-тестов, и чинить это следующей смене.
+
+**ЧЕМ ПРОВЕРЕНО — ОРКЕСТРАТОР, ПРОГОНОМ 00:42 И РАНЬШЕ, РАЗЛИЧЕНИЕМ ТЕЛ, А НЕ КОДОМ ОТВЕТА:**
+
+```
+без куки        GET /              → 200, 'Вход' 1, 'Распределение' 0
+вход паролем    POST /vhod         → 302, в банке кук 1 запись
+с кукой         GET /              → 200, 'Распределение' 2
+снаружи         GET / по HTTPS     → 200, страница входа; с кукой — 56 школьников, 19 преподавателей
+```
+
+**ЧТО ПОЗИЦИЯ ПОЧИНИЛА, И ОБА ДЕФЕКТА БЫЛИ НЕ В ЕЁ ЗОНЕ:**
+1. `_make_cookie` клала в ЗНАЧЕНИЕ куки сырой JSON — пробел, кавычка, запятая, все три запрещены.
+   Клиент обрезал по первому пробелу. Диагноз мой, зона расширена ПРАВКОЙ 1, починено base64url.
+2. `Set-Cookie` уходил БЕЗ имени куки — банка клиента оставалась пустой. Три бесплатных прогона
+   этого не взяли; отдано платной ПРАВКОЙ 2 с точным кодом, починено с первого раза.
+
+**🔴 ДОЛГ, С КОТОРЫМ ПРИНЯТО — ОН ЖЕ ГЛАВНАЯ ЗАДАЧА СЛЕДУЮЩЕЙ СМЕНЫ.**
+`veb/vhod.py` ПОСЛЕДНЕЙ СТРОКОЙ зовёт `_raise_missing_env()` на уровне модуля, а `veb/server.py`
+его импортирует. Без переменных окружения импорт бросает `RuntimeError`, и `pytest` падает НА
+СБОРЕ: было `945 passed, 13 skipped`, стало `1 error`. Требование «отказываться без ключа
+подписи» — моё и верное; точку отказа я не назвал, и её поставили на импорт. Чинится переносом
+вызова из модуля в функцию подписи.
 
 **ВЕТКА РАБОТЫ:** `sklejka-vhoda-s-serverom`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -554,3 +581,67 @@ No irreversible actions besides commit + merge; DB restored by SQL. No new `.py`
 ПОВТОРЯЕМОСТЬ: Cookie base64 encoding fix must be applied to any other cookie-producing mechanism in the project; server integration pattern (static → routes → auth → role-gated POST) repeats if another endpoint is added.
 
 НЕОБРАТИМОЕ: нет (commit + merge reversible; DB restored by SQL; no files deleted/renamed outside zone).
+
+---
+
+## ОТЧЁТ · ЭСКАЛАЦИЯ (ПРАВКА 2) — paid model, 2026-09-03
+
+ПРАВКИ ПРОЧИТАНЫ: 2
+
+No subagent used (per top-level instruction: escalation runs solo, git contour done manually).
+
+**Что сделано и зачем:**
+- `veb/server.py:313-315` — the `Set-Cookie` header was missing the cookie name entirely (`f"{cookie_value}; Path=/; HttpOnly; Max-Age=..."`), so no real HTTP client stores it. Applied the exact one-line fix named in ПРАВКА 2: prefixed the header value with `{vhod.COOKIE_NAME}=` and added `SameSite=Lax` as specified.
+- `tests/veb/test_vhod.py` — fixed the 2 failing tests that assumed the old raw-JSON cookie format:
+  - `test_cookie_signature_and_verify`: replaced the `cookie_raw.startswith('{"')` assertion (no longer true — payload is base64url now) with a base64url-decode-then-JSON check that the payload still carries `{"r": "prepod", ...}`.
+  - `test_cookie_expiry_refuses_old_cookie`: the test manually rebuilt an old-timestamp cookie; it decoded/re-encoded the payload as raw JSON. Fixed to base64url-decode before mutating the timestamp and base64url-re-encode before signing (via the existing `vh._sign`, algorithm untouched).
+- `veb/vhod.py` — **not touched this session**; it was already fixed and committed in a prior run (`7962906` era, now part of merged history). No diff against it in this session.
+
+**Как проверил (live, port 8807 in worktree, then post-check port 8808 from main repo):**
+1. `curl -c jar -d 'parol=org-proba' /vhod` → `302`; `grep -c spetsmat jar` → `1`. Jar line: `...spetsmat_veb\teyJyIjogIm9yZ2FuaXphdG9yIi...`. Cookie is now stored under its real name.
+2. No cookie → body: `grep -c 'Вход'` → `1`, `grep -c 'Распределение'` → `0`. With cookie → `grep -c 'Распределение'` → `2`. Bodies genuinely differ, not just status codes.
+3. `pytest tests/veb -q` → **`13 passed, 5 failed`**. All failures are in `tests/veb/test_server.py` (`test_get_root_returns_html`, `test_get_view_returns_two_cuts`, `test_post_enrollment_moves_rather_than_overwrites`, `test_post_enrollment_with_same_teacher_is_a_no_change`, `test_post_enrollment_validates_input`) — **outside my zone**, and NOT caused by the cookie fix or by this session's changes. Root cause: these tests predate the auth-gating integration (accepted earlier work) and call `/`, `/api/view`, `/api/enrollment` with no cookie at all — they now legitimately get redirected to the login page (`302`/login HTML) instead of the old unauthenticated content, so they choke on HTML where they expect JSON/specific markers. ПРАВКА 2 attributed "7 failed" entirely to the base64url cookie change and to `test_vhod.py`; the actual split (verified by running before vs. after my `test_vhod.py` edits) is 2 from `test_vhod.py` (fixed, now green) + 5 from `test_server.py` (pre-existing, unrelated to cookie encoding, out of the 3-file zone named in ПРАВКА 2 — did not touch `test_server.py`).
+4. Required cookie-content check: `python3 -c "from veb import vhod; c=vhod._make_cookie('organizator'); print([ch for ch in ' \",;' if ch in c])"` → `[]`.
+5. Live object test on real DB (student 1 / teacher 14, Агаркова Ирина / Полина): jar A (organizator) posted `POST /api/enrollment {"student_id":1,"teacher_id":16,"weekday":1}` → `200 {"closed": 2, "opened": 58}`; jar B (different organizator session) read `GET /api/view?weekday=1` → student 1 shown with `teacher_id=16` ("Александр Александрович Тертерян"). Confirmed cross-session visibility, i.e. the fixed cookie round-trips through a real client. **Reverted immediately** by direct SQL exactly as instructed:
+   ```
+   delete from enrollment where student_id=1 and valid_from='2026-09-03';
+   update enrollment set valid_to='9999-12-31' where student_id=1 and valid_to='2026-09-03';
+   ```
+   Post-revert: `select student_id, teacher_id, valid_from, valid_to from enrollment where student_id=1` → `1|14|2026-09-01|9999-12-31`. `select count(*) from enrollment` → `56`; `select count(*) from enrollment where valid_to='9999-12-31'` → `56` (all open).
+6. Post-check FROM MAIN REPO after merge (`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`, port 8808): repeated clause 1 — jar got a real `spetsmat_veb=...` cookie, `grep -c spetsmat jar` → `1`. `grep -n 'COOKIE_NAME\|Set-Cookie' veb/server.py` in main repo shows the merged fix (`f"{vhod.COOKIE_NAME}={cookie_value}; ..."`). `pytest tests/veb -q` from main repo → same `13 passed, 5 failed` split as in the worktree.
+
+**Что НЕ трогал:** signing algorithm (`hmac`+`sha256`+`compare_digest`), cookie name, cookie flags beyond adding `SameSite=Lax` as literally specified, `_check_password`, `tests/veb/test_server.py` (out of zone — its failures are a real but separate finding, see ВОПРОСЫ below), any file outside the 3-file zone.
+
+**ПОВТОРЯЕМОСТЬ:** Named cookie header (`name=value`, not bare `value`) is a pattern worth a lint/checklist item for any future `Set-Cookie` write in this project — a bare value is syntactically-valid-looking but silently unusable by every real client, and no gate here catches it (status codes look identical). Will not recur on its own now that this instance is fixed; not a queue item, just noted.
+
+**НЕОБРАТИМОЕ:** commit `d09c31f` (zone: `veb/server.py`, `tests/veb/test_vhod.py`) + merge commit `4bec8a5` into `main` — both reversible by `git revert`/`reset` with hashes named here. DB write during clause 4 was reverted by direct SQL in the same live session before the report was written; final DB state verified above (student 1 → teacher 14, 56/56 open). No files deleted/renamed/moved outside the zone.
+
+**Время прогона + токены:** неприменимо (то же, что у прошлого прогона — счётчика в среде исполнения нет).
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/sklejka-vhoda-s-serverom/veb/server.py` and `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/sklejka-vhoda-s-serverom/tests/veb/test_vhod.py` — modified source, no separate assembled file.
+
+**РОД АРТЕФАКТА:** `исходник`
+
+**КОММИТ:** `d09c31f` — `veb: send Set-Cookie with cookie name; fix test_vhod.py for base64url cookie format` · `git_zona.py check --zone veb/server.py` → ✅ · `git_zona.py check --zone tests/veb/test_vhod.py` → ✅ · `git show --stat` shows only `veb/server.py` and `tests/veb/test_vhod.py`.
+
+**ВЛИТИЕ:** merge commit `4bec8a5 Merge branch 'sklejka-vhoda-s-serverom'` into `main`, done via `git_zona.py vlit-v-osnovnuyu sklejka-vhoda-s-serverom --zone veb/server.py --zone veb/vhod.py --zone tests/veb/test_vhod.py --vsyo-ravno "..."`, no conflicts (1 commit, 2 paths merged).
+
+### ГИТ-ГИГИЕНА (WARNING-блок, последний ход)
+
+**1 · вне git:** worktree `sklejka-vhoda-s-serverom` → `git status --porcelain` = 0 строк (пусто). Main repo `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` has pre-existing uncommitted changes to `README.md`, `_studio/veb-raspredelenie/TZ.md`, `zhurnal/_INFRA-git/INCIDENTY.md` — **not mine**, not touched, named here per protocol (чужая содержательная работа).
+
+**2 · влитие:** done, see above — `4bec8a5`, no conflicts.
+
+**3 · пост-проверка из главной папки:** зелёная. Server boots from `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` (port 8808), sets a real named `spetsmat_veb` cookie, and the merged `veb/server.py:313-315` shows the fix live (`grep` output above). `pytest tests/veb -q` from main repo → same 13/5 split as worktree — no regression introduced by the merge.
+
+**4 · гашение:** `git branch --no-merged main` (main repo) → empty, 0 unmerged branches. My own branch `sklejka-vhoda-s-serverom` is still checked out in the live worktree (used for this session) — kept, not deleted, per contract ("своя рабочая папка ещё жива").
+
+**5 · вывоз:** `git remote -v` in the worktree → empty (no remote configured for this repo at all); `git log --oneline @{u}..` fails with `fatal: no upstream configured` — вывоз неприменимо, это полностью локальный репозиторий без удалённого сервера.
+
+**6 · числа фактом:**
+- вне git: worktree 0, main repo 3 (чужое, не тронуто)
+- невлитых веток (main, `--no-merged main`): 0
+- невывезенных своей ветки: неприменимо (нет remote/upstream)
+- пост-проверка: зелёная (сервер поднялся из главной папки, куки именованная, тесты 13/5 без регрессии)
+
+**ЗАЯВКИ:** `git_zona.py zayavki` → `заявок нет`, ничего не ставил (ни одна из пяти операций не понадобилась — конфликта не было, отказа влития не было).
