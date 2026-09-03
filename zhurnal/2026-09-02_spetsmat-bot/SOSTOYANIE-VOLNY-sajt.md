@@ -172,3 +172,18 @@ curl <URL>/api/view?weekday=1                {"weekday":1,"students":[{"student_
 
 **Что осталось до выдачи владельцу адреса:** дождаться `veb/vhod.py` от P2, влить обе ветки,
 поднять с паролями, проверить снаружи ещё раз — и отдать адрес вместе с паролем организатора.
+
+## 23:16 — ДВА ЗАПРЕТА ВОЛНЫ ПРОВЕРЕНЫ КОМАНДОЙ, А НЕ ОТЧЁТОМ
+
+Оба названы в мандате провалом волны, оба сняты фактом:
+
+```
+git diff --stat 2549b06..HEAD -- bot/ core/ infra/ migrations/     → пусто
+git diff --name-only main..<ветка> | grep -E '^(bot|core|infra|migrations)/'
+    veb-raspredelenie-mvp: 0 · veb-vhod-i-obshchee-sostoyanie: 0 · vykatka-tunnel-i-storozh: 0
+git grep -nE 'CREATE TABLE' <ветки> -- veb/ tools/ deploy/ ops/    → пусто
+git grep -nE 'INSERT INTO enrollment|UPDATE enrollment' -- veb/ tools/ → пусто
+```
+
+**Бот не тронут ни одной позицией. Второго хранилища нет, запись в `enrollment` идёт только
+через `EnrollmentService`.** Проверено по веткам, а не по словам исполнителей.
