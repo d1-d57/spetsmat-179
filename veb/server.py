@@ -52,12 +52,63 @@ from core.services.enrollment import (
 )
 from infra.db import connect
 from infra.enrollment_repo import SqliteEnrollmentRepo
+from veb import vhod
 
 
 WEEKDAY_DEFAULT = 1  # Monday; the page shows one lesson day at a time.
 PORT_DEFAULT = 8765
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _static_content_type(path: str) -> str:
+    if path.endswith(".css"):
+        return "text/css; charset=utf-8"
+    if path.endswith(".js"):
+        return "application/javascript; charset=utf-8"
+    if path.endswith(".png"):
+        return "image/png"
+    if path.endswith(".svg"):
+        return "image/svg+xml; charset=utf-8"
+    return "application/octet-stream"
+
+
+def _serve_static(self, path: str) -> bool:
+    rel = path[len("/static/"):].lstrip("/")
+    if not rel or ".." in rel.split("/"):
+        self._send_json(404, {"error": "not found"})
+        return True
+    target = (STATIC_DIR / rel).resolve()
+    try:
+        target.relative_to(STATIC_DIR.resolve())
+    except ValueError:
+        self._send_json(404, {"error": "not found"})
+        return True
+    if not target.is_file():
+        self._send_json(404, {"error": "not found"})
+        return True
+    body = target.read_bytes()
+    self.send_response(200)
+    self.send_header("Content-Type", _static_content_type(rel))
+    self.send_header("Content-Length", str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+    return True
+
+
+_BAD_LOGIN_HTML = (
+    b"<!doctype html><html lang=\"ru\"><head>"
+    b"<meta charset=\"utf-8\"><title>\xd0\x9d\xd0\xb5\xd0\xb2\xd0\xb5\xd1\x80\xd0\xbd\xd1\x8b\xd0\xb9 \xd0\xbf\xd0\xb0\xd1\x80\xd0\xbe\xd0\xbb\xd1\x8c \xe2\x80\x94 \xd0\xa1\xd0\xbf\xd0\xb5\xd1\x86\xd0\xbc\xd0\xb0\xd1\x82</title>"
+    b"<link rel=\"stylesheet\" href=\"/static/vhod.css\"></head><body>"
+    b"<header><h1>\xd0\xa1\xd0\xbf\xd0\xb5\xd1\x86\xd0\xbc\xd0\xb0\xd1\x82 \xe2\x80\x94 \xd0\xb2\xd1\x85\xd0\xbe\xd0\xb4</h1></header>"
+    b"<main><p class=\"error\">\xd0\x9d\xd0\xb5\xd0\xb2\xd0\xb5\xd1\x80\xd0\xbd\xd1\x8b\xd0\xb9 \xd0\xbf\xd0\xb0\xd1\x80\xd0\xbe\xd0\xbb\xd1\x8c.</p>"
+    b"<form method=\"post\" action=\"/vhod\">"
+    b"<label for=\"parol\">\xd0\x9f\xd0\xb0\xd1\x80\xd0\xbe\xd0\xbb\xd1\x8c</label>"
+    b"<input type=\"password\" id=\"parol\" name=\"parol\" required autocomplete=\"current-password\">"
+    b"<button type=\"submit\">\xd0\x92\xd0\xbe\xd0\xb9\xd1\x82\xd0\xb8</button>"
+    b"</form></main></body></html>"
+)
 
 
 # --------------------------------------------------------------------- helpers
@@ -185,6 +236,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        if path.startswith("/static/"):
+            _serve_static(self, path)
+            return
+        if path in vhod.marshruty():
+            self._send_html(200, vhod.marshruty()[path]())
+            return
+        if vhod.rol(self.headers) is None:
+            self.send_response(302)
+            self.send_header("Location", "/vhod")
+            self.end_headers()
+            return
         if path == "/":
             index = (TEMPLATES_DIR / "index.html").read_bytes()
             self._send_html(200, index)
@@ -217,10 +279,41 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path == "/vhod":
+            self._post_vhod()
+            return
         if path == "/api/enrollment":
+            role = vhod.rol(self.headers)
+            if role is None:
+                self.send_response(302)
+                self.send_header("Location", "/vhod")
+                self.end_headers()
+                return
+            if role != "organizator":
+                self._send_json(403, {"error": "only organizator may change enrollment"})
+                return
             self._post_enrollment()
             return
         self._send_json(404, {"error": "not found"})
+
+    def _post_vhod(self) -> None:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        raw = self.rfile.read(length) if length else b""
+        from urllib.parse import parse_qs
+        form = parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+        submitted = (form.get("parol", [""])[0] or "")
+        role = vhod._check_password(submitted)
+        if role is None:
+            self._send_html(401, _BAD_LOGIN_HTML)
+            return
+        self.send_response(302)
+        self.send_header("Location", "/")
+        cookie_value = vhod._make_cookie(role)
+        self.send_header(
+            "Set-Cookie",
+            f"{cookie_value}; Path=/; HttpOnly; Max-Age={vhod.COOKIE_MAX_AGE_SECONDS}",
+        )
+        self.end_headers()
 
     def _post_enrollment(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")
