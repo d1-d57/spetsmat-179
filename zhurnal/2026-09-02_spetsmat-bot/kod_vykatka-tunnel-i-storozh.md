@@ -9,7 +9,7 @@
 > Это блок для владельца — то, чем тебя запустили. Исполнителю здесь делать нечего, твоё задание ниже.
 
 ```
-cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && GIT_ZONA_REPO=/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add vykatka-tunnel-i-storozh --branch vykatka-tunnel-i-storozh && cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vykatka-tunnel-i-storozh && GIT_ZONA_REPO=/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot opencode run --auto --model openrouter/minimax/minimax-m3:free 'Модель: openrouter/minimax/minimax-m3:free — решение владельца 03.09: бесплатная везде, платная только эскалацией после провала.
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vykatka-tunnel-i-storozh && GIT_ZONA_REPO=/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot opencode run --auto --model openrouter/minimax/minimax-m3:free 'Модель: openrouter/minimax/minimax-m3:free — решение владельца 03.09: бесплатная везде, платная только эскалацией после провала.
 
 Ты исполнитель в репозитории /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vykatka-tunnel-i-storozh.
 
