@@ -1,0 +1,23 @@
+[Unit]
+Description=spetsmat veb site (179 school)
+Documentation=file://@CHECKOUT@/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=TZ=UTC
+Environment=PYTHONUNBUFFERED=1
+Environment=SPETSMAT_VEB_ENTRY=${SPETSMAT_VEB_ENTRY:-dummy_entry}
+User=@USER@
+Group=@USER@
+WorkingDirectory=@CHECKOUT@
+ExecStart=/usr/bin/python3 -m veb.${SPETSMAT_VEB_ENTRY}
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
