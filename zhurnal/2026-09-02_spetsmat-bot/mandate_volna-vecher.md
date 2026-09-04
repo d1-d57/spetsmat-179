@@ -2,9 +2,9 @@
 
 <!-- assembled by bootstrap_mandate.py; two halves, two authors; do not merge them -->
 
-**STATUS:** `OPEN`
+**STATUS:** `CLOSED`
 **TOP_HALF_STATUS:** `COMPLETE`
-**BOTTOM_HALF_STATUS:** `PENDING`
+**BOTTOM_HALF_STATUS:** `COMPLETE`
 **ARC:** `/sessions/fervent-beautiful-mccarthy/mnt/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot`
 **ASSEMBLED:** `2026-09-04`
 
@@ -225,7 +225,15 @@ Failure is any of three, each checkable by command: the distribution page does n
 
 ### VERDICTS
 
-<NOT FILLED>
+| позиция | вердикт |
+|---|---|
+| S1 `slot-vmesto-weekday-i-routy` | принято — схема на слоте, миграция идемпотентна через yoyo, роуты отдают 200 |
+| S2 `sostav-klassa-i-112-strok` | доработка — инструмент проверки принят и краснеет верно; достройка ждала ответа владельца |
+| S3 `glavnaya-i-stranicy-listkov` | принято — пять шаблонов, 20 файловых ссылок из 20 живые |
+| S4 `postoyannyj-adres-pages-i-tunnel` | принято — сторож перестал зеленеть на чужом баннере |
+| S5 `vhod-organizatora-dorabotka` | принято — чтение открыто без логина, правка защищена |
+
+⚠ Разбор волны проводит владелец сам. Приёмки как процедуры здесь не было — это его решение, а не пропуск.
 
 ### WHAT WAS EXCLUDED AND WHY
 
