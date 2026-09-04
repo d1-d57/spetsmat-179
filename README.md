@@ -223,6 +223,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_S5-vhod-organizatora.md`** (S5 волны ВЕЧЕР: вход дорабатывается до минимума спеки)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_dozabivka-dolgov-sklejki.md`** (закрыть долги заходa склейки: права у кабинетов, опечатка except Value, красные тесты enrollment)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_skleit-adminku-s-sajtom.md`** (свести рабочий редактор распределения и страницу правки на сайте в один шаблон с двумя режимами)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_sklejka-vhoda-s-serverom.md`** (Склейка: вход veb/vhod.py приделывается к серверу veb/server.py — единственный файл, которого не было ни в одной зоне)
