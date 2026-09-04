@@ -300,7 +300,7 @@ tr:hover td{{background:var(--accent-soft)}}
   <input class="rd" type="radio" name="lst" id="l-9" checked>
   <input class="rd" type="radio" name="lst" id="l-8">
   <div class="tabbar"><label for="l-9">9 класс</label><label for="l-8">8 класс</label></div>
-  <section class="vid" id="w-9" style="display:block">
+  <section class="vid" id="w-9">
     <table class="listki"><tbody>{stroki_9()}</tbody></table>
   </section>
   <section class="vid" id="w-8">
