@@ -207,6 +207,24 @@
 
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_S1-slot-i-routy.md`** (S1 волны ВЕЧЕР: слот вместо weekday в схеме и коде, плюс роуты под шаблоны контракта имён)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_S2-sostav-i-112-strok.md`** (S2 волны ВЕЧЕР)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_S3-glavnaya-i-listki.md`** (S3 волны ВЕЧЕР: главная и страницы листков по спеке владельца)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_S4-postoyannyj-adres.md`** (S4 волны ВЕЧЕР: постоянный адрес и починка ложно-зелёного сторожа)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_S5-vhod-organizatora.md`** (S5 волны ВЕЧЕР: вход дорабатывается до минимума спеки)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_skleit-adminku-s-sajtom.md`** (свести рабочий редактор распределения и страницу правки на сайте в один шаблон с двумя режимами)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_sklejka-vhoda-s-serverom.md`** (Склейка: вход veb/vhod.py приделывается к серверу veb/server.py — единственный файл, которого не было ни в одной зоне)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_veb-konduit-proshlogo-goda.md`** (Кондуит прошлого года на чтение: 18 листков на 56 учеников, 15847 событий, уже лежащих в базе)
@@ -228,4 +246,6 @@
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_veb-raspredelenie.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-OSNOVANIE.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
+
+**`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-vecher.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
