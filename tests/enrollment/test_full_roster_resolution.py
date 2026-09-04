@@ -83,7 +83,7 @@ def _enroll_whole_roster(service, connection, starts=None):
     for index, student in enumerate(students):
         for offset, (weekday, _day) in zip((0, 7), LESSON_DAYS):
             teacher, room = teachers[(index + offset) % len(teachers)]
-            service.assign(student, teacher, room=room, weekday=weekday,
+            service.assign(student, teacher, room=room, slot=weekday,
                            valid_from=starts.get(student, SEASON_START))
             expected[(student, weekday)] = (teacher, room)
     return students, expected
@@ -105,7 +105,7 @@ def test_the_whole_roster_resolves_on_both_lesson_days(connection, roster, capsy
                 failures.append("student %s has no teacher on %s" % (student, day))
                 continue
             resolved += 1
-            if (answer.teacher_id, answer.room, answer.weekday) != (
+            if (answer.teacher_id, answer.room, answer.slot) != (
                 expected[(student, weekday)] + (weekday,)
             ):
                 errors += 1
@@ -183,8 +183,8 @@ def test_the_two_real_movements_of_last_year(connection, roster):
     # SHE LEFT.  The intervals are closed, not removed, so October still knows who taught
     # her while May correctly knows nobody did.
     octobers_teacher = service.teacher_on(gamayunova, MONDAY).teacher_id
-    service.end(gamayunova, weekday=MON, effective_from="2025-12-01")
-    service.end(gamayunova, weekday=THU, effective_from="2025-12-01")
+    service.end(gamayunova, slot=MON, effective_from="2025-12-01")
+    service.end(gamayunova, slot=THU, effective_from="2025-12-01")
 
     assert service.teacher_on(gamayunova, MONDAY).teacher_id == octobers_teacher
     assert service.teacher_on(gamayunova, "2025-12-08") is None
@@ -206,7 +206,7 @@ def test_a_move_inside_the_full_roster_touches_exactly_one_pair(connection, rost
     mover = students[0]
     elsewhere = [row for row in _real_teachers(connection)
                  if row[0] != service.teacher_on(mover, MONDAY).teacher_id][0]
-    service.move(mover, weekday=MON, to_teacher_id=elsewhere[0],
+    service.move(mover, slot=MON, to_teacher_id=elsewhere[0],
                  effective_from="2025-12-01", room=elsewhere[1])
 
     # October: nothing anywhere has changed, the mover included.

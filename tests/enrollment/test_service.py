@@ -16,7 +16,7 @@ from core.services.enrollment import (
     MoveChangesNothing,
     MoveNotForward,
     NotEnrolled,
-    UnknownWeekday,
+    UnknownSlot,
     lesson_day_of,
     weekday_of,
 )
@@ -31,8 +31,8 @@ KAKHIANI = 1
 
 def test_one_student_has_two_teachers_on_two_lesson_days(fake_enrollment):
     """The Кахиани case: Ваня on Monday, Ян on Thursday, both open at once."""
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
-    fake_enrollment.assign(KAKHIANI, YAN, room="303", weekday=THU, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, YAN, room="303", slot=THU, valid_from="2025-09-01")
 
     assert fake_enrollment.teacher_on(KAKHIANI, MONDAY).teacher_id == VANYA
     assert fake_enrollment.teacher_on(KAKHIANI, THURSDAY).teacher_id == YAN
@@ -46,28 +46,28 @@ def test_the_weekday_comes_from_the_date_and_not_from_the_caller(fake_enrollment
     that contradicts it, and the answer would be a teacher the student never sat with on
     that day.
     """
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
-    fake_enrollment.assign(KAKHIANI, YAN, room="303", weekday=THU, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, YAN, room="303", slot=THU, valid_from="2025-09-01")
 
     for day, expected in (("2025-10-06", VANYA), ("2025-10-13", VANYA),
                           ("2025-10-09", YAN), ("2025-10-16", YAN)):
         assert fake_enrollment.teacher_on(KAKHIANI, day).teacher_id == expected
-        assert fake_enrollment.teacher_on(KAKHIANI, day).weekday == weekday_of(day)
+        assert fake_enrollment.teacher_on(KAKHIANI, day).slot == weekday_of(day)
 
 
 def test_a_day_the_student_does_not_attend_answers_none_and_is_not_an_error(fake_enrollment):
     """Wednesday is not a lesson day for this student, and that is a fact, not a fault."""
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
     assert fake_enrollment.teacher_on(KAKHIANI, "2025-10-08") is None
 
 
 def test_moving_one_lesson_day_leaves_the_other_alone(fake_enrollment):
     """The mutable side is one (student, weekday) pair, never the student as a whole."""
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
-    fake_enrollment.assign(KAKHIANI, YAN, room="303", weekday=THU, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, YAN, room="303", slot=THU, valid_from="2025-09-01")
 
     fake_enrollment.move(
-        KAKHIANI, weekday=MON, to_teacher_id=DANYA, effective_from="2025-12-01", room="302"
+        KAKHIANI, slot=MON, to_teacher_id=DANYA, effective_from="2025-12-01", room="302"
     )
 
     assert fake_enrollment.teacher_on(KAKHIANI, "2025-12-08").teacher_id == DANYA
@@ -79,10 +79,10 @@ def test_moving_one_lesson_day_leaves_the_other_alone(fake_enrollment):
 
 def test_a_move_closes_one_interval_and_opens_one_and_rewrites_nothing(fake_enrollment, store):
     """Two rows afterwards, and the first still names the teacher it always named."""
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
 
     move = fake_enrollment.move(
-        KAKHIANI, weekday=MON, to_teacher_id=DANYA, effective_from="2025-12-01", room="302"
+        KAKHIANI, slot=MON, to_teacher_id=DANYA, effective_from="2025-12-01", room="302"
     )
 
     assert store.closes == 1
@@ -102,9 +102,9 @@ def test_the_handover_is_half_open_and_leaves_no_uncovered_day(fake_enrollment):
     teacher covers through 30 November, the incoming one from 1 December, and writing the
     literal 30th into ``valid_to`` would leave the 30th covered by nobody.
     """
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
     fake_enrollment.move(
-        KAKHIANI, weekday=MON, to_teacher_id=DANYA, effective_from="2025-12-01", room="302"
+        KAKHIANI, slot=MON, to_teacher_id=DANYA, effective_from="2025-12-01", room="302"
     )
 
     # 24 November and 1 December are the last Monday before and the first Monday on or
@@ -115,11 +115,11 @@ def test_the_handover_is_half_open_and_leaves_no_uncovered_day(fake_enrollment):
 
 def test_the_past_keeps_its_teacher_after_the_move(fake_enrollment):
     """Ask about October again after moving in December: the answer must not have moved."""
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
     october = fake_enrollment.teacher_on(KAKHIANI, MONDAY).teacher_id
 
     fake_enrollment.move(
-        KAKHIANI, weekday=MON, to_teacher_id=DANYA, effective_from="2025-12-01", room="302"
+        KAKHIANI, slot=MON, to_teacher_id=DANYA, effective_from="2025-12-01", room="302"
     )
 
     assert october == VANYA
@@ -127,9 +127,9 @@ def test_the_past_keeps_its_teacher_after_the_move(fake_enrollment):
 
 
 def test_a_move_carries_the_room_over_when_the_caller_does_not_name_one(fake_enrollment):
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
     move = fake_enrollment.move(
-        KAKHIANI, weekday=MON, to_teacher_id=YAN, effective_from="2025-12-01"
+        KAKHIANI, slot=MON, to_teacher_id=YAN, effective_from="2025-12-01"
     )
     assert move.opened.room == "303"
 
@@ -137,8 +137,8 @@ def test_a_move_carries_the_room_over_when_the_caller_does_not_name_one(fake_enr
 def test_ending_an_enrollment_closes_it_without_a_successor(fake_enrollment):
     """Гамаюнова left after sheet 6, and October still knows who taught her."""
     gamayunova = 2
-    fake_enrollment.assign(gamayunova, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
-    fake_enrollment.end(gamayunova, weekday=MON, effective_from="2025-12-01")
+    fake_enrollment.assign(gamayunova, VANYA, room="303", slot=MON, valid_from="2025-09-01")
+    fake_enrollment.end(gamayunova, slot=MON, effective_from="2025-12-01")
 
     assert fake_enrollment.teacher_on(gamayunova, MONDAY).teacher_id == VANYA
     assert fake_enrollment.teacher_on(gamayunova, "2025-12-08") is None
@@ -148,39 +148,39 @@ def test_ending_an_enrollment_closes_it_without_a_successor(fake_enrollment):
 # -------------------------------------------------------------------- the refusals
 
 def test_assigning_over_an_open_row_is_refused_and_names_the_repair(fake_enrollment):
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
     with pytest.raises(AlreadyEnrolled, match="move"):
-        fake_enrollment.assign(KAKHIANI, DANYA, room="302", weekday=MON,
+        fake_enrollment.assign(KAKHIANI, DANYA, room="302", slot=MON,
                                valid_from="2025-12-01")
 
 
 def test_moving_a_student_who_has_no_open_row_is_refused(fake_enrollment):
     """Not silently promoted into a first enrolment: the caller said "change", not "add"."""
     with pytest.raises(NotEnrolled):
-        fake_enrollment.move(KAKHIANI, weekday=THU, to_teacher_id=YAN,
+        fake_enrollment.move(KAKHIANI, slot=THU, to_teacher_id=YAN,
                              effective_from="2025-12-01")
 
 
 def test_a_move_effective_before_the_interval_opened_is_refused(fake_enrollment):
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
     for day in ("2025-09-01", "2025-08-25"):
         with pytest.raises(MoveNotForward):
-            fake_enrollment.move(KAKHIANI, weekday=MON, to_teacher_id=DANYA,
+            fake_enrollment.move(KAKHIANI, slot=MON, to_teacher_id=DANYA,
                                  effective_from=day, room="302")
 
 
 def test_a_move_that_changes_nothing_is_refused(fake_enrollment):
     """Splitting an interval into two identical halves makes one fact answer as two."""
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
     with pytest.raises(MoveChangesNothing):
-        fake_enrollment.move(KAKHIANI, weekday=MON, to_teacher_id=VANYA,
+        fake_enrollment.move(KAKHIANI, slot=MON, to_teacher_id=VANYA,
                              effective_from="2025-12-01", room="303")
 
 
 def test_a_room_change_with_the_same_teacher_is_a_real_move(fake_enrollment):
     """"Who worked with him" and "where he sat" are one question, so the room moves too."""
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
-    move = fake_enrollment.move(KAKHIANI, weekday=MON, to_teacher_id=VANYA,
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
+    move = fake_enrollment.move(KAKHIANI, slot=MON, to_teacher_id=VANYA,
                                 effective_from="2025-12-01", room="302")
     assert (move.closed.room, move.opened.room) == ("303", "302")
 
@@ -188,8 +188,8 @@ def test_a_room_change_with_the_same_teacher_is_a_real_move(fake_enrollment):
 def test_a_zero_based_weekday_is_caught_at_the_door(fake_enrollment):
     """Monday = 1.  With Monday = 0 every lookup shifts a day and answers wrongly."""
     for bad in (0, 8, -1, True):
-        with pytest.raises(UnknownWeekday):
-            fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=bad,
+        with pytest.raises(UnknownSlot):
+            fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=bad,
                                    valid_from="2025-09-01")
 
 
@@ -204,7 +204,7 @@ def test_a_date_that_is_not_a_padded_iso_day_is_refused(fake_enrollment):
     """
     for bad in ("2025-9-1", "20250901", "2025-09-01T00:00:00", "not a date", ""):
         with pytest.raises(EnrollmentError):
-            fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON,
+            fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON,
                                    valid_from=bad)
         with pytest.raises(EnrollmentError):
             fake_enrollment.teacher_on(KAKHIANI, bad)
@@ -218,16 +218,16 @@ def test_the_open_sentinel_cannot_open_or_close_an_interval(fake_enrollment):
     value that MEANS still open, so a student reported as having left stays enrolled and
     the call returns a row that reads as closed.
     """
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
 
     with pytest.raises(EnrollmentError, match="sentinel"):
-        fake_enrollment.assign(2, VANYA, room="303", weekday=MON,
+        fake_enrollment.assign(2, VANYA, room="303", slot=MON,
                                valid_from=config.OPEN_END_DATE)
     with pytest.raises(EnrollmentError, match="sentinel"):
-        fake_enrollment.move(KAKHIANI, weekday=MON, to_teacher_id=DANYA,
+        fake_enrollment.move(KAKHIANI, slot=MON, to_teacher_id=DANYA,
                              effective_from=config.OPEN_END_DATE, room="302")
     with pytest.raises(EnrollmentError, match="sentinel"):
-        fake_enrollment.end(KAKHIANI, weekday=MON, effective_from=config.OPEN_END_DATE)
+        fake_enrollment.end(KAKHIANI, slot=MON, effective_from=config.OPEN_END_DATE)
 
     # And the refusal changed nothing: the student is still with the teacher he had.
     standing = fake_enrollment.history_of(KAKHIANI, MON)
@@ -238,7 +238,7 @@ def test_the_open_sentinel_cannot_open_or_close_an_interval(fake_enrollment):
 
 def test_a_row_without_a_room_is_refused(fake_enrollment):
     with pytest.raises(EnrollmentError, match="room"):
-        fake_enrollment.assign(KAKHIANI, VANYA, room="  ", weekday=MON,
+        fake_enrollment.assign(KAKHIANI, VANYA, room="  ", slot=MON,
                                valid_from="2025-09-01")
 
 
@@ -246,8 +246,8 @@ def test_a_row_without_a_room_is_refused(fake_enrollment):
 
 def test_resolve_many_answers_for_every_student_asked_including_the_misses(fake_enrollment):
     """A dict that dropped the misses would make ``len(resolved)`` look like a full house."""
-    fake_enrollment.assign(1, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
-    fake_enrollment.assign(2, YAN, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(1, VANYA, room="303", slot=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(2, YAN, room="303", slot=MON, valid_from="2025-09-01")
 
     resolved = fake_enrollment.resolve_many([1, 2, 3], MONDAY)
 
@@ -259,9 +259,9 @@ def test_resolve_many_answers_for_every_student_asked_including_the_misses(fake_
 
 def test_resolve_many_agrees_with_asking_one_at_a_time(fake_enrollment):
     """The bulk read exists for the room screen; it must not be a second opinion."""
-    fake_enrollment.assign(1, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
-    fake_enrollment.assign(2, YAN, room="303", weekday=MON, valid_from="2025-09-01")
-    fake_enrollment.move(2, weekday=MON, to_teacher_id=DANYA,
+    fake_enrollment.assign(1, VANYA, room="303", slot=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(2, YAN, room="303", slot=MON, valid_from="2025-09-01")
+    fake_enrollment.move(2, slot=MON, to_teacher_id=DANYA,
                          effective_from="2025-10-01", room="302")
 
     for day in ("2025-09-08", MONDAY, "2025-12-01"):
@@ -276,7 +276,7 @@ def test_a_mark_is_attributed_through_the_school_timezone(fake_enrollment):
     fell on in ``config.TZ_DISPLAY``.  A fixed three-hour offset would be wrong twice a
     year; the conversion goes through the timezone database.
     """
-    fake_enrollment.assign(KAKHIANI, VANYA, room="303", weekday=MON, valid_from="2025-09-01")
+    fake_enrollment.assign(KAKHIANI, VANYA, room="303", slot=MON, valid_from="2025-09-01")
 
     # 18:30 Moscow on Monday 6 October is 15:30Z the same day.
     assert lesson_day_of("2025-10-06T15:30:00Z") == MONDAY

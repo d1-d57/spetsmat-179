@@ -48,36 +48,36 @@ class FakeEnrollmentStore(EnrollmentPort):
     def transaction(self):
         return _NoTransaction()
 
-    def open_row(self, student_id: int, weekday: int) -> Optional[Enrollment]:
+    def open_row(self, student_id: int, slot: int) -> Optional[Enrollment]:
         for row in self.rows:
-            if (row.student_id, row.weekday) == (student_id, weekday) and row.is_open:
+            if (row.student_id, row.slot) == (student_id, slot) and row.is_open:
                 return row
         return None
 
     def rows_valid_on(
         self,
         day: str,
-        weekday: int,
+        slot: int,
         student_ids: Optional[Sequence[int]] = None,
     ) -> list:
         wanted = None if student_ids is None else set(student_ids)
         return [
             row
             for row in self.rows
-            if row.weekday == weekday
+            if row.slot == slot
             and row.valid_from <= day < row.valid_to
             and (wanted is None or row.student_id in wanted)
         ]
 
-    def history(self, student_id: int, weekday: Optional[int] = None) -> list:
+    def history(self, student_id: int, slot: Optional[int] = None) -> list:
         return sorted(
             (
                 row
                 for row in self.rows
                 if row.student_id == student_id
-                and (weekday is None or row.weekday == weekday)
+                and (slot is None or row.slot == slot)
             ),
-            key=lambda row: (row.weekday, row.valid_from, row.id),
+            key=lambda row: (row.slot, row.valid_from, row.id),
         )
 
     def insert(
@@ -86,7 +86,7 @@ class FakeEnrollmentStore(EnrollmentPort):
         student_id: int,
         teacher_id: int,
         room: str,
-        weekday: int,
+        slot: int,
         valid_from: str,
         valid_to: str = config.OPEN_END_DATE,
     ) -> Enrollment:
@@ -94,7 +94,7 @@ class FakeEnrollmentStore(EnrollmentPort):
         # ``a.from < b.to and b.from < a.to``, and two open rows are the special case of
         # it in which both ``to`` are the sentinel.
         for row in self.rows:
-            if (row.student_id, row.weekday) != (student_id, weekday):
+            if (row.student_id, row.slot) != (student_id, slot):
                 continue
             if row.valid_from < valid_to and valid_from < row.valid_to:
                 raise OverlappingHistory(
@@ -106,7 +106,7 @@ class FakeEnrollmentStore(EnrollmentPort):
             student_id=student_id,
             teacher_id=teacher_id,
             room=room,
-            weekday=weekday,
+            slot=slot,
             valid_from=valid_from,
             valid_to=valid_to,
         )
@@ -125,7 +125,7 @@ class FakeEnrollmentStore(EnrollmentPort):
                     student_id=row.student_id,
                     teacher_id=row.teacher_id,
                     room=row.room,
-                    weekday=row.weekday,
+                    slot=row.slot,
                     valid_from=row.valid_from,
                     valid_to=valid_to,
                 )

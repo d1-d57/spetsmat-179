@@ -48,8 +48,8 @@ def test_the_kakhiani_case_survives_the_real_schema(enrollment, world):
     student = world.student_ids[0]
     vanya, yan = world.teacher_ids
 
-    enrollment.assign(student, vanya, room="303", weekday=MON, valid_from="2025-09-01")
-    enrollment.assign(student, yan, room="303", weekday=THU, valid_from="2025-09-01")
+    enrollment.assign(student, vanya, room="303", slot=MON, valid_from="2025-09-01")
+    enrollment.assign(student, yan, room="303", slot=THU, valid_from="2025-09-01")
 
     assert enrollment.teacher_on(student, MONDAY).teacher_id == vanya
     assert enrollment.teacher_on(student, THURSDAY).teacher_id == yan
@@ -62,8 +62,8 @@ def test_a_move_on_the_real_store_writes_two_rows_and_rewrites_neither(
     student = world.student_ids[1]
     vanya = world.teacher_ids[0]
 
-    enrollment.assign(student, vanya, room="303", weekday=MON, valid_from="2025-09-01")
-    enrollment.move(student, weekday=MON, to_teacher_id=third_teacher,
+    enrollment.assign(student, vanya, room="303", slot=MON, valid_from="2025-09-01")
+    enrollment.move(student, slot=MON, to_teacher_id=third_teacher,
                     effective_from="2025-12-01", room="302")
 
     history = enrollment.history_of(student, MON)
@@ -91,10 +91,10 @@ def test_two_open_rows_for_one_lesson_day_are_refused(enrollment_repo, world):
     vanya, yan = world.teacher_ids
 
     enrollment_repo.insert(student_id=student, teacher_id=vanya, room="303",
-                           weekday=MON, valid_from="2025-09-01")
+                           slot=MON, valid_from="2025-09-01")
     with pytest.raises(OverlappingHistory):
         enrollment_repo.insert(student_id=student, teacher_id=yan, room="303",
-                               weekday=MON, valid_from="2025-12-01")
+                               slot=MON, valid_from="2025-12-01")
 
     # And the index is live too: ask it directly, so that "the trigger covers this" does
     # not quietly become "the index was never created".
@@ -112,10 +112,10 @@ def test_two_closed_intervals_that_overlap_are_refused_by_the_trigger(enrollment
     student = world.student_ids[3]
     vanya, yan = world.teacher_ids
 
-    enrollment_repo.insert(student_id=student, teacher_id=vanya, room="303", weekday=MON,
+    enrollment_repo.insert(student_id=student, teacher_id=vanya, room="303", slot=MON,
                            valid_from="2025-09-01", valid_to="2025-11-01")
     with pytest.raises(OverlappingHistory, match="must not overlap"):
-        enrollment_repo.insert(student_id=student, teacher_id=yan, room="303", weekday=MON,
+        enrollment_repo.insert(student_id=student, teacher_id=yan, room="303", slot=MON,
                                valid_from="2025-10-01", valid_to="2025-12-01")
 
 
@@ -124,9 +124,9 @@ def test_a_touching_handover_is_not_an_overlap(enrollment_repo, world):
     student = world.student_ids[4]
     vanya, yan = world.teacher_ids
 
-    enrollment_repo.insert(student_id=student, teacher_id=vanya, room="303", weekday=MON,
+    enrollment_repo.insert(student_id=student, teacher_id=vanya, room="303", slot=MON,
                            valid_from="2025-09-01", valid_to="2025-12-01")
-    enrollment_repo.insert(student_id=student, teacher_id=yan, room="302", weekday=MON,
+    enrollment_repo.insert(student_id=student, teacher_id=yan, room="302", slot=MON,
                            valid_from="2025-12-01", valid_to="2026-01-01")
 
     assert len(enrollment_repo.history(student, MON)) == 2
@@ -143,7 +143,7 @@ def test_an_integrity_error_that_is_not_an_overlap_is_not_reported_as_one(
     """
     with pytest.raises(sqlite3.IntegrityError) as raised:
         enrollment_repo.insert(student_id=world.student_ids[0], teacher_id=10 ** 6,
-                               room="303", weekday=MON, valid_from="2025-09-01")
+                               room="303", slot=MON, valid_from="2025-09-01")
     assert not isinstance(raised.value, OverlappingHistory)
     assert "FOREIGN KEY" in str(raised.value)
 
@@ -159,10 +159,10 @@ def test_a_failed_move_leaves_the_standing_interval_open(enrollment, enrollment_
     """
     student = world.student_ids[0]
     vanya = world.teacher_ids[0]
-    enrollment.assign(student, vanya, room="303", weekday=MON, valid_from="2025-09-01")
+    enrollment.assign(student, vanya, room="303", slot=MON, valid_from="2025-09-01")
 
     with pytest.raises(sqlite3.IntegrityError):
-        enrollment.move(student, weekday=MON, to_teacher_id=10 ** 6,
+        enrollment.move(student, slot=MON, to_teacher_id=10 ** 6,
                         effective_from="2025-12-01", room="302")
 
     standing = enrollment_repo.open_row(student, MON)
@@ -184,16 +184,16 @@ def test_the_open_sentinel_is_refused_on_the_real_store_too(
     """
     student = world.student_ids[0]
     vanya = world.teacher_ids[0]
-    enrollment.assign(student, vanya, room="303", weekday=MON, valid_from="2025-09-01")
+    enrollment.assign(student, vanya, room="303", slot=MON, valid_from="2025-09-01")
 
     with pytest.raises(EnrollmentError):
-        enrollment.assign(world.student_ids[1], vanya, room="303", weekday=MON,
+        enrollment.assign(world.student_ids[1], vanya, room="303", slot=MON,
                           valid_from=config.OPEN_END_DATE)
     with pytest.raises(EnrollmentError):
-        enrollment.move(student, weekday=MON, to_teacher_id=third_teacher,
+        enrollment.move(student, slot=MON, to_teacher_id=third_teacher,
                         effective_from=config.OPEN_END_DATE, room="302")
     with pytest.raises(EnrollmentError):
-        enrollment.end(student, weekday=MON, effective_from=config.OPEN_END_DATE)
+        enrollment.end(student, slot=MON, effective_from=config.OPEN_END_DATE)
 
     standing = enrollment_repo.open_row(student, MON)
     assert (standing.teacher_id, standing.valid_from, standing.valid_to) == (
@@ -214,7 +214,7 @@ def test_an_empty_student_filter_matches_nobody_rather_than_everybody(
 ):
     """The classic: an empty ``in`` list collapsing into "no filter" and reporting a full house."""
     enrollment_repo.insert(student_id=world.student_ids[0], teacher_id=world.teacher_ids[0],
-                           room="303", weekday=MON, valid_from="2025-09-01")
+                           room="303", slot=MON, valid_from="2025-09-01")
     assert enrollment_repo.rows_valid_on(MONDAY, MON, []) == []
     assert len(enrollment_repo.rows_valid_on(MONDAY, MON, None)) == 1
 
@@ -233,14 +233,14 @@ def test_a_student_who_left_and_came_back_is_assigned_again_not_moved(
     student = world.student_ids[1]
     vanya = world.teacher_ids[0]
 
-    enrollment.assign(student, vanya, room="303", weekday=MON, valid_from="2025-09-01")
-    enrollment.end(student, weekday=MON, effective_from="2025-12-01")
+    enrollment.assign(student, vanya, room="303", slot=MON, valid_from="2025-09-01")
+    enrollment.end(student, slot=MON, effective_from="2025-12-01")
 
     with pytest.raises(NotEnrolled):
-        enrollment.move(student, weekday=MON, to_teacher_id=third_teacher,
+        enrollment.move(student, slot=MON, to_teacher_id=third_teacher,
                         effective_from="2026-02-01")
 
-    enrollment.assign(student, third_teacher, room="302", weekday=MON,
+    enrollment.assign(student, third_teacher, room="302", slot=MON,
                       valid_from="2026-02-01")
 
     assert enrollment.teacher_on(student, MONDAY).teacher_id == vanya       # October
@@ -252,10 +252,10 @@ def test_a_returning_interval_that_reaches_back_into_the_old_one_is_refused(
     enrollment, world, third_teacher
 ):
     student = world.student_ids[2]
-    enrollment.assign(student, world.teacher_ids[0], room="303", weekday=MON,
+    enrollment.assign(student, world.teacher_ids[0], room="303", slot=MON,
                       valid_from="2025-09-01")
-    enrollment.end(student, weekday=MON, effective_from="2025-12-01")
+    enrollment.end(student, slot=MON, effective_from="2025-12-01")
 
     with pytest.raises(OverlappingHistory):
-        enrollment.assign(student, third_teacher, room="302", weekday=MON,
+        enrollment.assign(student, third_teacher, room="302", slot=MON,
                           valid_from="2025-10-01")

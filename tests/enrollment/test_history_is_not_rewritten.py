@@ -40,7 +40,7 @@ def test_moving_a_student_in_december_does_not_change_who_marked_him_in_october(
     problems = world.problems_by_sheet[world.sheet_ids[0]]
 
     # September: the student sits with A on Mondays.
-    enrollment.assign(student, teacher_a, room="303", weekday=MON, valid_from="2025-09-01")
+    enrollment.assign(student, teacher_a, room="303", slot=MON, valid_from="2025-09-01")
 
     # October: A marks four problems, one per lesson.
     for lesson, problem in zip(OCTOBER_LESSONS, problems):
@@ -57,7 +57,7 @@ def test_moving_a_student_in_december_does_not_change_who_marked_him_in_october(
 
     # December: the student is moved to B.
     move = enrollment.move(
-        student, weekday=MON, to_teacher_id=teacher_b, effective_from=MOVED_ON, room="302"
+        student, slot=MON, to_teacher_id=teacher_b, effective_from=MOVED_ON, room="302"
     )
     assert (move.closed.teacher_id, move.opened.teacher_id) == (teacher_a, teacher_b)
 
@@ -82,13 +82,13 @@ def test_the_move_added_a_row_and_did_not_edit_one(enrollment, world, connection
     student = world.student_ids[1]
     teacher_a, teacher_b = world.teacher_ids
 
-    enrollment.assign(student, teacher_a, room="303", weekday=MON, valid_from="2025-09-01")
-    enrollment.move(student, weekday=MON, to_teacher_id=teacher_b,
+    enrollment.assign(student, teacher_a, room="303", slot=MON, valid_from="2025-09-01")
+    enrollment.move(student, slot=MON, to_teacher_id=teacher_b,
                     effective_from=MOVED_ON, room="302")
 
     rows = connection.execute(
         "select teacher_id, room, valid_from, valid_to from enrollment "
-        " where student_id = ? and weekday = ? order by valid_from",
+        " where student_id = ? and slot = ? order by valid_from",
         (student, MON),
     ).fetchall()
     assert [tuple(row) for row in rows] == [
@@ -110,13 +110,13 @@ def test_the_journal_itself_is_untouched_by_a_move(
     teacher_a, teacher_b = world.teacher_ids
     problems = world.problems_by_sheet[world.sheet_ids[0]]
 
-    enrollment.assign(student, teacher_a, room="303", weekday=MON, valid_from="2025-09-01")
+    enrollment.assign(student, teacher_a, room="303", slot=MON, valid_from="2025-09-01")
     for lesson, problem in zip(OCTOBER_LESSONS, problems):
         marking.give(student, problem, source="кнопка", teacher_id=teacher_a,
                      valid_at=lesson)
     before = [(mark.id, mark.teacher_id, mark.valid_at) for mark in journal.events([student])]
 
-    enrollment.move(student, weekday=MON, to_teacher_id=teacher_b,
+    enrollment.move(student, slot=MON, to_teacher_id=teacher_b,
                     effective_from=MOVED_ON, room="302")
 
     after = [(mark.id, mark.teacher_id, mark.valid_at) for mark in journal.events([student])]
@@ -140,7 +140,7 @@ def test_who_taught_in_october_is_a_query_and_never_a_stored_column(connection):
         row["name"] for row in connection.execute("pragma table_info(enrollment)")
     }
     assert enrollment_columns == {
-        "id", "student_id", "teacher_id", "room", "weekday", "valid_from", "valid_to"
+        "id", "student_id", "teacher_id", "room", "slot", "valid_from", "valid_to"
     }
 
 
@@ -155,10 +155,10 @@ def test_a_student_moved_twice_still_answers_correctly_for_each_stretch(
     )
     teacher_c = cursor.lastrowid
 
-    enrollment.assign(student, teacher_a, room="303", weekday=MON, valid_from="2025-09-01")
-    enrollment.move(student, weekday=MON, to_teacher_id=teacher_b,
+    enrollment.assign(student, teacher_a, room="303", slot=MON, valid_from="2025-09-01")
+    enrollment.move(student, slot=MON, to_teacher_id=teacher_b,
                     effective_from="2025-11-03", room="302")
-    enrollment.move(student, weekday=MON, to_teacher_id=teacher_c,
+    enrollment.move(student, slot=MON, to_teacher_id=teacher_c,
                     effective_from="2026-02-02", room="203")
 
     assert enrollment.teacher_on(student, "2025-09-08").teacher_id == teacher_a
