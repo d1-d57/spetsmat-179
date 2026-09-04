@@ -62,6 +62,7 @@ from core.services.enrollment import (
 from infra.db import connect
 from infra.enrollment_repo import SqliteEnrollmentRepo
 from veb import vhod
+from veb.sobrat_fajl import blizhajshee_zanyatie
 
 
 SLOT_DEFAULT = 1  # The page shows one slot at a time.
@@ -135,11 +136,12 @@ _BAD_LOGIN_HTML = (
 # --------------------------------------------------------------------- helpers
 
 def _all_students(connection: sqlite3.Connection) -> list[dict]:
+    _obespechit_gruppu_shkolnika(connection)
     return [
         {"id": row["id"], "surname": row["surname"], "name": row["name"],
-         "class": row["class"]}
+         "class": row["class"], "gruppa": row["gruppa"]}
         for row in connection.execute(
-            "select id, surname, name, class from students "
+            "select id, surname, name, class, gruppa from students "
             "where status is null or status <> 'left' order by surname, name"
         ).fetchall()
     ]
@@ -171,6 +173,26 @@ def _obespechit_aktivnost(connection: sqlite3.Connection) -> None:
     kolonki = [r[1] for r in connection.execute("pragma table_info(teachers)")]
     if "aktiven" not in kolonki:
         connection.execute("alter table teachers add column aktiven integer not null default 1")
+        connection.commit()
+
+
+def _obespechit_gruppu_shkolnika(connection: sqlite3.Connection) -> None:
+    """Колонка `students.gruppa` — СРЕДНЯЯ СТУПЕНЬ, и без неё её негде хранить.
+
+    Ступеней у школьника три: «нигде» · «в группе, преподаватель не выбран» ·
+    конкретный преподаватель. Средняя в `enrollment` не помещается по построению:
+    `teacher_id` там `not null`, а преподавателя у этой ступени как раз нет.
+    🔴 Ровно из-за отсутствия этой памяти снятый ребёнок ИСЧЕЗАЛ с той вкладки,
+    на которой его сняли: группу вычисляли из преподавателя, преподавателя не
+    стало — и ребёнок пропал в тот момент, когда его надо кому-то отдать.
+
+    Заводится молча и один раз, тем же приёмом, что `teachers.aktiven` выше:
+    `migrations/` живёт своей нумерацией, а колонка нужна коду, который её и
+    создаёт, — иначе свежая тестовая база падает там, где данные просто старее.
+    """
+    kolonki = [r[1] for r in connection.execute("pragma table_info(students)")]
+    if "gruppa" not in kolonki:
+        connection.execute("alter table students add column gruppa text")
         connection.commit()
 
 
@@ -254,8 +276,14 @@ def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
     # преподавателя ВЫЧИСЛЯЮТСЯ, а не хранятся у каждого.
     kab_gruppy, starshie = _kabinety_grupp(connection)
     gruppa_prepoda = {t_["id"]: t_.get("gruppa") for t_ in teachers}
+    svoya_gruppa = {s["id"]: s.get("gruppa") for s in students}
     for row in by_students:
-        g = gruppa_prepoda.get(row["teacher_id"])
+        # 🔴 У НАЗНАЧЕННОГО ГРУППА ОТ ПРЕПОДАВАТЕЛЯ, У СНЯТОГО — ПОМНИТСЯ.
+        # Перевели преподавателя в другую группу — его школьники уехали с ним
+        # сами, потому что группа тут ВЫЧИСЛЯЕТСЯ, а не хранится у каждого.
+        # Сняли школьника — остаётся его собственная запомненная группа, и он
+        # никуда не исчезает: он и есть средняя ступень.
+        g = gruppa_prepoda.get(row["teacher_id"]) or svoya_gruppa.get(row["student_id"])
         row["gruppa"] = g
         row["room"] = kab_gruppy.get(g)
         row["starshij"] = starshie.get(g)
@@ -279,6 +307,14 @@ def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
 
     return {
         "slot": slot,
+        # День занятия и состав групп страница показывает в шапке; правило
+        # «ближайший четверг или суббота» живёт в ОДНОМ месте — `veb/sobrat_fajl.py`,
+        # чтобы сайт и файл не начали называть разные дни (так уже было).
+        "data": blizhajshee_zanyatie(),
+        "gruppy": [
+            {"kod": k, "starshij": starshie.get(k), "kabinet": kab_gruppy.get(k)}
+            for k in ("В", "Д", "Н")
+        ],
         "students": by_students,
         "teachers": by_teachers,
     }
@@ -425,6 +461,31 @@ class Handler(BaseHTTPRequestHandler):
 
     # --------------------------------------------------------------- POST routes
 
+    def _pravka_zapreshchena(self) -> bool:
+        """Пускать ли правку. ОДНО место на все правящие роуты, и в этом смысл.
+
+        🔴 Д1, найдено живым прогоном: `/api/prepodavateli` спрашивал роль
+        напрямую и потому отвечал 403 ВСЕГДА. Пароль сегодня выключен
+        (`SVOBODNAYA_PRAVKA`), куки никто не ставит, роли нет — отказ на любой
+        запрос, и вкладка преподавателей на сервере была мертва. Условие стояло
+        в двух местах, и второе о переключателе просто не знало. Теперь место одно.
+
+        Механизм входа не удалён и работает: `veb/vhod.py`, роуты `/vhod` и
+        `/vyhod`, подпись куки, роли. Вернуть пароль завтра — снять переключатель.
+        """
+        if SVOBODNAYA_PRAVKA:
+            return False
+        role = vhod.rol(self.headers)
+        if role is None:
+            self.send_response(302)
+            self.send_header("Location", "/vhod")
+            self.end_headers()
+            return True
+        if role != "organizator":
+            self._send_json(403, {"error": "правит только организатор"})
+            return True
+        return False
+
     def do_POST(self) -> None:
         path = urlparse(self.path).path
         if path == "/vhod":
@@ -454,9 +515,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"gruppa": gruppa, "kabinet": kabinet, "data": den})
             return
         if path == "/api/prepodavateli":
-            role = vhod.rol(self.headers)
-            if role != "organizator":
-                self._send_json(403, {"error": "правит только организатор"})
+            if self._pravka_zapreshchena():
                 return
             self._post_prepodavateli()
             return
@@ -470,16 +529,8 @@ class Handler(BaseHTTPRequestHandler):
             # `/vyhod`, подпись куки, роли — всё на месте и проверяется тестами.
             # Чтобы вернуть пароль ЗАВТРА, достаточно снять `if not SVOBODNAYA_PRAVKA`
             # ниже: одна строка, никакой миграции и никакого восстановления кода.
-            if not SVOBODNAYA_PRAVKA:
-                role = vhod.rol(self.headers)
-                if role is None:
-                    self.send_response(302)
-                    self.send_header("Location", "/vhod")
-                    self.end_headers()
-                    return
-                if role != "organizator":
-                    self._send_json(403, {"error": "only organizator may change enrollment"})
-                    return
+            if self._pravka_zapreshchena():
+                return
             self._post_enrollment()
             return
         self._send_json(404, {"error": "not found"})
@@ -550,11 +601,63 @@ class Handler(BaseHTTPRequestHandler):
         elif deystvie == "kabinet":
             connection.execute("update teachers set kabinet = ? where id = ?",
                                (payload.get("kabinet"), tid))
+        elif deystvie == "gruppa":
+            # 🔴 ШКОЛЬНИКИ ЕДУТ С ЧЕЛОВЕКОМ, и отдельной правки для этого нет.
+            # Ребёнок закреплён за преподавателем, а группа ребёнка из него и
+            # вычисляется (`_build_views`) — поэтому одна строка переводит и его
+            # самого, и всех его школьников, и ни одна из них не может отстать.
+            gruppa = payload.get("gruppa")
+            if gruppa not in ("В", "Д", "Н"):
+                self._send_json(400, {"error": "группа: В | Д | Н"})
+                return
+            connection.execute("update teachers set gruppa = ? where id = ?", (gruppa, tid))
+            # Своя память группы у ЕГО школьников тоже переезжает: иначе, сняв
+            # ребёнка после перевода, мы вернули бы его в покинутую группу.
+            _obespechit_gruppu_shkolnika(connection)
+            connection.execute(
+                "update students set gruppa = ? where id in ("
+                "  select student_id from enrollment"
+                "  where teacher_id = ? and valid_to = ?)",
+                (gruppa, tid, "9999-12-31"))
         else:
-            self._send_json(400, {"error": "деиствие: dobavit | ubrat | vernut | kabinet"})
+            self._send_json(400, {
+                "error": "деиствие: dobavit | ubrat | vernut | kabinet | gruppa"})
             return
         connection.commit()
         self._send_json(200, {"ok": True})
+
+    def _snyat_shkolnika(self, conn, student_id: int, slot: int,
+                         gruppa, den: str) -> None:
+        """Две ступени без преподавателя: «нигде» и «в группе, но без него».
+
+        Разница между ними — ровно поле `students.gruppa`: у первой оно пустое,
+        у второй хранит группу, в которой ребёнок числится, пока ему не нашли
+        принимающего. Именно её отсутствие и роняло ребёнка с вкладки в тот
+        момент, когда его надо было кому-то отдать.
+        """
+        if gruppa not in (None, "", "В", "Д", "Н"):
+            self._send_json(400, {"error": "группа: В | Д | Н или пусто"})
+            return
+        _obespechit_gruppu_shkolnika(conn)
+        conn.execute("update students set gruppa = ? where id = ?",
+                     (gruppa or None, student_id))
+        repo = SqliteEnrollmentRepo(conn)
+        standing = repo.open_row(student_id, slot)
+        itog = {"snyat": True, "gruppa": gruppa or None}
+        if standing is not None:
+            if standing.valid_from == den:
+                # 🔴 Интервал, ОТКРЫТЫЙ СЕГОДНЯ, УДАЛЯЕТСЯ, а не закрывается.
+                # Закрыть его сегодняшним днём схема не даёт: `check (valid_from
+                # < valid_to)`. И терять тут нечего — за сегодня никакого «раньше»
+                # ещё не было, ребёнок ни к кому не успел сходить. История
+                # прошлых дней не трогается вовсе, ровно как в правке на месте.
+                conn.execute("delete from enrollment where id = ?", (standing.id,))
+                itog["udalen"] = standing.id
+            else:
+                repo.close(standing.id, valid_to=den)
+                itog["zakryt"] = standing.id
+        conn.commit()
+        self._send_json(200, itog)
 
     def _post_enrollment(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")
@@ -567,7 +670,13 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             student_id = int(payload["student_id"])
-            teacher_id = int(payload["teacher_id"])
+            # 🔴 `teacher_id: null` — ЗАКОННОЕ ЗНАЧЕНИЕ, а не отсутствие поля.
+            # Ступеней у школьника три, и две из них без преподавателя: «нигде»
+            # и «в группе, преподаватель ещё не выбран». Пока ступень была одна,
+            # ребёнок бывшего преподавателя навсегда оставался в его группе:
+            # убрать его оттуда было нечем.
+            syroj = payload["teacher_id"]
+            teacher_id = None if syroj is None or syroj == "" else int(syroj)
             slot = int(payload.get("slot", SLOT_DEFAULT))
         except (KeyError, TypeError, ValueError):
             self._send_json(400, {"error": "student_id, teacher_id and slot are required"})
@@ -584,6 +693,21 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         conn = self._connection()
+        if teacher_id is None:
+            self._snyat_shkolnika(conn, student_id, slot,
+                                  payload.get("gruppa"), effective_from)
+            return
+
+        # Группа назначенного — группа его преподавателя, и её запоминаем СРАЗУ:
+        # завтра, когда ребёнка снимут, это единственное, что скажет, где он был.
+        # Пишется до правки интервала намеренно — пока преподаватель стоит,
+        # показанная группа всё равно вычисляется из него, и запись не видна.
+        _obespechit_gruppu_shkolnika(conn)
+        conn.execute(
+            "update students set gruppa = (select gruppa from teachers where id = ?) "
+            "where id = ?", (teacher_id, student_id))
+        conn.commit()
+
         repo = SqliteEnrollmentRepo(conn)
         service = EnrollmentService(repo)
         try:

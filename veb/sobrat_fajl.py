@@ -56,19 +56,30 @@ METKA_DANNYH = "/*ДАННЫЕ*/"
 METKA_REZHIMA = "let NA_SERVERE = true;          /*РЕЖИМ*/"
 
 
-def blizhajshee_zanyatie(ot: date | None = None) -> str:
-    """Ближайший день занятия, начиная с сегодняшнего.
+# 🔴 ДНИ ЗАНЯТИЙ ЖИВУТ В ОДНОМ МЕСТЕ, И ЭТО ОНО. Занятия по четвергам и субботам;
+# `date.weekday()` считает от понедельника с нуля, поэтому чт = 3, сб = 5.
+DNI_ZANYATIJ = {3: "четверг", 5: "суббота"}
+
+
+def blizhajshij_den(weekday: int, ot: date | None = None) -> str:
+    """Ближайший такой день недели, начиная с сегодняшнего.
 
     🔴 ДЕНЬ СЧИТАЕТСЯ, А НЕ ВПИСЫВАЕТСЯ. Вписанная руками дата протухает молча и
     начинает врать в заголовке: так `2026-09-05` и звался в коде четвергом, будучи
-    субботой. Занятия по четвергам и субботам — это и есть всё правило.
+    субботой, а `2026-09-06` — субботой, будучи воскресеньем. Никакой гейт этого
+    не видел, потому что вписанная строка всегда «верна» самой себе.
     """
     ot = ot or date.today()
     for sdvig in range(7):
         den = ot + timedelta(days=sdvig)
-        if den.weekday() in (3, 5):  # чт · сб
+        if den.weekday() == weekday:
             return den.isoformat()
-    raise AssertionError("за семь дней обязан встретиться четверг или суббота")
+    raise AssertionError("за семь дней обязан встретиться любой день недели")
+
+
+def blizhajshee_zanyatie(ot: date | None = None) -> str:
+    """Ближайшее занятие — то есть ближайший из дней `DNI_ZANYATIJ`."""
+    return min(blizhajshij_den(w, ot) for w in DNI_ZANYATIJ)
 
 
 def sobrat_dannye(baza: Path, den: str) -> dict:
