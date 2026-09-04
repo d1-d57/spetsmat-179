@@ -422,7 +422,7 @@ class Handler(BaseHTTPRequestHandler):
             target = (MATERIALS_DIR / rel).resolve()
             try:
                 target.relative_to(MATERIALS_DIR.resolve())
-            except Value:
+            except ValueError:
                 self._send_json(404, {"error": "not found"})
                 return
             if not target.is_file():
@@ -542,6 +542,10 @@ class Handler(BaseHTTPRequestHandler):
             # кабинет, я захожу через админпанель и меняю закрепление В на другой
             # кабинет — и всё отображается сразу везде». Правка одной строки меняет
             # кабинет у всех людей группы, потому что он вычисляется, а не хранится.
+            # 🔴 Владелец 2026-09-05: кабинеты правят те же люди, что распределение
+            # и листки — права у трёх правящих роутов одинаковые.
+            if self._pravka_zapreshchena():
+                return
             try:
                 p = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
             except (ValueError, TypeError):
