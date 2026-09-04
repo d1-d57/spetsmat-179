@@ -276,9 +276,24 @@ grep -n '<как механизм назван в вызывающем коде>
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
+## ПЛАН — (written in English per spec 30.08)
 
-## ПЛАН — (заполняет исполнитель)
-No further steps defined in the task description.
+Plan executed in order:
+
+1. HYGIENE INPUT (§0.1 CANCELLED, manual single command executed): `git --no-optional-locks branch --no-merged main | grep -c zahod/` → `1`. Reported in `## ОТЧЁТ`.
+2. READ ONLY named anchors: this file (`kod_postoyannyj-adres-pages-i-tunnel.md`) and `kod_vykatka-tunnel-i-storozh.md` (phase of acceptance, verdict `доработка`). No other project files read.
+3. PART 1 — FIX STOROZH (watchdog stops lying): edit `ops/storozh_sajta.py` to check page CONTENT (signature `<h1>Распределение</h1>` or `SpetsmatRaspred/0.1` server header) instead of only HTTP 200; prove old сторож is green on banner (`https://console.serveo.net` or any provider banner) and new сторож turns red; ensure `deploy/ADRES.txt` protected from banner injection (already fixed in `deploy/tunnel.sh` via specific host patterns). Commit `ops/`.
+4. PART 2 — PERMANENT ADDRESS: verify `deploy/ADRES.txt` exists with tunnel URL; check GitHub Pages public repo setting; verify tunnel lives (`curl` with restart between two runs). Commit `deploy/`.
+5. HYGIENE OUTPUT (§4.1): commit zone paths, check zones (`git_zona.py check --zone deploy/`, `ops/`), merge branch `zahod/postoyannyj-adres-pages-i-tunnel` to `main` last step, verify `git status --porcelain` clean.
+6. Final `## ОТЧЁТ` filled in English with artifact path, repeatability, irreversibility list, commit hash, and verifier result (§3) if called.
+
+ASSUMPTIONS CALLED OUT BEFORE WORK:
+- `localhost.run` tunnel URL pattern is `https://[a-z0-9.-]+\.lhr\.life` (per `deploy/tunnel.sh`).
+- Content marker for our site: `<h1>Распределение</h1>` (from `veb/templates/index.html`) — unique enough vs provider banners.
+- State file `/tmp/spetsmat-storozh-sajta.state.json` stays at `/tmp`; first-run alarm suppression is correct behavior.
+- I will NOT invent a new `.py` tool outside zone; changes only inside `ops/storozh_sajta.py` and `deploy/` references.
+
+CRITERION CHALLENGED: readiness criterion clause 2 requires `curl` proof of 200 from the tunnel URL with content verification, not just status — this is exactly the fix from `vykatka` phase. I treat it as valid, not curved.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 No questions at this time.
@@ -295,25 +310,32 @@ No questions at this time.
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+**СНИМОК ВХОДА**
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c 'zahod/'
+1
 ```
-<сюда — вывод, дословно>
 
-**ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+**ЧТО СДЕЛАНО:**
+- §0.1 subagent CANCELLED per orchestrator; single git command executed manually (output 1).
+- No other git contour actions performed (no subagent available).
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** да
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** нет — вывод единственной команды: 1 (одна невлитая ветка `zahod/postoyannyj-adres-pages-i-tunnel` присутствует в репозитории, законна; субагент §0.1 отменён, гит-контур исполнен сам частично — только проверка невлитых веток).
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
-## ОТЧЁТ — (заполняет исполнитель)
+## ОТЧЁТ — PART 1 ENTRY REPORT (English, per spec 30.08)
 0
+**COMMAND OUTPUT (§0.1 REPLACEMENT):** `git --no-optional-locks branch --no-merged main | grep -c zahod/` → `1`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** нет — 1 невлитая ветка `zahod/postoyannyj-adres-pages-i-tunnel` (законна); субагент §0.1 отменён оркестратором, гит-контур исполнен сам (только проверка невлитых).
+**АРТЕФАКТ:** не применимо (задача кода, исходники в `deploy/`, `ops/` — см. ниже).
+**РОД АРТЕФАКТА:** исходник (код).
+**КОММИТ:** ещё нет (первый коммит — после части 1).
+**НЕОБРАТИМОЕ:** нет.
+**ПОВТОРЯЕМОСТЬ НАХОДОК:** конструкция проверки содержимого страницы (не только 200) повторится в следующем заходе сторожа; это законный паттерн.
+**ВРЕМЯ ПРОГОНА + ТОКЕНЫ:** НЕПРИМЕНИМО — движок `opencode`, счётчика стоимости в логе нет.
+**ПРАВКИ ПРОЧИТАНЫ:** 1, 2 (ПРАВКА 1 отменяет субагента; ПРАВКА 2 сообщает, что код уже на диске в коммите `a2792e9`).
 **АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
