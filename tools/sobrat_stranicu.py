@@ -65,60 +65,74 @@ def sobrat():
     def kab_shk(r):
         return kabinety.get(gr_shk(r))
 
-    def vid_dnya(kl, tolko_gruppa=None):
-        """Распределение на один день ТРЕМЯ КОЛОНКАМИ, во весь экран.
+    def para_shk(r, kl, pokazat_kab=True):
+        """Строка «школьник → его преподаватель»."""
+        kab = kabinety_dnya[kl]
+        t_ = prep.get(r["teacher_id"])
+        g = gr_shk(r)
+        hvost = ""
+        if t_:
+            hvost = e(t_["name"])
+            if pokazat_kab and kab.get(g):
+                hvost += f' <span class="kab">{e(kab.get(g))}</span>'
+        else:
+            hvost = "—"
+        return (f'<div class="para" data-i="{e((r["surname"] + " " + r["name"]).lower())}">'
+                f'<span class="kto"><b>{e(r["surname"])}</b> {e(r["name"])}</span>'
+                f'<span class="komu">{hvost}</span></div>')
 
-        Слева и посередине — школьник и его преподаватель; справа — преподаватель
-        и его школьники. Разделены вертикальной линией. Не «квадратики», а списки:
-        человек ищет свою фамилию по алфавиту или поиском (требование владельца 04.09).
+    def para_prep(x, kl, pokazat_gruppu=True):
+        """Строка «преподаватель → его школьники».
+
+        🔴 ТОЛЬКО ФАМИЛИИ школьников: с именами строка не влезает (замечание
+        владельца 04.09). Группа и кабинет на вкладке ГРУППЫ не печатаются — там
+        и так все из одной группы и одного кабинета, это шум.
         """
         kab = kabinety_dnya[kl]
-        deti = [r for r in shk_dnya[kl]
-                if tolko_gruppa is None or gr_shk(r) == tolko_gruppa]
-        prepy = sorted((x for x in prep.values()
-                        if tolko_gruppa is None or x["gruppa"] == tolko_gruppa),
-                       key=lambda x: x["name"])
+        ego = sorted(r["surname"] for r in shk_dnya[kl] if r["teacher_id"] == x["id"])
+        redko = ' <span class="redko">не всегда</span>' if x["name"] == "Ольга Рыжая" else ""
+        metki = ""
+        if pokazat_gruppu:
+            if x["gruppa"]:
+                metki += f' <span class="gr">{e(x["gruppa"])}</span>'
+            if kab.get(x["gruppa"]):
+                metki += f' <span class="kab">{e(kab.get(x["gruppa"]))}</span>'
+        deti_html = ("".join(f'<span>{e(d)}</span>' for d in ego)
+                     or '<span class="net">—</span>')
+        return (f'<div class="para" data-i="{e(x["name"].lower())}">'
+                f'<span class="kto"><b>{e(x["name"])}</b>{redko}{metki}</span>'
+                f'<span class="komu deti">{deti_html}</span></div>')
 
-        def para(r):
-            t_ = prep.get(r["teacher_id"])
-            g = gr_shk(r)
-            return (f'<div class="para" data-i="{e((r["surname"] + " " + r["name"]).lower())}">'
-                    f'<span class="kto"><b>{e(r["surname"])}</b> {e(r["name"])}</span>'
-                    f'<span class="komu">{e(t_["name"]) if t_ else "—"}'
-                    f'{f" <span class=kab>{e(kab.get(g))}</span>" if t_ and kab.get(g) else ""}</span></div>')
+    def vid_vse(kl):
+        """Вкладка «все»: школьники двумя столбцами, каждому — его преподаватель."""
+        deti = shk_dnya[kl]
+        pol = (len(deti) + 1) // 2
+        return ('<div class="dva">'
+                f'<div class="kol">{"".join(para_shk(r, kl) for r in deti[:pol])}</div>'
+                f'<div class="kol">{"".join(para_shk(r, kl) for r in deti[pol:])}</div></div>')
 
-        polovina = (len(deti) + 1) // 2
-        stolb1 = "".join(para(r) for r in deti[:polovina])
-        stolb2 = "".join(para(r) for r in deti[polovina:])
-
-        def blok_prepa(x):
-            ego = sorted(f'{r["surname"]} {r["name"]}' for r in shk_dnya[kl]
-                         if r["teacher_id"] == x["id"])
-            redko = ' <span class="redko">не всегда</span>' if x["name"] == "Ольга Рыжая" else ""
-            k = kab.get(x["gruppa"])
-            deti_html = "".join(f'<span>{e(d)}</span>' for d in ego) or '<span class="net">—</span>'
-            return (f'<div class="para" data-i="{e(x["name"].lower())}">'
-                    f'<span class="kto"><b>{e(x["name"])}</b>{redko}'
-                    + (f' <span class="gr">{e(x["gruppa"])}</span>' if x["gruppa"] else "")
-                    + (f' <span class="kab">{e(k)}</span>' if k else "") + '</span>' 
-                    + f'<span class="komu deti">{deti_html}</span></div>')
-
-        stolb3 = "".join(blok_prepa(x) for x in prepy)
-        return (f'<div class="tri">'
-                f'<div class="kol">{stolb1}</div>'
-                f'<div class="kol">{stolb2}</div>'
-                f'<div class="kol kol-pr">{stolb3}</div></div>')
+    def vid_prepodavateli(kl):
+        """Отдельная вкладка преподавателей — чтобы преподаватель посмотрел на себя."""
+        prepy = sorted(prep.values(), key=lambda x: x["name"])
+        return f'<div class="odin">{"".join(para_prep(x, kl) for x in prepy)}</div>'
 
     def vkladka_gruppy(kod, kl):
-        """Группа — тот же вид, только короче: свои школьники и свои преподаватели."""
+        """Группа — ОДИН столбец: половина экрана пустой быть не должна.
+
+        Группа и кабинет у каждой строки не печатаются: на вкладке группы они
+        одинаковы у всех и стоят один раз в шапке.
+        """
         star = gruppy[kod]
         kab = kabinety_dnya[kl].get(kod)
         deti = [r for r in shk_dnya[kl] if gr_shk(r) == kod]
-        svoi = [x for x in prep.values() if x["gruppa"] == kod]
-        return (f'<p class="shapka"><b>{e(star)}</b> · '
-                + (f'кабинет <span class="kab">{e(kab)}</span>' if kab else '<span class="net">кабинет не назначен</span>')
-                + f' · преподавателей {len(svoi)} · школьников {len(deti)}</p>'
-                + vid_dnya(kl, kod))
+        svoi = sorted((x for x in prep.values() if x["gruppa"] == kod), key=lambda x: x["name"])
+        shapka = (f'<p class="shapka"><b>{e(star)}</b> · '
+                  + (f'кабинет <span class="kab">{e(kab)}</span>' if kab else '<span class="net">кабинет не назначен</span>')
+                  + f' · преподавателей {len(svoi)} · школьников {len(deti)}</p>')
+        return (shapka + '<div class="dva">'
+                + f'<div class="kol">{"".join(para_shk(r, kl, pokazat_kab=False) for r in deti)}</div>'
+                + f'<div class="kol kol-pr">{"".join(para_prep(x, kl, pokazat_gruppu=False) for x in svoi)}</div>'
+                + '</div>')
 
     # ── ЛИСТКИ ────────────────────────────────────────────────────────────────
     # Номер и название по СМЫСЛУ, а не имя файла. Ведущие нули убраны, слово
@@ -258,18 +272,20 @@ tr:hover td{{background:var(--accent-soft)}}
 /* ТРИ КОЛОНКИ ВО ВЕСЬ ЭКРАН. Слева и посередине — школьник и его преподаватель,
    справа — преподаватель и его школьники. Разделены вертикальной линией.
    Списками, а не квадратиками: человек ищет свою фамилию по алфавиту. */
-.tri{{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:0 2rem;align-items:start}}
+.dva{{display:grid;grid-template-columns:1fr 1fr;gap:0 2.5rem;align-items:start}}
+.odin{{max-width:none}}
 .kol{{padding-right:2rem;border-right:1px solid var(--rule);min-width:0}}
 .kol:last-child{{border-right:none;padding-right:0}}
-.para{{display:flex;gap:.8rem;align-items:baseline;padding:.3rem 0;flex-wrap:wrap;
-  border-bottom:1px solid var(--rule);font-size:1.05rem}}
+/* Крупнее и плотнее: пустой половины экрана быть не должно. */
+.para{{display:flex;gap:.8rem;align-items:baseline;padding:.34rem 0;flex-wrap:wrap;
+  border-bottom:1px solid var(--rule);font-size:1.15rem}}
 .para .kto{{flex:0 0 auto;min-width:0}}
 .para .komu{{margin-left:auto;text-align:right;color:var(--muted);font-family:var(--sans);
-  font-size:.95rem}}
+  font-size:1.05rem}}
 .para .komu.deti{{white-space:normal;text-align:right}}
 .para .komu.deti span{{display:inline-block;margin-left:.55rem}}
 .kol-pr .para{{padding:.45rem 0}}
-.kol-pr .komu.deti{{font-size:.92rem}}
+.kol-pr .komu.deti{{font-size:1rem}}
 .para.skryt{{display:none}}
 /* Переключатель дня — сверху справа, рядом с заголовком. */
 .shapka-str{{display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap;margin:0 0 1rem}}
@@ -284,9 +300,9 @@ tr:hover td{{background:var(--accent-soft)}}
   background:var(--accent-soft)}}
 .den{{display:none}}
 #d-cht:checked~#s-rasp .den-cht,#d-sub:checked~#s-rasp .den-sub{{display:block}}
-@media(max-width:1100px){{.tri{{grid-template-columns:1fr 1fr}}.kol-pr{{grid-column:1/-1;
-  border-top:1px solid var(--rule);padding-top:1rem;margin-top:1rem}}}}
-@media(max-width:700px){{.tri{{grid-template-columns:1fr}}.kol{{border-right:none;padding-right:0}}}}
+.poisk-str{{margin:0;max-width:32rem;flex:1 1 18rem}}
+@media(max-width:900px){{.dva{{grid-template-columns:1fr}}
+  .kol{{border-right:none;padding-right:0}}}}
 /* Карточки группы: всё на один экран, колонками — преподаватель и его дети. */
 .karty{{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:1rem}}
 .kart{{border:1px solid var(--rule);border-radius:10px;padding:.7rem .9rem;background:var(--panel)}}
@@ -367,23 +383,28 @@ tr:hover td{{background:var(--accent-soft)}}
 <section class="str holst" id="s-rasp">
   <div class="shapka-str">
     <h1>Распределение</h1>
+    <input class="poisk poisk-str" id="poisk-r" placeholder="Фамилия школьника или имя преподавателя" autocomplete="off">
     <div class="dni">
       <label for="d-cht">четверг</label><label for="d-sub">суббота</label>
     </div>
   </div>
-  <input class="poisk" id="poisk-r" placeholder="Фамилия школьника или имя преподавателя" autocomplete="off">
 
   <input class="rd" type="radio" name="vk" id="t-shk" checked>
+  <input class="rd" type="radio" name="vk" id="t-prep">
   <input class="rd" type="radio" name="vk" id="t-В">
   <input class="rd" type="radio" name="vk" id="t-Д">
   <input class="rd" type="radio" name="vk" id="t-Н">
   <div class="tabbar">
-    <label for="t-shk">все</label>
+    <label for="t-shk">школьникам</label><label for="t-prep">преподавателям</label>
     <label for="t-В">В</label><label for="t-Д">Д</label><label for="t-Н">Н</label>
   </div>
   <section class="vid" id="v-shk">
-    <div class="den den-cht">{vid_dnya("cht")}</div>
-    <div class="den den-sub">{vid_dnya("sub")}</div>
+    <div class="den den-cht">{vid_vse("cht")}</div>
+    <div class="den den-sub">{vid_vse("sub")}</div>
+  </section>
+  <section class="vid" id="v-prep">
+    <div class="den den-cht">{vid_prepodavateli("cht")}</div>
+    <div class="den den-sub">{vid_prepodavateli("sub")}</div>
   </section>
   {"".join(f'<section class="vid" id="v-{k}">'
            f'<div class="den den-cht">{vkladka_gruppy(k, "cht")}</div>'
