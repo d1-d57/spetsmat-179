@@ -21,8 +21,11 @@ ADRES_FILE = ROOT / "deploy" / "ADRES.txt"
 STATE_FILE = Path("/tmp/spetsmat-storozh-sajta.state.json")
 
 # Content marker that must appear on OUR site and cannot appear on provider banners.
+# Per correction 1 (2026-09-04 17:41): S1 moves distribution to /raspredelenie.
+# We check that path specifically to avoid false-red after S1 merge.
 OUR_CONTENT_MARKER = "Распределение"
 CHECK_NAMES = ("site",)
+RASPREDELENIE_PATH = "/raspredelenie"
 
 
 @dataclass(frozen=True)
@@ -82,7 +85,9 @@ def check_site(url: str | None) -> tuple[OneCheck, str, bool]:
     if url is None:
         return OneCheck("site", False, "ADRES.txt missing"), "не смог проверить: ADRES.txt missing", False
     try:
-        req = urllib.request.Request(url, method="GET")
+        # Per correction: check the specific path where the site content will live after S1.
+        check_url = url.rstrip("/") + RASPREDELENIE_PATH if url else None
+        req = urllib.request.Request(check_url, method="GET")
         with urllib.request.urlopen(req, timeout=15) as resp:
             status = resp.getcode()
             body = resp.read(512).decode("utf-8", errors="replace")
