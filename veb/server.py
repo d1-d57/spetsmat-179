@@ -138,12 +138,26 @@ def _all_students(connection: sqlite3.Connection) -> list[dict]:
 
 def _all_teachers(connection: sqlite3.Connection) -> list[dict]:
     return [
-        {"id": row["id"], "name": row["name"],
-         "kabinet": row["kabinet"] if "kabinet" in row.keys() else None}
+        {"id": row["id"], "name": row["name"], "kabinet": row["kabinet"],
+         "aktiven": bool(row["aktiven"])}
         for row in connection.execute(
-            "select id, name, kabinet from teachers order by name"
+            "select id, name, kabinet, aktiven from teachers order by name"
         ).fetchall()
     ]
+
+
+def _obespechit_aktivnost(connection: sqlite3.Connection) -> None:
+    """Колонка `teachers.aktiven`, заводится один раз и молча.
+
+    Владелец 2026-09-04: «сейчас там очень захардкожен список преподавателей».
+    Состав в этом году другой, кого-то придётся позвать, кто-то приходит редко.
+    🔴 УБРАТЬ = снять из активных, НЕ удалить: за преподавателем висит история
+    прошлого года, и терять её нельзя.
+    """
+    kolonki = [r[1] for r in connection.execute("pragma table_info(teachers)")]
+    if "aktiven" not in kolonki:
+        connection.execute("alter table teachers add column aktiven integer not null default 1")
+        connection.commit()
 
 
 def _rukovoditeli(connection: sqlite3.Connection) -> dict:
@@ -176,6 +190,7 @@ def _open_assignments(
 
 
 def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
+    _obespechit_aktivnost(connection)
     students = _all_students(connection)
     teachers = _all_teachers(connection)
     assignments = _open_assignments(connection, slot)
@@ -375,6 +390,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/vhod":
             self._post_vhod()
             return
+        if path == "/api/prepodavateli":
+            role = vhod.rol(self.headers)
+            if role != "organizator":
+                self._send_json(403, {"error": "правит только организатор"})
+                return
+            self._post_prepodavateli()
+            return
         if path == "/api/enrollment":
             role = vhod.rol(self.headers)
             if role is None:
@@ -408,6 +430,58 @@ class Handler(BaseHTTPRequestHandler):
             f"Max-Age={vhod.COOKIE_MAX_AGE_SECONDS}",
         )
         self.end_headers()
+
+    def _post_prepodavateli(self) -> None:
+        """Добавить преподавателя, снять с активных, вернуть в активные, задать кабинет.
+
+        Без правки кода и без миграции — требование владельца 2026-09-04.
+        Удаления НЕТ ни в одном действии: за преподавателем висит история.
+        """
+        try:
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        except (ValueError, TypeError):
+            self._send_json(400, {"error": "нечитаемое тело"})
+            return
+        deystvie = payload.get("deystvie")
+        connection = self._connection()
+        _obespechit_aktivnost(connection)
+
+        if deystvie == "dobavit":
+            imya = (payload.get("name") or "").strip()
+            if not imya:
+                self._send_json(400, {"error": "имя обязательно"})
+                return
+            est = connection.execute(
+                "select id from teachers where name = ?", (imya,)).fetchone()
+            if est:
+                # Повтор не плодит человека — возвращаем в активные.
+                connection.execute("update teachers set aktiven = 1 where id = ?", (est["id"],))
+                connection.commit()
+                self._send_json(200, {"teacher_id": est["id"], "vernuli": True})
+                return
+            cur = connection.execute(
+                "insert into teachers (name, aka, is_owner, kabinet, aktiven) values (?, ?, 0, ?, 1)",
+                (imya, payload.get("aka") or imya[:2], payload.get("kabinet")))
+            connection.commit()
+            self._send_json(200, {"teacher_id": cur.lastrowid})
+            return
+
+        tid = payload.get("teacher_id")
+        if not tid:
+            self._send_json(400, {"error": "нужен teacher_id"})
+            return
+        if deystvie == "ubrat":
+            connection.execute("update teachers set aktiven = 0 where id = ?", (tid,))
+        elif deystvie == "vernut":
+            connection.execute("update teachers set aktiven = 1 where id = ?", (tid,))
+        elif deystvie == "kabinet":
+            connection.execute("update teachers set kabinet = ? where id = ?",
+                               (payload.get("kabinet"), tid))
+        else:
+            self._send_json(400, {"error": "деиствие: dobavit | ubrat | vernut | kabinet"})
+            return
+        connection.commit()
+        self._send_json(200, {"ok": True})
 
     def _post_enrollment(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")
