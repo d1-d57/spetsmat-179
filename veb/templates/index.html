@@ -86,12 +86,12 @@ const STUDENTS_LIMIT = 5;
 
 let state = {
   view: 'students',
-  weekday: 1,
+  slot: 1,
   data: null,
 };
 
-async function fetchView(weekday) {
-  const r = await fetch(`/api/view?weekday=${weekday}`);
+async function fetchView(slot) {
+  const r = await fetch(`/api/view?slot=${slot}`);
   if (!r.ok) { toast(`Ошибка: ${r.status}`); return; }
   state.data = await r.json();
   render();
@@ -207,12 +207,12 @@ async function changeTeacher(student, teacherIdRaw) {
     body: JSON.stringify({
       student_id: student.student_id,
       teacher_id: teacherId,
-      weekday: state.weekday,
+      slot: state.slot,
     }),
   });
   if (r.ok) {
     toast('сохранено');
-    fetchView(state.weekday);
+    fetchView(state.slot);
   } else {
     const err = await r.json().catch(() => ({}));
     toast(`ошибка: ${err.error || r.status}`);
@@ -240,11 +240,11 @@ document.getElementById('weekday-toggle').addEventListener('click', e => {
   if (e.target.tagName !== 'BUTTON') return;
   for (const b of e.currentTarget.children) b.classList.remove('active');
   e.target.classList.add('active');
-  state.weekday = parseInt(e.target.dataset.day, 10);
-  fetchView(state.weekday);
+  state.slot = parseInt(e.target.dataset.day, 10);
+  fetchView(state.slot);
 });
 
-fetchView(state.weekday);
+fetchView(state.slot);
 </script>
 
 </body>

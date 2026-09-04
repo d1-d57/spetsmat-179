@@ -2,7 +2,7 @@
 
 ONE page, two views, one mutation.  The page is intentionally HTML+vanilla JS in
 one file under ``veb/templates/``; the only mutable thing the server takes from
-the request body is the next teacher for one ``(student, weekday)`` pair.  No
+the request body is the next teacher for one ``(student, slot)`` pair.  No
 session, no login, no analytics: the project has none of those yet, and adding
 them here would commit the wrong choice twice (the code AND the documentation).
 
@@ -10,7 +10,7 @@ The two GET endpoints speak JSON for the page to fetch on load; the POST endpoin
 takes JSON and replies with the resulting ``(closed, opened)`` pair.  All three
 go through ``EnrollmentService`` — never through raw SQL — so the half-open
 interval and the partial unique index stay the carrier of "one open row per
-``(student, weekday)``".
+``(student, slot)``".
 
 WHAT THE PAGE SHOWS.
 
@@ -28,6 +28,13 @@ new ``teacher_id``, computes ``effective_from`` as today, and calls
 PATCH-style "set teacher on this row" exists, because the schema's only
 mutation is ``close`` and a port without ``update`` is the whole point of the
 half-open model.
+
+SLOT, NOT WEEKDAY.  ``slot`` is the key the school actually teaches by: each child
+attends one or two slots, and the unit of assignment is ``(student, slot)``.  The
+schema's CHECK on the column still reads ``between 1 and 7`` because SQLite cannot
+ALTER a CHECK in place and the values that exist today all fit; the ceiling is the
+schema's, not a property of the slot concept.  See ``migrations/003_slot_vmesto_weekday.sql``
+for the weekday-to-slot mapping.
 """
 
 from __future__ import annotations
@@ -55,11 +62,16 @@ from infra.enrollment_repo import SqliteEnrollmentRepo
 from veb import vhod
 
 
-WEEKDAY_DEFAULT = 1  # Monday; the page shows one lesson day at a time.
+SLOT_DEFAULT = 1  # The page shows one slot at a time.
 PORT_DEFAULT = 8765
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
+MATERIALS_DIR = Path("/Users/ivanyakovlev/Documents/GitHub/materials/spetsmat-2026")
+
+GLAVNAYA_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\x93\xd0\xbb\xd0\xb0\xd0\xb2\xd0\xbd\xd0\xb0\xd1\x8f</title></head><body><p>\xd0\xa1\xd1\x82\xd1\x80\xd0\xb0\xd0\xbd\xd0\xb8\xd1\x86\xd0\xb0 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
+LISTKI_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\x9b\xd0\xb8\xd1\x81\xd1\x82\xd0\xba\xd0\xb8</title></head><body><p>\xd0\x9b\xd0\xb8\xd1\x81\xd1\x82\xd0\xba\xd0\xb8 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
+UROVNI_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\xa3\xd1\x80\xd0\xbe\xd0\xb2\xd0\xbd\xd0\xb8</title></head><body><p>\xd0\xa2\xd0\xb5\xd0\xba\xd1\x81\xd1\x82 \xd0\xbf\xd1\x80\xd0\xbe \xd1\x83\xd1\x80\xd0\xbe\xd0\xb2\xd0\xbd\xd0\xb8 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
 
 
 def _static_content_type(path: str) -> str:
@@ -134,21 +146,21 @@ def _all_teachers(connection: sqlite3.Connection) -> list[dict]:
 
 
 def _open_assignments(
-    connection: sqlite3.Connection, weekday: int
+    connection: sqlite3.Connection, slot: int
 ) -> dict[int, dict]:
     """``{student_id: {teacher_id, room, valid_from}}`` for the open rows."""
     rows = connection.execute(
         "select student_id, teacher_id, room, valid_from from enrollment "
-        "where weekday = ? and valid_to = ?",
-        (weekday, "9999-12-31"),
+        "where slot = ? and valid_to = ?",
+        (slot, "9999-12-31"),
     ).fetchall()
     return {row["student_id"]: dict(row) for row in rows}
 
 
-def _build_views(connection: sqlite3.Connection, weekday: int) -> dict:
+def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
     students = _all_students(connection)
     teachers = _all_teachers(connection)
-    assignments = _open_assignments(connection, weekday)
+    assignments = _open_assignments(connection, slot)
 
     by_students: list[dict] = []
     for student in students:
@@ -182,7 +194,7 @@ def _build_views(connection: sqlite3.Connection, weekday: int) -> dict:
         })
 
     return {
-        "weekday": weekday,
+        "slot": slot,
         "students": by_students,
         "teachers": by_teachers,
     }
@@ -236,6 +248,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        if path.startswith("/materials/"):
+            rel = path[len("/materials/"):].lstrip("/")
+            if ".." in rel.split("/"):
+                self._send_json(404, {"error": "not found"})
+                return
+            target = (MATERIALS_DIR / rel).resolve()
+            try:
+                target.relative_to(MATERIALS_DIR.resolve())
+            except Value:
+                self._send_json(404, {"error": "not found"})
+                return
+            if not target.is_file():
+                self._send_json(404, {"error": "not found"})
+                return
+            body = target.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/pdf" if target.suffix == ".pdf" else "application/octet-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path.startswith("/static/"):
             _serve_static(self, path)
             return
@@ -248,25 +281,56 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         if path == "/":
+            glavnaya = TEMPLATES_DIR / "glavnaya.html"
+            if glavnaya.is_file():
+                self._send_html(200, glavnaya.read_bytes())
+            else:
+                self._send_html(200, GLAVNAYA_STUB)
+            return
+        if path == "/raspredelenie":
             index = (TEMPLATES_DIR / "index.html").read_bytes()
             self._send_html(200, index)
+            return
+        if path == "/listki":
+            listki_dir = MATERIALS_DIR / "listki"
+            if listki_dir.is_dir():
+                files = sorted(f.name for f in listki_dir.iterdir() if f.is_file() and f.suffix == ".pdf")
+                self._send_json(200, {"listki": [{"name": n, "url": f"/materials/listki/{n}"} for n in files]})
+            else:
+                self._send_json(200, {"listki": []})
+            return
+        if path == "/listki-8":
+            listki8_dir = MATERIALS_DIR / "listki-8kl"
+            if listki8_dir.is_dir():
+                files = sorted(f.name for f in listki8_dir.iterdir() if f.is_file() and f.suffix == ".pdf")
+                self._send_json(200, {"listki": [{"name": n, "url": f"/materials/listki-8kl/{n}"} for n in files]})
+            else:
+                self._send_json(200, {"listki": []})
+            return
+        if path == "/urovni":
+            urovni_file = MATERIALS_DIR / "teksty" / "2026-09-04_post-pro-tri-listka.md"
+            if urovni_file.is_file():
+                text = urovni_file.read_text(encoding="utf-8")
+                self._send_json(200, {"text": text})
+            else:
+                self._send_json(200, {"text": ""})
             return
         if path == "/api/teachers":
             self._send_json(200, _all_teachers(self._connection()))
             return
         if path == "/api/view":
-            weekday = self._read_weekday()
-            if weekday is None:
-                self._send_json(400, {"error": "weekday must be 1..7"})
+            slot = self._read_slot()
+            if slot is None:
+                self._send_json(400, {"error": "slot must be 1..7"})
                 return
-            self._send_json(200, _build_views(self._connection(), weekday))
+            self._send_json(200, _build_views(self._connection(), slot))
             return
         self._send_json(404, {"error": "not found"})
 
-    def _read_weekday(self) -> Optional[int]:
+    def _read_slot(self) -> Optional[int]:
         from urllib.parse import parse_qs
         query = parse_qs(urlparse(self.path).query)
-        raw = query.get("weekday", ["1"])[0]
+        raw = query.get("slot", ["1"])[0]
         try:
             n = int(raw)
         except ValueError:
@@ -328,12 +392,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             student_id = int(payload["student_id"])
             teacher_id = int(payload["teacher_id"])
-            weekday = int(payload.get("weekday", WEEKDAY_DEFAULT))
+            slot = int(payload.get("slot", SLOT_DEFAULT))
         except (KeyError, TypeError, ValueError):
-            self._send_json(400, {"error": "student_id, teacher_id and weekday are required"})
+            self._send_json(400, {"error": "student_id, teacher_id and slot are required"})
             return
-        if not 1 <= weekday <= 7:
-            self._send_json(400, {"error": "weekday must be 1..7"})
+        if not 1 <= slot <= 7:
+            self._send_json(400, {"error": "slot must be 1..7"})
             return
 
         effective_from = datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat()
@@ -349,7 +413,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             move = service.move(
                 student_id=student_id,
-                weekday=weekday,
+                slot=slot,
                 to_teacher_id=teacher_id,
                 effective_from=effective_from,
             )
@@ -362,7 +426,7 @@ class Handler(BaseHTTPRequestHandler):
                     student_id=student_id,
                     teacher_id=teacher_id,
                     room="000",  # placeholder — caller must follow up via move if wrong
-                    weekday=weekday,
+                    slot=slot,
                     valid_from=effective_from,
                 )
             except EnrollmentError as exc:

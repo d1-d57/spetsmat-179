@@ -55,7 +55,7 @@ def running_server(tmp_path):
         )
     # Student 0 is already with teacher-0 on Monday.
     connection.execute(
-        "insert into enrollment (student_id, teacher_id, room, weekday, "
+        "insert into enrollment (student_id, teacher_id, room, slot, "
         "valid_from, valid_to) values (?, ?, ?, 1, '2026-09-01', ?)",
         (1, 1, "203", config.OPEN_END_DATE),
     )
@@ -102,7 +102,7 @@ def _http_post(url: str, payload: dict) -> tuple[int, bytes]:
 
 def test_get_root_returns_html(running_server):
     base, _ = running_server
-    status, body = _http_get(base + "/")
+    status, body = _http_get(base + "/raspredelenie")
     assert status == 200
     assert b"<!doctype html>" in body.lower() or b"<html" in body.lower()
     assert b"\xd0\xa8\xd0\xba\xd0\xbe\xd0\xbb\xd1\x8c\xd0\xbd\xd0\xb8\xd0\xba" in body  # «Школьники»
@@ -110,7 +110,7 @@ def test_get_root_returns_html(running_server):
 
 def test_get_view_returns_two_cuts(running_server):
     base, _ = running_server
-    status, body = _http_get(base + "/api/view?weekday=1")
+    status, body = _http_get(base + "/api/view?slot=1")
     assert status == 200
     payload = json.loads(body)
     assert len(payload["students"]) == 3
@@ -123,7 +123,7 @@ def test_get_view_returns_two_cuts(running_server):
 def test_post_enrollment_moves_rather_than_overwrites(running_server):
     base, connection = running_server
     status, body = _http_post(base + "/api/enrollment", {
-        "student_id": 1, "teacher_id": 2, "weekday": 1,
+        "student_id": 1, "teacher_id": 2, "slot": 1,
     })
     assert status == 200, body
     payload = json.loads(body)
@@ -143,7 +143,7 @@ def test_post_enrollment_moves_rather_than_overwrites(running_server):
 def test_post_enrollment_with_same_teacher_is_a_no_change(running_server):
     base, connection = running_server
     status, body = _http_post(base + "/api/enrollment", {
-        "student_id": 1, "teacher_id": 1, "weekday": 1,
+        "student_id": 1, "teacher_id": 1, "slot": 1,
     })
     assert status == 200
     payload = json.loads(body)
@@ -158,6 +158,6 @@ def test_post_enrollment_with_same_teacher_is_a_no_change(running_server):
 def test_post_enrollment_validates_input(running_server):
     base, _ = running_server
     status, _ = _http_post(base + "/api/enrollment", {
-        "student_id": 1, "weekday": 99,
+        "student_id": 1, "slot": 99,
     })
     assert status == 400

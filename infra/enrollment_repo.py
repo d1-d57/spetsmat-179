@@ -9,9 +9,9 @@ one; there is no third mutation.
 
 The guards stay in the schema and are not re-implemented here:
 
-  * ``enrollment_one_open_row`` — a partial unique index on ``(student_id, weekday)``
-    over rows whose ``valid_to`` is the open sentinel, so two open rows for one lesson
-    day cannot exist;
+  * ``enrollment_one_open_row`` — a partial unique index on ``(student_id, slot)``
+    over rows whose ``valid_to`` is the open sentinel, so two open rows for one slot
+    cannot exist;
   * ``enrollment_no_overlap_insert`` / ``..._update`` — triggers for two CLOSED
     intervals that overlap, which no index can express.
 
@@ -34,7 +34,7 @@ import config
 from core.models import Enrollment
 from core.services.enrollment import EnrollmentError, EnrollmentPort, OverlappingHistory
 
-_COLUMNS = "id, student_id, teacher_id, room, weekday, valid_from, valid_to"
+_COLUMNS = "id, student_id, teacher_id, room, slot, valid_from, valid_to"
 
 #: Fragments SQLite puts in the message when one of the schema's two enrollment guards
 #: refuses a row.  Matched so that a foreign key failure — also an ``IntegrityError`` —
@@ -51,7 +51,7 @@ def _enrollment_from_row(row: sqlite3.Row) -> Enrollment:
         student_id=row["student_id"],
         teacher_id=row["teacher_id"],
         room=row["room"],
-        weekday=row["weekday"],
+        slot=row["slot"],
         valid_from=row["valid_from"],
         valid_to=row["valid_to"],
     )
@@ -100,8 +100,8 @@ class SqliteEnrollmentRepo(EnrollmentPort):
 
     # -------------------------------------------------------------------- reading
 
-    def open_row(self, student_id: int, weekday: int) -> Optional[Enrollment]:
-        """The still-open interval for this (student, lesson day), or None.
+    def open_row(self, student_id: int, slot: int) -> Optional[Enrollment]:
+        """The still-open interval for this (student, slot), or None.
 
         Keyed on the sentinel rather than on ``max(valid_to)``: the partial unique index
         is defined over exactly this predicate, so this lookup rides it and there is at
@@ -109,18 +109,18 @@ class SqliteEnrollmentRepo(EnrollmentPort):
         """
         row = self._connection.execute(
             "select %s from enrollment "
-            " where student_id = ? and weekday = ? and valid_to = ?" % _COLUMNS,
-            (student_id, weekday, config.OPEN_END_DATE),
+            " where student_id = ? and slot = ? and valid_to = ?" % _COLUMNS,
+            (student_id, slot, config.OPEN_END_DATE),
         ).fetchone()
         return _enrollment_from_row(row) if row is not None else None
 
     def rows_valid_on(
         self,
         day: str,
-        weekday: int,
+        slot: int,
         student_ids: Optional[Sequence[int]] = None,
     ) -> list:
-        """Intervals covering ``day`` on that lesson day, in ONE query.
+        """Intervals covering ``day`` in that slot, in ONE query.
 
         The interval test is ``valid_from <= day and day < valid_to`` — half-open, so a
         handover on ``day`` itself belongs to the incoming teacher and to nobody else.
@@ -130,9 +130,9 @@ class SqliteEnrollmentRepo(EnrollmentPort):
         """
         sql = (
             "select %s from enrollment "
-            " where weekday = ? and valid_from <= ? and ? < valid_to" % _COLUMNS
+            " where slot = ? and valid_from <= ? and ? < valid_to" % _COLUMNS
         )
-        params: list = [weekday, day, day]
+        params: list = [slot, day, day]
         if student_ids is not None:
             # An EMPTY sequence means "nothing matches" and must NOT collapse into "no
             # filter": that is how a query about zero students quietly becomes a query
@@ -144,15 +144,15 @@ class SqliteEnrollmentRepo(EnrollmentPort):
         rows = self._connection.execute(sql + " order by student_id, id", params).fetchall()
         return [_enrollment_from_row(row) for row in rows]
 
-    def history(self, student_id: int, weekday: Optional[int] = None) -> list:
-        """Every interval of one student, oldest first; one lesson day if asked."""
+    def history(self, student_id: int, slot: Optional[int] = None) -> list:
+        """Every interval of one student, oldest first; one slot if asked."""
         sql = "select %s from enrollment where student_id = ?" % _COLUMNS
         params: list = [student_id]
-        if weekday is not None:
-            sql += " and weekday = ?"
-            params.append(weekday)
+        if slot is not None:
+            sql += " and slot = ?"
+            params.append(slot)
         rows = self._connection.execute(
-            sql + " order by weekday, valid_from, id", params
+            sql + " order by slot, valid_from, id", params
         ).fetchall()
         return [_enrollment_from_row(row) for row in rows]
 
@@ -164,7 +164,7 @@ class SqliteEnrollmentRepo(EnrollmentPort):
         student_id: int,
         teacher_id: int,
         room: str,
-        weekday: int,
+        slot: int,
         valid_from: str,
         valid_to: str = config.OPEN_END_DATE,
     ) -> Enrollment:
@@ -172,9 +172,9 @@ class SqliteEnrollmentRepo(EnrollmentPort):
         try:
             cursor = self._connection.execute(
                 "insert into enrollment "
-                "(student_id, teacher_id, room, weekday, valid_from, valid_to) "
+                "(student_id, teacher_id, room, slot, valid_from, valid_to) "
                 "values (?, ?, ?, ?, ?, ?)",
-                (student_id, teacher_id, room, weekday, valid_from, valid_to),
+                (student_id, teacher_id, room, slot, valid_from, valid_to),
             )
         except sqlite3.IntegrityError as exc:
             raise _as_overlap(exc) from exc
