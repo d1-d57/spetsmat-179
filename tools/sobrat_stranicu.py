@@ -72,35 +72,98 @@ def sobrat():
                 f'<td>{f"<span class=kab>{e(kab)}</span>" if kab else "<span class=net>—</span>"}</td></tr>')
 
     def vkladka_gruppy(kod):
+        """Всё про группу НА ОДИН ЭКРАН: преподаватели слева, школьники справа.
+
+        Числа — СВОИ, не общие: «ждут назначения» в группе В и в группе Д разные,
+        общая цифра здесь бессмысленна (замечание владельца 04.09).
+        """
         star = gruppy[kod]
         kab = kabinety.get(kod)
         svoi = sorted((t for t in prep.values() if t["gruppa"] == kod), key=lambda t: t["name"])
         deti = [r for r in shk if gr_shk(r) == kod]
-        ryady_prep = "".join(
-            f'<tr><td class="pr"><b>{e(t["name"])}</b>'
-            f'{" <span class=redko>приходит не всегда</span>" if t["name"] == "Ольга Рыжая" else ""}</td>'
-            f'<td class="ch">{sum(1 for r in shk if r["teacher_id"] == t["id"])}</td></tr>'
-            for t in svoi)
-        ryady_deti = "".join(
-            f'<tr><td><b>{e(r["surname"])}</b> {e(r["name"])} '
-            f'<span class="kl">{e(r["class"])}</span></td>'
-            f'<td>{e(prep[r["teacher_id"]]["name"]) if r["teacher_id"] in prep else "<span class=net>ждёт назначения</span>"}</td></tr>'
-            for r in deti)
+        zhdut_gr = [r for r in deti if r["teacher_id"] not in prep]
+
+        kolonki = []
+        for t_ in svoi:
+            ego = sorted(f'{r["surname"]} {r["name"]}' for r in shk if r["teacher_id"] == t_["id"])
+            redko = ' <span class="redko">не всегда</span>' if t_["name"] == "Ольга Рыжая" else ""
+            deti_html = "".join(f'<li>{e(d)}</li>' for d in ego) or '<li class="net">никого</li>'
+            kolonki.append(
+                f'<div class="kart"><div class="kart-z"><b>{e(t_["name"])}</b>{redko}'
+                f'<span class="ch">{len(ego)}</span></div><ul>{deti_html}</ul></div>')
+
+        zh = ""
+        if zhdut_gr:
+            zh = ('<div class="kart zhd"><div class="kart-z"><b>ждут назначения</b>'
+                  f'<span class="ch">{len(zhdut_gr)}</span></div><ul>'
+                  + "".join(f'<li>{e(r["surname"])} {e(r["name"])}</li>' for r in zhdut_gr)
+                  + "</ul></div>")
+
         return f"""<section class="vid" id="v-{kod}">
-  <p class="shapka">{e(star)} · {f'кабинет <span class="kab">{e(kab)}</span>' if kab else '<span class="net">кабинет не назначен</span>'} ·
-     преподавателей {len(svoi)} · школьников {len(deti)}</p>
-  <table><thead><tr><th>Преподаватель</th><th>Школьников</th></tr></thead><tbody>{ryady_prep}</tbody></table>
-  <table style="margin-top:2rem"><thead><tr><th>Школьник</th><th>Принимает</th></tr></thead><tbody>{ryady_deti}</tbody></table>
+  <p class="shapka"><b>{e(star)}</b> · {f'кабинет <span class="kab">{e(kab)}</span>' if kab else '<span class="net">кабинет не назначен</span>'} ·
+     преподавателей {len(svoi)} · школьников {len(deti)}{f' · <span class="net">ждут назначения {len(zhdut_gr)}</span>' if zhdut_gr else ''}</p>
+  <div class="karty">{zh}{"".join(kolonki)}</div>
 </section>"""
 
-    l9 = sorted(p.name for p in (MAT / "listki").glob("*.pdf"))
-    l8 = sorted(p.name for p in (MAT / "listki-8kl").glob("*.pdf"))
+    # ── ЛИСТКИ ────────────────────────────────────────────────────────────────
+    # Номер и название по СМЫСЛУ, а не имя файла. Ведущие нули убраны, слово
+    # «ДРАФТ» снято: это готовая версия, а не черновик (слова владельца 04.09).
+    # Зачёт стоит ПОСЛЕ листка 10 — им заканчивалось первое полугодие.
+    # Числа Фибоначчи не выдавались вовсе, поэтому их на странице нет.
+    L8_PERVOE = [
+        ("1",  "Постепенно, с первого шага",       "01_Постепенно, с первого шага.pdf"),
+        ("2",  "Правило суммы и произведения",     "02_Правило суммы и произведения.pdf"),
+        ("3",  "Пары и тройки",                    "03_Пары и тройки.pdf"),
+        ("4",  "Ещё раз про сложение и умножение", "04_Еще раз про сложение и умножение.pdf"),
+        ("5",  "Биекции",                          "05_Биекции.pdf"),
+        ("6",  "Графы",                            "06_Графы.pdf"),
+        ("7",  "Множества",                        "07_Множества.pdf"),
+        ("8",  "Зоопарк теории графов",            "08_Зоопарк теории графов.pdf"),
+        ("9",  "Индукция",                         "09_Индукция.pdf"),
+        ("10", "Биномиальные коэффициенты",        "10_Биномиальные_коэффициенты_ДРАФТ.pdf"),
+        ("",   "Программа зачёта",                 "Программа зачета.pdf"),
+        ("Д1", "Информация",                       "д01_Информация.pdf"),
+        ("Д2", "Геометрическое суммирование",      "д02_Геометрическое суммирование.pdf"),
+    ]
+    L8_VTOROE = [
+        ("11", "Соответствия",  "11_Соответствия.pdf"),
+        ("12", "Делимость",     "12_Делимость.pdf"),
+        ("13", "Остатки",       "13_Остатки.pdf"),
+        ("14", "ОТА",           "14_ОТА.pdf"),
+        ("15", "Бесконечность", "15_Бесконечность.pdf"),
+        ("Д3", "Игры",          "д03_Игры.pdf"),
+    ]
+    # 9 класс: одна ТЕМА, три версии в одну строку слева направо — A · α · ℵ.
+    L9 = [("16", "Деревья", [("A", "16A-derevya.pdf"),
+                             ("α", "16α-derevya.pdf"),
+                             ("ℵ", "16ℵ-derevya.pdf")])]
 
-    def pdf(spisok, papka):
-        if not spisok:
-            return '<p class="net">пока нет</p>'
-        return '<ul class="fajly">' + "".join(
-            f'<li><a href="{papka}/{e(n)}">{e(n[:-4])}</a></li>' for n in spisok) + "</ul>"
+    def est(papka, fajl):
+        return (MAT / papka).joinpath(fajl).is_file()
+
+    def stroki_8(spisok, papka):
+        out = []
+        for nom, nazv, fajl in spisok:
+            if not est(papka, fajl):
+                continue
+            out.append(f'<tr><td class="nom">{e(nom)}</td>'
+                       f'<td><a href="{papka}/{e(fajl)}">{e(nazv)}</a></td></tr>')
+        return "".join(out)
+
+    def stroki_9():
+        out = []
+        for nom, tema, versii in L9:
+            live = [(z, f) for z, f in versii if est("listki", f)]
+            if not live:
+                continue
+            ssylki = " ".join(
+                f'<a class="ver" href="listki/{e(f)}">{e(z)}</a>' for z, f in live)
+            out.append(f'<tr><td class="nom">{e(nom)}</td>'
+                       f'<td>{e(tema)}</td><td class="verstroka">{ssylki}</td></tr>')
+        return "".join(out)
+
+    l9 = [f for _, _, vs in L9 for _, f in vs if est("listki", f)]
+    l8 = [f for _, _, f in L8_PERVOE + L8_VTOROE if est("listki-8kl", f)]
 
     zhdut = [r for r in shk if r["teacher_id"] not in prep]
 
@@ -177,6 +240,33 @@ tr:hover td{{background:var(--accent-soft)}}
   border:1px solid var(--rule);border-radius:0 0 9px 9px;max-height:18rem;overflow:auto}}
 .spisok div{{padding:.5em .9em;cursor:pointer}}
 .spisok div:hover{{background:var(--accent-soft);color:var(--accent)}}
+/* Карточки группы: всё на один экран, колонками — преподаватель и его дети. */
+.karty{{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:1rem}}
+.kart{{border:1px solid var(--rule);border-radius:10px;padding:.7rem .9rem;background:var(--panel)}}
+.kart-z{{display:flex;align-items:baseline;gap:.4rem;font-family:var(--sans);font-size:1rem;
+  padding-bottom:.4rem;margin-bottom:.4rem;border-bottom:1px solid var(--rule)}}
+.kart-z .ch{{margin-left:auto;color:var(--muted)}}
+.kart ul{{list-style:none;margin:0;padding:0}}
+.kart li{{font-size:.95rem;padding:.12rem 0}}
+.kart.zhd{{border-color:var(--warm)}}
+.kart.zhd .kart-z b{{color:var(--warm)}}
+/* Листки: номер · название · версии в одну строку. */
+.listki{{max-width:46em}}
+.listki td{{padding:.4rem 1rem .4rem 0}}
+.listki .nom{{font-family:var(--sans);font-weight:600;color:var(--faint);
+  width:3.5rem;white-space:nowrap}}
+.listki a{{color:var(--accent);text-decoration:none;font-size:1.05rem}}
+.listki a:hover{{text-decoration:underline}}
+.verstroka{{white-space:nowrap;text-align:right}}
+.ver{{display:inline-block;font-family:var(--sans);font-weight:600;background:var(--chip);
+  border-radius:7px;padding:.12em .6em;margin-left:.35rem;color:var(--text)!important;
+  text-decoration:none!important}}
+.ver:hover{{background:var(--accent);color:var(--panel)!important}}
+.polug{{font-family:var(--sans);font-size:.85rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--faint);margin:1.8rem 0 .5rem}}
+.polug:first-child{{margin-top:0}}
+.menu label.im{{font-weight:600;font-size:1.05rem;margin-right:1.6rem;color:var(--text);
+  padding-left:0}}
 .fajly{{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}}
 .fajly li{{padding:.4em 0;border-bottom:1px solid var(--rule);break-inside:avoid}}
 .fajly a{{color:var(--accent);text-decoration:none;font-size:1.05rem}}
@@ -187,7 +277,7 @@ tr:hover td{{background:var(--accent-soft)}}
 <input class="rd" type="radio" name="str" id="p-list">
 <input class="rd" type="radio" name="str" id="p-rasp">
 <nav class="menu">
-  <span class="im">Спецмат · 9 класс</span>
+  <label class="im" for="p-start">Спецмат 9 класс</label>
   <label for="p-start">Стартовая</label>
   <label for="p-list">Листки</label>
   <label for="p-rasp">Распределение</label>
@@ -200,7 +290,7 @@ tr:hover td{{background:var(--accent-soft)}}
     <p>Кто у кого занимается и в каком кабинете, и все листки — этого года и прошлого.</p>
     <div class="raspisanie">
       <div class="zag2">Расписание</div>
-      <div>Занятия по понедельникам и четвергам. <span class="net">время пока не указано</span></div>
+      <div>Занятия по четвергам и субботам. <span class="net">время пока не указано</span></div>
     </div>
     <div class="podskazki" style="margin-top:2rem">
       <input class="poisk" id="poisk" placeholder="Найти себя — фамилия школьника или имя преподавателя" autocomplete="off">
@@ -215,8 +305,15 @@ tr:hover td{{background:var(--accent-soft)}}
   <input class="rd" type="radio" name="lst" id="l-9" checked>
   <input class="rd" type="radio" name="lst" id="l-8">
   <div class="tabbar"><label for="l-9">9 класс</label><label for="l-8">8 класс</label></div>
-  <section class="vid" id="w-9" style="display:block">{pdf(l9, "listki")}</section>
-  <section class="vid" id="w-8">{pdf(l8, "listki-8kl")}</section>
+  <section class="vid" id="w-9" style="display:block">
+    <table class="listki"><tbody>{stroki_9()}</tbody></table>
+  </section>
+  <section class="vid" id="w-8">
+    <p class="polug">первое полугодие</p>
+    <table class="listki"><tbody>{stroki_8(L8_PERVOE, "listki-8kl")}</tbody></table>
+    <p class="polug">второе полугодие</p>
+    <table class="listki"><tbody>{stroki_8(L8_VTOROE, "listki-8kl")}</tbody></table>
+  </section>
 </section>
 
 <section class="str holst" id="s-rasp">
@@ -247,7 +344,12 @@ tr:hover td{{background:var(--accent-soft)}}
 <script>
 // Поиск ищет и школьника, и преподавателя, подсказывает от двух букв: людей мало.
 const IMENA = {[e(f'{r["surname"]} {r["name"]}') for r in shk] + [e(t["name"]) for t in prep.values()]!r};
-const KOMU = {{{",".join(f'"{e(r["surname"])} {e(r["name"])}":"{e(prep[r["teacher_id"]]["name"]) if r["teacher_id"] in prep else "ждёт назначения"} · {e(kab_shk(r) or "кабинет не назначен")}"' for r in shk)}}};
+// Что показать по найденному. Для школьника — к кому и куда идти; для
+// преподавателя — его группа, старший, кабинет и сколько у него школьников.
+const KOMU = {{{",".join(
+  [f'"{e(r["surname"])} {e(r["name"])}":"{e(prep[r["teacher_id"]]["name"]) if r["teacher_id"] in prep else "ждёт назначения"} · группа {e(gr_shk(r) or "—")} · кабинет {e(kab_shk(r) or "не назначен")}"' for r in shk]
++ [f'"{e(t_["name"])}":"группа {e(t_["gruppa"] or "—")} · старший {e(gruppy.get(t_["gruppa"], "—"))} · кабинет {e(kabinety.get(t_["gruppa"]) or "не назначен")} · школьников {sum(1 for r in shk if r["teacher_id"] == t_["id"])}"' for t_ in prep.values()]
+)}}};
 const poisk=document.getElementById('poisk'),spisok=document.getElementById('spisok'),nashli=document.getElementById('nashli');
 poisk.addEventListener('input',e=>{{
   const q=e.target.value.trim().toLowerCase(); nashli.innerHTML='';
