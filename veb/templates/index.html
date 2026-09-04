@@ -78,6 +78,19 @@ tr:hover td{background:var(--accent-soft)}
 .kab{font-family:var(--sans);font-weight:600;background:var(--chip);border-radius:7px;
   padding:.15em .6em;white-space:nowrap}
 .ruk{color:var(--muted);font-family:var(--sans);font-size:.95rem}
+.gr{font-family:var(--sans);font-weight:600;color:var(--accent)}
+.pr{white-space:nowrap}
+.deti{font-size:.95rem;color:var(--muted);line-height:1.4}
+.ch{font-family:var(--sans);color:var(--muted);text-align:right}
+tr.zhdet td{background:rgba(201,116,58,.10)}
+.kabpanel{display:flex;gap:1.6rem;flex-wrap:wrap;align-items:center;margin:0 0 1.8rem;
+  padding:.9rem 1.2rem;border:1px solid var(--rule);border-radius:10px;background:var(--panel)}
+.kabpanel .p{display:flex;gap:.5rem;align-items:baseline;font-family:var(--sans)}
+.kabpanel .g{font-weight:600;color:var(--accent);font-size:1.15rem}
+.kabpanel .s{color:var(--muted);font-size:.95rem}
+.kabpanel input{width:5.5rem;padding:.35em .5em;font:inherit;font-size:1rem;text-align:center;
+  border:1px solid var(--rule);border-radius:7px;background:var(--bg);color:var(--text)}
+.kabpanel input:focus{outline:none;border-color:var(--accent)}
 .net{color:var(--warm);font-family:var(--sans);font-size:1rem}
 .gruppa{margin:0 0 2.6rem}
 .gruppa h2{font-family:var(--sans);font-size:1.7rem;font-weight:600;margin:0 0 .1em}
@@ -109,6 +122,8 @@ select{font:inherit;font-size:1rem;padding:.3em;background:var(--panel);color:va
   <h1>Распределение</h1>
   <p class="data" id="data"></p>
 
+  <div class="kabpanel" id="kabpanel"></div>
+
   <div class="tabs">
     <input type="radio" name="vid" id="t-shk" checked>
     <input type="radio" name="vid" id="t-prp">
@@ -120,7 +135,7 @@ select{font:inherit;font-size:1rem;padding:.3em;background:var(--panel);color:va
     <section class="vid" id="v-shk">
       <input class="poisk" id="poisk" placeholder="Фамилия" autocomplete="off">
       <table>
-        <thead><tr><th>Школьник</th><th>Принимает</th><th>Кабинет</th></tr></thead>
+        <thead><tr><th>Школьник</th><th>Группа</th><th>Принимает</th><th>Кабинет</th></tr></thead>
         <tbody id="telo-shk"></tbody>
       </table>
     </section>
@@ -145,7 +160,10 @@ function ekran(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;',
 function risuyShkolnikov(filtr){
   const telo = document.getElementById('telo-shk');
   const f = (filtr || '').trim().toLowerCase();
-  const spisok = dannye.students.filter(s => !f || s.surname.toLowerCase().startsWith(f));
+  let spisok = dannye.students.filter(s => !f || s.surname.toLowerCase().startsWith(f));
+  // 🔴 ЖДУЩИЕ НАЗНАЧЕНИЯ — НАВЕРХ. Ради них правка сегодня и нужна: в общем списке
+  // из 54 человек они тонут, а это главная работа организатора перед занятием.
+  spisok = [...spisok.filter(s => !s.teacher_id), ...spisok.filter(s => s.teacher_id)];
   telo.innerHTML = spisok.map(s => {
     const prep = s.teacher_name
       ? (organizator ? vybor(s) : ekran(s.teacher_name))
@@ -154,33 +172,73 @@ function risuyShkolnikov(filtr){
       ? '<span class="kab">' + ekran(s.room) + '</span>' +
         (s.rukovoditel ? ' <span class="ruk">' + ekran(s.rukovoditel) + '</span>' : '')
       : '<span class="net">—</span>';
-    return '<tr><td><span class="fam">' + ekran(s.surname) + '</span> ' + ekran(s.name) +
+    const gr = s.gruppa ? '<span class="gr">' + ekran(s.gruppa) + '</span>'
+                        : '<span class="net">—</span>';
+    return '<tr' + (s.teacher_id ? '' : ' class="zhdet"') + '><td><span class="fam">' +
+           ekran(s.surname) + '</span> ' + ekran(s.name) +
            ' <span class="klass">' + ekran(s.class || '') + '</span></td>' +
-           '<td>' + prep + '</td><td>' + kab + '</td></tr>';
+           '<td>' + gr + '</td><td>' + prep + '</td><td>' + kab + '</td></tr>';
   }).join('');
 }
 
 function vybor(s){
-  const opts = dannye.teachers.map(t =>
-    '<option value="' + t.teacher_id + '"' + (t.teacher_id === s.teacher_id ? ' selected' : '') +
-    '>' + ekran(t.name) + '</option>').join('');
+  // 🔴 СНАЧАЛА ПРЕПОДАВАТЕЛИ СВОЕЙ ГРУППЫ, потом остальные: 90% правок — внутри
+  // группы, и частый случай обязан быть самым коротким. Пробежаться по всем можно,
+  // но «свои» — первыми. Выбрал чужого — школьник переехал в другую группу и кабинет
+  // сменился сам, потому что кабинет держится группой.
+  const svoi = dannye.teachers.filter(t => t.gruppa && t.gruppa === s.gruppa);
+  const chuzhie = dannye.teachers.filter(t => !t.gruppa || t.gruppa !== s.gruppa);
+  const opt = t => '<option value="' + t.teacher_id + '"' +
+    (t.teacher_id === s.teacher_id ? ' selected' : '') + '>' + ekran(t.name) + '</option>';
+  let opts = '';
+  if (!s.teacher_id) opts += '<option value="" selected>— ждёт назначения —</option>';
+  if (svoi.length) opts += '<optgroup label="группа ' + ekran(s.gruppa) + '">' + svoi.map(opt).join('') + '</optgroup>';
+  const po = {};
+  chuzhie.forEach(t => { (po[t.gruppa || '—'] = po[t.gruppa || '—'] || []).push(t); });
+  Object.keys(po).sort().forEach(g => {
+    opts += '<optgroup label="группа ' + ekran(g) + '">' + po[g].map(opt).join('') + '</optgroup>';
+  });
   return '<select data-student="' + s.student_id + '">' + opts + '</select>';
+}
+
+function risuyKabinety(){
+  // Три строки: В → кабинет, Д → кабинет, Н → кабинет. Правка отражается везде,
+  // потому что кабинет школьника и преподавателя вычисляются из группы.
+  const po = {};
+  dannye.teachers.forEach(t => { if (t.gruppa && !po[t.gruppa]) po[t.gruppa] = t; });
+  document.getElementById('kabpanel').innerHTML = ['В','Д','Н'].map(g => {
+    const t = po[g] || {};
+    return '<div class="p"><span class="g">' + g + '</span>' +
+      '<span class="s">' + ekran(t.starshij || '') + '</span>' +
+      '<input data-gruppa="' + g + '" value="' + ekran(t.kabinet || '') + '" placeholder="кабинет"></div>';
+  }).join('');
 }
 
 function risuyPrepodavatelej(){
   const telo = document.getElementById('telo-prp');
-  telo.innerHTML = dannye.teachers.filter(t => t.load > 0).map(t =>
-    '<div class="gruppa"><h2>' + ekran(t.name) + '</h2>' +
-    '<p class="pod">' + (t.kabinet ? '<span class="kab">' + ekran(t.kabinet) + '</span>' : '') +
-    (t.rukovoditel ? ' <span class="ruk">' + ekran(t.rukovoditel) + '</span>' : '') + '</p>' +
-    '<ul>' + t.students.map(s =>
-      '<li><span class="fam">' + ekran(s.surname) + '</span> ' + ekran(s.name) + '</li>').join('') +
-    '</ul></div>').join('');
+  telo.innerHTML = '<table><thead><tr><th>Преподаватель</th><th>Группа</th>' +
+    '<th>Школьники</th><th>#</th><th>Кабинет</th></tr></thead><tbody>' +
+    dannye.teachers.map(t =>
+      '<tr><td class="pr"><span class="fam">' + ekran(t.name) + '</span></td>' +
+      '<td>' + (t.gruppa ? '<span class="gr">' + ekran(t.gruppa) + '</span>' : '') + '</td>' +
+      '<td class="deti">' + ekran(t.students.map(s => s.surname + ' ' + s.name).join(', ')) + '</td>' +
+      '<td class="ch">' + t.load + '</td>' +
+      '<td>' + (t.kabinet ? '<span class="kab">' + ekran(t.kabinet) + '</span>' : '') + '</td></tr>'
+    ).join('') + '</tbody></table>';
 }
 
 document.getElementById('poisk').addEventListener('input', e => risuyShkolnikov(e.target.value));
 
 document.addEventListener('change', async e => {
+  const kab = e.target.closest('input[data-gruppa]');
+  if (kab) {
+    const otvet = await fetch('/api/kabinety', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({gruppa: kab.dataset.gruppa, kabinet: kab.value.trim()})
+    });
+    if (otvet.ok) zagruzi(); else kab.style.borderColor = 'var(--warm)';
+    return;
+  }
   const sel = e.target.closest('select[data-student]');
   if (!sel) return;
   const otvet = await fetch('/api/enrollment', {
@@ -199,6 +257,7 @@ async function zagruzi(){
   organizator = true;
   document.getElementById('data').textContent =
     'на ' + new Date().toLocaleDateString('ru-RU', {day:'numeric', month:'long'});
+  risuyKabinety();
   risuyShkolnikov(document.getElementById('poisk').value);
   risuyPrepodavatelej();
 }

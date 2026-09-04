@@ -149,11 +149,14 @@ def _all_teachers(connection: sqlite3.Connection) -> list[dict]:
     return [
         {"id": row["id"], "name": row["name"],
          "kabinet": row["kabinet"] if "kabinet" in row.keys() else None,
+         "gruppa": row["gruppa"] if "gruppa" in row.keys() else None,
          "aktiven": bool(row["aktiven"]) if "aktiven" in row.keys() else True}
         # 🔴 `select *`, а не перечисление колонок: миграция 004 (кабинеты) могла ещё
         # не применяться — в тестах база свежая. Жёсткий список колонок ронял сборку
         # там, где данные просто старее кода.
-        for row in connection.execute("select * from teachers order by name").fetchall()
+        for row in connection.execute(
+            "select * from teachers where aktiven is null or aktiven = 1 order by name"
+        ).fetchall()
     ]
 
 
@@ -169,6 +172,29 @@ def _obespechit_aktivnost(connection: sqlite3.Connection) -> None:
     if "aktiven" not in kolonki:
         connection.execute("alter table teachers add column aktiven integer not null default 1")
         connection.commit()
+
+
+def _kabinety_grupp(connection: sqlite3.Connection):
+    """``({группа: кабинет на сегодня}, {группа: старший})``.
+
+    Кабинет назначается ГРУППЕ на КОНКРЕТНЫЙ ДЕНЬ и меняется: владелец ставит
+    привязку накануне вечером. Нет строки на дату — кабинета на этот день нет,
+    и это законный случай, а не потеря данных.
+    """
+    from datetime import date as _date
+    try:
+        segodnya = _date.today().isoformat()
+        # 🔴 Берём БЛИЖАЙШУЮ дату, а не последнюю: словарь перезаписывается по ходу,
+        # поэтому сортируем по УБЫВАНИЮ — ближайшая дата ложится последней и побеждает.
+        # Без этого правка «кабинет на сегодня» молча проигрывала записи на завтра.
+        kab = {r["gruppa"]: r["kabinet"] for r in connection.execute(
+            "select gruppa, kabinet from kabinet_na_den where data >= ? order by data desc",
+            (segodnya,))}
+        star = {r["kod"]: r["starshij"] for r in connection.execute(
+            "select kod, starshij from gruppy")}
+        return kab, star
+    except sqlite3.OperationalError:
+        return {}, {}
 
 
 def _rukovoditeli(connection: sqlite3.Connection) -> dict:
@@ -223,14 +249,16 @@ def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
             "room": assignment["room"] if assignment else None,
         })
 
-    ruk = _rukovoditeli(connection)
-    kabinet_prepoda = {t_["id"]: t_.get("kabinet") for t_ in teachers}
+    # 🔴 КАБИНЕТ ДЕРЖИТСЯ ГРУППОЙ, а не человеком (ТЗ §5). Меняешь кабинет группы —
+    # меняется у всех её людей одним действием. Поэтому кабинет школьника и
+    # преподавателя ВЫЧИСЛЯЮТСЯ, а не хранятся у каждого.
+    kab_gruppy, starshie = _kabinety_grupp(connection)
+    gruppa_prepoda = {t_["id"]: t_.get("gruppa") for t_ in teachers}
     for row in by_students:
-        # Кабинет строки перекрывает постоянную привязку — дорога временному
-        # переводу (болезнь) оставлена открытой, как просил владелец.
-        kab = row["room"] or kabinet_prepoda.get(row["teacher_id"])
-        row["room"] = kab
-        row["rukovoditel"] = ruk.get(kab)
+        g = gruppa_prepoda.get(row["teacher_id"])
+        row["gruppa"] = g
+        row["room"] = kab_gruppy.get(g)
+        row["starshij"] = starshie.get(g)
 
     by_teachers: list[dict] = []
     for teacher in teachers:
@@ -238,8 +266,9 @@ def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
         by_teachers.append({
             "teacher_id": teacher["id"],
             "name": teacher["name"],
-            "kabinet": teacher.get("kabinet"),
-            "rukovoditel": ruk.get(teacher.get("kabinet")),
+            "gruppa": teacher.get("gruppa"),
+            "kabinet": kab_gruppy.get(teacher.get("gruppa")),
+            "starshij": starshie.get(teacher.get("gruppa")),
             "load": len(kids),
             "students": [
                 {"student_id": k["student_id"], "surname": k["surname"],
@@ -359,7 +388,7 @@ class Handler(BaseHTTPRequestHandler):
         # JSON остаётся доступен под /api/listki, /api/listki-8, /api/urovni.
         for _put, _shablon in (("/listki", "listki.html"),
                                ("/listki-8", "listki8.html"),
-                               ("/urovni", "urovni.html")):
+):
             if path == _put:
                 _fajl = TEMPLATES_DIR / _shablon
                 if _fajl.is_file():
@@ -400,6 +429,29 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/vhod":
             self._post_vhod()
+            return
+        if path == "/api/kabinety":
+            # 🔴 КАБИНЕТ ГРУППЫ НА ДЕНЬ. Владелец: «если завтра у меня будет другой
+            # кабинет, я захожу через админпанель и меняю закрепление В на другой
+            # кабинет — и всё отображается сразу везде». Правка одной строки меняет
+            # кабинет у всех людей группы, потому что он вычисляется, а не хранится.
+            try:
+                p = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            except (ValueError, TypeError):
+                self._send_json(400, {"error": "нечитаемое тело"})
+                return
+            gruppa, kabinet = p.get("gruppa"), (p.get("kabinet") or "").strip()
+            if gruppa not in ("В", "Д", "Н") or not kabinet:
+                self._send_json(400, {"error": "нужны gruppa (В|Д|Н) и kabinet"})
+                return
+            from datetime import date as _d
+            den = p.get("data") or _d.today().isoformat()
+            conn = self._connection()
+            conn.execute(
+                "insert or replace into kabinet_na_den (data, gruppa, kabinet) values (?,?,?)",
+                (den, gruppa, kabinet))
+            conn.commit()
+            self._send_json(200, {"gruppa": gruppa, "kabinet": kabinet, "data": den})
             return
         if path == "/api/prepodavateli":
             role = vhod.rol(self.headers)
