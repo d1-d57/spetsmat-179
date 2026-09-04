@@ -9,6 +9,9 @@ import sqlite3
 import sys
 from collections import Counter
 
+# TOOL-CONTRACT: called-by-hand — вызывается вручную заголовком одной команды,
+# живой точки вызова в коде не имеет (это измеритель, а не часть конвейера).
+
 DB = "data/spetsmat.db"
 
 # Пять спорных чисел, ни одно не подтверждено другим (задание части 1).
