@@ -280,6 +280,13 @@ tr:hover td{{background:var(--accent-soft)}}
   border:1px solid var(--rule);border-radius:9px;background:var(--panel);color:var(--text);margin:0 0 1.5rem}}
 .poisk:focus{{outline:none;border-color:var(--accent)}}
 .podskazki{{position:relative;max-width:640px}}
+.podskazki.bolshoj{{max-width:none;margin-top:2.2rem}}
+.poisk-big{{max-width:none;width:100%;font-size:1.6rem;padding:.85em 1.1em;border-radius:14px}}
+.podskazki.bolshoj .spisok{{top:5.2rem;font-size:1.3rem}}
+.podskazki.bolshoj .spisok div{{padding:.6em 1.1em}}
+#nashli{{max-width:none;font-size:1.5rem;line-height:1.45;margin-top:1.6rem}}
+.otvet{{width:100%;padding:1rem 1.2rem;border:1px solid var(--rule);border-radius:12px;
+  background:var(--panel);color:var(--text)}}
 .spisok{{position:absolute;left:0;right:0;top:3.1rem;z-index:20;background:var(--panel);
   border:1px solid var(--rule);border-radius:0 0 9px 9px;max-height:18rem;overflow:auto}}
 .spisok div{{padding:.5em .9em;cursor:pointer}}
@@ -295,8 +302,8 @@ tr:hover td{{background:var(--accent-soft)}}
 .para{{display:flex;gap:.8rem;align-items:baseline;padding:.34rem 0;flex-wrap:wrap;
   border-bottom:1px solid var(--rule);font-size:1.15rem}}
 /* На вкладках групп места больше — там строки крупнее. */
-#v-В .para,#v-Д .para,#v-Н .para{{font-size:1.35rem;padding:.42rem 0}}
-#v-В .komu,#v-Д .komu,#v-Н .komu{{font-size:1.25rem}}
+#v-В .para,#v-Д .para,#v-Н .para{{font-size:1.6rem;padding:.48rem 0}}
+#v-В .komu,#v-Д .komu,#v-Н .komu{{font-size:1.5rem}}
 /* На общей вкладке школьников, наоборот, чуть плотнее — там 54 строки. */
 #v-shk .para{{font-size:1.08rem;padding:.26rem 0}}
 #v-shk .komu{{font-size:1rem}}
@@ -306,15 +313,15 @@ tr:hover td{{background:var(--accent-soft)}}
 .para .komu.deti{{white-space:normal;text-align:right}}
 .para .komu.deti span{{display:inline-block;margin-left:.55rem}}
 .kol-pr .para{{padding:.45rem 0}}
-.kol-pr .para{{font-size:1.6rem}}
-.kol-pr .komu.deti{{font-size:1.35rem}}
+.kol-pr .para{{font-size:1.75rem}}
+.kol-pr .komu.deti{{font-size:1.55rem}}
 .kol-pr .komu.deti span{{margin-left:.7rem}}
 /* Таблица преподавателей: колонки ровные, кабинет уходит вправо. */
 .prep-tab{{width:100%;border-collapse:collapse}}
-.prep-tab td{{padding:.4rem .8rem .4rem 0;border-bottom:1px solid var(--rule);
-  vertical-align:baseline;font-size:1.15rem}}
+.prep-tab td{{padding:.55rem .8rem .55rem 0;border-bottom:1px solid var(--rule);
+  vertical-align:baseline;font-size:1.75rem}}
 .prep-tab .tp{{white-space:nowrap;width:1%;padding-right:2rem}}
-.prep-tab .td-deti{{color:var(--muted);font-family:var(--sans);font-size:1.1rem;
+.prep-tab .td-deti{{color:var(--muted);font-family:var(--sans);font-size:1.55rem;
   width:auto;padding-right:2rem}}
 .prep-tab tr.skryt{{display:none}}
 .prep-tab .tg{{font-family:var(--sans);font-weight:600;color:var(--accent);
@@ -384,14 +391,13 @@ tr:hover td{{background:var(--accent-soft)}}
 <section class="str holst" id="s-start">
   <div class="oblozhka">
     <h1>Спецмат · 9 класс</h1>
-    <p class="data">9К и 9Л · распределение на {DATA_SLOVAMI}</p>
-    <p>Кто у кого занимается и в каком кабинете, и все листки — этого года и прошлого.</p>
+    <p class="data">9К и 9Л</p>
     <div class="raspisanie">
       <div class="zag2">Расписание</div>
       <div>Занятия по четвергам и субботам. <span class="net">время пока не указано</span></div>
     </div>
-    <div class="podskazki" style="margin-top:2rem">
-      <input class="poisk" id="poisk" placeholder="Найти себя — фамилия школьника или имя преподавателя" autocomplete="off">
+    <div class="podskazki bolshoj">
+      <input class="poisk poisk-big" id="poisk" placeholder="Поиск по сайту — школьник, преподаватель, листок" autocomplete="off">
       <div class="spisok" id="spisok" hidden></div>
       <div id="nashli"></div>
     </div>
@@ -448,11 +454,14 @@ tr:hover td{{background:var(--accent-soft)}}
 
 <script>
 // Поиск ищет и школьника, и преподавателя, подсказывает от двух букв: людей мало.
-const IMENA = {[e(f'{r["surname"]} {r["name"]}') for r in shk] + [e(t["name"]) for t in prep.values()]!r};
+const IMENA = {[e(f'{r["surname"]} {r["name"]}') for r in shk] + [e(t["name"]) for t in prep.values()]
+               + [e(f'{n} {tema}') for n, tema, _ in L9] + [e(f'{n} {nz}') for n, nz, _ in L8_PERVOE + L8_VTOROE if n]!r};
 // Что показать по найденному. Для школьника — к кому и куда идти; для
 // преподавателя — его группа, старший, кабинет и сколько у него школьников.
 const KOMU = {{{",".join(
   [f'"{e(r["surname"])} {e(r["name"])}":"{e(prep[r["teacher_id"]]["name"]) if r["teacher_id"] in prep else "—"} · {e(gr_shk(r) or "—")} · {e(kab_shk(r) or "кабинет не назначен")}"' for r in shk]
++ [f'"{e(n)} {e(tema)}":"листок 9 класса · {" · ".join(z for z, f in vs if est("listki", f))}"' for n, tema, vs in L9]
++ [f'"{e(n)} {e(nz)}":"листок 8 класса"' for n, nz, fl in L8_PERVOE + L8_VTOROE if n and est("listki-8kl", fl)]
 + [f'"{e(t_["name"])}":"{e(", ".join(sorted(r["surname"] + " " + r["name"] for r in shk if r["teacher_id"] == t_["id"])) or "школьников нет")} · {e(t_["gruppa"] or "—")} · {e(kabinety.get(t_["gruppa"]) or "кабинет не назначен")}"' for t_ in prep.values()]
 )}}};
 const poisk=document.getElementById('poisk'),spisok=document.getElementById('spisok'),nashli=document.getElementById('nashli');
@@ -465,12 +474,20 @@ poisk.addEventListener('input',e=>{{
 spisok.addEventListener('click',e=>{{
   if(e.target.tagName!=='DIV')return;
   const n=e.target.textContent; poisk.value=n; spisok.hidden=true;
-  nashli.innerHTML = KOMU[n] ? '<p class="shapka" style="margin-top:1rem">'+n+' → '+KOMU[n]+'</p>' : '';
+  nashli.innerHTML = KOMU[n] ? '<div class="otvet"><b>'+n+'</b> → '+KOMU[n]+'</div>' : '';
 }});
 document.addEventListener('click',e=>{{if(!e.target.closest('.podskazki'))spisok.hidden=true;}});
 
 // Поиск на РАСПРЕДЕЛЕНИИ: прячет строки, не совпавшие с фамилией или именем.
 // Работает разом во всех вкладках и в обоих днях — искать надо там, где смотришь.
+// 🔴 ПО УМОЛЧАНИЮ — БЛИЖАЙШЕЕ ЗАНЯТИЕ. Занятия по четвергам и субботам: в пятницу
+// и субботу ближайшее — суббота, в остальные дни — четверг. Страница статическая,
+// поэтому день выбирается при открытии, а не при сборке.
+(function(){{
+  const d=new Date().getDay();          // 0 вс · 5 пт · 6 сб
+  if(d===5||d===6) document.getElementById('d-sub').checked=true;
+}})();
+
 const pr=document.getElementById('poisk-r');
 pr.addEventListener('input',e=>{{
   const q=e.target.value.trim().toLowerCase();
