@@ -112,10 +112,25 @@ def sobrat():
                 f'<div class="kol">{"".join(para_shk(r, kl) for r in deti[pol:])}</div></div>')
 
     def vid_prepodavateli(kl):
-        """Отдельная вкладка преподавателей — чтобы преподаватель посмотрел на себя."""
-        prepy = sorted(prep.values(), key=lambda x: x["name"])
-        return f'<div class="odin">{"".join(para_prep(x, kl) for x in prepy)}</div>'
+        """Вкладка преподавателей ТАБЛИЦЕЙ: колонки обязаны стоять ровно.
 
+        Порядок владельца: преподаватель · школьники · группа · кабинет —
+        кабинет самое неважное и уходит вправо.
+        """
+        kab = kabinety_dnya[kl]
+        ryady = []
+        for x in sorted(prep.values(), key=lambda z: z["name"]):
+            ego = sorted(r["surname"] for r in shk_dnya[kl] if r["teacher_id"] == x["id"])
+            deti = e(", ".join(ego)) if ego else '<span class="net">—</span>'
+            k = kab.get(x["gruppa"])
+            ryady.append(
+                f'<tr class="para" data-i="{e(x["name"].lower())}">'
+                f'<td class="tp"><b>{e(x["name"])}</b></td>'
+                f'<td class="td-deti">{deti}</td>'
+                f'<td class="tg">{e(x["gruppa"] or "")}</td>'
+                + (f'<td class="tk"><span class="kab">{e(k)}</span></td>' if k else '<td class="tk"></td>')
+                + '</tr>')
+        return '<table class="prep-tab"><tbody>' + "".join(ryady) + '</tbody></table>'
     def vkladka_gruppy(kod, kl):
         """Группа — ОДИН столбец: половина экрана пустой быть не должна.
 
