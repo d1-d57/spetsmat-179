@@ -282,7 +282,10 @@ class Handler(BaseHTTPRequestHandler):
             # /vhod and /vyhod handled by marshruty
             pass  # already handled above; actually marshruty is only /vhod and /vyhod
         # Reading endpoints open without cookie
-        if path == "/":
+        # `/glavnaya` — прощающий синоним корня. Шаблоны S3 ссылаются на него,
+        # контракт волны кладёт главную на `/`; 404 в шапке каждой страницы дороже
+        # одной лишней строки (решение оркестратора при сведении, 2026-09-04).
+        if path in ("/", "/glavnaya"):
             glavnaya = TEMPLATES_DIR / "glavnaya.html"
             if glavnaya.is_file():
                 self._send_html(200, glavnaya.read_bytes())
