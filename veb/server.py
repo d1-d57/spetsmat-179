@@ -138,11 +138,13 @@ def _all_students(connection: sqlite3.Connection) -> list[dict]:
 
 def _all_teachers(connection: sqlite3.Connection) -> list[dict]:
     return [
-        {"id": row["id"], "name": row["name"], "kabinet": row["kabinet"],
-         "aktiven": bool(row["aktiven"])}
-        for row in connection.execute(
-            "select id, name, kabinet, aktiven from teachers order by name"
-        ).fetchall()
+        {"id": row["id"], "name": row["name"],
+         "kabinet": row["kabinet"] if "kabinet" in row.keys() else None,
+         "aktiven": bool(row["aktiven"]) if "aktiven" in row.keys() else True}
+        # 🔴 `select *`, а не перечисление колонок: миграция 004 (кабинеты) могла ещё
+        # не применяться — в тестах база свежая. Жёсткий список колонок ронял сборку
+        # там, где данные просто старее кода.
+        for row in connection.execute("select * from teachers order by name").fetchall()
     ]
 
 
