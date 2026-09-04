@@ -59,7 +59,7 @@ def sobrat():
         return (f'<tr><td><b>{e(r["surname"])}</b> {e(r["name"])} '
                 f'<span class="kl">{e(r["class"])}</span></td>'
                 f'<td>{f"<span class=gr>{e(g)}</span>" if g else "<span class=net>—</span>"}</td>'
-                f'<td>{e(t["name"]) if t else "<span class=net>ждёт назначения</span>"}</td>'
+                f'<td>{e(t["name"]) if t else "<span class=net>принимающий не назначен</span>"}</td>'
                 f'<td>{f"<span class=kab>{e(kab_shk(r))}</span>" if kab_shk(r) else "<span class=net>—</span>"}</td></tr>')
 
     def stroka_prep(t):
