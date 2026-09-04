@@ -296,30 +296,25 @@ class Handler(BaseHTTPRequestHandler):
             index = (TEMPLATES_DIR / "index.html").read_bytes()
             self._send_html(200, index)
             return
-        if path == "/listki":
-            listki_dir = MATERIALS_DIR / "listki"
-            if listki_dir.is_dir():
-                files = sorted(f.name for f in listki_dir.iterdir() if f.is_file() and f.suffix == ".pdf")
-                self._send_json(200, {"listki": [{"name": n, "url": f"/materials/listki/{n}"} for n in files]})
-            else:
-                self._send_json(200, {"listki": []})
-            return
-        if path == "/listki-8":
-            listki8_dir = MATERIALS_DIR / "listki-8kl"
-            if listki8_dir.is_dir():
-                files = sorted(f.name for f in listki8_dir.iterdir() if f.is_file() and f.suffix == ".pdf")
-                self._send_json(200, {"listki": [{"name": n, "url": f"/materials/listki-8kl/{n}"} for n in files]})
-            else:
-                self._send_json(200, {"listki": []})
-            return
-        if path == "/urovni":
-            urovni_file = MATERIALS_DIR / "teksty" / "2026-09-04_post-pro-tri-listka.md"
-            if urovni_file.is_file():
-                text = urovni_file.read_text(encoding="utf-8")
-                self._send_json(200, {"text": text})
-            else:
-                self._send_json(200, {"text": ""})
-            return
+        # 🔴 РОУТЫ ОТДАЮТ ШАБЛОНЫ S3, А НЕ JSON. Правка оркестратора при сведении
+        # 2026-09-04: S1 сделала эти три роута JSON-эндпойнтами, а S3 написала под них
+        # HTML-шаблоны — и они не отдавались никогда. Снаружи это выглядело как 200 с
+        # пустой страницей, то есть БЕЛЫЙ ЭКРАН, ровно тот, о котором предупреждал
+        # контракт имён волны. Ни один тест этого не видел: тесты судили код ответа.
+        # JSON остаётся доступен под /api/listki, /api/listki-8, /api/urovni.
+        for _put, _shablon in (("/listki", "listki.html"),
+                               ("/listki-8", "listki8.html"),
+                               ("/urovni", "urovni.html")):
+            if path == _put:
+                _fajl = TEMPLATES_DIR / _shablon
+                if _fajl.is_file():
+                    self._send_html(200, _fajl.read_bytes())
+                else:
+                    # Надёжность выше функционала: заглушка, а не 500.
+                    self._send_html(200, ("<h1>%s</h1><p>Страница ещё не собрана.</p>" % _put).encode("utf-8"))
+                return
+
+
         if path == "/api/teachers":
             self._send_json(200, _all_teachers(self._connection()))
             return
