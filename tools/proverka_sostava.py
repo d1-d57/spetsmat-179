@@ -28,13 +28,22 @@ def main() -> int:
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
 
-    n_students = cur.execute("select count(*) from students").fetchone()[0]
+    # 🔴 ТОЛЬКО АКТИВНЫЕ. Правка оркестратора 2026-09-04 18:44: ушедшие остаются в
+    # таблице со `status='left'` — за школьником висит история, и удалять его нельзя.
+    # Пока ушедших не было, `count(*)` совпадал с числом активных и был верен случайно;
+    # в тот же час, когда владелец назвал первых двух ушедших, инструмент насчитал 57
+    # вместо 55 и потребовал 114 строк вместо 110. Совпадение перестало быть верным
+    # ровно тогда, когда стало важным — ровно та болезнь, ради которой инструмент и писан.
+    n_students = cur.execute(
+        "select count(*) from students where status is null or status <> 'left'"
+    ).fetchone()[0]
     rows = cur.execute("select student_id from enrollment").fetchall()
     m_rows = len(rows)
     k = Counter(r[0] for r in rows)
     n_enrolled = len(k)
     no_rows = cur.execute(
-        "select count(*) from students where id not in (select student_id from enrollment)"
+        "select count(*) from students where (status is null or status <> 'left') "
+        "and id not in (select student_id from enrollment)"
     ).fetchone()[0]
 
     expected = 2 * n_students
