@@ -280,7 +280,7 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if not 1 <= n <= 7:
             return None
-        return n</oldString>
+        return n
 
     # --------------------------------------------------------------- POST routes
 
