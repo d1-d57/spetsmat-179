@@ -242,11 +242,13 @@ class Handler(BaseHTTPRequestHandler):
         if path in vhod.marshruty():
             self._send_html(200, vhod.marshruty()[path]())
             return
-        if vhod.rol(self.headers) is None:
-            self.send_response(302)
-            self.send_header("Location", "/vhod")
-            self.end_headers()
-            return
+        if path == "/vhod" or path == "/vyhod":
+            # Entry pages always open, no cookie required.
+            pass  # fall through to marshruty handler below
+        elif path in vhod.marshruty():
+            # /vhod and /vyhod handled by marshruty
+            pass  # already handled above; actually marshruty is only /vhod and /vyhod
+        # Reading endpoints open without cookie
         if path == "/":
             index = (TEMPLATES_DIR / "index.html").read_bytes()
             self._send_html(200, index)
