@@ -2,7 +2,7 @@
 
 ONE page, two views, one mutation.  The page is intentionally HTML+vanilla JS in
 one file under ``veb/templates/``; the only mutable thing the server takes from
-the request body is the next teacher for one ``(student, weekday)`` pair.  No
+the request body is the next teacher for one ``(student, slot)`` pair.  No
 session, no login, no analytics: the project has none of those yet, and adding
 them here would commit the wrong choice twice (the code AND the documentation).
 
@@ -10,7 +10,7 @@ The two GET endpoints speak JSON for the page to fetch on load; the POST endpoin
 takes JSON and replies with the resulting ``(closed, opened)`` pair.  All three
 go through ``EnrollmentService`` — never through raw SQL — so the half-open
 interval and the partial unique index stay the carrier of "one open row per
-``(student, weekday)``".
+``(student, slot)``".
 
 WHAT THE PAGE SHOWS.
 
@@ -28,6 +28,13 @@ new ``teacher_id``, computes ``effective_from`` as today, and calls
 PATCH-style "set teacher on this row" exists, because the schema's only
 mutation is ``close`` and a port without ``update`` is the whole point of the
 half-open model.
+
+SLOT, NOT WEEKDAY.  ``slot`` is the key the school actually teaches by: each child
+attends one or two slots, and the unit of assignment is ``(student, slot)``.  The
+schema's CHECK on the column still reads ``between 1 and 7`` because SQLite cannot
+ALTER a CHECK in place and the values that exist today all fit; the ceiling is the
+schema's, not a property of the slot concept.  See ``migrations/003_slot_vmesto_weekday.sql``
+for the weekday-to-slot mapping.
 """
 
 from __future__ import annotations
@@ -55,7 +62,7 @@ from infra.enrollment_repo import SqliteEnrollmentRepo
 from veb import vhod
 
 
-WEEKDAY_DEFAULT = 1  # Monday; the page shows one lesson day at a time.
+SLOT_DEFAULT = 1  # The page shows one slot at a time.
 PORT_DEFAULT = 8765
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -134,21 +141,21 @@ def _all_teachers(connection: sqlite3.Connection) -> list[dict]:
 
 
 def _open_assignments(
-    connection: sqlite3.Connection, weekday: int
+    connection: sqlite3.Connection, slot: int
 ) -> dict[int, dict]:
     """``{student_id: {teacher_id, room, valid_from}}`` for the open rows."""
     rows = connection.execute(
         "select student_id, teacher_id, room, valid_from from enrollment "
-        "where weekday = ? and valid_to = ?",
-        (weekday, "9999-12-31"),
+        "where slot = ? and valid_to = ?",
+        (slot, "9999-12-31"),
     ).fetchall()
     return {row["student_id"]: dict(row) for row in rows}
 
 
-def _build_views(connection: sqlite3.Connection, weekday: int) -> dict:
+def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
     students = _all_students(connection)
     teachers = _all_teachers(connection)
-    assignments = _open_assignments(connection, weekday)
+    assignments = _open_assignments(connection, slot)
 
     by_students: list[dict] = []
     for student in students:
@@ -182,7 +189,7 @@ def _build_views(connection: sqlite3.Connection, weekday: int) -> dict:
         })
 
     return {
-        "weekday": weekday,
+        "slot": slot,
         "students": by_students,
         "teachers": by_teachers,
     }
@@ -255,25 +262,25 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, _all_teachers(self._connection()))
             return
         if path == "/api/view":
-            weekday = self._read_weekday()
-            if weekday is None:
-                self._send_json(400, {"error": "weekday must be 1..7"})
+            slot = self._read_slot()
+            if slot is None:
+                self._send_json(400, {"error": "slot must be 1..7"})
                 return
-            self._send_json(200, _build_views(self._connection(), weekday))
+            self._send_json(200, _build_views(self._connection(), slot))
             return
         self._send_json(404, {"error": "not found"})
 
-    def _read_weekday(self) -> Optional[int]:
+    def _read_slot(self) -> Optional[int]:
         from urllib.parse import parse_qs
         query = parse_qs(urlparse(self.path).query)
-        raw = query.get("weekday", ["1"])[0]
+        raw = query.get("slot", ["1"])[0]
         try:
             n = int(raw)
         except ValueError:
             return None
         if not 1 <= n <= 7:
             return None
-        return n
+        return n</oldString>
 
     # --------------------------------------------------------------- POST routes
 
@@ -328,12 +335,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             student_id = int(payload["student_id"])
             teacher_id = int(payload["teacher_id"])
-            weekday = int(payload.get("weekday", WEEKDAY_DEFAULT))
+            slot = int(payload.get("slot", SLOT_DEFAULT))
         except (KeyError, TypeError, ValueError):
-            self._send_json(400, {"error": "student_id, teacher_id and weekday are required"})
+            self._send_json(400, {"error": "student_id, teacher_id and slot are required"})
             return
-        if not 1 <= weekday <= 7:
-            self._send_json(400, {"error": "weekday must be 1..7"})
+        if not 1 <= slot <= 7:
+            self._send_json(400, {"error": "slot must be 1..7"})
             return
 
         effective_from = datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat()
@@ -349,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             move = service.move(
                 student_id=student_id,
-                weekday=weekday,
+                slot=slot,
                 to_teacher_id=teacher_id,
                 effective_from=effective_from,
             )
@@ -362,7 +369,7 @@ class Handler(BaseHTTPRequestHandler):
                     student_id=student_id,
                     teacher_id=teacher_id,
                     room="000",  # placeholder — caller must follow up via move if wrong
-                    weekday=weekday,
+                    slot=slot,
                     valid_from=effective_from,
                 )
             except EnrollmentError as exc:
