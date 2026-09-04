@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Спецмат — главная</title>
+<link rel="stylesheet" href="/static/vhod.css">
+<style>
+  :root { --ink: #1a1714; --paper: #f2ede2; --rule: #d8cfbe;
+          --muted: #8a8075; --accent: #a8502a; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 15px/1.4 -apple-system, "Helvetica Neue", sans-serif;
+         color: var(--ink); background: var(--paper);
+         padding: 24px 32px; max-width: 720px; }
+  header { border-bottom: 1px solid var(--rule); padding-bottom: 12px;
+           margin-bottom: 20px; }
+  h1 { font-size: 26px; font-weight: 500; }
+  h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.18em;
+       text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  .now { border: 1px solid var(--rule); padding: 14px 16px; border-radius: 2px; }
+  .now .num { font-size: 22px; font-weight: 500; }
+  .now .ver { color: var(--muted); font-size: 13px; margin-left: 8px; }
+  .now .dl { color: var(--accent); font-size: 14px; margin-top: 4px; }
+  .now .dl b { font-weight: 600; }
+  .row { display: flex; justify-content: space-between; align-items: baseline;
+         padding: 7px 0; border-bottom: 1px solid var(--rule); }
+  .row .k { color: var(--muted); font-size: 14px; }
+  .row .v { font-weight: 500; }
+  .find { margin-top: 14px; }
+  .find input { width: 100%; padding: 8px 10px; border: 1px solid var(--rule);
+                border-radius: 4px; font: inherit; background: #fff; }
+  .find button { margin-top: 8px; padding: 6px 14px; border: none; border-radius: 4px;
+                 background: var(--ink); color: var(--paper); font: inherit; cursor: pointer; }
+  footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--rule);
+           font-size: 13px; color: var(--muted); }
+  footer a { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Спецмат</h1>
+</header>
+
+<section class="now">
+  <h2>Сейчас идёт</h2>
+  <div class="num">16<span class="ver"> · одна версия на диске</span></div>
+  <div class="dl">Деревья · сдать лучше к <b>10 сентября</b>, дедлайн мягкий</div>
+</section>
+
+<h2>Расписание</h2>
+<div class="row"><span class="k">Занятия</span><span class="v">понедельник и четверг</span></div>
+<div class="row"><span class="k">Время</span><span class="v">16:00 – 19:00 (МСК)</span></div>
+<div class="row"><span class="k">Следующее</span><span class="v">четверг, 16:00</span></div>
+
+<h2>Куда идти</h2>
+<p style="font-size:14px;color:var(--muted);margin-bottom:8px;">
+  Свой кабинет и принимающего найдёшь в распределении — по фамилии.
+</p>
+<div class="find">
+  <input id="surname" type="text" placeholder="Фамилия" autocomplete="off">
+  <button type="button" onclick="go()">Найти себя</button>
+</div>
+
+<footer>
+  <a href="/urovni">Система трёх уровней</a> ·
+  <a href="/listki-8">Листки 8 класса</a> ·
+  <a href="/raspredelenie">Распределение</a>
+</footer>
+
+<script>
+function go() {
+  const v = document.getElementById('surname').value.trim();
+  if (!v) return;
+  window.location.href = '/raspredelenie?q=' + encodeURIComponent(v);
+}
+document.getElementById('surname').addEventListener('keydown', e => {
+  if (e.key === 'Enter') go();
+});
+</script>
+
+</body>
+</html>
