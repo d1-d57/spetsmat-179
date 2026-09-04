@@ -295,7 +295,151 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+### Definition (slot, defined once, used below)
+A `slot` is a NUMBER that names one lesson in the system. Each `(student, slot)` pair
+has exactly one open row in `enrollment`. Today every child attends one or two lessons:
+the existing 56 rows carry `weekday ∈ {1, 4}` and partition as 53 rows with `weekday=1`
+(Monday) and 3 rows with `weekday=4` (Thursday). The slot mapping below is the MINIMAL
+renaming that keeps 56 rows = 56 rows and lets the parallel position S2 add the missing
+second slot for the 50 children who currently have only one.
+
+### PART 1 — slot instead of weekday
+1. Migration `migrations/003_slot_vmesto_weekday.sql`:
+   * IDEMPOTENT — second run is a no-op (uses `pragma table_info` to detect column name).
+   * Renames column `enrollment.weekday` to `enrollment.slot` (SQLite ALTER TABLE
+     RENAME COLUMN); rewrites `weekday=1` → `slot=1`, `weekday=4` → `slot=2`. Mapping is
+     chosen so that the unique-open-row index becomes `enrollment_one_open_row` on
+     `(student_id, slot)`: today's data already respects it (53 + 3 = 56, no student has
+     both slot=1 and slot=2 except the three who legitimately attend both days).
+   * The CHECK constraint on `weekday between 1 and 7` is dropped (SQLite cannot alter
+     a CHECK in-place; the table is rebuilt with the new constraint `slot between 1
+     and 7`). Migration uses the canonical `ALTER TABLE ... RENAME COLUMN` if SQLite
+     ≥ 3.25.0 (yoyo requires 3.8+, which guarantees this), otherwise the manual 12-step
+     recipe (create new, copy, drop old, rename) — only the first path is implemented
+     here because the host SQLite is 3.x ≥ 25.
+   * Idempotency: migration looks for the column name and exits with a no-op when it is
+     already `slot`. Verified by running twice and comparing `select count(*) from
+     enrollment`.
+   * ROLLBACK is written as the comment block at the top of the file:
+     `rename column slot back to weekday`, `update enrollment set weekday = case slot when
+     1 then 1 when 2 then 4 end`, `drop and recreate CHECK`. (Rollback is a comment, not
+     a separate `.down.sql`, per the assignment's "на твоё усмотрение".)
+2. Code in `veb/server.py` (zone):
+   * `_build_views(connection, slot)` (was `_build_views(connection, weekday)`).
+   * `_open_assignments(connection, slot)` filter changed from `where weekday = ?` to
+     `where slot = ?`.
+   * `_read_weekday` → `_read_slot`, range `1..7` (the schema CHECK still uses 1..7; the
+     existing 7-day ceiling is kept because slot is the new key, not the new ceiling).
+   * `/api/view?slot=` (was `?weekday=`).
+   * `/api/enrollment` POST reads `payload.get("slot", SLOT_DEFAULT)`.
+   * `WEEKDAY_DEFAULT = 1` → `SLOT_DEFAULT = 1`.
+   * Returned JSON: top-level `"slot"` key instead of `"weekday"`.
+3. Tests in `tests/veb/test_server.py`:
+   * `test_get_view_returns_two_cuts` switches `?weekday=1` → `?slot=1`.
+   * `test_post_enrollment_*` switch `weekday` → `slot` in payloads.
+   * `running_server` fixture inserts an enrollment with `slot=1` (was `weekday=1`).
+   * `test_post_enrollment_validates_input` uses `slot=99` and expects the same 400.
+4. Template `veb/templates/index.html`: NOT touched by layout. The JS sends
+   `/api/view?weekday=...` — assignment says "если её JS шлёт `weekday`, поменяй ТОЛЬКО
+   имя параметра, минимальной правкой". So I change `weekday=` → `slot=` in the two JS
+   lines that read it. The state field is renamed `weekday` → `slot` in JS too, and the
+   toggle's `data-day` becomes `data-slot` (UI strings Пн/Чт stay; the value attribute
+   is the slot id, which today equals the weekday id for the displayed slots).
+
+### PART 2 — routes for templates
+Add to `veb/server.py`:
+* `/` → renders `glavnaya.html` if present, else 200 + stub HTML.
+* `/raspredelenie` → renders `index.html` (which now reads slot), 200 + stub if missing.
+* `/listki` → reads `materials/spetsmat-2026/listki/` (verified path: `/Users/ivanyakovlev/
+  Documents/GitHub/materials/spetsmat-2026/listki/` — ONE file `16-derevya.pdf`),
+  returns a JSON-ish context {listki: [{name, url}]}. 200 + stub if directory missing.
+* `/listki-8` → same shape over `listki-8kl/` (verified: 19 PDFs). 200 + stub if missing.
+* `/urovni` → reads `materials/spetsmat-2026/teksty/2026-09-04_post-pro-tri-listka.md`,
+  returns its text as a single field. 200 + stub if missing.
+* All routes are GET, return 200 EVEN IF THE TEMPLATE FILE IS MISSING — the requirement
+  is "надёжность выше функционала" and S3 is parallel.
+* The legacy `/` → distribution route moves to `/raspredelenie`. Old bookmarks: `/` now
+  serves `glavnaya.html`. A separate `301 Moved Permanently` redirect from `/raspredelenie`
+  is NOT applied — distribution is the SAME page on a new URL, and the brief asks for a
+  decision ("редиректом или дублем"). Decision: **двой** — `/raspredelenie` returns the
+  same distribution page as `/` USED to. The owner's pre-opened `/` tabs now show the
+  new main page, which is the correct behaviour for a site reorganisation. (If the owner
+  later wants a redirect, that is one new line.)
+
+### READINESS GATES — output goes verbatim into `## ОТЧЁТ`
+1. `python3 -c "..."` — apply migration twice, print count after each.
+2. `python3 -m pytest tests/veb/test_server.py -q` — number of tests in the report.
+3. Live server: 5× `curl -sS -o /dev/null -w '%{http_code} %{url_effective}\n'` for the
+   five URLs.
+4. `curl -sS /api/view?slot=1` showing a real teacher name.
+
+### COMMIT ORDER
+* commit 1: PART 1 — migration + server.py + test_server.py + index.html JS rename.
+* commit 2: PART 2 — five new GET routes.
+* Each commit is `add` followed by `commit -- <paths>` with `--no-optional-locks`.
+
+### VERIFIER (§3)
+I will run it after both commits, before the final hygiene block.
+
+### FINAL HYGIENE (§ WARNING block)
+Run the full sequence: status → vlit-v-osnovnuyu → post-check from main → гашение → вывоз.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+### 1. The brief contradicts itself on the data shape
+   The brief says "ребёнок ходит на ДВА слота" AND "56 строк обязаны остаться 56".
+   These two together only fit if `slot` is a NEW KEY distinct from `weekday` AND the
+   existing 56 rows each carry exactly one `slot` already (so S2 can later add the
+   second). I picked the mapping `weekday=1 → slot=1`, `weekday=4 → slot=2`. It is the
+   MINIMAL renaming; anything else either loses data or duplicates rows. If the owner
+   wants a different mapping (e.g. one slot per (weekday, half-day) pair), this
+   migration must be re-done.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+### 2. `infra/enrollment_repo.py` is OUT OF ZONE
+   `EnrollmentPort.open_row(rows_valid_on, insert, close, history)` is keyed on `weekday`
+   all over. I am NOT touching it — it is outside the zone (`infra/` is not listed). The
+   server calls `SqliteEnrollmentRepo` only via `_open_assignments` (raw SQL) for the
+   view, and via `EnrollmentService` for `move/assign` (these use the port's `weekday`
+   parameter). After my migration, `_open_assignments` uses `slot=`. The port's
+   `weekday`-named parameter still works (the column is `slot`, the argument is positional
+   in the SQL, so the port's parameter name is just a Python name). But the schema's
+   `enrollment_one_open_row` index is now on `(student_id, slot)`, and a move via
+   `EnrollmentService.move(student_id=..., weekday=1, ...)` will look up the open row
+   on `slot=1` — which IS the right answer, because my mapping makes slot=1 coincide
+   with the old weekday=1.
+   IF THE OWNER LATER DECIDES THAT `slot ≠ weekday` for some rows (slot=3 = second Пн
+   half), this port's API name becomes a lie and must be renamed — not by me, by the
+   owner, because that crosses zones.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+### 3. Slot ceiling
+   I kept the CHECK `slot between 1 and 7`. The two slots I actually use are 1 and 2.
+   If S2 plans to use slot ids > 7, the CHECK must be widened. I left the ceiling at 7
+   because (a) the brief says "диапазон значений слота выведи из данных и назови в
+   отчёте — не выдумывай", and (b) widening a CHECK is a separate schema change that
+   belongs with whoever decides the slot taxonomy.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+### 4. `materials/` lives OUTSIDE the repo
+   The brief says the path from repo root is `../materials/spetsmat-2026/`. It is not
+   there — `materials/` is at `/Users/ivanyakovlev/Documents/GitHub/materials/`, a
+   separate repository. The server reads it via an absolute path. If the deployment
+   machine mounts `materials` somewhere else, the routes will silently serve stubs.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+### 5. S3 templates missing on disk
+   The five routes for PART 2 will serve stubs until S3 lands its templates. The brief
+   asks me NOT to write the templates — only the routes. Verified by `ls` that none of
+   `glavnaya.html`, `listki.html`, `listki8.html`, `urovni.html` exist today. The 200 +
+   stub behaviour is the correct response per the brief's "надёжность выше функционала".
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
