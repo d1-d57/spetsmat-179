@@ -90,7 +90,7 @@ def sobrat():
         """
         kab = kabinety_dnya[kl]
         ego = sorted(r["surname"] for r in shk_dnya[kl] if r["teacher_id"] == x["id"])
-        redko = ' <span class="redko">не всегда</span>' if x["name"] == "Ольга Рыжая" else ""
+        redko = ""
         metki = ""
         if pokazat_gruppu:
             if x["gruppa"]:
@@ -219,8 +219,8 @@ body{{margin:0;background:var(--bg);color:var(--text);font-family:var(--serif);f
 .menu label{{cursor:pointer;font-weight:600;font-size:1.05rem;color:var(--muted);
   padding:.35em 1rem;border-radius:8px}}
 .menu label:hover{{color:var(--text);background:var(--accent-soft)}}
-.holst{{padding:2.2rem 3rem 4rem;max-width:none}}
-h1{{font-family:var(--sans);font-size:2.5rem;font-weight:600;letter-spacing:-.02em;margin:0 0 .1em}}
+.holst{{padding:1.3rem 3rem 2rem;max-width:none}}
+h1{{font-family:var(--sans);font-size:2.1rem;font-weight:600;letter-spacing:-.02em;margin:0}}
 .data{{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 1.6rem}}
 .oblozhka p{{font-size:1.3rem;line-height:1.5;max-width:52em;margin:0 0 .8em}}
 .raspisanie{{border:1px solid var(--rule);border-radius:10px;padding:1.1rem 1.4rem;
@@ -232,7 +232,7 @@ h1{{font-family:var(--sans);font-size:2.5rem;font-weight:600;letter-spacing:-.02
 #p-start:checked~.menu label[for=p-start],#p-list:checked~.menu label[for=p-list],
 #p-rasp:checked~.menu label[for=p-rasp]{{color:var(--accent);background:var(--accent-soft)}}
 input.rd{{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}}
-.tabbar{{display:flex;gap:.25rem;border-bottom:2px solid var(--rule);margin:0 0 1.8rem;flex-wrap:wrap}}
+.tabbar{{display:flex;gap:.25rem;border-bottom:2px solid var(--rule);margin:0 0 1rem;flex-wrap:wrap}}
 .tabbar label{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1.1rem;
   color:var(--muted);padding:.5rem 1.2rem;border:2px solid transparent;border-bottom:none;
   border-radius:10px 10px 0 0;margin-bottom:-2px}}
@@ -258,7 +258,7 @@ tr:hover td{{background:var(--accent-soft)}}
 .ch{{font-family:var(--sans);color:var(--muted);text-align:right;white-space:nowrap}}
 .net{{color:var(--warm);font-family:var(--sans);font-size:.95rem}}
 .redko{{font-family:var(--sans);font-size:.85rem;color:var(--warm)}}
-.shapka{{font-family:var(--sans);font-size:1.15rem;color:var(--muted);margin:0 0 1.4rem}}
+.shapka{{font-family:var(--sans);font-size:1.15rem;color:var(--muted);margin:0 0 .8rem}}
 .zhdut{{border:1px solid var(--warm);border-radius:10px;padding:1rem 1.3rem;margin:0 0 1.8rem}}
 .zhdut .zag2{{color:var(--warm)}}
 .poisk{{width:100%;max-width:640px;padding:.65em .9em;font:inherit;font-size:1.1rem;
@@ -285,10 +285,21 @@ tr:hover td{{background:var(--accent-soft)}}
 .para .komu.deti{{white-space:normal;text-align:right}}
 .para .komu.deti span{{display:inline-block;margin-left:.55rem}}
 .kol-pr .para{{padding:.45rem 0}}
-.kol-pr .komu.deti{{font-size:1rem}}
+.kol-pr .para{{font-size:1.45rem}}
+.kol-pr .komu.deti{{font-size:1.25rem}}
+.kol-pr .komu.deti span{{margin-left:.7rem}}
+/* Таблица преподавателей: колонки ровные, кабинет уходит вправо. */
+.prep-tab{{width:100%;border-collapse:collapse}}
+.prep-tab td{{padding:.4rem .8rem .4rem 0;border-bottom:1px solid var(--rule);
+  vertical-align:baseline;font-size:1.15rem}}
+.prep-tab .tp{{white-space:nowrap;width:1%}}
+.prep-tab .td-deti{{color:var(--muted);font-family:var(--sans);font-size:1.05rem}}
+.prep-tab .tg{{font-family:var(--sans);font-weight:600;color:var(--accent);
+  text-align:center;width:1%;white-space:nowrap}}
+.prep-tab .tk{{text-align:right;width:1%;white-space:nowrap;padding-right:0}}
 .para.skryt{{display:none}}
 /* Переключатель дня — сверху справа, рядом с заголовком. */
-.shapka-str{{display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap;margin:0 0 1rem}}
+.shapka-str{{display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap;margin:0 0 .7rem}}
 .dni{{display:flex;gap:.25rem;margin-left:auto}}
 .dni label{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1.05rem;
   color:var(--muted);padding:.35em 1.1rem;border:1px solid var(--rule);border-radius:9px}}
@@ -418,8 +429,8 @@ const IMENA = {[e(f'{r["surname"]} {r["name"]}') for r in shk] + [e(t["name"]) f
 // Что показать по найденному. Для школьника — к кому и куда идти; для
 // преподавателя — его группа, старший, кабинет и сколько у него школьников.
 const KOMU = {{{",".join(
-  [f'"{e(r["surname"])} {e(r["name"])}":"{e(prep[r["teacher_id"]]["name"]) if r["teacher_id"] in prep else "—"} · группа {e(gr_shk(r) or "—")} · кабинет {e(kab_shk(r) or "не назначен")}"' for r in shk]
-+ [f'"{e(t_["name"])}":"группа {e(t_["gruppa"] or "—")} · старший {e(gruppy.get(t_["gruppa"], "—"))} · кабинет {e(kabinety.get(t_["gruppa"]) or "не назначен")} · школьников {sum(1 for r in shk if r["teacher_id"] == t_["id"])}"' for t_ in prep.values()]
+  [f'"{e(r["surname"])} {e(r["name"])}":"{e(prep[r["teacher_id"]]["name"]) if r["teacher_id"] in prep else "—"} · {e(gr_shk(r) or "—")} · {e(kab_shk(r) or "кабинет не назначен")}"' for r in shk]
++ [f'"{e(t_["name"])}":"{e(", ".join(sorted(r["surname"] + " " + r["name"] for r in shk if r["teacher_id"] == t_["id"])) or "школьников нет")} · {e(t_["gruppa"] or "—")} · {e(kabinety.get(t_["gruppa"]) or "кабинет не назначен")}"' for t_ in prep.values()]
 )}}};
 const poisk=document.getElementById('poisk'),spisok=document.getElementById('spisok'),nashli=document.getElementById('nashli');
 poisk.addEventListener('input',e=>{{
