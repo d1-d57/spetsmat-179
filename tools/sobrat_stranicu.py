@@ -193,9 +193,7 @@ tr:hover td{{background:var(--accent-soft)}}
   <label for="p-rasp">Распределение</label>
 </nav>
 
-<main class="holst">
-
-<section class="str" id="s-start">
+<section class="str holst" id="s-start">
   <div class="oblozhka">
     <h1>Спецмат · 9 класс</h1>
     <p class="data">9К и 9Л · распределение на {DATA_SLOVAMI}</p>
@@ -212,7 +210,7 @@ tr:hover td{{background:var(--accent-soft)}}
   </div>
 </section>
 
-<section class="str" id="s-list">
+<section class="str holst" id="s-list">
   <h1>Листки</h1>
   <input class="rd" type="radio" name="lst" id="l-9" checked>
   <input class="rd" type="radio" name="lst" id="l-8">
@@ -221,7 +219,7 @@ tr:hover td{{background:var(--accent-soft)}}
   <section class="vid" id="w-8">{pdf(l8, "listki-8kl")}</section>
 </section>
 
-<section class="str" id="s-rasp">
+<section class="str holst" id="s-rasp">
   <h1>Распределение</h1>
   <p class="data">на {DATA_SLOVAMI}</p>
   {'<div class="zhdut"><div class="zag2">ждут назначения — ' + str(len(zhdut)) + '</div>'
@@ -245,8 +243,6 @@ tr:hover td{{background:var(--accent-soft)}}
   </section>
   {"".join(vkladka_gruppy(k) for k in ("В", "Д", "Н"))}
 </section>
-
-</main>
 
 <script>
 // Поиск ищет и школьника, и преподавателя, подсказывает от двух букв: людей мало.
