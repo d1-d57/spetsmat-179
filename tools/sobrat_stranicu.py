@@ -20,6 +20,12 @@ VYHOD = KOREN / "docs" / "index.html"
 MAT = KOREN.parent / "materials" / "spetsmat-2026"
 DATA_NA = "5 сентября"
 
+# 🔴 СТАРШИЕ ПО КАБИНЕТАМ. Пусто, пока владелец не назвал, кто из троих какой кабинет
+# держит. Ваня сидит в 303, Даня в 302, но на 203 два кандидата (Наталия Павлована и
+# Надя), а в 302 есть ещё Наталья Яковлевна — угадывать нельзя, это дети перед занятием.
+# Заполняется ОДНОЙ строкой, когда владелец ответит: {"203": "имя", ...}
+STARSHIE = {}
+
 
 def e(s):
     return html.escape(str(s if s is not None else ""))
@@ -53,10 +59,17 @@ def sobrat():
                 f'<td>{prep}</td><td>{kab}</td></tr>')
 
     def gruppa(k, v):
+        # ОДНА СТРОКА, а не блок: преподаватель · школьники · старший · кабинет.
+        # Владелец: «зачем его делать большими буквами, ради солидности не надо».
+        # Смысл списка в том, что видны ВСЕ сразу.
         prep, kab = k
-        deti = "".join(f"<li>{e(d)}</li>" for d in sorted(v))
+        deti = ", ".join(sorted(v))
         chip = f'<span class="kab">{e(kab)}</span>' if kab else ""
-        return f'<div class="gr"><h3>{e(prep)} {chip}</h3><ul>{deti}</ul></div>'
+        star = STARSHIE.get(kab)
+        star_html = f'<span class="star">{e(star)}</span>' if star else ""
+        return (f'<tr><td class="pr"><b>{e(prep)}</b></td>'
+                f'<td class="deti">{e(deti)}</td>'
+                f'<td>{star_html}</td><td>{chip}</td></tr>')
 
     def pdf(spisok, papka):
         if not spisok:
@@ -71,59 +84,123 @@ def sobrat():
 <html lang="ru">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Спецмат 9 класс</title>
+<title>Спецмат · 9 класс</title>
 {stil}
 <style>
-.gr{{margin:0 0 1.8rem}}
-.gr h3{{font-family:var(--sans);font-size:1.35rem;font-weight:600;margin:0 0 .3em}}
-.gr ul{{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}}
-.gr li{{padding:.3em 0;border-bottom:1px solid var(--rule);break-inside:avoid}}
+.oblozhka{{max-width:none;margin:0 0 2.5rem}}
+.oblozhka p{{font-size:1.35rem;line-height:1.5;margin:0 0 .8em;max-width:52em}}
+.raspisanie{{border:1px solid var(--rule);border-radius:10px;padding:1.1rem 1.4rem;
+  margin:1.5rem 0 0;background:var(--panel);max-width:52em}}
+.raspisanie .zag2{{font-family:var(--sans);font-size:.85rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin:0 0 .5em}}
+.pr{{white-space:nowrap;font-size:1.05rem}}
+.deti{{font-size:1rem;color:var(--muted);line-height:1.45}}
+.star{{font-family:var(--sans);font-size:.95rem;color:var(--accent)}}
 .fajly{{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}}
-.fajly li{{padding:.4em 0;border-bottom:1px solid var(--rule);break-inside:avoid}}
+.fajly li{{padding:.45em 0;border-bottom:1px solid var(--rule);break-inside:avoid}}
 .fajly a{{color:var(--accent);text-decoration:none;font-size:1.1rem}}
 .fajly a:hover{{text-decoration:underline}}
-h2{{font-family:var(--sans);font-size:2rem;font-weight:600;margin:3rem 0 1.2rem;
-   padding-top:1.5rem;border-top:1px solid var(--rule)}}
-h2:first-of-type{{border-top:none;padding-top:0;margin-top:2rem}}
+/* Вкладки статики: свои имена, стиль наследуется из страницы распределения. */
+#t-rasp:checked~#v-rasp,#t-l9:checked~#v-l9,#t-l8:checked~#v-l8{{display:block}}
+#t-rasp:checked~.tabbar label[for=t-rasp],
+#t-l9:checked~.tabbar label[for=t-l9],
+#t-l8:checked~.tabbar label[for=t-l8]{{color:var(--accent);background:var(--panel);
+  border-color:var(--rule) var(--rule) var(--panel)}}
+.podskazki{{position:relative;max-width:640px}}
+.spisok{{position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--panel);
+  border:1px solid var(--rule);border-radius:0 0 9px 9px;max-height:19rem;overflow:auto}}
+.spisok div{{padding:.55em .9em;cursor:pointer;font-size:1.05rem}}
+.spisok div:hover{{background:var(--accent-soft);color:var(--accent)}}
 </style>
 
 <button class="burger" id="burger" aria-label="меню"><span></span><span></span><span></span></button>
 <nav class="panel-bok" id="panel">
-  <div class="zag">Спецмат</div>
-  <a href="#raspredelenie">Распределение</a>
-  <a href="#listki9">Листки 9 класса</a>
-  <a href="#listki8">Листки 8 класса</a>
+  <div class="zag">Спецмат · 9 класс</div>
+  <a href="#" data-vk="t-rasp">Распределение</a>
+  <a href="#" data-vk="t-l9">Листки 9 класса</a>
+  <a href="#" data-vk="t-l8">Листки 8 класса</a>
 </nav>
 
 <main class="holst" id="holst">
-  <h1>Спецмат</h1>
-  <p class="data">9 класс · на {DATA_NA}</p>
+  <div class="oblozhka">
+    <h1>Спецмат · 9 класс</h1>
+    <p class="data">9К и 9Л · на {DATA_NA}</p>
+    <p>Здесь распределение — кто у кого занимается и в каком кабинете, — и все листки:
+       этого года и прошлого.</p>
+    <div class="raspisanie">
+      <div class="zag2">Расписание</div>
+      <div class="net">время занятий пока не указано</div>
+    </div>
+  </div>
 
-  <h2 id="raspredelenie">Распределение</h2>
-  <input class="poisk" id="poisk" placeholder="Фамилия" autocomplete="off">
-  <table>
-    <thead><tr><th>Школьник</th><th>Принимает</th><th>Кабинет</th></tr></thead>
-    <tbody id="telo">{"".join(tr(r) for r in stroki)}</tbody>
-  </table>
+  <div class="tabs">
+    <input type="radio" name="vk" id="t-rasp" checked>
+    <input type="radio" name="vk" id="t-l9">
+    <input type="radio" name="vk" id="t-l8">
+    <div class="tabbar">
+      <label for="t-rasp">Распределение</label>
+      <label for="t-l9">Листки 9 класса</label>
+      <label for="t-l8">Листки 8 класса</label>
+    </div>
 
-  <h2>По преподавателям</h2>
-  {"".join(gruppa(k, v) for k, v in sorted(po_prepodam.items()))}
+    <section class="vid" id="v-rasp">
+      <div class="podskazki">
+        <input class="poisk" id="poisk" placeholder="Найти себя — фамилия школьника или преподавателя" autocomplete="off">
+        <div class="spisok" id="spisok" hidden></div>
+      </div>
+      <table>
+        <thead><tr><th>Школьник</th><th>Принимает</th><th>Кабинет</th></tr></thead>
+        <tbody id="telo">{"".join(tr(r) for r in stroki)}</tbody>
+      </table>
 
-  <h2 id="listki9">Листки 9 класса</h2>
-  {pdf(l9, "listki")}
+      <h2>По преподавателям</h2>
+      <table>
+        <thead><tr><th>Преподаватель</th><th>Школьники</th><th>Старший</th><th>Кабинет</th></tr></thead>
+        <tbody id="telo-prep">{"".join(gruppa(k, v) for k, v in sorted(po_prepodam.items()))}</tbody>
+      </table>
+    </section>
 
-  <h2 id="listki8">Листки 8 класса</h2>
-  {pdf(l8, "listki-8kl")}
+    <section class="vid" id="v-l9">{pdf(l9, "listki")}</section>
+    <section class="vid" id="v-l8">{pdf(l8, "listki-8kl")}</section>
+  </div>
 </main>
 
 <script>
 const b=document.getElementById('burger'),p=document.getElementById('panel'),h=document.getElementById('holst');
 b.addEventListener('click',()=>{{p.classList.toggle('open');h.classList.toggle('sdvinut');}});
-const poisk=document.getElementById('poisk'),telo=document.getElementById('telo'),vse=[...telo.rows];
+p.querySelectorAll('a[data-vk]').forEach(a=>a.addEventListener('click',ev=>{{
+  ev.preventDefault();document.getElementById(a.dataset.vk).checked=true;
+  p.classList.remove('open');h.classList.remove('sdvinut');
+}}));
+
+// Поиск ищет И школьника, И преподавателя, и подсказывает по мере ввода:
+// людей мало, двух букв хватает, чтобы восстановить фамилию.
+const poisk=document.getElementById('poisk'),spisok=document.getElementById('spisok');
+const telo=document.getElementById('telo'),vseStroki=[...telo.rows];
+const teloP=document.getElementById('telo-prep'),vsePrep=[...teloP.rows];
+const imena=[...new Set([
+  ...vseStroki.map(r=>r.cells[0].textContent.trim().split(/\s+/).slice(0,2).join(' ')),
+  ...vsePrep.map(r=>r.cells[0].textContent.trim())
+])].sort((a,b)=>a.localeCompare(b,'ru'));
+
+function primenit(f){{
+  const q=f.trim().toLowerCase();
+  vseStroki.forEach(r=>{{r.style.display=!q||r.textContent.toLowerCase().includes(q)?'':'none';}});
+  vsePrep.forEach(r=>{{r.style.display=!q||r.textContent.toLowerCase().includes(q)?'':'none';}});
+}}
 poisk.addEventListener('input',e=>{{
-  const f=e.target.value.trim().toLowerCase();
-  vse.forEach(r=>{{r.style.display=!f||r.cells[0].textContent.trim().toLowerCase().startsWith(f)?'':'none';}});
+  const q=e.target.value.trim().toLowerCase();
+  primenit(q);
+  if(q.length<2){{spisok.hidden=true;return;}}
+  const nashli=imena.filter(n=>n.toLowerCase().includes(q)).slice(0,8);
+  spisok.innerHTML=nashli.map(n=>'<div>'+n+'</div>').join('');
+  spisok.hidden=!nashli.length;
 }});
+spisok.addEventListener('click',e=>{{
+  if(e.target.tagName!=='DIV')return;
+  poisk.value=e.target.textContent;primenit(poisk.value);spisok.hidden=true;
+}});
+document.addEventListener('click',e=>{{if(!e.target.closest('.podskazki'))spisok.hidden=true;}});
 </script>
 """, encoding="utf-8")
     print(f"собрано: {VYHOD}")
