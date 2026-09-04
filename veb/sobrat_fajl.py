@@ -129,7 +129,9 @@ def sobrat_dannye(baza: Path, den: str) -> dict:
     aktivnye_id = {p["id"] for p in prepodavateli if p["aktiven"]}
     po_id = {p["id"]: p for p in prepodavateli}
 
-    # Своя память группы, если она у школьника уже проставлена сайтом.
+    # Своя память группы, проставленная человеком на сайте. Пустая строка здесь
+    # значит «нигде» и это РЕШЕНИЕ: она сильнее памяти закрытых строк ниже, иначе
+    # снятый в никуда ребёнок вернулся бы в покинутую группу при первой сборке.
     kolonki = [x[1] for x in c.execute("pragma table_info(students)")]
     svoya_gruppa = {}
     if "gruppa" in kolonki:
@@ -147,8 +149,11 @@ def sobrat_dannye(baza: Path, den: str) -> dict:
         if tid is not None and tid not in aktivnye_id:
             tid = None
         if tid is None:
-            byvshij = po_id.get(byloe.get(r["id"]), {})
-            gruppa = svoya_gruppa.get(r["id"]) or byvshij.get("gruppa")
+            svoj = svoya_gruppa.get(r["id"])
+            if svoj is not None:
+                gruppa = svoj or None          # "" — это «нигде», а не «не решали»
+            else:
+                gruppa = po_id.get(byloe.get(r["id"]), {}).get("gruppa")
         else:
             gruppa = po_id.get(tid, {}).get("gruppa")
         shkolniki.append({

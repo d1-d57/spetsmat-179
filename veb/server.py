@@ -236,6 +236,40 @@ def _rukovoditeli(connection: sqlite3.Connection) -> dict:
     return {row["kabinet"]: row["name"] for row in rows}
 
 
+def _byvshaya_gruppa(connection: sqlite3.Connection, slot: int) -> dict[int, int]:
+    """``{student_id: teacher_id последней ЗАКРЫТОЙ строки}`` — память о группе.
+
+    🔴 ЗАКРЫТЫЕ СТРОКИ ВЫБРАСЫВАТЬ НЕЛЬЗЯ. Когда преподаватель ушёл, его строки
+    закрыли датой — вместе с единственным следом того, В КАКОЙ ГРУППЕ ребёнок
+    был. Без него дети выглядят «ничьими вообще», хотя группа у них известна и
+    менять её незачем. Файловый сборщик это уже умел, а сервер — нет, и один и
+    тот же ребёнок оказывался на сайте «нигде», а в файле — в своей группе.
+    Две правды об одном ребёнке и есть тот разъезд, который здесь и сводится.
+
+    Своя запись `students.gruppa` сильнее: её поставил человек руками.
+    """
+    rows = connection.execute(
+        "select student_id, teacher_id from enrollment "
+        "where slot = ? and valid_to <> ? order by valid_to, id",
+        (slot, "9999-12-31"),
+    ).fetchall()
+    return {row["student_id"]: row["teacher_id"] for row in rows}
+
+
+def _gruppy_vseh_prepodavatelej(connection: sqlite3.Connection) -> dict[int, str]:
+    """``{teacher_id: группа}`` по ВСЕМ преподавателям, включая снятых с активных.
+
+    🔴 Именно снятые и держат память: ребёнок «ничей» ровно потому, что его
+    преподаватель ушёл. Спрашивать группу только у активных значит спрашивать
+    всех, кроме того единственного, кто может ответить.
+    """
+    try:
+        rows = connection.execute("select id, gruppa from teachers").fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {row["id"]: row["gruppa"] for row in rows if row["gruppa"]}
+
+
 def _open_assignments(
     connection: sqlite3.Connection, slot: int
 ) -> dict[int, dict]:
@@ -277,13 +311,25 @@ def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
     kab_gruppy, starshie = _kabinety_grupp(connection)
     gruppa_prepoda = {t_["id"]: t_.get("gruppa") for t_ in teachers}
     svoya_gruppa = {s["id"]: s.get("gruppa") for s in students}
+    byloe = _byvshaya_gruppa(connection, slot)
+    gruppa_lyubogo = _gruppy_vseh_prepodavatelej(connection)
     for row in by_students:
-        # 🔴 У НАЗНАЧЕННОГО ГРУППА ОТ ПРЕПОДАВАТЕЛЯ, У СНЯТОГО — ПОМНИТСЯ.
-        # Перевели преподавателя в другую группу — его школьники уехали с ним
-        # сами, потому что группа тут ВЫЧИСЛЯЕТСЯ, а не хранится у каждого.
-        # Сняли школьника — остаётся его собственная запомненная группа, и он
-        # никуда не исчезает: он и есть средняя ступень.
-        g = gruppa_prepoda.get(row["teacher_id"]) or svoya_gruppa.get(row["student_id"])
+        # 🔴 ТРИ СТУПЕНИ ЧИТАЮТСЯ ЗДЕСЬ, И ПОРЯДОК ВАЖЕН.
+        #  1. У назначенного группа — ГРУППА ЕГО ПРЕПОДАВАТЕЛЯ. Перевели
+        #     преподавателя — школьники уехали с ним сами, потому что группа
+        #     вычисляется, а не хранится у каждого.
+        #  2. Иначе — то, что человек поставил руками. Пустая строка здесь
+        #     значит «нигде» И ЭТО РЕШЕНИЕ, а не отсутствие данных: без такой
+        #     разницы «нигде» не держалось бы — пункт 3 возвращал бы ребёнка
+        #     в покинутую группу при первой же перерисовке.
+        #  3. И только если руками не трогали — память закрытых строк.
+        svoy = svoya_gruppa.get(row["student_id"])
+        if gruppa_prepoda.get(row["teacher_id"]):
+            g = gruppa_prepoda[row["teacher_id"]]
+        elif svoy is not None:
+            g = svoy or None
+        else:
+            g = gruppa_lyubogo.get(byloe.get(row["student_id"]))
         row["gruppa"] = g
         row["room"] = kab_gruppy.get(g)
         row["starshij"] = starshie.get(g)
@@ -639,11 +685,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "группа: В | Д | Н или пусто"})
             return
         _obespechit_gruppu_shkolnika(conn)
+        # 🔴 ПУСТАЯ СТРОКА, А НЕ NULL. «Нигде» — это ВЫБОР человека, и он обязан
+        # отличаться от «про этого ребёнка ещё ничего не решали»: иначе память
+        # закрытых строк вернула бы его в старую группу, и снять его оттуда было
+        # бы нечем — ровно та поломка, ради которой ступеней стало три.
         conn.execute("update students set gruppa = ? where id = ?",
-                     (gruppa or None, student_id))
+                     (gruppa or "", student_id))
         repo = SqliteEnrollmentRepo(conn)
         standing = repo.open_row(student_id, slot)
-        itog = {"snyat": True, "gruppa": gruppa or None}
+        itog = {"snyat": True, "gruppa": gruppa or None}  # наружу — по-прежнему None
         if standing is not None:
             if standing.valid_from == den:
                 # 🔴 Интервал, ОТКРЫТЫЙ СЕГОДНЯ, УДАЛЯЕТСЯ, а не закрывается.
