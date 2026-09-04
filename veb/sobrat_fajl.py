@@ -204,11 +204,20 @@ def main(argv=None) -> int:
     p.add_argument("--den", default=None, help="день занятия ГГГГ-ММ-ДД; по умолчанию ближайший")
     args = p.parse_args(argv)
 
+    # 🔴 КОД 2 — «ПОЗВАЛИ НЕВЕРНО», И ОН ОБЯЗАН ОТЛИЧАТЬСЯ ОТ ОСТАЛЬНЫХ ДВУХ.
+    # 0 — собрал, 1 — позвали верно, но собрать нечем (шаблон без метки, в файле
+    # осталась сеть), 2 — неверный вызов. Слипшись, «нет такой базы» и «шаблон
+    # сломан» выглядят снаружи одинаково, и вызывающий конвейер молча идёт дальше.
     if not args.baza.is_file():
-        sys.exit(f"Не нашёл базу: {args.baza}")
+        print(f"Не нашёл базу: {args.baza}", file=sys.stderr)
+        return 2
 
     den = args.den or blizhajshee_zanyatie()
     dannye = sobrat_dannye(args.baza, den)
+
+    if not SHABLON.is_file():
+        print(f"Не нашёл шаблон: {SHABLON}", file=sys.stderr)
+        return 2
 
     shablon = SHABLON.read_text(encoding="utf-8")
     if METKA_DANNYH not in shablon:
