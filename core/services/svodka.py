@@ -592,8 +592,9 @@ class SvodkaService:
 
         Empty means "the roll cannot answer" -- an unpopulated ``enrollment`` or a store
         that does not offer the query -- and the caller falls back rather than narrowing to
-        nobody.  The weekday is ISO (Monday = 1), the same convention ``enrollment.weekday``
-        and ``ops/raspisanie.LESSON_WEEKDAYS`` already use, so nothing needs translating.
+        nobody.  The weekday is ISO (Monday = 1), which maps to ``enrollment.slot`` via
+        the migration (weekday 1 → slot 1, weekday 4 → slot 2), so the value passes
+        unchanged to the SQL.
         """
         if self._roll is None:
             return set()

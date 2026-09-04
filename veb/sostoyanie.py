@@ -46,10 +46,10 @@ def sostoyanie_page(weekday: int = 1) -> bytes:
         teachers_cursor = conn.execute("SELECT id, name FROM teachers ORDER BY name")
         teachers_rows = teachers_cursor.fetchall()
 
-        # Build assignment lookup for the given weekday
+        # Build assignment lookup for the given slot
         open_assignments = {}
         for row in conn.execute(
-            "SELECT student_id, teacher_id, room FROM enrollment WHERE weekday = ? AND valid_to = ?",
+            "SELECT student_id, teacher_id, room FROM enrollment WHERE slot = ? AND valid_to = ?",
             (weekday, config.OPEN_END_DATE),
         ).fetchall():
             open_assignments[row["student_id"]] = dict(row)
