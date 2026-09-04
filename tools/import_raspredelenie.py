@@ -8,16 +8,16 @@ named in the report and skipped, never invented.
 
 INTERVAL MODEL.
 
-The store keeps ``enrollment`` as a half-open interval per ``(student_id, weekday)``
-with ``valid_to = config.OPEN_END_DATE`` for the open row.  The source has no weekday
+The store keeps ``enrollment`` as a half-open interval per ``(student_id, slot)``
+with ``valid_to = config.OPEN_END_DATE`` for the open row.  The source has no slot
 column and no explicit start date: last year ran two lesson days (Mon and Thu) per
 student.  A composite teacher ("Саша Оревкова / Ольга Александровна" and two more)
 becomes TWO intervals, one per lesson day, with the same ``valid_from``:
 
   * the source names two people behind one slash — each one IS a lesson day, and the
     school runs two days a week;
-  * the schema forbids two OPEN rows for the same ``(student_id, weekday)``, so
-    opening two of them on DIFFERENT weekdays does not collide;
+  * the schema forbids two OPEN rows for the same ``(student_id, slot)``, so
+    opening two of them on DIFFERENT slots does not collide;
   * the page (``veb/``) lets the owner fix the day of the week interactively, which
     is the point of having a web surface instead of a static export.
 
@@ -35,7 +35,7 @@ full string in the catalogue FIRST; only if it does not resolve does it split on
 IDEMPOTENCY.
 
 A second run on the same database MUST NOT open a second open row for the same
-``(student, weekday)``.  For every row of the source the script first reads the open
+``(student, slot)``.  For every row of the source the script first reads the open
 interval:
 
   * no open row  -> ``assign``;
@@ -82,6 +82,10 @@ WEEKDAY_MONDAY = 1
 # The school runs two lesson days a week.  A composite teacher in the source is
 # mapped to the same person on each day; the owner splits them through the page.
 WEEKDAY_THURSDAY = 4
+
+# Mapping from ISO weekday to slot (migration 003_slot_vmesto_weekday).
+# weekday 1 (Mon) → slot 1, weekday 4 (Thu) → slot 2.
+WEEKDAY_TO_SLOT = {1: 1, 4: 2}
 
 # A composite teacher is written with this separator.  The catalogue has ONE name
 # with a slash in it ("Мика/Вася"); see module docstring for the disarm.
@@ -220,22 +224,21 @@ def _apply_one(
 ) -> tuple[str, str]:
     """Decide assign vs move vs skip and call the service.  Returns ``(status, reason)``.
 
-    ``open_row`` is the current open interval for ``(student_id, weekday)`` — the caller
+    ``open_row`` is the current open interval for ``(student_id, slot)`` — the caller
     has already read it, so the service does not have to query twice.  ``None`` means
     there is no open row yet.
     """
+    slot = WEEKDAY_TO_SLOT[weekday]
     if open_row is None:
         try:
             service.assign(
                 student_id=student_id,
                 teacher_id=teacher_id,
                 room=room,
-                weekday=weekday,
+                slot=slot,
                 valid_from=effective_from,
             )
         except AlreadyEnrolled:
-            # Race: someone else opened between our read and our write.  Re-read and
-            # fall through to the move branch by reporting it the same way.
             return (STATUS_SKIPPED, "open row appeared between read and write")
         return (STATUS_ASSIGNED, "")
     if open_row.teacher_id == teacher_id and open_row.room == room:
@@ -243,7 +246,7 @@ def _apply_one(
     try:
         service.move(
             student_id=student_id,
-            weekday=weekday,
+            slot=slot,
             to_teacher_id=teacher_id,
             effective_from=effective_from,
             room=room,
@@ -308,8 +311,8 @@ def run(
         first_outcome: Optional[Outcome] = None
         # Pair each resolved slot with its weekday; the order in ``weekdays`` matches
         # the order in ``resolved`` by construction (Monday first).
-        for weekday, slot in zip(weekdays, resolved):
-            slot_name, teacher_id, room = slot
+        for weekday, teacher_info in zip(weekdays, resolved):
+            slot_name, teacher_id, room = teacher_info
             if not room:
                 outcomes.append(
                     Outcome(surname, first_name, teacher_name,
@@ -317,7 +320,7 @@ def run(
                 )
                 continue
 
-            open_row = repo.open_row(student_id, weekday)
+            open_row = repo.open_row(student_id, WEEKDAY_TO_SLOT[weekday])
             if dry_run:
                 if open_row is None:
                     outcome = Outcome(surname, first_name, slot_name, STATUS_WOULD_ASSIGN, "")

@@ -62,10 +62,10 @@ def _payload(entries: list[dict], teachers: list[dict] | None = None) -> dict:
     }
 
 
-def _open_count(connection, weekday: int = 1) -> int:
+def _open_count(connection, slot: int = 1) -> int:
     return connection.execute(
-        "select count(*) from enrollment where weekday = ? and valid_to = ?",
-        (weekday, config.OPEN_END_DATE),
+        "select count(*) from enrollment where slot = ? and valid_to = ?",
+        (slot, config.OPEN_END_DATE),
     ).fetchone()[0]
 
 
@@ -161,14 +161,14 @@ def test_import_splits_composite_teacher_into_two_rows(tmp_path):
         # Two ASSIGNED outcomes, one per resolved part.
         assigned = [o for o in outcomes if o.status == "assigned"]
         assert len(assigned) == 2, [o.line() for o in outcomes]
-        # And the rows live on DIFFERENT weekdays — Monday AND Thursday.
+        # And the rows live on DIFFERENT slots — Monday (slot 1) AND Thursday (slot 2).
         open_rows = conn.execute(
-            "select weekday, teacher_id from enrollment "
-            "where valid_to = ? order by weekday", (config.OPEN_END_DATE,),
+            "select slot, teacher_id from enrollment "
+            "where valid_to = ? order by slot", (config.OPEN_END_DATE,),
         ).fetchall()
         assert len(open_rows) == 2
-        weekdays = sorted(row["weekday"] for row in open_rows)
-        assert weekdays == [1, 4]
+        slots = sorted(row["slot"] for row in open_rows)
+        assert slots == [1, 2]
         teacher_ids = sorted(row["teacher_id"] for row in open_rows)
         # teacher-0 is id=1, teacher-2 is id=3.
         assert teacher_ids == [1, 3]

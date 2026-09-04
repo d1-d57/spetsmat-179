@@ -204,7 +204,7 @@ class SqliteWorkingTeachers:
             row["teacher_id"]
             for row in self._connection.execute(
                 "select distinct teacher_id from enrollment "
-                "where weekday = ? and valid_from <= ? and ? < valid_to "
+                "where slot = ? and valid_from <= ? and ? < valid_to "
                 "order by teacher_id",
                 (weekday, day, day),
             )

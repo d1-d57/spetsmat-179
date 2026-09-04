@@ -42,8 +42,9 @@ import config  # noqa: E402  -- deliberately after the path bootstrap above
 
 # --------------------------------------------------------------------------- timetable
 #
-# ISO-8601 weekday numbers, Monday = 1 -- the same convention as ``enrollment.weekday`` in
-# the schema, so the two never need translating.  Two lessons a week: Monday and Thursday.
+# ISO-8601 weekday numbers, Monday = 1 -- the mapping to ``enrollment.slot`` is
+# weekday 1 → slot 1, weekday 4 → slot 2 (migration 003_slot_vmesto_weekday).
+# Two lessons a week: Monday and Thursday.
 # The evidence is in the schema itself (``migrations/001_init.sql``: "Кахиани = Ваня on
 # Mon, Ян on Thu"), not guessed.
 #
