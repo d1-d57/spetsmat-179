@@ -350,7 +350,7 @@ None. No foreign-house findings; all references (`kod_veb-vhod-i-obshchee-sostoy
 **ПОВТОРЯЕМОСТЬ:** нет — проблема была конкретной: `do_GET` блокировал чтение без куки; исправлено для этого захода; не повторится, если другие заходы не внесут такой же блок.
 **АРТЕФАКТ:** код в рабочей папке `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vhod-organizatora-dorabotka/veb/vhod.py`, `veb/static/vhod.css`, `tests/veb/test_vhod.py`, `veb/server.py`.
 **РОД АРТЕФАКТА:** `исходник`
-**КОММИТ:** `6a10a92` — `vhod-organizatora-dorabotka: remove blanket cookie redirect in do_GET, keep POST protection`
+**КОММИТ:** `6a10a92` — `vhod-organizatora-dorabotka: remove blanket cookie redirect in do_GET, keep POST protection` (zone); `b6b8793` — `Merge branch 'zahod/vhod-organizatora-dorabotka'` (main).
 **ГИТ-ГИГИЕНА:** `git --no-optional-locks status --porcelain` → пусто; `git --no-optional-locks show --stat` → только `veb/server.py`; `python3 .../git_zona.py check --zone veb/vhod.py` и остальные зоны — ✅ (проверено на диске, пути зоны не изменялись кроме `veb/server.py`).
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
