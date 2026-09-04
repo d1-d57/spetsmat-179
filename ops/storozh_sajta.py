@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 ADRES_FILE = ROOT / "deploy" / "ADRES.txt"
 STATE_FILE = Path("/tmp/spetsmat-storozh-sajta.state.json")
 
+# Content marker that must appear on OUR site and cannot appear on provider banners.
+OUR_CONTENT_MARKER = "Распределение"
 CHECK_NAMES = ("site",)
 
 
@@ -85,7 +87,11 @@ def check_site(url: str | None) -> tuple[OneCheck, str, bool]:
             status = resp.getcode()
             body = resp.read(512).decode("utf-8", errors="replace")
         if 200 <= status < 300:
-            return OneCheck("site", True, "жив: status=%d" % status), "жив: status=%d" % status, True
+            if OUR_CONTENT_MARKER in body:
+                return OneCheck("site", True, "жив: status=%d content_marker_found" % status), "жив: status=%d" % status, True
+            else:
+                # Provider banner (e.g. console.serveo.net) has 200 but no our content.
+                return OneCheck("site", False, "мёртв: status=%d content_marker_MISSING (banner?) body=%r" % (status, body[:200])), "мёртв: status=%d banner_detected_no_content" % status, False
         else:
             return OneCheck("site", False, "мёртв: status=%d" % status), "мёртв: status=%d body=%r" % (status, body[:200]), False
     except urllib.error.HTTPError as exc:
