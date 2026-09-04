@@ -261,11 +261,11 @@ tr:hover td{{background:var(--accent-soft)}}
 .tri{{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:0 2rem;align-items:start}}
 .kol{{padding-right:2rem;border-right:1px solid var(--rule);min-width:0}}
 .kol:last-child{{border-right:none;padding-right:0}}
-.para{{display:flex;gap:1rem;align-items:baseline;padding:.3rem 0;
+.para{{display:flex;gap:.8rem;align-items:baseline;padding:.3rem 0;flex-wrap:wrap;
   border-bottom:1px solid var(--rule);font-size:1.05rem}}
 .para .kto{{flex:0 0 auto;min-width:0}}
 .para .komu{{margin-left:auto;text-align:right;color:var(--muted);font-family:var(--sans);
-  font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+  font-size:.95rem}}
 .para .komu.deti{{white-space:normal;text-align:right}}
 .para .komu.deti span{{display:inline-block;margin-left:.55rem}}
 .kol-pr .para{{padding:.45rem 0}}
