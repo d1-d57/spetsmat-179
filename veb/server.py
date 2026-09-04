@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
 from datetime import date, datetime
@@ -55,6 +56,7 @@ from core.services.enrollment import (
     EnrollmentError,
     EnrollmentService,
     MoveChangesNothing,
+    MoveNotForward,
     NotEnrolled,
 )
 from infra.db import connect
@@ -64,6 +66,13 @@ from veb import vhod
 
 SLOT_DEFAULT = 1  # The page shows one slot at a time.
 PORT_DEFAULT = 8765
+
+# 🔴 ТУМБЛЕР СВОБОДНОЙ ПРАВКИ. True — распределение правится БЕЗ пароля (решение
+# владельца на сегодня: строку меняет несколько человек, пароль загораживал).
+# False — правка снова требует куки организатора; механизм входа для этого никуда
+# не девался, он живой и всё это время проверяется тестами.
+# Перебивается переменной окружения SPETSMAT_VEB_SVOBODNAYA_PRAVKA=0.
+SVOBODNAYA_PRAVKA = os.environ.get("SPETSMAT_VEB_SVOBODNAYA_PRAVKA", "1") != "0"
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -400,15 +409,25 @@ class Handler(BaseHTTPRequestHandler):
             self._post_prepodavateli()
             return
         if path == "/api/enrollment":
-            role = vhod.rol(self.headers)
-            if role is None:
-                self.send_response(302)
-                self.send_header("Location", "/vhod")
-                self.end_headers()
-                return
-            if role != "organizator":
-                self._send_json(403, {"error": "only organizator may change enrollment"})
-                return
+            # 🔴 ПРАВКА БЕЗ ПАРОЛЯ — решение владельца 2026-09-04, дословно:
+            # «просто сделать страницу без пароля, дать ссылку, где можно править всё».
+            # Причина: распределение сегодня меняет НЕ ОДИН человек, а несколько, и
+            # пароль встал на критический путь.
+            #
+            # 🔴 МЕХАНИЗМ ВХОДА НЕ УДАЛЁН И РАБОТАЕТ. `veb/vhod.py`, роуты `/vhod` и
+            # `/vyhod`, подпись куки, роли — всё на месте и проверяется тестами.
+            # Чтобы вернуть пароль ЗАВТРА, достаточно снять `if not SVOBODNAYA_PRAVKA`
+            # ниже: одна строка, никакой миграции и никакого восстановления кода.
+            if not SVOBODNAYA_PRAVKA:
+                role = vhod.rol(self.headers)
+                if role is None:
+                    self.send_response(302)
+                    self.send_header("Location", "/vhod")
+                    self.end_headers()
+                    return
+                if role != "organizator":
+                    self._send_json(403, {"error": "only organizator may change enrollment"})
+                    return
             self._post_enrollment()
             return
         self._send_json(404, {"error": "not found"})
@@ -538,6 +557,37 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(409, {"error": str(exc)})
                 return
             self._send_json(200, {"assigned": opened.id})
+            return
+        except MoveNotForward:
+            # 🔴 ВТОРАЯ ПРАВКА ТОЙ ЖЕ СТРОКИ В ТОТ ЖЕ ДЕНЬ. Найдено живым прогоном
+            # 2026-09-04: сервис закрывает старый интервал сегодняшним днём и открывает
+            # новый тем же днём, а если стоящий интервал ТОЖЕ открыт сегодня, выходит
+            # valid_from == valid_to, схема это запрещает, и правка падает с 409.
+            # Для владельца это значило: строку можно поменять ОДИН раз в день, вторая
+            # попытка молча не проходит — а он правит распределение перед занятием и
+            # переставляет одного и того же ребёнка по нескольку раз.
+            #
+            # ЧТО ДЕЛАЕМ: интервал, ОТКРЫТЫЙ СЕГОДНЯ, правим НА МЕСТЕ. Истории это не
+            # теряет: за сегодняшний день никакого «раньше» ещё не было — ребёнок не
+            # успел ни к кому сходить. История прошлых дней не трогается вовсе.
+            standing = repo.open_row(student_id, slot)
+            if standing is None or standing.valid_from != effective_from:
+                self._send_json(409, {"error": "интервал открыт не сегодня — правка на месте небезопасна"})
+                return
+            if standing.teacher_id == teacher_id:
+                self._send_json(200, {"bez_izmenenij": True})
+                return
+            kab = conn.execute(
+                "select kabinet from teachers where id = ?", (teacher_id,)
+            ).fetchone()
+            novyj_kabinet = (kab["kabinet"] if kab and "kabinet" in kab.keys() and kab["kabinet"]
+                             else standing.room)
+            conn.execute(
+                "update enrollment set teacher_id = ?, room = ? where id = ?",
+                (teacher_id, novyj_kabinet, standing.id),
+            )
+            conn.commit()
+            self._send_json(200, {"pravka_na_meste": standing.id, "room": novyj_kabinet})
             return
         except MoveChangesNothing as exc:
             # The same teacher was chosen: that is not an error, but it is also

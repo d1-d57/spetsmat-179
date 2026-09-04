@@ -193,7 +193,10 @@ document.addEventListener('change', async e => {
 async function zagruzi(){
   const r = await fetch('/api/view?slot=1');
   dannye = await r.json();
-  organizator = document.cookie.includes('spetsmat_veb');
+  // 🔴 Правка открыта ВСЕМ по ссылке — решение владельца: строку меняет несколько
+  // человек, и пароль стоял на критическом пути. Кука больше не решает, показывать ли
+  // выбор; вернём пароль — вернётся и условие.
+  organizator = true;
   document.getElementById('data').textContent =
     'на ' + new Date().toLocaleDateString('ru-RU', {day:'numeric', month:'long'});
   risuyShkolnikov(document.getElementById('poisk').value);
