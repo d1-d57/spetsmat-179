@@ -2,264 +2,538 @@
 <html lang="ru">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Распределение — спецмат</title>
+<title>Распределение — спецмат, 9 класс</title>
 <style>
 :root{
-  --bg:#fbfaf6; --panel:#fffdf8; --text:#211f1b; --muted:#726c60;
-  --rule:#e7e2d6; --accent:#2f6e8e; --accent-soft:#e8f0f4; --warm:#c9743a;
-  --faint:#b7ae9c; --chip:#e7e0d2;
-  --sans:"Source Sans 3",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
-  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --bg:#fbfaf6; --panel:#fffdf8; --text:#211f1b; --muted:#6d675c;
+  --rule:#e4dfd2; --accent:#2f6e8e; --accent-soft:#e8f0f4;
+  --krasn:#b3402a; --krasn-fon:rgba(179,64,42,.08);
+  --gV:#2f6e8e; --gV-fon:#e3eef4;
+  --gD:#7a4a9c; --gD-fon:#efe6f6;
+  --gN:#2d7a53; --gN-fon:#e2f1e8;
+  --faint:#a8a08d;
+  --sans:"Source Sans 3",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#1b1e22; --panel:#23272c; --text:#dcd8d0; --muted:#9a948a;
-  --rule:#343a41; --accent:#7fb6d2; --accent-soft:#22333d; --warm:#e0946a;
-  --faint:#6b6f75; --chip:#333a41;
+  --rule:#343a41; --accent:#7fb6d2; --accent-soft:#22333d;
+  --krasn:#e8836a; --krasn-fon:rgba(232,131,106,.12);
+  --gV:#7fb6d2; --gV-fon:#22333d;
+  --gD:#bd9ada; --gD-fon:#2f2739;
+  --gN:#7cc79b; --gN-fon:#1f3529;
+  --faint:#6b6f75;
 }}
 :root[data-theme="dark"]{
   --bg:#1b1e22; --panel:#23272c; --text:#dcd8d0; --muted:#9a948a;
-  --rule:#343a41; --accent:#7fb6d2; --accent-soft:#22333d; --warm:#e0946a;
-  --faint:#6b6f75; --chip:#333a41;
+  --rule:#343a41; --accent:#7fb6d2; --accent-soft:#22333d;
+  --krasn:#e8836a; --krasn-fon:rgba(232,131,106,.12);
+  --gV:#7fb6d2; --gV-fon:#22333d; --gD:#bd9ada; --gD-fon:#2f2739;
+  --gN:#7cc79b; --gN-fon:#1f3529; --faint:#6b6f75;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:var(--serif);font-size:20px}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:19px;line-height:1.4;padding:1.4rem 2rem 3rem}
 
-/* ── выезжающая панель: устройство взято из lenta-derevya/view.html ── */
-.panel-bok{position:fixed;left:0;top:0;height:100vh;width:320px;z-index:50;overflow:auto;
-  background:var(--panel);border-right:1px solid var(--rule);padding:5rem 1.4rem 2rem;
-  transform:translateX(-100%);transition:transform .18s ease,box-shadow .18s ease;
-  font-family:var(--sans)}
-.panel-bok.open{transform:none;box-shadow:0 0 26px rgba(0,0,0,.28)}
-.burger{position:fixed;left:14px;top:14px;z-index:60;width:44px;height:40px;
-  background:var(--panel);border:1px solid var(--rule);border-radius:8px;cursor:pointer;
-  display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px}
-.burger span{display:block;width:20px;height:2px;background:var(--text);border-radius:2px}
-.burger:hover{border-color:var(--accent)}
-.panel-bok a{display:block;color:var(--muted);text-decoration:none;padding:.5em .6em;
-  border-radius:6px;font-size:19px}
-.panel-bok a:hover{color:var(--accent);background:var(--accent-soft)}
-.panel-bok .zag{font-size:13px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--faint);margin:1.4rem 0 .5rem;padding-bottom:.4em;border-bottom:1px solid var(--rule)}
+.verh{display:flex;align-items:baseline;gap:1.1rem;flex-wrap:wrap;margin:0 0 1rem}
+h1{font-size:1.85rem;font-weight:600;margin:0;letter-spacing:-.015em}
+.pod{color:var(--muted);font-size:1rem}
+button{font:inherit;padding:.45em 1.1em;border-radius:9px;cursor:pointer;
+  border:1px solid var(--rule);background:var(--panel);color:var(--text)}
+#skachat{margin-left:auto;background:var(--accent);border-color:var(--accent);color:#fff;
+  font-weight:600}
+#skachat:hover{opacity:.88}
+#sbros{font-size:.88rem;color:var(--muted);padding:.35em .8em}
 
-/* Текст занимает ВСЁ пространство. Сдвигается вправо, только когда панель открыта. */
-.holst{padding:5rem 3rem 4rem;transition:padding-left .18s ease;max-width:none}
-.holst.sdvinut{padding-left:22rem}
-
-h1{font-family:var(--sans);font-size:2.6rem;font-weight:600;letter-spacing:-.02em;margin:0 0 .1em}
-.data{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 2rem}
-
-/* ── вкладки: скрытые radio + label, без JS ── */
-.tabs>input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-.tabbar{display:flex;gap:.3rem;border-bottom:2px solid var(--rule);margin:0 0 2rem}
-.tabbar label{cursor:pointer;user-select:none;font-family:var(--sans);font-weight:600;
-  font-size:1.25rem;color:var(--muted);padding:.55rem 1.4rem;border:2px solid transparent;
-  border-bottom:none;border-radius:10px 10px 0 0;margin-bottom:-2px}
-.tabbar label:hover{color:var(--text)}
-.vid{display:none}
-#t-shk:checked~#v-shk{display:block}
-#t-prp:checked~#v-prp{display:block}
-#t-shk:checked~.tabbar label[for=t-shk],
-#t-prp:checked~.tabbar label[for=t-prp]{color:var(--accent);background:var(--panel);
+/* ── пять вкладок ─────────────────────────────────────── */
+.tabbar{display:flex;gap:.3rem;border-bottom:2px solid var(--rule);margin:0 0 1.5rem;
+  flex-wrap:wrap}
+.tabbar button{border:2px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;
+  margin-bottom:-2px;font-weight:600;font-size:1.1rem;color:var(--muted);background:none;
+  padding:.5em 1.25em}
+.tabbar button.on{color:var(--accent);background:var(--panel);
   border-color:var(--rule) var(--rule) var(--panel)}
 
-.poisk{width:100%;max-width:640px;padding:.7em .9em;font:inherit;font-size:1.2rem;
-  border:1px solid var(--rule);border-radius:9px;background:var(--panel);color:var(--text);
-  margin:0 0 1.6rem}
-.poisk:focus{outline:none;border-color:var(--accent)}
+/* ── шапка группы: группа и кабинет ОДИН раз ──────────── */
+.shapka{display:flex;gap:2rem;align-items:baseline;flex-wrap:wrap;
+  padding:.75rem 1.2rem;border:1px solid var(--rule);border-radius:10px;
+  background:var(--panel);margin:0 0 1.3rem}
+.shapka .kod{font-size:1.5rem;font-weight:700}
+.shapka .pole{color:var(--muted);font-size:1rem}
+.shapka .pole b{color:var(--text);font-weight:600;font-size:1.1rem}
+.shapka .schet{margin-left:auto;font-size:1.05rem}
+.shapka .zhdut{color:var(--krasn)}
+.shapka input{width:6rem;padding:.28em .5em;font:inherit;font-size:1.15rem;font-weight:600;
+  text-align:center;border:1px solid var(--rule);border-radius:7px;background:var(--bg);
+  color:var(--text)}
+.shapka input:focus{outline:none;border-color:var(--accent)}
 
-table{border-collapse:collapse;width:100%;font-size:1.15rem}
-th{font-family:var(--sans);font-size:.85rem;font-weight:600;letter-spacing:.09em;
-  text-transform:uppercase;color:var(--faint);text-align:left;padding:0 1.2rem .6rem 0;
+/* ── строка школьника: имя НИКОГДА не переносится на вторую строку ──
+   Перенос был не косметикой, а поломкой: список переставал читаться колонкой.
+   Причина — раздутый выпадающий список: 17rem съедали место у фамилии.
+   Сетка вместо flex даёт имени всё, что осталось, и фиксирует ширину поля. */
+.spisok{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));
+  gap:0 2.5rem;align-items:start;margin:0 0 1.4rem}
+.stroka{display:grid;grid-template-columns:1fr 1.3rem 11.5rem;gap:.7rem;align-items:center;
+  padding:.32rem 0;border-bottom:1px solid var(--rule)}
+.stroka .kto{font-size:1.08rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stroka .kto b{font-weight:600}
+.stroka .kl{color:var(--faint);font-size:.86rem;text-align:center}
+.stroka select{width:100%;font:inherit;font-size:.98rem;padding:.28em .4em;
+  border:1px solid var(--rule);border-radius:7px;background:var(--panel);color:var(--text)}
+.stroka select:focus{outline:none;border-color:var(--accent)}
+.stroka.net{background:var(--krasn-fon)}
+.stroka.net select{border-color:var(--krasn);color:var(--krasn)}
+
+/* ── преподаватели ────────────────────────────────────── */
+.prepy{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));
+  gap:0 3rem;margin:0 0 1.4rem}
+.prepstroka{display:flex;align-items:center;gap:1rem;padding:.45rem 0;
   border-bottom:1px solid var(--rule)}
-td{padding:.75rem 1.2rem .75rem 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
-tr:hover td{background:var(--accent-soft)}
-.fam{font-weight:600}
-.klass{color:var(--muted);font-family:var(--sans);font-size:.95rem}
-.kab{font-family:var(--sans);font-weight:600;background:var(--chip);border-radius:7px;
-  padding:.15em .6em;white-space:nowrap}
-.ruk{color:var(--muted);font-family:var(--sans);font-size:.95rem}
-.gr{font-family:var(--sans);font-weight:600;color:var(--accent)}
-.pr{white-space:nowrap}
-.deti{font-size:.95rem;color:var(--muted);line-height:1.4}
-.ch{font-family:var(--sans);color:var(--muted);text-align:right}
-tr.zhdet td{background:rgba(201,116,58,.10)}
-.kabpanel{display:flex;gap:1.6rem;flex-wrap:wrap;align-items:center;margin:0 0 1.8rem;
-  padding:.9rem 1.2rem;border:1px solid var(--rule);border-radius:10px;background:var(--panel)}
-.kabpanel .p{display:flex;gap:.5rem;align-items:baseline;font-family:var(--sans)}
-.kabpanel .g{font-weight:600;color:var(--accent);font-size:1.15rem}
-.kabpanel .s{color:var(--muted);font-size:.95rem}
-.kabpanel input{width:5.5rem;padding:.35em .5em;font:inherit;font-size:1rem;text-align:center;
-  border:1px solid var(--rule);border-radius:7px;background:var(--bg);color:var(--text)}
-.kabpanel input:focus{outline:none;border-color:var(--accent)}
-.net{color:var(--warm);font-family:var(--sans);font-size:1rem}
-.gruppa{margin:0 0 2.6rem}
-.gruppa h2{font-family:var(--sans);font-size:1.7rem;font-weight:600;margin:0 0 .1em}
-.gruppa .pod{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 .8rem}
-.gruppa ul{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}
-.gruppa li{padding:.35em 0;border-bottom:1px solid var(--rule);break-inside:avoid;font-size:1.15rem}
-select{font:inherit;font-size:1rem;padding:.3em;background:var(--panel);color:var(--text);
-  border:1px solid var(--rule);border-radius:6px}
-@media (max-width:760px){
-  .holst{padding:5rem 1.2rem 3rem}
-  .holst.sdvinut{padding-left:1.2rem}
-  .gruppa ul{columns:1}
-}
+.prepstroka .imya{flex:1 1 auto;font-size:1.12rem;font-weight:600}
+.prepstroka .n{flex:0 0 2.6rem;text-align:right;font-size:1.25rem;font-weight:700;
+  color:var(--muted)}
+.prepstroka.malo .n{color:var(--krasn)}
+.prepstroka select{flex:0 0 5.5rem;font:inherit;font-size:1.02rem;font-weight:600;
+  padding:.3em .4em;border:1px solid var(--rule);border-radius:8px;text-align:center}
+
+/* ── вкладка группы: слева школьники в две колонки, справа преподаватели ──
+   У преподавателя школьники идут ТАБЛЕТКАМИ В ТУ ЖЕ СТРОКУ, а не столбиком:
+   их 3–5, отдельная строка на каждого растягивала правую колонку вниз на два
+   экрана и ради этого же владелец не видел конца списка. */
+.troe{display:grid;grid-template-columns:2fr 1.25fr;gap:0 2.5rem;align-items:start}
+@media (max-width:1180px){.troe{grid-template-columns:1fr}}
+.troe .deti{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));
+  gap:0 2.5rem;align-items:start}
+.karta{display:flex;align-items:baseline;flex-wrap:wrap;gap:.35rem .6rem;
+  padding:.45rem 0;border-bottom:1px solid var(--rule)}
+.karta .imya{font-size:1.18rem;font-weight:600}
+.karta .n{font-size:1.05rem;font-weight:700;color:var(--muted);margin-right:.35rem}
+.karta.malo .imya,.karta.malo .n{color:var(--krasn)}
+.tabl{display:inline-flex;align-items:center;gap:0;padding:.14em .55em;
+  border:1px solid var(--rule);border-radius:999px;background:var(--panel);
+  font-size:.85rem;line-height:1.25;cursor:pointer;color:var(--text);white-space:nowrap}
+.tabl:hover,.tabl:focus-visible{border-color:var(--krasn);background:var(--krasn-fon);
+  color:var(--krasn);outline:none}
+/* Крестик занимает место только когда нужен. */
+.tabl .x{width:0;overflow:hidden;color:var(--krasn);font-size:1rem;line-height:1;
+  transition:width .12s,margin-left .12s}
+.tabl:hover .x,.tabl:focus-visible .x{width:.7em;margin-left:.3em}
+.nikogo{color:var(--krasn);font-size:.95rem}
+.g-В{background:var(--gV-fon);color:var(--gV)}
+.g-Д{background:var(--gD-fon);color:var(--gD)}
+.g-Н{background:var(--gN-fon);color:var(--gN)}
+.chip{padding:.1em .55em;border-radius:6px;font-weight:700;font-size:.95rem}
+
+/* ── сводка внизу: мелко и аккуратно ──────────────────── */
+.niz{margin:2.6rem 0 0;padding:.9rem 1.1rem;border:1px solid var(--rule);border-radius:9px;
+  background:var(--panel);font-size:.92rem;color:var(--muted);display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:.5rem 2.5rem}
+.niz b{color:var(--krasn);font-weight:600}
+.niz .ok{color:var(--accent)}
+#soobshchenie{position:fixed;left:50%;bottom:1.5rem;transform:translateX(-50%);
+  background:var(--accent);color:#fff;padding:.6em 1.3em;border-radius:9px;
+  box-shadow:0 4px 18px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;pointer-events:none}
+#soobshchenie.vidno{opacity:1}
 </style>
 
-<button class="burger" id="burger" aria-label="меню"><span></span><span></span><span></span></button>
-
-<nav class="panel-bok" id="panel">
-  <div class="zag">Спецмат</div>
-  <a href="/">Главная</a>
-  <a href="/raspredelenie">Распределение</a>
-  <a href="/listki">Листки 9 класса</a>
-  <div class="zag">Ещё</div>
-  <a href="/urovni">Три уровня</a>
-  <a href="/listki-8">Листки 8 класса</a>
-</nav>
-
-<main class="holst" id="holst">
+<div class="verh">
   <h1>Распределение</h1>
-  <p class="data" id="data"></p>
+  <span class="pod" id="pod"></span>
+  <button id="skachat">Скачать файлом</button>
+  <button id="sbros">Сбросить правки</button>
+</div>
 
-  <div class="kabpanel" id="kabpanel"></div>
+<!-- 🔴 ВКЛАДКИ СТОЯТ В РАЗМЕТКЕ, А НЕ СОБИРАЮТСЯ ЦИКЛОМ. Порядок владельца
+     виден в самом файле, и его можно прочитать, не запуская страницу. -->
+<div class="tabbar" id="tabbar">
+  <button data-v="shk" class="on">школьникам</button>
+  <button data-v="В">В</button>
+  <button data-v="Д">Д</button>
+  <button data-v="Н">Н</button>
+  <button data-v="prp">преподавателям</button>
+</div>
+<div id="telo"></div>
+<noscript>Школьников и преподавателей рисует браузер — включите JavaScript.</noscript>
+<div id="soobshchenie"></div>
 
-  <div class="tabs">
-    <input type="radio" name="vid" id="t-shk" checked>
-    <input type="radio" name="vid" id="t-prp">
-    <div class="tabbar">
-      <label for="t-shk">Школьнику</label>
-      <label for="t-prp">Преподавателю</label>
-    </div>
-
-    <section class="vid" id="v-shk">
-      <input class="poisk" id="poisk" placeholder="Фамилия" autocomplete="off">
-      <table>
-        <thead><tr><th>Школьник</th><th>Группа</th><th>Принимает</th><th>Кабинет</th></tr></thead>
-        <tbody id="telo-shk"></tbody>
-      </table>
-    </section>
-
-    <section class="vid" id="v-prp"><div id="telo-prp"></div></section>
-  </div>
-</main>
-
+<script id="dannye" type="application/json">/*ДАННЫЕ*/</script>
 <script>
-const burger = document.getElementById('burger');
-const panel  = document.getElementById('panel');
-const holst  = document.getElementById('holst');
-burger.addEventListener('click', () => {
-  panel.classList.toggle('open');
-  holst.classList.toggle('sdvinut');
-});
+"use strict";
 
-let dannye = null, organizator = false;
+/* ══════════════════════════════════════════════════════════════════════
+   ОДИН ШАБЛОН, ДВА РЕЖИМА — ФАЙЛ И СЕРВЕР.
 
-function ekran(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+   Ветвление ровно в ДВУХ местах: `vzyat` — откуда берутся данные, и
+   `zapisat` — куда уезжает правка. Всё остальное — разметка, раскладка,
+   три ступени, таблетки, шапка группы, сводка — общий текст. Разведёшь
+   на две копии — каждую правку придётся чинить дважды; ровно из-за
+   этого страница сайта и отстала от рабочего файла.
 
-function risuyShkolnikov(filtr){
-  const telo = document.getElementById('telo-shk');
-  const f = (filtr || '').trim().toLowerCase();
-  let spisok = dannye.students.filter(s => !f || s.surname.toLowerCase().startsWith(f));
-  // 🔴 ЖДУЩИЕ НАЗНАЧЕНИЯ — НАВЕРХ. Ради них правка сегодня и нужна: в общем списке
-  // из 54 человек они тонут, а это главная работа организатора перед занятием.
-  spisok = [...spisok.filter(s => !s.teacher_id), ...spisok.filter(s => s.teacher_id)];
-  telo.innerHTML = spisok.map(s => {
-    const prep = s.teacher_name
-      ? (organizator ? vybor(s) : ekran(s.teacher_name))
-      : '<span class="net">не назначен</span>';
-    const kab = s.room
-      ? '<span class="kab">' + ekran(s.room) + '</span>' +
-        (s.rukovoditel ? ' <span class="ruk">' + ekran(s.rukovoditel) + '</span>' : '')
-      : '<span class="net">—</span>';
-    const gr = s.gruppa ? '<span class="gr">' + ekran(s.gruppa) + '</span>'
-                        : '<span class="net">—</span>';
-    return '<tr' + (s.teacher_id ? '' : ' class="zhdet"') + '><td><span class="fam">' +
-           ekran(s.surname) + '</span> ' + ekran(s.name) +
-           ' <span class="klass">' + ekran(s.class || '') + '</span></td>' +
-           '<td>' + gr + '</td><td>' + prep + '</td><td>' + kab + '</td></tr>';
-  }).join('');
+   РЕЖИМ ФАЙЛ: данные вморожены сборщиком `veb/sobrat_fajl.py` в
+   `<script id="dannye">`, правка ложится в память браузера, круг
+   замыкает кнопка «Скачать файлом». Сборщик ВЫРЕЗАЕТ серверный блок
+   целиком — поэтому в собранном файле нет ни одного обращения к сети
+   и он работает с диска офлайн.
+
+   РЕЖИМ СЕРВЕР: данные приходят из базы через `/api/view`, правка
+   уезжает POST-ом и страница перечитывает базу — она всегда показывает
+   то, что в базе, а не то, что помнит вкладка.
+   ══════════════════════════════════════════════════════════════════════ */
+
+let NA_SERVERE = true;          /*РЕЖИМ*/
+let vzyat, zapisat;
+
+const SLOT = 1;                 // страница показывает один слот; слоты 1 и 2 сегодня совпадают
+const MALO = 3;                 // «меньше трёх школьников — это очень мало»
+const KODY = ['В','Д','Н'];
+
+let ISHODNOE = null;            // как пришло: нужно кнопке «Сбросить правки»
+let sostoyanie = null;
+let vkladka = 'shk';            // школьникам — ПЕРВАЯ, порядок задан владельцем
+
+const ekran = t => String(t == null ? '' : t)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ── ВЕТВЛЕНИЕ 1 и 2, СЕРВЕРНАЯ ПОЛОВИНА ───────────────────────────── */
+/*РЕЖИМ-СЕРВЕР НАЧАЛО*/
+vzyat = async function(){
+  const otvet = await fetch('/api/view?slot=' + SLOT);
+  if(!otvet.ok) throw new Error('сервер не отдал данные');
+  const v = await otvet.json();
+  // Одна форма состояния на оба режима: дальше по файлу никто не знает,
+  // из базы это пришло или из вмороженного блока.
+  return {
+    data: v.data || '',
+    sobrano: v.sobrano || '',
+    gruppy: v.gruppy || [],
+    prepodavateli: (v.teachers || []).map(t => ({
+      id: t.teacher_id, imya: t.name, gruppa: t.gruppa, aktiven: true})),
+    shkolniki: (v.students || []).map(s => ({
+      id: s.student_id, familiya: s.surname, imya: s.name, klass: s.class,
+      prepodavatel: s.teacher_id, gruppa: s.gruppa}))
+  };
+};
+zapisat = async function(op){
+  let put, telo;
+  if(op.rod === 'shkolnik'){
+    put = '/api/enrollment';
+    telo = {student_id: op.id, slot: SLOT, teacher_id: op.prepodavatel, gruppa: op.gruppa};
+  }else if(op.rod === 'prepodavatel'){
+    put = '/api/prepodavateli';
+    telo = {deystvie: 'gruppa', teacher_id: op.id, gruppa: op.gruppa};
+  }else{
+    put = '/api/kabinety';
+    telo = {gruppa: op.kod, kabinet: op.kabinet};
+  }
+  let ok = false;
+  try{
+    const otvet = await fetch(put, {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(telo)});
+    ok = otvet.ok;
+  }catch(e){ ok = false; }
+  if(!ok) skazat('Не сохранилось — показываю, что в базе');
+  return nachat();              // перечитываем базу: на экране всегда её ответ
+};
+/*РЕЖИМ-СЕРВЕР КОНЕЦ*/
+
+/* ── ВЕТВЛЕНИЕ 1 и 2, ФАЙЛОВАЯ ПОЛОВИНА ────────────────────────────── */
+if(!NA_SERVERE){
+  // Синхронно и без сети: файл читает сам себя.
+  vzyat = function(){ return JSON.parse(document.getElementById('dannye').textContent); };
+  zapisat = function(){ sohranit(); };
 }
 
-function vybor(s){
-  // 🔴 СНАЧАЛА ПРЕПОДАВАТЕЛИ СВОЕЙ ГРУППЫ, потом остальные: 90% правок — внутри
-  // группы, и частый случай обязан быть самым коротким. Пробежаться по всем можно,
-  // но «свои» — первыми. Выбрал чужого — школьник переехал в другую группу и кабинет
-  // сменился сам, потому что кабинет держится группой.
-  const svoi = dannye.teachers.filter(t => t.gruppa && t.gruppa === s.gruppa);
-  const chuzhie = dannye.teachers.filter(t => !t.gruppa || t.gruppa !== s.gruppa);
-  const opt = t => '<option value="' + t.teacher_id + '"' +
-    (t.teacher_id === s.teacher_id ? ' selected' : '') + '>' + ekran(t.name) + '</option>';
-  let opts = '';
-  if (!s.teacher_id) opts += '<option value="" selected>— ждёт назначения —</option>';
-  if (svoi.length) opts += '<optgroup label="группа ' + ekran(s.gruppa) + '">' + svoi.map(opt).join('') + '</optgroup>';
-  const po = {};
-  chuzhie.forEach(t => { (po[t.gruppa || '—'] = po[t.gruppa || '—'] || []).push(t); });
-  Object.keys(po).sort().forEach(g => {
-    opts += '<optgroup label="группа ' + ekran(g) + '">' + po[g].map(opt).join('') + '</optgroup>';
+/* 🔴 КЛЮЧ ПАМЯТИ ПРИВЯЗАН К СБОРКЕ, И ЭТО НЕ МЕЛОЧЬ.
+   Пока ключ был общий, память ПРОШЛОЙ сборки поднималась в НОВОМ файле молча:
+   владелец скачал файл и получил в нём девять детей, расставленных отменённым
+   предзаполнением, — то самое, что он запретил, вернулось невидимо и выглядело
+   как его собственная работа. Теперь новая сборка = новый ключ: старое состояние
+   подняться не может, а тот же файл, открытый повторно, свою память находит. */
+function klyuch(){
+  return 'spetsmat-raspredelenie-' + (ISHODNOE.sobrano || '?')
+       + '-' + ISHODNOE.shkolniki.length + 'x' + ISHODNOE.prepodavateli.length;
+}
+
+/* Память браузера. Файл открыт с диска и сохранить сам себя не может — без этого
+   случайно закрытая вкладка стирает работу молча. */
+function sohranit(){
+  try{
+    localStorage.setItem(klyuch(), JSON.stringify({
+      shkolniki: sostoyanie.shkolniki.map(s => [s.id, s.prepodavatel, s.gruppa]),
+      prepodavateli: sostoyanie.prepodavateli.map(p => [p.id, p.gruppa]),
+      kabinety: sostoyanie.gruppy.map(g => [g.kod, g.kabinet])
+    }));
+  }catch(e){}
+}
+function vosstanovit(){
+  let syroe = null;
+  try{ syroe = localStorage.getItem(klyuch()); }catch(e){ return; }
+  if(!syroe) return;
+  let p; try{ p = JSON.parse(syroe); }catch(e){ return; }
+  const ps = new Map(sostoyanie.shkolniki.map(s => [s.id, s]));
+  (p.shkolniki||[]).forEach(([id,tid,g]) => { const s = ps.get(id);
+    if(s){ s.prepodavatel = tid; if(g !== undefined) s.gruppa = g; } });
+  const pp = new Map(sostoyanie.prepodavateli.map(x => [x.id, x]));
+  (p.prepodavateli||[]).forEach(([id,g]) => { if(pp.has(id)) pp.get(id).gruppa = g; });
+  const pg = new Map(sostoyanie.gruppy.map(g => [g.kod, g]));
+  (p.kabinety||[]).forEach(([k,v]) => { if(pg.has(k)) pg.get(k).kabinet = v; });
+}
+
+const aktivnye = () => sostoyanie.prepodavateli.filter(p => p.aktiven);
+const poId = () => new Map(sostoyanie.prepodavateli.map(p => [p.id, p]));
+
+/* 🔴 ГРУППА ШКОЛЬНИКА: у назначенного — от преподавателя, у снятого — ПОМНИТСЯ.
+   Без памяти снятый ребёнок исчезал с той самой вкладки, на которой его сняли:
+   группу вычисляли из преподавателя, преподавателя не стало — и ребёнок пропал
+   ровно в тот момент, когда его надо кому-то отдать. Поле `gruppa` и есть эта
+   память: там, где ребёнок числится, пока ему не нашли нового принимающего. */
+const gruppaShkolnika = (s, po) => s.prepodavatel === null
+  ? (s.gruppa || null)
+  : ((po.get(s.prepodavatel) || {}).gruppa || null);
+
+function schet(){
+  const m = new Map(aktivnye().map(p => [p.id, 0]));
+  sostoyanie.shkolniki.forEach(s => {
+    if(m.has(s.prepodavatel)) m.set(s.prepodavatel, m.get(s.prepodavatel) + 1);
   });
-  return '<select data-student="' + s.student_id + '">' + opts + '</select>';
+  return m;
 }
 
-function risuyKabinety(){
-  // Три строки: В → кабинет, Д → кабинет, Н → кабинет. Правка отражается везде,
-  // потому что кабинет школьника и преподавателя вычисляются из группы.
-  const po = {};
-  dannye.teachers.forEach(t => { if (t.gruppa && !po[t.gruppa]) po[t.gruppa] = t; });
-  document.getElementById('kabpanel').innerHTML = ['В','Д','Н'].map(g => {
-    const t = po[g] || {};
-    return '<div class="p"><span class="g">' + g + '</span>' +
-      '<span class="s">' + ekran(t.starshij || '') + '</span>' +
-      '<input data-gruppa="' + g + '" value="' + ekran(t.kabinet || '') + '" placeholder="кабинет"></div>';
-  }).join('');
+/* ── отрисовка ────────────────────────────────────────── */
+function narisovat(){
+  const po = poId(), sch = schet();
+
+  document.getElementById('pod').textContent =
+    'на ' + sostoyanie.data + ' · ' + sostoyanie.shkolniki.length + ' школьников · '
+    + aktivnye().length + ' преподавателей';
+
+  document.querySelectorAll('#tabbar button').forEach(b =>
+    b.classList.toggle('on', b.dataset.v === vkladka));
+
+  let html = '', vidimye;
+
+  if(vkladka === 'prp'){
+    html += '<div class="prepy">'
+      + aktivnye().slice().sort((a,b) => a.imya.localeCompare(b.imya,'ru')).map(p => {
+        const n = sch.get(p.id) || 0;
+        return '<div class="prepstroka' + (n < MALO ? ' malo' : '') + '">'
+          + '<span class="imya">' + ekran(p.imya) + '</span>'
+          + '<span class="n">' + n + '</span>'
+          + '<select class="g-' + ekran(p.gruppa) + '" data-p="' + p.id + '">'
+          + KODY.map(k => '<option value="' + k + '"'
+              + (k === p.gruppa ? ' selected' : '') + '>' + k + '</option>').join('')
+          + '</select></div>';
+      }).join('') + '</div>';
+    vidimye = sostoyanie.shkolniki;
+
+  } else if(vkladka === 'shk'){
+    vidimye = sostoyanie.shkolniki;
+    html += '<div class="spisok">' + vidimye.map(s => stroka(s, po, true)).join('') + '</div>';
+
+  } else {
+    const g = sostoyanie.gruppy.find(x => x.kod === vkladka);
+    const vsego = sostoyanie.shkolniki.filter(s => gruppaShkolnika(s, po) === g.kod);
+    const zhdut = vsego.filter(s => s.prepodavatel === null).length;
+    html += '<div class="shapka">'
+      + '<span class="kod chip g-' + g.kod + '">Группа ' + g.kod + '</span>'
+      + '<span class="pole">старший <b>' + ekran(g.starshij) + '</b></span>'
+      + '<span class="pole">кабинет <input id="kab" value="' + ekran(g.kabinet || '')
+        + '" placeholder="—"></span>'
+      + '<span class="pole schet"><b>' + vsego.length + '</b> школьников'
+      + (zhdut ? ' · <b class="zhdut">' + zhdut + '</b> ждут' : '') + '</span></div>';
+
+    const svoi = aktivnye().filter(p => p.gruppa === g.kod)
+      .sort((a,b) => a.imya.localeCompare(b.imya,'ru'));
+
+    // Дети без группы здесь не показываются: группы у них нет, и приписывать её нельзя.
+    vidimye = sostoyanie.shkolniki.filter(s => gruppaShkolnika(s, po) === g.kod);
+
+    html += '<div class="troe">'
+      + '<div class="deti">' + vidimye.map(s => stroka(s, po, false)).join('') + '</div>'
+      + '<div>'
+      + svoi.map(p => {
+          const deti = sostoyanie.shkolniki.filter(s => s.prepodavatel === p.id);
+          return '<div class="karta' + (deti.length < MALO ? ' malo' : '') + '">'
+            + '<span class="imya">' + ekran(p.imya) + '</span>'
+            + '<span class="n">' + deti.length + '</span>'
+            + (deti.length
+                ? deti.map(s => '<button class="tabl" data-snyat="' + s.id + '" title="снять">'
+                    + ekran(s.familiya) + '<span class="x">×</span></button>').join('')
+                : '<span class="nikogo">никого</span>')
+            + '</div>';
+        }).join('')
+      + '</div></div>';
+  }
+
+  html += svodka(vidimye, po, sch);
+  document.getElementById('telo').innerHTML = html;
 }
 
-function risuyPrepodavatelej(){
-  const telo = document.getElementById('telo-prp');
-  telo.innerHTML = '<table><thead><tr><th>Преподаватель</th><th>Группа</th>' +
-    '<th>Школьники</th><th>#</th><th>Кабинет</th></tr></thead><tbody>' +
-    dannye.teachers.map(t =>
-      '<tr><td class="pr"><span class="fam">' + ekran(t.name) + '</span></td>' +
-      '<td>' + (t.gruppa ? '<span class="gr">' + ekran(t.gruppa) + '</span>' : '') + '</td>' +
-      '<td class="deti">' + ekran(t.students.map(s => s.surname + ' ' + s.name).join(', ')) + '</td>' +
-      '<td class="ch">' + t.load + '</td>' +
-      '<td>' + (t.kabinet ? '<span class="kab">' + ekran(t.kabinet) + '</span>' : '') + '</td></tr>'
-    ).join('') + '</tbody></table>';
+function stroka(s, po, pokazatGruppu){
+  const g = gruppaShkolnika(s, po);
+  return '<div class="stroka' + (s.prepodavatel === null ? ' net' : '') + '">'
+    + '<span class="kto">' + (pokazatGruppu && g
+        ? '<span class="chip g-' + g + '">' + g + '</span> ' : '')
+    + '<b>' + ekran(s.familiya) + '</b> ' + ekran(s.imya) + '</span>'
+    + '<span class="kl">' + ekran((s.klass || '').slice(-1)) + '</span>'
+    + spisok(s, g) + '</div>';
 }
 
-document.getElementById('poisk').addEventListener('input', e => risuyShkolnikov(e.target.value));
+/* Свои первыми: 90 % правок — внутри группы, чужие не должны попадаться раньше своих. */
+function spisok(s, g){
+  const svoi = [], chuzhie = [];
+  aktivnye().forEach(p => (p.gruppa === g ? svoi : chuzhie).push(p));
+  const sort = a => a.sort((x,y) => x.imya.localeCompare(y.imya,'ru'));
+  const opt = p => '<option value="' + p.id + '"'
+    + (p.id === s.prepodavatel ? ' selected' : '') + '>' + ekran(p.imya) + '</option>';
+  /* 🔴 ДВЕ РАЗНЫЕ СТУПЕНИ, которые раньше были одной строкой «не назначен».
+     Пока они совпадали, ребёнок бывшего преподавателя навсегда оставался в его
+     группе: убрать его оттуда было нечем, и группа В держала Савкова, которого
+     там нет. Теперь «нигде» и «в группе, но без преподавателя» — разные состояния. */
+  let h = '<select data-s="' + s.id + '"><option value=""'
+    + (s.prepodavatel === null && !s.gruppa ? ' selected' : '') + '>— нигде</option>'
+    + KODY.map(k => '<option value="g:' + k + '"'
+        + (s.prepodavatel === null && s.gruppa === k ? ' selected' : '')
+        + '>группа ' + k + '</option>').join('');
+  if(svoi.length) h += '<optgroup label="группа ' + ekran(g) + '">'
+    + sort(svoi).map(opt).join('') + '</optgroup>';
+  const pog = {};
+  sort(chuzhie).forEach(p => { (pog[p.gruppa] ||= []).push(p); });
+  KODY.filter(k => pog[k]).forEach(k => {
+    h += '<optgroup label="группа ' + k + '">' + pog[k].map(opt).join('') + '</optgroup>';
+  });
+  return h + '</select>';
+}
 
-document.addEventListener('change', async e => {
-  const kab = e.target.closest('input[data-gruppa]');
-  if (kab) {
-    const otvet = await fetch('/api/kabinety', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({gruppa: kab.dataset.gruppa, kabinet: kab.value.trim()})
-    });
-    if (otvet.ok) zagruzi(); else kab.style.borderColor = 'var(--warm)';
+/* Сводка внизу, мелко, и она РАЗНАЯ на разных вкладках. */
+function svodka(vidimye, po, sch){
+  const net = vidimye.filter(s => s.prepodavatel === null);
+  // Две ступени считаются ОТДЕЛЬНО: «ждёт преподавателя внутри группы» и «нигде»
+  // требуют разных действий, и слипшись в одно число они это скрывали.
+  const nigde = sostoyanie.shkolniki.filter(s => s.prepodavatel === null && !s.gruppa);
+  const prepy = (vkladka === 'shk' || vkladka === 'prp')
+    ? aktivnye() : aktivnye().filter(p => p.gruppa === vkladka);
+  const malo = prepy.filter(p => (sch.get(p.id) || 0) < MALO);
+  return '<div class="niz"><div>'
+    + (net.length
+        ? 'Без преподавателя — <b>' + net.length + '</b>: '
+          + net.map(s => ekran(s.familiya) + ' ' + ekran(s.imya)).join(', ')
+        : '<span class="ok">Все назначены.</span>')
+    + '</div><div>'
+    + (nigde.length
+        ? 'Вне групп — <b>' + nigde.length + '</b>: '
+          + nigde.map(s => ekran(s.familiya) + ' ' + ekran(s.imya)).join(', ')
+        : '<span class="ok">Вне групп никого.</span>')
+    + '</div><div>'
+    + (malo.length
+        ? 'Меньше трёх школьников — <b>' + malo.length + '</b>: '
+          + malo.map(p => ekran(p.imya) + ' (' + (sch.get(p.id)||0) + ')').join(', ')
+        : '<span class="ok">У всех не меньше трёх.</span>')
+    + '</div></div>';
+}
+
+/* ── правки ───────────────────────────────────────────── */
+document.addEventListener('change', e => {
+  const ss = e.target.closest('select[data-s]');
+  if(ss){
+    const s = sostoyanie.shkolniki.find(x => x.id === +ss.dataset.s);
+    const v = ss.value;
+    if(v === ''){                       // нигде: выпадает со всех вкладок групп
+      s.prepodavatel = null; s.gruppa = null;
+    } else if(v.startsWith('g:')){      // в группе, преподаватель ещё не выбран
+      s.prepodavatel = null; s.gruppa = v.slice(2);
+    } else {                            // у преподавателя — группа его
+      s.prepodavatel = +v;
+      s.gruppa = (poId().get(s.prepodavatel) || {}).gruppa || null;
+    }
+    narisovat();
+    zapisat({rod:'shkolnik', id:s.id, prepodavatel:s.prepodavatel, gruppa:s.gruppa});
     return;
   }
-  const sel = e.target.closest('select[data-student]');
-  if (!sel) return;
-  const otvet = await fetch('/api/enrollment', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({student_id:+sel.dataset.student, teacher_id:+sel.value, slot: dannye.slot})
-  });
-  if (otvet.ok) zagruzi(); else sel.style.borderColor = 'var(--warm)';
+  const sp = e.target.closest('select[data-p]');
+  if(sp){
+    // Преподаватель переехал в другую группу — его школьники едут с ним, потому что
+    // ребёнок закреплён за ЧЕЛОВЕКОМ, а группу мы из человека и вычисляем.
+    const p = sostoyanie.prepodavateli.find(x => x.id === +sp.dataset.p);
+    p.gruppa = sp.value;
+    narisovat();
+    zapisat({rod:'prepodavatel', id:p.id, gruppa:p.gruppa});
+    return;
+  }
+  const kab = e.target.closest('#kab');
+  if(kab){
+    const g = sostoyanie.gruppy.find(x => x.kod === vkladka);
+    if(g){
+      g.kabinet = kab.value.trim();
+      narisovat();
+      zapisat({rod:'kabinet', kod:g.kod, kabinet:g.kabinet});
+    }
+  }
 });
 
-async function zagruzi(){
-  const r = await fetch('/api/view?slot=1');
-  dannye = await r.json();
-  // 🔴 Правка открыта ВСЕМ по ссылке — решение владельца: строку меняет несколько
-  // человек, и пароль стоял на критическом пути. Кука больше не решает, показывать ли
-  // выбор; вернём пароль — вернётся и условие.
-  organizator = true;
-  document.getElementById('data').textContent =
-    'на ' + new Date().toLocaleDateString('ru-RU', {day:'numeric', month:'long'});
-  risuyKabinety();
-  risuyShkolnikov(document.getElementById('poisk').value);
-  risuyPrepodavatelej();
+document.addEventListener('click', e => {
+  const t = e.target.closest('#tabbar button');
+  if(t){ vkladka = t.dataset.v; narisovat(); return; }
+
+  // Крестик: снять школьника с преподавателя. Он НЕ исчезает — остаётся в своей
+  // группе красным, готовым уйти к тому, кого разгружаем в пользу.
+  const x = e.target.closest('button[data-snyat]');
+  if(x){
+    const s = sostoyanie.shkolniki.find(y => y.id === +x.dataset.snyat);
+    s.gruppa = gruppaShkolnika(s, poId());   // группу помним — ступень «без преподавателя»
+    s.prepodavatel = null;
+    narisovat();
+    zapisat({rod:'shkolnik', id:s.id, prepodavatel:null, gruppa:s.gruppa});
+  }
+});
+
+function skazat(text){
+  const el = document.getElementById('soobshchenie');
+  el.textContent = text; el.classList.add('vidno');
+  setTimeout(() => el.classList.remove('vidno'), 2600);
 }
-zagruzi();
+
+/* Выгрузка отдаёт НОВЫЙ самодостаточный файл: на каждом шаге круга ездит один файл. */
+document.getElementById('skachat').addEventListener('click', () => {
+  document.getElementById('dannye').textContent = JSON.stringify(sostoyanie);
+  document.getElementById('telo').innerHTML = '';
+  const fajl = '<!doctype html>\n<html lang="ru">' + document.documentElement.innerHTML + '</html>';
+  narisovat();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([fajl], {type:'text/html;charset=utf-8'}));
+  a.download = 'raspredelenie-' + new Date().toISOString().slice(0,10) + '.html';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  skazat('Файл скачан — его и пересылайте');
+});
+
+document.getElementById('sbros').addEventListener('click', () => {
+  if(!window.confirm('Вернуть распределение к тому, как оно пришло? Правки пропадут.')) return;
+  try{ localStorage.removeItem(klyuch()); }catch(e){}
+  sostoyanie = JSON.parse(JSON.stringify(ISHODNOE));
+  narisovat(); skazat('Вернул как было');
+});
+
+function prinyat(d){
+  if(ISHODNOE === null) ISHODNOE = JSON.parse(JSON.stringify(d));
+  sostoyanie = d;
+  if(!NA_SERVERE) vosstanovit();
+  narisovat();
+}
+
+function nachat(){
+  /*РЕЖИМ-СЕРВЕР НАЧАЛО*/
+  if(NA_SERVERE){
+    document.getElementById('skachat').hidden = true;   // сервер сам себе хранилище
+    document.getElementById('sbros').hidden = true;
+    return Promise.resolve(vzyat()).then(prinyat,
+      () => skazat('Сервер не ответил — обновите страницу'));
+  }
+  /*РЕЖИМ-СЕРВЕР КОНЕЦ*/
+  prinyat(vzyat());              // файл читает сам себя, синхронно
+}
+
+nachat();
 </script>
+</html>
