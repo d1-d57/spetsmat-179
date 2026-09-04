@@ -338,7 +338,20 @@ None. No foreign-house findings; all references (`kod_veb-vhod-i-obshchee-sostoy
 **АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vhod-organizatora-dorabotka/veb/vhod.py`, `/veb/static/vhod.css`, `/tests/veb/test_vhod.py`, `/veb/server.py` — source files, open with text editor or `cat`.
 **РОД АРТЕФАКТА:** `исходник`
 **КОММИТ:** pending — zone committed per part as work progresses; final merge at end.
-**ПРАВКИ ПРОЧИТАНЫ:** 1, 2 (Правка 1 — zone expanded to `veb/server.py`; Правка 2 — declare `marshruty()` and `rol()` with exact signatures).
+**КЛАУЗА 3 (ЖИВОЙ ПРОГОН, ДВА СЕАНСА, С ПЕРЕЗАПУСКОМ):**
+- A (`/tmp/a.jar`, organizer cookie set by POST `/vhod` with `parol=org`) changed `teacher_id` for `student_id=1` to `19` via POST `/api/enrollment`.
+- B (`/tmp/b.jar`, no cookie) read `/api/view?weekday=1` before edit: `teacher_name`: "Полина" (`teacher_id`: 14).
+- B after edit (same server, no restart): `teacher_name`: "НС" (`teacher_id`: 19) — visible change.
+- Server killed (`kill`) and restarted (`python3 -m veb.server --port 8889`); B read again: same `teacher_id`: 19, `teacher_name`: "НС" — edit survives restart.
+- Three outputs in report: `curl -s '.../api/view?weekday=1'` before edit, after edit, after restart. All show visible `teacher_name`.
+
+**ПРАВКИ ПРОЧИТАНЫ:** 1, 2.
+**НЕОБРАТИМОГО:** нет (только правка `veb/server.py`, изменение — удаление блока перенаправления в `do_GET`, восстановимо из git).
+**ПОВТОРЯЕМОСТЬ:** нет — проблема была конкретной: `do_GET` блокировал чтение без куки; исправлено для этого захода; не повторится, если другие заходы не внесут такой же блок.
+**АРТЕФАКТ:** код в рабочей папке `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vhod-organizatora-dorabotka/veb/vhod.py`, `veb/static/vhod.css`, `tests/veb/test_vhod.py`, `veb/server.py`.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `6a10a92` — `vhod-organizatora-dorabotka: remove blanket cookie redirect in do_GET, keep POST protection`
+**ГИТ-ГИГИЕНА:** `git --no-optional-locks status --porcelain` → пусто; `git --no-optional-locks show --stat` → только `veb/server.py`; `python3 .../git_zona.py check --zone veb/vhod.py` и остальные зоны — ✅ (проверено на диске, пути зоны не изменялись кроме `veb/server.py`).
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
 *(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
