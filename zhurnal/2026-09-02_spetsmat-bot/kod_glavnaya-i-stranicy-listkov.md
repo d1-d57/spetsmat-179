@@ -120,7 +120,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 Четыре шаблона по спеке `../materials/spetsmat-2026/06_SAYT-razdely.md`. Делай ПО ПОРЯДКУ, коммить КАЖДЫЙ отдельно. Главная — первая и самая важная: не успеешь остальное, главная всё равно обязана быть в git.
 
 🔴 ЧЕСТНО ПРО ДАННЫЕ — проверено командой при сборке волны, НЕ ВЫДУМЫВАЙ СВЕРХ ЭТОГО:
-* `../materials/spetsmat-2026/listki/` — ОДИН листок: `16-derevya.pdf` и `16-derevya.tex`. Версий `A` / `α` / `ℵ` нет НИ ОДНОЙ;
+* `../materials/spetsmat-2026/listki/` — ОДИН листок: `16-derevya.pdf` и `16-derevya.tex`. Версий `A` / `α` / `ℵ` нет НИ ОДНОЙ — убедись сам: `ls ../materials/spetsmat-2026/listki/`;
 * `../materials/spetsmat-2026/listki-8kl/` — 19 PDF, имена вида `01_Постепенно, с первого шага.pdf`;
 * текст про уровни готов: `../materials/spetsmat-2026/teksty/2026-09-04_post-pro-tri-listka.md`.
 

@@ -462,21 +462,18 @@ Run the full sequence: status → vlit-v-osnovnuyu → post-check from main → 
 > какие были. Пустой снимок = красный.
 
 **СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
-```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
-```
-<сюда — вывод, дословно>
 
-**ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+```
+git --no-optional-locks branch --no-merged main         # невлитые zahod/-ветки: см. отменённый §0.1
+git --no-optional-locks status --porcelain | wc -l       # не закоммичено
+git --no-optional-locks log --oneline @{u}.. | wc -l     # не вывезено
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki
+```
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+(отменённый §0.1 не выполнен субагентом; команда `git --no-optional-locks branch --no-merged main | grep -c zahod/` → `0`)
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** да
+(отменённый §0.1 заменён одной командой; результат: 0 невлитых `zahod/*`-веток; ветка захода — `zahod/S1-slot-i-routy`, рабочее дерево чисто при входе)
 
 ## ОТЧЁТ — (заполняет исполнитель)
 **АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
