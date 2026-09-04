@@ -88,10 +88,10 @@ class OverlappingHistory(EnrollmentError):
     """
 
 
-class UnknownWeekday(EnrollmentError):
-    """A weekday outside ``config.WEEKDAY_MIN..config.WEEKDAY_MAX``.
+class UnknownSlot(EnrollmentError):
+    """A slot outside ``config.WEEKDAY_MIN..config.WEEKDAY_MAX``.
 
-    Monday is 1, ISO-8601.  A zero-based caller is the whole reason this exists: with
+    Monday = 1, ISO-8601.  A zero-based caller is the whole reason this exists: with
     Monday = 0 every lookup silently shifts by one day and answers with the wrong
     teacher rather than with nothing.
     """
@@ -177,15 +177,15 @@ def lesson_day_of(moment: str) -> str:
     return parse_iso(moment).astimezone(ZoneInfo(config.TZ_DISPLAY)).date().isoformat()
 
 
-def check_weekday(weekday: int) -> int:
-    if not isinstance(weekday, int) or isinstance(weekday, bool):
-        raise UnknownWeekday("weekday must be an int, got %r" % (weekday,))
-    if not config.WEEKDAY_MIN <= weekday <= config.WEEKDAY_MAX:
-        raise UnknownWeekday(
-            "weekday %r is outside ISO %d..%d (Monday = %d)"
-            % (weekday, config.WEEKDAY_MIN, config.WEEKDAY_MAX, config.WEEKDAY_MIN)
+def check_slot(slot: int) -> int:
+    if not isinstance(slot, int) or isinstance(slot, bool):
+        raise UnknownSlot("slot must be an int, got %r" % (slot,))
+    if not config.WEEKDAY_MIN <= slot <= config.WEEKDAY_MAX:
+        raise UnknownSlot(
+            "slot %r is outside ISO %d..%d (Monday = %d)"
+            % (slot, config.WEEKDAY_MIN, config.WEEKDAY_MAX, config.WEEKDAY_MIN)
         )
-    return weekday
+    return slot
 
 
 # ------------------------------------------------------------------------ the seam
@@ -209,16 +209,16 @@ class EnrollmentPort(Protocol):
         implement it as a no-op.
         """
 
-    def open_row(self, student_id: int, weekday: int) -> Optional[Enrollment]:
-        """The still-open interval for this (student, lesson day), or None."""
+    def open_row(self, student_id: int, slot: int) -> Optional[Enrollment]:
+        """The still-open interval for this (student, slot), or None."""
 
     def rows_valid_on(
         self,
         day: str,
-        weekday: int,
+        slot: int,
         student_ids: Optional[Sequence[int]] = None,
     ) -> list:
-        """Every interval covering ``day`` on that lesson day: ``[valid_from, valid_to)``.
+        """Every interval covering ``day`` in that slot: ``[valid_from, valid_to)``.
 
         Bulk on purpose.  The readiness criterion resolves 112 pairs at once and the room
         screen that stands on this position resolves a whole room; a port shaped for one
@@ -231,7 +231,7 @@ class EnrollmentPort(Protocol):
         student_id: int,
         teacher_id: int,
         room: str,
-        weekday: int,
+        slot: int,
         valid_from: str,
         valid_to: str = config.OPEN_END_DATE,
     ) -> Enrollment:
@@ -240,15 +240,15 @@ class EnrollmentPort(Protocol):
     def close(self, enrollment_id: int, *, valid_to: str) -> Enrollment:
         """Move ``valid_to`` on one row.  The ONLY mutation this port offers."""
 
-    def history(self, student_id: int, weekday: Optional[int] = None) -> list:
-        """Every interval of one student, oldest first; one lesson day if asked."""
+    def history(self, student_id: int, slot: Optional[int] = None) -> list:
+        """Every interval of one student, oldest first; one slot if asked."""
 
 
 # ---------------------------------------------------------------------- the answers
 
 @dataclass(frozen=True)
 class Assignment:
-    """The answer to ``(student, day) -> who, where``.
+    """The answer to ``(student, slot) -> who, where``.
 
     It carries the interval it came from, because the interesting follow-up question is
     always "since when" — and because an answer that cannot say which row produced it
@@ -258,8 +258,8 @@ class Assignment:
     student_id: int
     teacher_id: int
     room: str
-    #: ISO weekday of ``day``, Monday = 1.  Part of the key, not a decoration.
-    weekday: int
+    #: Slot number (1..7).  Part of the key.
+    slot: int
     #: The day that was asked about.
     day: str
     valid_from: str
@@ -302,25 +302,25 @@ class EnrollmentService:
         """Who worked with this student on this calendar day, and where.
 
         ``None`` is a legitimate answer and is NOT an error: it means the student had no
-        lesson on that weekday, or the day lies outside every interval recorded for him
+        lesson on that day, or the day lies outside every interval recorded for him
         (before he arrived, after he left).  Callers distinguish "no lesson" from "no
         such student" by asking the catalogue, which is not this service's business.
         """
-        weekday = weekday_of(day)
-        rows = self._rows.rows_valid_on(as_day(day), weekday, [student_id])
+        slot = weekday_of(day)
+        rows = self._rows.rows_valid_on(as_day(day), slot, [student_id])
         if not rows:
             return None
-        # The schema forbids two intervals covering one (student, weekday, day): the
+        # The schema forbids two intervals covering one (student, slot, day): the
         # partial unique index covers the open pair and the triggers cover the closed
         # ones.  If two ever arrive the guard has been bypassed, and answering with an
         # arbitrary one of them would hide that -- so it is said out loud.
         if len(rows) > 1:
             raise OverlappingHistory(
-                "student %s has %d intervals covering %s (weekday %d): the schema's "
+                "student %s has %d intervals covering %s (slot %d): the schema's "
                 "overlap guard was bypassed and no single answer is honest"
-                % (student_id, len(rows), day, weekday)
+                % (student_id, len(rows), day, slot)
             )
-        return self._as_assignment(rows[0], day, weekday)
+        return self._as_assignment(rows[0], day, slot)
 
     def teacher_at(self, student_id: int, moment: str) -> Optional[Assignment]:
         """Who worked with this student at the instant a mark was made.
@@ -334,44 +334,44 @@ class EnrollmentService:
     def resolve_many(self, student_ids: Iterable[int], day: str) -> dict:
         """``{student_id: Assignment or None}`` for every student asked about, in ONE read.
 
-        Students with no lesson on that weekday are present with ``None`` rather than
+        Students with no lesson on that day are present with ``None`` rather than
         absent: a caller counting coverage must be able to tell "resolved to nobody" from
         "was never asked", and a dict that silently drops the misses makes
         ``len(resolved)`` look like a full house.
         """
         asked = list(dict.fromkeys(student_ids))
-        weekday = weekday_of(day)
+        slot = weekday_of(day)
         day = as_day(day)
         found = {}
         if asked:
-            for row in self._rows.rows_valid_on(day, weekday, asked):
+            for row in self._rows.rows_valid_on(day, slot, asked):
                 if row.student_id in found:
                     raise OverlappingHistory(
-                        "student %s has more than one interval covering %s (weekday %d)"
-                        % (row.student_id, day, weekday)
+                        "student %s has more than one interval covering %s (slot %d)"
+                        % (row.student_id, day, slot)
                     )
-                found[row.student_id] = self._as_assignment(row, day, weekday)
+                found[row.student_id] = self._as_assignment(row, day, slot)
         return {student_id: found.get(student_id) for student_id in asked}
 
-    def history_of(self, student_id: int, weekday: Optional[int] = None) -> list:
+    def history_of(self, student_id: int, slot: Optional[int] = None) -> list:
         """Every interval ever recorded for this student, oldest first.
 
         This is the audit answer, and it is the reason a move is not an update: the row
         that said "teacher A from September" is still here after the move to B, saying
         the same thing about the same September.
         """
-        if weekday is not None:
-            check_weekday(weekday)
-        return self._rows.history(student_id, weekday)
+        if slot is not None:
+            check_slot(slot)
+        return self._rows.history(student_id, slot)
 
     def lesson_days_of(self, student_id: int) -> list:
-        """The ISO weekdays this student currently attends, ascending.
+        """The slots this student currently attends, ascending.
 
-        Read off the OPEN rows: a weekday whose interval has been closed and not
-        reopened is a day the student no longer comes.
+        Read off the OPEN rows: a slot whose interval has been closed and not
+        reopened is a slot the student no longer attends.
         """
         return sorted(
-            row.weekday
+            row.slot
             for row in self._rows.history(student_id)
             if row.valid_to == config.OPEN_END_DATE
         )
@@ -384,10 +384,10 @@ class EnrollmentService:
         teacher_id: int,
         *,
         room: str,
-        weekday: int,
+        slot: int,
         valid_from: str,
     ) -> Enrollment:
-        """Open the FIRST interval for this (student, lesson day).
+        """Open the FIRST interval for this (student, slot).
 
         Refuses when an open interval already stands: what that caller wants is ``move``,
         and the difference between the two is the whole subject of this position.  A
@@ -395,21 +395,21 @@ class EnrollmentService:
         assigned again here rather than moved — and the schema's overlap trigger is what
         checks that the new interval does not reach back into the old one.
         """
-        check_weekday(weekday)
+        check_slot(slot)
         valid_from = as_start_day(valid_from)
         with self._rows.transaction():
-            standing = self._rows.open_row(student_id, weekday)
+            standing = self._rows.open_row(student_id, slot)
             if standing is not None:
                 raise AlreadyEnrolled(
-                    "student %s already has an open row on weekday %d (teacher %s since "
+                    "student %s already has an open row in slot %d (teacher %s since "
                     "%s): use move(), which keeps the history"
-                    % (student_id, weekday, standing.teacher_id, standing.valid_from)
+                    % (student_id, slot, standing.teacher_id, standing.valid_from)
                 )
             return self._insert(
                 student_id=student_id,
                 teacher_id=teacher_id,
                 room=room,
-                weekday=weekday,
+                slot=slot,
                 valid_from=valid_from,
             )
 
@@ -417,12 +417,12 @@ class EnrollmentService:
         self,
         student_id: int,
         *,
-        weekday: int,
+        slot: int,
         to_teacher_id: int,
         effective_from: str,
         room: Optional[str] = None,
     ) -> Move:
-        """Move a student to another teacher on one lesson day, from ``effective_from``.
+        """Move a student to another teacher in one slot, from ``effective_from``.
 
         Two writes and no third: the open interval is closed AT ``effective_from`` and a
         new one is opened FROM ``effective_from``.  Under half-open intervals those two
@@ -440,15 +440,15 @@ class EnrollmentService:
         teacher's group normally passes that teacher's room, and a caller who is only
         correcting the room passes it with the same teacher.
         """
-        check_weekday(weekday)
+        check_slot(slot)
         effective_from = as_start_day(effective_from)
         with self._rows.transaction():
-            standing = self._rows.open_row(student_id, weekday)
+            standing = self._rows.open_row(student_id, slot)
             if standing is None:
                 raise NotEnrolled(
-                    "student %s has no open row on weekday %d: there is nothing to move, "
+                    "student %s has no open row in slot %d: there is nothing to move, "
                     "and creating one here would turn a correction into an enrolment"
-                    % (student_id, weekday)
+                    % (student_id, slot)
                 )
             if effective_from <= standing.valid_from:
                 raise MoveNotForward(
@@ -459,21 +459,21 @@ class EnrollmentService:
             room = standing.room if room is None else room
             if (to_teacher_id, room) == (standing.teacher_id, standing.room):
                 raise MoveChangesNothing(
-                    "student %s is already with teacher %s in room %s on weekday %d: "
+                    "student %s is already with teacher %s in room %s in slot %d: "
                     "splitting the interval would make one fact answer as two"
-                    % (student_id, to_teacher_id, room, weekday)
+                    % (student_id, to_teacher_id, room, slot)
                 )
             closed = self._rows.close(standing.id, valid_to=effective_from)
             opened = self._insert(
                 student_id=student_id,
                 teacher_id=to_teacher_id,
                 room=room,
-                weekday=weekday,
+                slot=slot,
                 valid_from=effective_from,
             )
             return Move(closed=closed, opened=opened)
 
-    def end(self, student_id: int, *, weekday: int, effective_from: str) -> Enrollment:
+    def end(self, student_id: int, *, slot: int, effective_from: str) -> Enrollment:
         """Close the open interval and open no successor: the student stopped attending.
 
         Гамаюнова left after sheet 6 and no row should claim she sat with anybody in
@@ -481,14 +481,14 @@ class EnrollmentService:
         marks she made in October would lose their teacher — so the interval is closed,
         not removed.
         """
-        check_weekday(weekday)
+        check_slot(slot)
         effective_from = as_start_day(effective_from)
         with self._rows.transaction():
-            standing = self._rows.open_row(student_id, weekday)
+            standing = self._rows.open_row(student_id, slot)
             if standing is None:
                 raise NotEnrolled(
-                    "student %s has no open row on weekday %d: nothing to close"
-                    % (student_id, weekday)
+                    "student %s has no open row in slot %d: nothing to close"
+                    % (student_id, slot)
                 )
             if effective_from <= standing.valid_from:
                 raise MoveNotForward(
@@ -508,12 +508,12 @@ class EnrollmentService:
         return self._rows.insert(**row)
 
     @staticmethod
-    def _as_assignment(row: Enrollment, day: str, weekday: int) -> Assignment:
+    def _as_assignment(row: Enrollment, day: str, slot: int) -> Assignment:
         return Assignment(
             student_id=row.student_id,
             teacher_id=row.teacher_id,
             room=row.room,
-            weekday=weekday,
+            slot=slot,
             day=day,
             valid_from=row.valid_from,
             valid_to=row.valid_to,

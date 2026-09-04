@@ -67,6 +67,11 @@ PORT_DEFAULT = 8765
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
+MATERIALS_DIR = Path("/Users/ivanyakovlev/Documents/GitHub/materials/spetsmat-2026")
+
+GLAVNAYA_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\x93\xd0\xbb\xd0\xb0\xd0\xb2\xd0\xbd\xd0\xb0\xd1\x8f</title></head><body><p>\xd0\xa1\xd1\x82\xd1\x80\xd0\xb0\xd0\xbd\xd0\xb8\xd1\x86\xd0\xb0 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
+LISTKI_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\x9b\xd0\xb8\xd1\x81\xd1\x82\xd0\xba\xd0\xb8</title></head><body><p>\xd0\x9b\xd0\xb8\xd1\x81\xd1\x82\xd0\xba\xd0\xb8 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
+UROVNI_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\xa3\xd1\x80\xd0\xbe\xd0\xb2\xd0\xbd\xd0\xb8</title></head><body><p>\xd0\xa2\xd0\xb5\xd0\xba\xd1\x81\xd1\x82 \xd0\xbf\xd1\x80\xd0\xbe \xd1\x83\xd1\x80\xd0\xbe\xd0\xb2\xd0\xbd\xd0\xb8 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
 
 
 def _static_content_type(path: str) -> str:
@@ -243,6 +248,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        if path.startswith("/materials/"):
+            rel = path[len("/materials/"):].lstrip("/")
+            if ".." in rel.split("/"):
+                self._send_json(404, {"error": "not found"})
+                return
+            target = (MATERIALS_DIR / rel).resolve()
+            try:
+                target.relative_to(MATERIALS_DIR.resolve())
+            except Value:
+                self._send_json(404, {"error": "not found"})
+                return
+            if not target.is_file():
+                self._send_json(404, {"error": "not found"})
+                return
+            body = target.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/pdf" if target.suffix == ".pdf" else "application/octet-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path.startswith("/static/"):
             _serve_static(self, path)
             return
@@ -255,8 +281,39 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         if path == "/":
+            glavnaya = TEMPLATES_DIR / "glavnaya.html"
+            if glavnaya.is_file():
+                self._send_html(200, glavnaya.read_bytes())
+            else:
+                self._send_html(200, GLAVNAYA_STUB)
+            return
+        if path == "/raspredelenie":
             index = (TEMPLATES_DIR / "index.html").read_bytes()
             self._send_html(200, index)
+            return
+        if path == "/listki":
+            listki_dir = MATERIALS_DIR / "listki"
+            if listki_dir.is_dir():
+                files = sorted(f.name for f in listki_dir.iterdir() if f.is_file() and f.suffix == ".pdf")
+                self._send_json(200, {"listki": [{"name": n, "url": f"/materials/listki/{n}"} for n in files]})
+            else:
+                self._send_json(200, {"listki": []})
+            return
+        if path == "/listki-8":
+            listki8_dir = MATERIALS_DIR / "listki-8kl"
+            if listki8_dir.is_dir():
+                files = sorted(f.name for f in listki8_dir.iterdir() if f.is_file() and f.suffix == ".pdf")
+                self._send_json(200, {"listki": [{"name": n, "url": f"/materials/listki-8kl/{n}"} for n in files]})
+            else:
+                self._send_json(200, {"listki": []})
+            return
+        if path == "/urovni":
+            urovni_file = MATERIALS_DIR / "teksty" / "2026-09-04_post-pro-tri-listka.md"
+            if urovni_file.is_file():
+                text = urovni_file.read_text(encoding="utf-8")
+                self._send_json(200, {"text": text})
+            else:
+                self._send_json(200, {"text": ""})
             return
         if path == "/api/teachers":
             self._send_json(200, _all_teachers(self._connection()))

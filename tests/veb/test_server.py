@@ -102,7 +102,7 @@ def _http_post(url: str, payload: dict) -> tuple[int, bytes]:
 
 def test_get_root_returns_html(running_server):
     base, _ = running_server
-    status, body = _http_get(base + "/")
+    status, body = _http_get(base + "/raspredelenie")
     assert status == 200
     assert b"<!doctype html>" in body.lower() or b"<html" in body.lower()
     assert b"\xd0\xa8\xd0\xba\xd0\xbe\xd0\xbb\xd1\x8c\xd0\xbd\xd0\xb8\xd0\xba" in body  # «Школьники»

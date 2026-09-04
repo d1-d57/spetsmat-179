@@ -197,16 +197,15 @@ class Cell:
 
 @dataclass(frozen=True)
 class Enrollment:
-    """Who teaches this student on this lesson day, over the half-open interval
+    """Who teaches this student in this slot, over the half-open interval
     ``[valid_from, valid_to)``.  The open row carries ``config.OPEN_END_DATE``."""
 
     id: int
     student_id: int
     teacher_id: int
     room: str
-    #: ISO-8601 weekday, Monday = 1.  Part of the key: the same student may have one
-    #: teacher on Monday and another on Thursday.
-    weekday: int
+    #: Slot number (1..7).  Part of the key: the same student may attend two slots.
+    slot: int
     valid_from: str
     valid_to: str = config.OPEN_END_DATE
 
