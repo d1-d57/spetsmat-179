@@ -138,11 +138,29 @@ def _all_students(connection: sqlite3.Connection) -> list[dict]:
 
 def _all_teachers(connection: sqlite3.Connection) -> list[dict]:
     return [
-        {"id": row["id"], "name": row["name"]}
+        {"id": row["id"], "name": row["name"],
+         "kabinet": row["kabinet"] if "kabinet" in row.keys() else None}
         for row in connection.execute(
-            "select id, name from teachers order by name"
+            "select id, name, kabinet from teachers order by name"
         ).fetchall()
     ]
+
+
+def _rukovoditeli(connection: sqlite3.Connection) -> dict:
+    """``{кабинет: имя руководителя | None}``.
+
+    Кабинет держится РУКОВОДИТЕЛЕМ, а не преподавателем: заболел преподаватель —
+    школьник идёт в тот же кабинет. Пока руководители не назначены владельцем,
+    значение None, и интерфейс просто не показывает строку — врать нельзя.
+    """
+    try:
+        rows = connection.execute(
+            "select k.kabinet, t.name from kabinety k "
+            "left join teachers t on t.id = k.rukovoditel_id"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {row["kabinet"]: row["name"] for row in rows}
 
 
 def _open_assignments(
@@ -179,12 +197,23 @@ def _build_views(connection: sqlite3.Connection, slot: int) -> dict:
             "room": assignment["room"] if assignment else None,
         })
 
+    ruk = _rukovoditeli(connection)
+    kabinet_prepoda = {t_["id"]: t_.get("kabinet") for t_ in teachers}
+    for row in by_students:
+        # Кабинет строки перекрывает постоянную привязку — дорога временному
+        # переводу (болезнь) оставлена открытой, как просил владелец.
+        kab = row["room"] or kabinet_prepoda.get(row["teacher_id"])
+        row["room"] = kab
+        row["rukovoditel"] = ruk.get(kab)
+
     by_teachers: list[dict] = []
     for teacher in teachers:
         kids = [row for row in by_students if row["teacher_id"] == teacher["id"]]
         by_teachers.append({
             "teacher_id": teacher["id"],
             "name": teacher["name"],
+            "kabinet": teacher.get("kabinet"),
+            "rukovoditel": ruk.get(teacher.get("kabinet")),
             "load": len(kids),
             "students": [
                 {"student_id": k["student_id"], "surname": k["surname"],
