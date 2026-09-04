@@ -92,16 +92,11 @@ def sobrat():
                 f'<div class="kart"><div class="kart-z"><b>{e(t_["name"])}</b>{redko}'
                 f'<span class="ch">{len(ego)}</span></div><ul>{deti_html}</ul></div>')
 
-        zh = ""
-        if zhdut_gr:
-            zh = ('<div class="kart zhd"><div class="kart-z"><b>ждут назначения</b>'
-                  f'<span class="ch">{len(zhdut_gr)}</span></div><ul>'
-                  + "".join(f'<li>{e(r["surname"])} {e(r["name"])}</li>' for r in zhdut_gr)
-                  + "</ul></div>")
+        zh = ""  # список ждущих — только в админ-панели, см. комментарий выше
 
         return f"""<section class="vid" id="v-{kod}">
   <p class="shapka"><b>{e(star)}</b> · {f'кабинет <span class="kab">{e(kab)}</span>' if kab else '<span class="net">кабинет не назначен</span>'} ·
-     преподавателей {len(svoi)} · школьников {len(deti)}{f' · <span class="net">ждут назначения {len(zhdut_gr)}</span>' if zhdut_gr else ''}</p>
+     преподавателей {len(svoi)} · школьников {len(deti)}</p>
   <div class="karty">{zh}{"".join(kolonki)}</div>
 </section>"""
 
@@ -319,8 +314,6 @@ tr:hover td{{background:var(--accent-soft)}}
 <section class="str holst" id="s-rasp">
   <h1>Распределение</h1>
   <p class="data">на {DATA_SLOVAMI}</p>
-  {'<div class="zhdut"><div class="zag2">ждут назначения — ' + str(len(zhdut)) + '</div>'
-   + ", ".join(e(f'{r["surname"]} {r["name"]}') for r in zhdut) + '</div>' if zhdut else ''}
   <input class="rd" type="radio" name="vk" id="t-shk" checked>
   <input class="rd" type="radio" name="vk" id="t-prep">
   <input class="rd" type="radio" name="vk" id="t-В">
@@ -347,7 +340,7 @@ const IMENA = {[e(f'{r["surname"]} {r["name"]}') for r in shk] + [e(t["name"]) f
 // Что показать по найденному. Для школьника — к кому и куда идти; для
 // преподавателя — его группа, старший, кабинет и сколько у него школьников.
 const KOMU = {{{",".join(
-  [f'"{e(r["surname"])} {e(r["name"])}":"{e(prep[r["teacher_id"]]["name"]) if r["teacher_id"] in prep else "ждёт назначения"} · группа {e(gr_shk(r) or "—")} · кабинет {e(kab_shk(r) or "не назначен")}"' for r in shk]
+  [f'"{e(r["surname"])} {e(r["name"])}":"{e(prep[r["teacher_id"]]["name"]) if r["teacher_id"] in prep else "—"} · группа {e(gr_shk(r) or "—")} · кабинет {e(kab_shk(r) or "не назначен")}"' for r in shk]
 + [f'"{e(t_["name"])}":"группа {e(t_["gruppa"] or "—")} · старший {e(gruppy.get(t_["gruppa"], "—"))} · кабинет {e(kabinety.get(t_["gruppa"]) or "не назначен")} · школьников {sum(1 for r in shk if r["teacher_id"] == t_["id"])}"' for t_ in prep.values()]
 )}}};
 const poisk=document.getElementById('poisk'),spisok=document.getElementById('spisok'),nashli=document.getElementById('nashli');
