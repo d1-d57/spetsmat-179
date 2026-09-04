@@ -124,7 +124,7 @@ def sobrat():
             deti = e(", ".join(ego)) if ego else '<span class="net">—</span>'
             k = kab.get(x["gruppa"])
             ryady.append(
-                f'<tr class="para" data-i="{e(x["name"].lower())}">'
+                f'<tr data-i="{e(x["name"].lower())}">'
                 f'<td class="tp"><b>{e(x["name"])}</b></td>'
                 f'<td class="td-deti">{deti}</td>'
                 f'<td class="tg">{e(x["gruppa"] or "")}</td>'
@@ -294,21 +294,29 @@ tr:hover td{{background:var(--accent-soft)}}
 /* Крупнее и плотнее: пустой половины экрана быть не должно. */
 .para{{display:flex;gap:.8rem;align-items:baseline;padding:.34rem 0;flex-wrap:wrap;
   border-bottom:1px solid var(--rule);font-size:1.15rem}}
+/* На вкладках групп места больше — там строки крупнее. */
+#v-В .para,#v-Д .para,#v-Н .para{{font-size:1.35rem;padding:.42rem 0}}
+#v-В .komu,#v-Д .komu,#v-Н .komu{{font-size:1.25rem}}
+/* На общей вкладке школьников, наоборот, чуть плотнее — там 54 строки. */
+#v-shk .para{{font-size:1.08rem;padding:.26rem 0}}
+#v-shk .komu{{font-size:1rem}}
 .para .kto{{flex:0 0 auto;min-width:0}}
 .para .komu{{margin-left:auto;text-align:right;color:var(--muted);font-family:var(--sans);
   font-size:1.05rem}}
 .para .komu.deti{{white-space:normal;text-align:right}}
 .para .komu.deti span{{display:inline-block;margin-left:.55rem}}
 .kol-pr .para{{padding:.45rem 0}}
-.kol-pr .para{{font-size:1.45rem}}
-.kol-pr .komu.deti{{font-size:1.25rem}}
+.kol-pr .para{{font-size:1.6rem}}
+.kol-pr .komu.deti{{font-size:1.35rem}}
 .kol-pr .komu.deti span{{margin-left:.7rem}}
 /* Таблица преподавателей: колонки ровные, кабинет уходит вправо. */
 .prep-tab{{width:100%;border-collapse:collapse}}
 .prep-tab td{{padding:.4rem .8rem .4rem 0;border-bottom:1px solid var(--rule);
   vertical-align:baseline;font-size:1.15rem}}
-.prep-tab .tp{{white-space:nowrap;width:1%}}
-.prep-tab .td-deti{{color:var(--muted);font-family:var(--sans);font-size:1.05rem}}
+.prep-tab .tp{{white-space:nowrap;width:1%;padding-right:2rem}}
+.prep-tab .td-deti{{color:var(--muted);font-family:var(--sans);font-size:1.1rem;
+  width:auto;padding-right:2rem}}
+.prep-tab tr.skryt{{display:none}}
 .prep-tab .tg{{font-family:var(--sans);font-weight:600;color:var(--accent);
   text-align:center;width:1%;white-space:nowrap}}
 .prep-tab .tk{{text-align:right;width:1%;white-space:nowrap;padding-right:0}}
@@ -466,7 +474,7 @@ document.addEventListener('click',e=>{{if(!e.target.closest('.podskazki'))spisok
 const pr=document.getElementById('poisk-r');
 pr.addEventListener('input',e=>{{
   const q=e.target.value.trim().toLowerCase();
-  document.querySelectorAll('#s-rasp .para').forEach(d=>{{
+  document.querySelectorAll('#s-rasp .para, #s-rasp tr[data-i]').forEach(d=>{{
     d.classList.toggle('skryt', !!q && !d.dataset.i.includes(q) &&
       !d.textContent.toLowerCase().includes(q));
   }});
