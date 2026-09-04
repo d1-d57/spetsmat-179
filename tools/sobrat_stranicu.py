@@ -24,7 +24,9 @@ DATA_NA = "5 сентября"
 # держит. Ваня сидит в 303, Даня в 302, но на 203 два кандидата (Наталия Павлована и
 # Надя), а в 302 есть ещё Наталья Яковлевна — угадывать нельзя, это дети перед занятием.
 # Заполняется ОДНОЙ строкой, когда владелец ответит: {"203": "имя", ...}
-STARSHIE = {}
+# Старший берётся из ГРУППЫ преподавателя (постоянная привязка), а кабинет —
+# из назначения группы НА ДЕНЬ. Кабинета на дату нет — колонка пустая, и это
+# законный случай: владелец ставит привязку накануне вечером.
 
 
 def e(s):
@@ -34,6 +36,10 @@ def e(s):
 def sobrat():
     c = sqlite3.connect(DATA)
     c.row_factory = sqlite3.Row
+    STARSHIE = {r[0]: r[1] for r in c.execute(
+        "select t.name, g.starshij from teachers t join gruppy g on g.kod = t.gruppa")}
+    KABINET_GRUPPY = {r[0]: r[1] for r in c.execute(
+        "select gruppa, kabinet from kabinet_na_den where data = date('now','localtime','+1 day')")}
     stroki = c.execute("""
         select s.surname, s.name, s.class, t.name as prep, e.room
         from students s
@@ -65,7 +71,7 @@ def sobrat():
         prep, kab = k
         deti = ", ".join(sorted(v))
         chip = f'<span class="kab">{e(kab)}</span>' if kab else ""
-        star = STARSHIE.get(kab)
+        star = STARSHIE.get(prep)
         star_html = f'<span class="star">{e(star)}</span>' if star else ""
         return (f'<tr><td class="pr"><b>{e(prep)}</b></td>'
                 f'<td class="deti">{e(deti)}</td>'
