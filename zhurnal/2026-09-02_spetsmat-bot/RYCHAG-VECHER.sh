@@ -8,6 +8,14 @@ R="$HOME/Documents/GitHub/spetsmat-bot"
 PORT="${PORT:-8899}"
 cd "$R" || exit 1
 
+# 🔴 СЕРВЕР НЕ СТАРТУЕТ БЕЗ ПЕРЕМЕННЫХ — замерено рычагом на main:
+# veb/server.py main() зовёт vhod.proverit_okruzhenie(), и без SPETSMAT_VEB_SECRET
+# процесс падает с RuntimeError ещё до первого запроса. Это не дефект позиции,
+# это условие запуска; рычаг обязан его выполнять, иначе краснеет на пустом месте.
+export SPETSMAT_VEB_SECRET="${SPETSMAT_VEB_SECRET:-rychag-priyomki-vechera-ne-dlya-boya}"
+export SPETSMAT_VEB_PAROL_ORG="${SPETSMAT_VEB_PAROL_ORG:-rychag-org}"
+export SPETSMAT_VEB_PAROL_PREPOD="${SPETSMAT_VEB_PAROL_PREPOD:-rychag-prepod}"
+
 podnyat() {
   python3 -m veb.server --port "$PORT" >/tmp/rychag-veb.log 2>&1 &
   echo $! > /tmp/rychag-veb.pid
