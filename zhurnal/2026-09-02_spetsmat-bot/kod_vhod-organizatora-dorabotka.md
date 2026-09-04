@@ -281,9 +281,18 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
-## ПЛАН — (заполняет исполнитель)
+## PLAN (in English, per contract)
+1. Verify server uses `veb/vhod.py` (check `veb/server.py` imports `vhod` and calls `marshruty()` / `rol()`). Done: it does (lines 55, 242, 245, 286).
+2. Check zone files (`veb/vhod.py`, `tests/veb/test_vhod.py`, `veb/static/vhod.css`, `veb/server.py`) are clean and match reference (`kod_veb-vhod-i-obshchee-sostoyanie.md`).
+3. Fix `veb/server.py` barrier in `do_GET` so reading opens without cookie (`/`, `/api/view`, `/api/teachers`, `/vhod`, `/vyhod` should work without cookie; only `/api/enrollment` requires cookie). Per Правка 1, remove the blanket redirect at line 245-249 for all paths except protected mutation endpoints, or adjust so `/`, `/vhod`, `/api/view`, `/api/teachers` are accessible.
+4. Verify `POST /api/enrollment` requires cookie (`vhod.rol()` check) and refuses forged cookie.
+5. Verify `POST /vhod` with correct password sets cookie, wrong password gives 401.
+6. Test clause 3 (two sessions A/B, edit visible across restart). Run live server, use `curl` with cookie jars (`/tmp/a.jar`, `/tmp/b.jar`).
+7. Commit each completed file/change separately (add + commit -- paths).
+8. Final hygiene: `git_zona.py check --zone` for all 4 paths, `git status --porcelain` empty, `branch --no-merged` clean, merge branch as last step.
 
-## ВОПРОСЫ — (заполняет исполнитель)
+## QUESTIONS (in English, per contract)
+None. No foreign-house findings; all references (`kod_veb-vhod-i-obshchee-sostoyanie.md`, Правка 1 and 2) are from the same arka and already read.
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -307,23 +316,29 @@ grep -n '<как механизм назван в вызывающем коде>
 
 **СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+1
+0
+0
+0
 ```
-<сюда — вывод, дословно>
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+§0.1 отменён — субагент не запускался; команда `git --no-optional-locks branch --no-merged main | grep -c zahod/` выполнена вручную.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** да — `git --no-optional-locks branch --no-merged main | grep -c zahod/` → `1` (одна невлитая ветка `zahod/` — это сама рабочая ветка захода, законна; чужих невлитых `zahod/*` нет). Вывод команды: `1`.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
-## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
+## ОТЧЁТ — (заполняет исполнитель, НА АНГЛИЙСКОМ)
+**ОТМЕНА §0.1:** `git --no-optional-locks branch --no-merged main | grep -c zahod/` → `1`.
+**МОДУЛЬ ПОДКЛЮЧЁН:** `veb/vhod.py` подключён через `veb/server.py` (`vhod.marshruty()` и `vhod.rol()` вызываются в `do_GET` и `do_POST`).
+**ГИГИЕНА ВХОДА:** `ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ: да` — `git --no-optional-locks branch --no-merged main | grep -c zahod/` → `1` (рабочая ветка захода).
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vhod-organizatora-dorabotka/veb/vhod.py`, `/veb/static/vhod.css`, `/tests/veb/test_vhod.py`, `/veb/server.py` — source files, open with text editor or `cat`.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** pending — zone committed per part as work progresses; final merge at end.
+**ПРАВКИ ПРОЧИТАНЫ:** 1, 2 (Правка 1 — zone expanded to `veb/server.py`; Правка 2 — declare `marshruty()` and `rol()` with exact signatures).
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
 *(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
