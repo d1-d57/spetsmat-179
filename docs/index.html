@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Спецмат 9 класс</title>
+<style>
+:root{
+  --bg:#fbfaf6; --panel:#fffdf8; --text:#211f1b; --muted:#726c60;
+  --rule:#e7e2d6; --accent:#2f6e8e; --accent-soft:#e8f0f4; --warm:#c9743a;
+  --faint:#b7ae9c; --chip:#e7e0d2;
+  --sans:"Source Sans 3",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1b1e22; --panel:#23272c; --text:#dcd8d0; --muted:#9a948a;
+  --rule:#343a41; --accent:#7fb6d2; --accent-soft:#22333d; --warm:#e0946a;
+  --faint:#6b6f75; --chip:#333a41;
+}}
+:root[data-theme="dark"]{
+  --bg:#1b1e22; --panel:#23272c; --text:#dcd8d0; --muted:#9a948a;
+  --rule:#343a41; --accent:#7fb6d2; --accent-soft:#22333d; --warm:#e0946a;
+  --faint:#6b6f75; --chip:#333a41;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--serif);font-size:20px}
+
+/* ── выезжающая панель: устройство взято из lenta-derevya/view.html ── */
+.panel-bok{position:fixed;left:0;top:0;height:100vh;width:320px;z-index:50;overflow:auto;
+  background:var(--panel);border-right:1px solid var(--rule);padding:5rem 1.4rem 2rem;
+  transform:translateX(-100%);transition:transform .18s ease,box-shadow .18s ease;
+  font-family:var(--sans)}
+.panel-bok.open{transform:none;box-shadow:0 0 26px rgba(0,0,0,.28)}
+.burger{position:fixed;left:14px;top:14px;z-index:60;width:44px;height:40px;
+  background:var(--panel);border:1px solid var(--rule);border-radius:8px;cursor:pointer;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px}
+.burger span{display:block;width:20px;height:2px;background:var(--text);border-radius:2px}
+.burger:hover{border-color:var(--accent)}
+.panel-bok a{display:block;color:var(--muted);text-decoration:none;padding:.5em .6em;
+  border-radius:6px;font-size:19px}
+.panel-bok a:hover{color:var(--accent);background:var(--accent-soft)}
+.panel-bok .zag{font-size:13px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--faint);margin:1.4rem 0 .5rem;padding-bottom:.4em;border-bottom:1px solid var(--rule)}
+
+/* Текст занимает ВСЁ пространство. Сдвигается вправо, только когда панель открыта. */
+.holst{padding:5rem 3rem 4rem;transition:padding-left .18s ease;max-width:none}
+.holst.sdvinut{padding-left:22rem}
+
+h1{font-family:var(--sans);font-size:2.6rem;font-weight:600;letter-spacing:-.02em;margin:0 0 .1em}
+.data{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 2rem}
+
+/* ── вкладки: скрытые radio + label, без JS ── */
+.tabs>input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.tabbar{display:flex;gap:.3rem;border-bottom:2px solid var(--rule);margin:0 0 2rem}
+.tabbar label{cursor:pointer;user-select:none;font-family:var(--sans);font-weight:600;
+  font-size:1.25rem;color:var(--muted);padding:.55rem 1.4rem;border:2px solid transparent;
+  border-bottom:none;border-radius:10px 10px 0 0;margin-bottom:-2px}
+.tabbar label:hover{color:var(--text)}
+.vid{display:none}
+#t-shk:checked~#v-shk{display:block}
+#t-prp:checked~#v-prp{display:block}
+#t-shk:checked~.tabbar label[for=t-shk],
+#t-prp:checked~.tabbar label[for=t-prp]{color:var(--accent);background:var(--panel);
+  border-color:var(--rule) var(--rule) var(--panel)}
+
+.poisk{width:100%;max-width:640px;padding:.7em .9em;font:inherit;font-size:1.2rem;
+  border:1px solid var(--rule);border-radius:9px;background:var(--panel);color:var(--text);
+  margin:0 0 1.6rem}
+.poisk:focus{outline:none;border-color:var(--accent)}
+
+table{border-collapse:collapse;width:100%;font-size:1.15rem}
+th{font-family:var(--sans);font-size:.85rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--faint);text-align:left;padding:0 1.2rem .6rem 0;
+  border-bottom:1px solid var(--rule)}
+td{padding:.75rem 1.2rem .75rem 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+tr:hover td{background:var(--accent-soft)}
+.fam{font-weight:600}
+.klass{color:var(--muted);font-family:var(--sans);font-size:.95rem}
+.kab{font-family:var(--sans);font-weight:600;background:var(--chip);border-radius:7px;
+  padding:.15em .6em;white-space:nowrap}
+.ruk{color:var(--muted);font-family:var(--sans);font-size:.95rem}
+.net{color:var(--warm);font-family:var(--sans);font-size:1rem}
+.gruppa{margin:0 0 2.6rem}
+.gruppa h2{font-family:var(--sans);font-size:1.7rem;font-weight:600;margin:0 0 .1em}
+.gruppa .pod{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 .8rem}
+.gruppa ul{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}
+.gruppa li{padding:.35em 0;border-bottom:1px solid var(--rule);break-inside:avoid;font-size:1.15rem}
+select{font:inherit;font-size:1rem;padding:.3em;background:var(--panel);color:var(--text);
+  border:1px solid var(--rule);border-radius:6px}
+@media (max-width:760px){
+  .holst{padding:5rem 1.2rem 3rem}
+  .holst.sdvinut{padding-left:1.2rem}
+  .gruppa ul{columns:1}
+}
+</style>
+<style>
+.gr{margin:0 0 1.8rem}
+.gr h3{font-family:var(--sans);font-size:1.35rem;font-weight:600;margin:0 0 .3em}
+.gr ul{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}
+.gr li{padding:.3em 0;border-bottom:1px solid var(--rule);break-inside:avoid}
+.fajly{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}
+.fajly li{padding:.4em 0;border-bottom:1px solid var(--rule);break-inside:avoid}
+.fajly a{color:var(--accent);text-decoration:none;font-size:1.1rem}
+.fajly a:hover{text-decoration:underline}
+h2{font-family:var(--sans);font-size:2rem;font-weight:600;margin:3rem 0 1.2rem;
+   padding-top:1.5rem;border-top:1px solid var(--rule)}
+h2:first-of-type{border-top:none;padding-top:0;margin-top:2rem}
+</style>
+
+<button class="burger" id="burger" aria-label="меню"><span></span><span></span><span></span></button>
+<nav class="panel-bok" id="panel">
+  <div class="zag">Спецмат</div>
+  <a href="#raspredelenie">Распределение</a>
+  <a href="#listki9">Листки 9 класса</a>
+  <a href="#listki8">Листки 8 класса</a>
+</nav>
+
+<main class="holst" id="holst">
+  <h1>Спецмат</h1>
+  <p class="data">9 класс · на 5 сентября</p>
+
+  <h2 id="raspredelenie">Распределение</h2>
+  <input class="poisk" id="poisk" placeholder="Фамилия" autocomplete="off">
+  <table>
+    <thead><tr><th>Школьник</th><th>Принимает</th><th>Кабинет</th></tr></thead>
+    <tbody id="telo"><tr><td><b>Агаркова</b> Ирина <span class="kl">9Л</span></td><td>Полина</td><td><span class="kab">203</span></td></tr><tr><td><b>Аникина</b> Анастасия <span class="kl">9К</span></td><td>Настя</td><td><span class="kab">302</span></td></tr><tr><td><b>Афанасьева</b> Полина <span class="kl">9К</span></td><td>Настя</td><td><span class="kab">302</span></td></tr><tr><td><b>Белеванцева</b> Елизавета <span class="kl">9Л</span></td><td>Настя</td><td><span class="kab">302</span></td></tr><tr><td><b>Бирюков</b> Василий <span class="kl">9К</span></td><td>Даня</td><td><span class="kab">302</span></td></tr><tr><td><b>Болотин</b> Фёдор <span class="kl">9К</span></td><td>Надя</td><td><span class="kab">203</span></td></tr><tr><td><b>Борисов</b> Дмитрий <span class="kl">9К</span></td><td>Вика</td><td><span class="kab">302</span></td></tr><tr><td><b>Бочарова</b> Анна <span class="kl">9Л</span></td><td>Ваня</td><td><span class="kab">303</span></td></tr><tr><td><b>Будылин</b> Михаил <span class="kl">9Л</span></td><td>Даня</td><td><span class="kab">302</span></td></tr><tr><td><b>Быков</b> Владислав <span class="kl">9К</span></td><td>Ваня</td><td><span class="kab">303</span></td></tr><tr><td><b>Верхошинский</b> Марк <span class="kl">9К</span></td><td>Михаил Анатольевич</td><td><span class="kab">303</span></td></tr><tr><td><b>Виляев</b> Максим <span class="kl">9Л</span></td><td>Наталья Яковлевна</td><td><span class="kab">302</span></td></tr><tr><td><b>Гамаюнова</b> Софья <span class="kl">9К</span></td><td><span class="net">не назначен</span></td><td><span class="net">—</span></td></tr><tr><td><b>Глебова</b> Елизавета <span class="kl">9К</span></td><td>Елена Юрьевна</td><td><span class="kab">303</span></td></tr><tr><td><b>Данилова</b> Вера <span class="kl">9Л</span></td><td>Наталья Яковлевна</td><td><span class="kab">302</span></td></tr><tr><td><b>Добромыслов</b> Георгий <span class="kl">9Л</span></td><td>Наталья Яковлевна</td><td><span class="kab">302</span></td></tr><tr><td><b>Долгирева</b> Екатерина <span class="kl">9К</span></td><td>Ваня</td><td><span class="kab">303</span></td></tr><tr><td><b>Домра</b> Евгений <span class="kl">9К</span></td><td>Елена Юрьевна</td><td><span class="kab">303</span></td></tr><tr><td><b>Егоров</b> Ярослав <span class="kl">9Л</span></td><td>Настя</td><td><span class="kab">302</span></td></tr><tr><td><b>Жуков</b> Иван <span class="kl">9Л</span></td><td>Полина</td><td><span class="kab">203</span></td></tr><tr><td><b>Исанин</b> Леонид <span class="kl">9К</span></td><td>Ваня</td><td><span class="kab">303</span></td></tr><tr><td><b>Искеева</b> Софья <span class="kl">9Л</span></td><td>Даня</td><td><span class="kab">302</span></td></tr><tr><td><b>Ишкаев</b> Владислав <span class="kl">9Л</span></td><td><span class="net">не назначен</span></td><td><span class="net">—</span></td></tr><tr><td><b>Кахиани</b> Нино <span class="kl">9К</span></td><td>Ян Маршалл</td><td><span class="kab">303</span></td></tr><tr><td><b>Коневник</b> Федор <span class="kl">9Л</span></td><td>Андрей Дмитриевич</td><td><span class="kab">302</span></td></tr><tr><td><b>Кудишин</b> Андрей <span class="kl">9Л</span></td><td>Саша Оревкова</td><td><span class="kab">303</span></td></tr><tr><td><b>Кудряшов</b> Виктор <span class="kl">9Л</span></td><td>Наталия Павлована</td><td><span class="kab">203</span></td></tr><tr><td><b>Левченко</b> Дмитрий <span class="kl">9К</span></td><td>Александр Александрович Тертерян</td><td><span class="kab">203</span></td></tr><tr><td><b>Леонович</b> Матвей <span class="kl">9Л</span></td><td>Дима</td><td><span class="kab">203</span></td></tr><tr><td><b>Лим</b> Владислав <span class="kl">9К</span></td><td>Дима</td><td><span class="kab">203</span></td></tr><tr><td><b>Лупулешин</b> Иван <span class="kl">9К</span></td><td>Дима</td><td><span class="kab">203</span></td></tr><tr><td><b>Могилевский</b> Дмитрий <span class="kl">9К</span></td><td>Александр Александрович Тертерян</td><td><span class="kab">203</span></td></tr><tr><td><b>Николаева</b> Елизавета <span class="kl">9Л</span></td><td>Полина</td><td><span class="kab">203</span></td></tr><tr><td><b>Ордян</b> Леонид <span class="kl">9К</span></td><td>Надя</td><td><span class="kab">203</span></td></tr><tr><td><b>Пирогов</b> Константин <span class="kl">9К</span></td><td>Михаил Анатольевич</td><td><span class="kab">303</span></td></tr><tr><td><b>Погорельцев</b> Александр <span class="kl">9Л</span></td><td>Андрей Дмитриевич</td><td><span class="kab">302</span></td></tr><tr><td><b>Пономарев</b> Алексей <span class="kl">9К</span></td><td>Елена Юрьевна</td><td><span class="kab">303</span></td></tr><tr><td><b>Романчук</b> Тимофей <span class="kl">9Л</span></td><td>Наталия Павлована</td><td><span class="kab">203</span></td></tr><tr><td><b>Рыбаков</b> Никита <span class="kl">9Л</span></td><td>Мика/Вася</td><td><span class="kab">303</span></td></tr><tr><td><b>Савельев</b> Михаил <span class="kl">9К</span></td><td>Саша Оревкова</td><td><span class="kab">303</span></td></tr><tr><td><b>Савков</b> Андрей <span class="kl">9Л</span></td><td>Ян Маршалл</td><td><span class="kab">303</span></td></tr><tr><td><b>Симонова</b> Анастасия <span class="kl">9К</span></td><td>Наталия Павлована</td><td><span class="kab">203</span></td></tr><tr><td><b>Сухов</b> Даниил <span class="kl">9Л</span></td><td><span class="net">не назначен</span></td><td><span class="net">—</span></td></tr><tr><td><b>Тараканов</b> Роман <span class="kl">9К</span></td><td>Вика</td><td><span class="kab">302</span></td></tr><tr><td><b>Тухватулин-Йалчын</b> Дэвин <span class="kl">9К</span></td><td>Даня</td><td><span class="kab">302</span></td></tr><tr><td><b>Устинина</b> Полина <span class="kl">9Л</span></td><td>Вика</td><td><span class="kab">302</span></td></tr><tr><td><b>Фефелов</b> Иван <span class="kl">9К</span></td><td>Даня</td><td><span class="kab">302</span></td></tr><tr><td><b>Фёдоров</b> Михаил <span class="kl">9К</span></td><td>Мика/Вася</td><td><span class="kab">303</span></td></tr><tr><td><b>Храмченко</b> Эльдар <span class="kl">9Л</span></td><td>Надя</td><td><span class="kab">203</span></td></tr><tr><td><b>Цикунов</b> Александр <span class="kl">9Л</span></td><td>Мика/Вася</td><td><span class="kab">303</span></td></tr><tr><td><b>Цуканов</b> Александр <span class="kl">9К</span></td><td>Александр Александрович Тертерян</td><td><span class="kab">203</span></td></tr><tr><td><b>Чапышев</b> Марк <span class="kl">9Л</span></td><td>Саша Оревкова</td><td><span class="kab">303</span></td></tr><tr><td><b>Шевелев</b> Константин <span class="kl">9Л</span></td><td>Елена Юрьевна</td><td><span class="kab">303</span></td></tr><tr><td><b>Юсуфов</b> Арон <span class="kl">9Л</span></td><td>Михаил Анатольевич</td><td><span class="kab">303</span></td></tr></tbody>
+  </table>
+
+  <h2>По преподавателям</h2>
+  <div class="gr"><h3>Александр Александрович Тертерян <span class="kab">203</span></h3><ul><li>Левченко Дмитрий</li><li>Могилевский Дмитрий</li><li>Цуканов Александр</li></ul></div><div class="gr"><h3>Андрей Дмитриевич <span class="kab">302</span></h3><ul><li>Коневник Федор</li><li>Погорельцев Александр</li></ul></div><div class="gr"><h3>Ваня <span class="kab">303</span></h3><ul><li>Бочарова Анна</li><li>Быков Владислав</li><li>Долгирева Екатерина</li><li>Исанин Леонид</li></ul></div><div class="gr"><h3>Вика <span class="kab">302</span></h3><ul><li>Борисов Дмитрий</li><li>Тараканов Роман</li><li>Устинина Полина</li></ul></div><div class="gr"><h3>Даня <span class="kab">302</span></h3><ul><li>Бирюков Василий</li><li>Будылин Михаил</li><li>Искеева Софья</li><li>Тухватулин-Йалчын Дэвин</li><li>Фефелов Иван</li></ul></div><div class="gr"><h3>Дима <span class="kab">203</span></h3><ul><li>Леонович Матвей</li><li>Лим Владислав</li><li>Лупулешин Иван</li></ul></div><div class="gr"><h3>Елена Юрьевна <span class="kab">303</span></h3><ul><li>Глебова Елизавета</li><li>Домра Евгений</li><li>Пономарев Алексей</li><li>Шевелев Константин</li></ul></div><div class="gr"><h3>Мика/Вася <span class="kab">303</span></h3><ul><li>Рыбаков Никита</li><li>Фёдоров Михаил</li><li>Цикунов Александр</li></ul></div><div class="gr"><h3>Михаил Анатольевич <span class="kab">303</span></h3><ul><li>Верхошинский Марк</li><li>Пирогов Константин</li><li>Юсуфов Арон</li></ul></div><div class="gr"><h3>Надя <span class="kab">203</span></h3><ul><li>Болотин Фёдор</li><li>Ордян Леонид</li><li>Храмченко Эльдар</li></ul></div><div class="gr"><h3>Настя <span class="kab">302</span></h3><ul><li>Аникина Анастасия</li><li>Афанасьева Полина</li><li>Белеванцева Елизавета</li><li>Егоров Ярослав</li></ul></div><div class="gr"><h3>Наталия Павлована <span class="kab">203</span></h3><ul><li>Кудряшов Виктор</li><li>Романчук Тимофей</li><li>Симонова Анастасия</li></ul></div><div class="gr"><h3>Наталья Яковлевна <span class="kab">302</span></h3><ul><li>Виляев Максим</li><li>Данилова Вера</li><li>Добромыслов Георгий</li></ul></div><div class="gr"><h3>Полина <span class="kab">203</span></h3><ul><li>Агаркова Ирина</li><li>Жуков Иван</li><li>Николаева Елизавета</li></ul></div><div class="gr"><h3>Саша Оревкова <span class="kab">303</span></h3><ul><li>Кудишин Андрей</li><li>Савельев Михаил</li><li>Чапышев Марк</li></ul></div><div class="gr"><h3>Ян Маршалл <span class="kab">303</span></h3><ul><li>Кахиани Нино</li><li>Савков Андрей</li></ul></div>
+
+  <h2 id="listki9">Листки 9 класса</h2>
+  <ul class="fajly"><li><a href="listki/16-derevya.pdf">16-derevya</a></li></ul>
+
+  <h2 id="listki8">Листки 8 класса</h2>
+  <ul class="fajly"><li><a href="listki-8kl/01_Постепенно, с первого шага.pdf">01_Постепенно, с первого шага</a></li><li><a href="listki-8kl/02_Правило суммы и произведения.pdf">02_Правило суммы и произведения</a></li><li><a href="listki-8kl/03_Пары и тройки.pdf">03_Пары и тройки</a></li><li><a href="listki-8kl/04_Еще раз про сложение и умножение.pdf">04_Еще раз про сложение и умножение</a></li><li><a href="listki-8kl/05_Биекции.pdf">05_Биекции</a></li><li><a href="listki-8kl/06_Графы.pdf">06_Графы</a></li><li><a href="listki-8kl/07_Множества.pdf">07_Множества</a></li><li><a href="listki-8kl/08_Зоопарк теории графов.pdf">08_Зоопарк теории графов</a></li><li><a href="listki-8kl/09_Индукция.pdf">09_Индукция</a></li><li><a href="listki-8kl/10_Биномиальные_коэффициенты_ДРАФТ.pdf">10_Биномиальные_коэффициенты_ДРАФТ</a></li><li><a href="listki-8kl/11_Соответствия.pdf">11_Соответствия</a></li><li><a href="listki-8kl/12_Делимость.pdf">12_Делимость</a></li><li><a href="listki-8kl/13_Остатки.pdf">13_Остатки</a></li><li><a href="listki-8kl/14_ОТА.pdf">14_ОТА</a></li><li><a href="listki-8kl/15_Бесконечность.pdf">15_Бесконечность</a></li><li><a href="listki-8kl/Программа зачета.pdf">Программа зачета</a></li><li><a href="listki-8kl/д01_Информация.pdf">д01_Информация</a></li><li><a href="listki-8kl/д02_Геометрическое суммирование.pdf">д02_Геометрическое суммирование</a></li><li><a href="listki-8kl/д03_Игры.pdf">д03_Игры</a></li><li><a href="listki-8kl/д04_Числа Фибоначчи.pdf">д04_Числа Фибоначчи</a></li></ul>
+</main>
+
+<script>
+const b=document.getElementById('burger'),p=document.getElementById('panel'),h=document.getElementById('holst');
+b.addEventListener('click',()=>{p.classList.toggle('open');h.classList.toggle('sdvinut');});
+const poisk=document.getElementById('poisk'),telo=document.getElementById('telo'),vse=[...telo.rows];
+poisk.addEventListener('input',e=>{
+  const f=e.target.value.trim().toLowerCase();
+  vse.forEach(r=>{r.style.display=!f||r.cells[0].textContent.trim().toLowerCase().startsWith(f)?'':'none';});
+});
+</script>
