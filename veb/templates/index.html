@@ -525,8 +525,12 @@ function prinyat(d){
 function nachat(){
   /*РЕЖИМ-СЕРВЕР НАЧАЛО*/
   if(NA_SERVERE){
-    document.getElementById('skachat').hidden = true;   // сервер сам себе хранилище
-    document.getElementById('sbros').hidden = true;
+    // 🔴 УДАЛЯЕМ, А НЕ ПРЯЧЕМ. «Скачать файлом» и «Сбросить правки» на сервере
+    // не значат ничего: хранилище там — база. Спрятанная атрибутом кнопка живёт
+    // в разметке и оживает снятием одного атрибута; кнопки, которой не может
+    // быть, в документе быть не должно (находка верификатора).
+    document.getElementById('skachat').remove();
+    document.getElementById('sbros').remove();
     return Promise.resolve(vzyat()).then(prinyat,
       () => skazat('Сервер не ответил — обновите страницу'));
   }
