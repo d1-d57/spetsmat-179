@@ -709,11 +709,26 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(302)
         self.send_header("Location", "/")
         cookie_value = vhod._make_cookie(role)
-        self.send_header(
-            "Set-Cookie",
-            f"{vhod.COOKIE_NAME}={cookie_value}; Path=/; HttpOnly; SameSite=Lax; "
-            f"Max-Age={vhod.COOKIE_MAX_AGE_SECONDS}",
-        )
+        # 🔴 `Secure` СТАВИТСЯ, ТОЛЬКО ЕСЛИ ЗАПРОС ПРИШЁЛ ПО HTTPS — и ставится
+        # обязательно, иначе шифрование наполовину бессмысленно. Домен с 06.09 живёт
+        # по https и перенаправляет туда с http, но перенаправление приходит ПОСЛЕ
+        # запроса: браузер успевает отправить куку открытым текстом по первому же
+        # обращению на `http://`. `Secure` запрещает ему это делать.
+        #
+        # Условие, а не константа, потому что вход обязан продолжать работать и по
+        # голому адресу `http://159.194.254.52` — он остаётся живым нарочно, как
+        # запасной путь. Кука с `Secure` там не поставилась бы вовсе, и вход по IP
+        # молча перестал бы работать: сервер отвечает 302 «успех», а куки нет.
+        #
+        # Схему сообщает nginx заголовком `X-Forwarded-Proto` (он его проставляет —
+        # см. snippets/spetsmat-obshchee.conf). Приложение слушает 127.0.0.1 и наружу
+        # недостижимо, поэтому подделать заголовок может только тот, кто уже на машине.
+        po_https = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+        kuka = (f"{vhod.COOKIE_NAME}={cookie_value}; Path=/; HttpOnly; SameSite=Lax; "
+                f"Max-Age={vhod.COOKIE_MAX_AGE_SECONDS}")
+        if po_https:
+            kuka += "; Secure"
+        self.send_header("Set-Cookie", kuka)
         self.end_headers()
 
     def _post_prepodavateli(self) -> None:
