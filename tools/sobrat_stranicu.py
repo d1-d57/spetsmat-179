@@ -109,10 +109,10 @@ VHOD_SKRIPT = r"""
 
 
 PRAVKA_SKRIPT = r"""
-<div class="panel-pravok" id="panel-pravok" hidden>
+<div class="panel-pravok" id="panel-pravok">
   <span class="skolko" id="skolko-pravok"></span>
-  <button type="button" id="sbrosit" class="vtoraya">Сбросить правки</button>
-  <button type="button" id="sohranit" class="glavnaya">Сохранить</button>
+  <button type="button" id="sbrosit" class="vtoraya" disabled>Сбросить правки</button>
+  <button type="button" id="sohranit" class="glavnaya" disabled>Сохранить</button>
 </div>
 <div class="soob" id="soob"></div>
 <script>
@@ -146,9 +146,18 @@ PRAVKA_SKRIPT = r"""
     return 'правок';
   }
   function obnovit(){
+    /* 🔴 ПАНЕЛЬ ВИДНА ВСЕГДА, кнопки просто гаснут. Панель, появляющаяся только
+       при правке, не сообщает, что сохранение вообще существует, — и человек её
+       ищет. Владелец 06.09: «кнопки Сохранить не вижу». Видимая, но погашенная
+       кнопка отвечает на вопрос «а что тут вообще можно» до первого действия. */
     const n = pravki.size;
-    panel.hidden = n === 0;
-    schyot.textContent = n + ' ' + slovo(n) + ' не сохранено';
+    const est = n > 0;
+    document.getElementById('sohranit').disabled = !est;
+    document.getElementById('sbrosit').disabled = !est;
+    panel.classList.toggle('est-pravki', est);
+    schyot.textContent = est
+      ? n + ' ' + slovo(n) + ' не сохранено'
+      : 'правок нет — можно менять распределение';
   }
   function pomenyalos(el, klyuch, operacia){
     pravki.set(klyuch, operacia);
@@ -975,8 +984,14 @@ button.vtoraya:hover{{color:var(--text)}}
   align-items:center;gap:1rem;padding:.8rem 1.4rem;background:var(--panel);
   border-top:2px solid var(--warm);box-shadow:0 -6px 24px rgba(0,0,0,.18);
   font-family:var(--sans)}}
-.panel-pravok[hidden]{{display:none}}
-.panel-pravok .skolko{{font-weight:600;color:var(--warm);margin-right:auto}}
+.panel-pravok{{border-top:2px solid var(--rule)}}
+.panel-pravok.est-pravki{{border-top-color:var(--warm)}}
+.panel-pravok .skolko{{font-weight:600;color:var(--muted);margin-right:auto}}
+.panel-pravok.est-pravki .skolko{{color:var(--warm)}}
+button.glavnaya[disabled],button.vtoraya[disabled]{{opacity:.45;cursor:default}}
+button.glavnaya[disabled]:hover{{opacity:.45}}
+/* Панель занимает низ экрана — страница не должна прятать под ней последние строки. */
+body{{padding-bottom:4.5rem}}
 /* Тронутое, но не сохранённое — видно глазом и не спутаешь с сохранённым. */
 .tronuto{{background:rgba(201,116,58,.10);outline:2px solid rgba(201,116,58,.35);
   outline-offset:2px;border-radius:6px}}

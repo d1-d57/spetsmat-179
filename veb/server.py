@@ -482,6 +482,30 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/static/"):
             _serve_static(self, path)
             return
+        if path == "/vyhod":
+            # 🔴 ВЫХОД ОБЯЗАН СТИРАТЬ КУКУ, А НЕ СООБЩАТЬ О СЕБЕ. `vhod.py` отдавал
+            # страничку «Выход выполнен» с мета-переходом на `/vhod` и НИ ОДНОГО
+            # заголовка `Set-Cookie` — то есть не выходил вовсе: человек нажимал
+            # «Выход», попадал на форму пароля и оставался организатором. Найдено
+            # владельцем: «нажимаю выход, и всё падает… раньше выводило на странную
+            # заглушку песочного цвета».
+            #
+            # Обработчик из `vhod.marshruty()` починить на месте нельзя: он умеет
+            # возвращать только тело, а заголовки — привилегия этого метода. Поэтому
+            # маршрут обслуживается здесь, ДО общей развилки.
+            #
+            # Возвращаемся на `/`, а не на `/vhod`: человек выходит, чтобы увидеть
+            # сайт глазами гостя, а не чтобы снова вводить пароль.
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header(
+                "Set-Cookie",
+                f"{vhod.COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; "
+                "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+            )
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if path in vhod.marshruty():
             self._send_html(200, vhod.marshruty()[path]())
             return
