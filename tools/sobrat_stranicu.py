@@ -40,46 +40,110 @@ sys.path.insert(0, str(KOREN))
 from veb.sobrat_fajl import DNI_ZANYATIJ, SOKR_DNYA, blizhajshij_den  # noqa: E402
 
 
-def krivaya_drakona(shagov: int = 12) -> str:
-    """SVG кривой дракона — фоновый графический элемент заглавной.
-
-    🔴 РИСУЕТСЯ ЗДЕСЬ, А НЕ ПОДКЛЮЧАЕТСЯ ФАЙЛОМ. Готовые картинки кривой лежат в
-    СОСЕДНЕМ репозитории `materials/krivaya-drakona`, и ссылаться на них значило бы
-    повторить ту же ошибку, что уже стоила листков: путь в чужую папку, которой на
-    сервере нет. Кривая дракона строится в пятнадцать строк, поэтому дешевле
-    построить, чем принести.
-
-    Как строится: слово складок. На каждом шаге к слову приписывается поворот
-    налево и зеркально-обращённое предыдущее слово — это и есть определение кривой
-    через складывание полоски бумаги пополам. Дальше повороты разворачиваются в
-    ломаную единичными шагами.
-
-    Кривая уместна не как украшение: это предмет занятия, разобранный с этими же
-    детьми, и на их странице он к месту.
-    """
-    povoroty = []
-    for _ in range(shagov):
-        povoroty = povoroty + [1] + [-x for x in reversed(povoroty)]
-    napravlenie, x, y = 0, 0, 0
-    tochki = [(0, 0)]
-    shag = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-    for p_ in povoroty + [0]:
-        dx, dy = shag[napravlenie]
-        x, y = x + dx, y + dy
-        tochki.append((x, y))
-        napravlenie = (napravlenie + (1 if p_ == 1 else -1)) % 4
-    xs = [a for a, _ in tochki]
-    ys = [b for _, b in tochki]
-    minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
-    put = "M" + " L".join(f"{a - minx},{b - miny}" for a, b in tochki)
-    return (f'<svg class="drakon" viewBox="0 0 {maxx - minx} {maxy - miny}" '
-            f'role="img" aria-label="кривая дракона" preserveAspectRatio="xMidYMid meet">'
-            f'<path d="{put}" fill="none" stroke="currentColor" stroke-width="1" '
-            f'stroke-linecap="square" stroke-linejoin="miter"/></svg>')
-
-
 def e(s):
     return html.escape(str(s if s is not None else ""))
+
+
+DRAKON_SKRIPT = r"""
+<script>
+/* ── КРИВАЯ ДРАКОНА ХАРТЕРА—ХЕЙТУЭЯ ─────────────────────────────────────────────
+   🔴 ЛИНИЕЙ СО СКРУГЛЁННЫМИ УГЛАМИ, А НЕ ЛЕСЕНКОЙ И НЕ ОБЛАКОМ ТОЧЕК.
+   Первый заход рисовал её единичными шагами с острыми углами — на большом экране
+   вышла пиксельная лесенка. Владелец: «плохо прорисовано… должна быть детальная,
+   не пиксельная».
+
+   Способ взят там, где он уже отработан: сайт лекции про кривую дракона
+   (`materials/krivaya-drakona/sayt/src/dragon.js`) — слово складок, ломаная целыми
+   координатами, скруглённые углы. Кривая рисуется одной непрерывной линией,
+   которую можно проследить пальцем: это её смысл, а не её вид.
+
+   СЛОВО СКЛАДОК. На каждом шаге к слову приписывается поворот налево и зеркально
+   обращённое предыдущее слово: s = s + L + flip(s). Это буквально складывание
+   полоски бумаги пополам, из которого кривая и получается.
+
+   Ранг 13 — 8192 звена: достаточно, чтобы линия читалась как сплошная, и мало,
+   чтобы рисоваться мгновенно. Холст перерисовывается при смене размера, поэтому
+   на любом экране линия остаётся чёткой — в отличие от растянутой картинки. */
+(function(){
+  const holst = document.getElementById('drakon');
+  if(!holst || !holst.getContext) return;
+
+  /* Слово поворотов: +1 налево, −1 направо. */
+  function slovo(rang){
+    let s = [];
+    for(let i = 0; i < rang; i++){
+      const zerkalo = [];
+      for(let j = s.length - 1; j >= 0; j--) zerkalo.push(-s[j]);
+      s = s.concat([1], zerkalo);
+    }
+    return s;
+  }
+
+  /* Ломаная целыми координатами: округление обязательно, иначе поворот на 90°
+     даёт 6.1e-17 вместо нуля и звенья перестают быть горизонтальными. */
+  function lomanaya(rang){
+    const pov = slovo(rang), shag = [[1,0],[0,1],[-1,0],[0,-1]];
+    let n = 0, x = 0, y = 0;
+    const tochki = [[0,0]];
+    for(let i = 0; i <= pov.length; i++){
+      x += shag[n][0]; y += shag[n][1];
+      tochki.push([x, y]);
+      if(i < pov.length) n = (n + (pov[i] === 1 ? 1 : 3)) % 4;
+    }
+    return tochki;
+  }
+
+  /* 🔴 РАНГ 16, А НЕ 13. На тринадцати звено занимает пять пикселей, и линия
+     толщиной в половину звена слипается в кляксы — та самая «пиксельность», на
+     которую пожаловался владелец. На шестнадцати звеньев 65 тысяч, каждое
+     меньше двух пикселей, и кривая читается как тонкий плотный узор. Считается
+     один раз при загрузке, дальше только перерисовывается. */
+  const TOCHKI = lomanaya(16);
+
+  function risovat(){
+    const r = holst.getBoundingClientRect();
+    if(r.width < 40 || r.height < 40) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    holst.width = Math.round(r.width * dpr);
+    holst.height = Math.round(r.height * dpr);
+    const ctx = holst.getContext('2d');
+    ctx.clearRect(0, 0, holst.width, holst.height);
+
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for(const [a, b] of TOCHKI){
+      if(a < x0) x0 = a; if(a > x1) x1 = a;
+      if(b < y0) y0 = b; if(b > y1) y1 = b;
+    }
+    const pole = 0.04;
+    const mash = Math.min(holst.width * (1 - pole * 2) / (x1 - x0),
+                          holst.height * (1 - pole * 2) / (y1 - y0));
+    const sdvX = (holst.width - (x1 - x0) * mash) / 2;
+    const sdvY = (holst.height - (y1 - y0) * mash) / 2;
+
+    /* Цвет берётся из палитры страницы: тёмная и светлая темы переключаются
+       переменными, и второй список цветов здесь неминуемо бы разъехался. */
+    ctx.strokeStyle = getComputedStyle(document.documentElement)
+      .getPropertyValue('--accent').trim() || '#2f6e8e';
+    ctx.lineWidth = Math.max(0.7 * dpr, mash * 0.42);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    for(let i = 0; i < TOCHKI.length; i++){
+      const px = sdvX + (TOCHKI[i][0] - x0) * mash;
+      const py = holst.height - sdvY - (TOCHKI[i][1] - y0) * mash;
+      if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  risovat();
+  let zhdu;
+  window.addEventListener('resize', function(){
+    clearTimeout(zhdu); zhdu = setTimeout(risovat, 200);
+  });
+})();
+</script>"""
 
 
 VHOD_SKRIPT = r"""
@@ -949,7 +1013,7 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
                        '<a class="vhod" href="/vhod" data-otkryt-vhod>Вход</a></span>')
     # Окно входа лежит в странице ВСЕГДА, у обеих ролей: так каркас у них
     # совпадает буквально, и гейту нечего прощать.
-    skripty = VHOD_SKRIPT + (PRAVKA_SKRIPT if ADMIN else "")
+    skripty = DRAKON_SKRIPT + VHOD_SKRIPT + (PRAVKA_SKRIPT if ADMIN else "")
 
     return f"""<!doctype html>
 <html lang="ru">
@@ -1115,46 +1179,51 @@ tr:hover td{{background:var(--accent-soft)}}
 /* ── СТРАНИЦА КЛАССА. Ни одного повтора имени сайта: оно стоит наверху. ── */
 .klass{{display:grid;grid-template-columns:minmax(0,1fr) 17rem;gap:0 3rem;align-items:start}}
 @media(max-width:900px){{.klass{{grid-template-columns:1fr}}}}
-/* ── ЗАГЛАВНАЯ. Полосы во всю ширину, крупный ЕДИНЫЙ шрифт, кривая фоном. ── */
-.glav{{position:relative;min-height:calc(100vh - 9rem);display:flex;flex-direction:column}}
-.glav-fon{{position:absolute;inset:0;z-index:0;display:flex;align-items:center;
-  justify-content:flex-end;pointer-events:none;overflow:hidden}}
-/* Кривая дракона — предмет занятия, а не украшение, и потому приглушена до фона:
-   она должна попадаться на глаза, а не спорить с текстом. */
-.drakon{{width:min(46vw,720px);height:auto;color:var(--accent);opacity:.10;
-  transform:translateX(8%)}}
-@media(prefers-color-scheme:dark){{:root:not([data-theme=light]) .drakon{{opacity:.13}}}}
-.glav>*:not(.glav-fon){{position:relative;z-index:1}}
-.zag2{{display:block}}
-.glav-skoro{{padding:1.5rem 0 2rem}}
-.skoro-den{{font-size:clamp(2.4rem,5.2vw,4.4rem);font-weight:600;letter-spacing:-.025em;
-  margin:.2rem 0 0;line-height:1.05}}
-.skoro-vremya{{font-size:clamp(1.7rem,3.4vw,2.9rem);color:var(--accent);
-  margin:.15rem 0 0;font-weight:600}}
-.skoro-kab{{font-size:clamp(1.1rem,2vw,1.5rem);color:var(--muted);margin:.6rem 0 0}}
+/* ── ЗАГЛАВНАЯ: слева содержание, справа кривая. Кривая ЗАНИМАЕТ пустоту,
+   а не лежит под текстом — иначе она не решает ту задачу, ради которой взята. */
+.glav{{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.82fr);
+  gap:0 3.5rem;align-items:stretch;min-height:calc(100vh - 8rem)}}
+@media(max-width:980px){{.glav{{grid-template-columns:1fr}}
+  .glav-risunok{{min-height:46vw;order:-1}}}}
+.glav-tekst{{display:flex;flex-direction:column;padding-bottom:1rem}}
+.glav-risunok{{position:relative;min-height:22rem}}
+#drakon{{position:absolute;inset:0;width:100%;height:100%;opacity:.5}}
+@media(prefers-color-scheme:dark){{:root:not([data-theme=light]) #drakon{{opacity:.62}}}}
+/* Имя класса — самое крупное на странице. Не дата занятия: сайт про класс. */
+.glav-imya{{font-size:clamp(2.6rem,5.6vw,5rem);font-weight:600;letter-spacing:-.03em;
+  line-height:1.02;margin:1rem 0 0}}
+.glav-pod{{font-family:var(--sans);font-size:clamp(1.1rem,2vw,1.5rem);color:var(--muted);
+  margin:.5rem 0 0}}
+.glav-polosa{{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  gap:1.6rem 3rem;padding:1.8rem 0;border-top:1px solid var(--rule);align-items:start;
+  margin-top:1.8rem}}
+.skoro-den{{font-size:clamp(1.4rem,2.4vw,2rem);font-weight:600;margin:.2rem 0 0;
+  line-height:1.15}}
+.skoro-vremya{{font-family:var(--sans);font-size:clamp(1.15rem,1.9vw,1.5rem);
+  color:var(--accent);margin:.1rem 0 0;font-weight:600}}
+.skoro-kab{{font-family:var(--sans);font-size:1.05rem;color:var(--muted);margin:.45rem 0 0}}
 .skoro-kab b{{color:var(--text);font-weight:600}}
-/* Полосы: две колонки, обе широкие. Между полосами — воздух, а не пустота. */
-.glav-polosa{{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);
-  gap:2rem 4rem;padding:2rem 0;border-top:1px solid var(--rule);align-items:start}}
-@media(max-width:900px){{.glav-polosa{{grid-template-columns:1fr;gap:2rem}}}}
-.listok-imya{{font-size:clamp(1.6rem,3vw,2.5rem);font-weight:600;margin:.2rem 0 0;
+.listok-imya{{font-size:clamp(1.5rem,2.6vw,2.2rem);font-weight:600;margin:.2rem 0 0;
   line-height:1.1}}
 .listok-nom{{color:var(--faint);margin-right:.5rem}}
-.listok-ver{{margin:.8rem 0 0}}
-.ver.bolshoj{{font-size:1.25rem;padding:.3em 1.1em;margin:0 .5rem 0 0}}
-.rasp{{border-collapse:collapse;font-size:clamp(1.1rem,1.8vw,1.45rem)}}
-.rasp td{{border:none;padding:.25rem 0;vertical-align:baseline}}
+.listok-ver{{margin:.7rem 0 0}}
+.ver.bolshoj{{font-size:1.15rem;padding:.28em 1em;margin:0 .45rem 0 0}}
+.rasp,.vedut{{border-collapse:collapse;font-size:1.15rem}}
+.rasp td,.vedut td{{border:none;padding:.24rem 0;vertical-align:baseline}}
 .rasp .den-imya{{font-weight:600;padding-right:2rem}}
-.rasp .den-vremya{{white-space:nowrap;color:var(--muted)}}
-.vedut{{border-collapse:collapse;font-size:clamp(1.05rem,1.7vw,1.35rem)}}
-.vedut td{{border:none;padding:.3rem 0;vertical-align:baseline}}
-.vedut .predmet{{color:var(--muted);padding-right:2rem;white-space:nowrap}}
-.glav-lyudi{{margin-top:auto}}
-.glav-prepy .prep-spisok{{columns:2;column-gap:2.5rem;font-size:1.1rem}}
-.glav-prepy .prep-spisok.ranshe{{columns:1;font-size:1rem}}
-/* Подпись: то, что важно знать, но не первым. Линия внизу — и только внизу. */
-.podpis{{font-size:1rem;color:var(--faint);margin:0;padding:1.2rem 0 0;
-  border-top:1px solid var(--rule)}}
+.rasp .den-vremya{{white-space:nowrap;color:var(--muted);font-family:var(--sans)}}
+.vedut .predmet{{color:var(--muted);padding-right:1.8rem;white-space:nowrap;
+  font-family:var(--sans);font-size:1rem}}
+/* Имя человека не разрывается посреди фамилии. */
+.imya-celikom{{white-space:nowrap}}
+.prep-spisok{{list-style:none;margin:.4rem 0 0;padding:0;font-size:1.08rem;
+  columns:2;column-gap:2rem}}
+.prep-spisok li{{padding:.16rem 0;break-inside:avoid}}
+.prep-spisok.ranshe{{columns:1;color:var(--muted);font-size:1rem}}
+.ranshe-zag{{margin-top:1.2rem}}
+/* Подпись внизу — одна линия на всю страницу, и только здесь. */
+.podpis{{font-family:var(--sans);font-size:.95rem;color:var(--faint);margin:auto 0 0;
+  padding:1.2rem 0 0;border-top:1px solid var(--rule)}}
 .klass-sboku{{border-left:1px solid var(--rule);padding-left:2rem}}
 @media(max-width:900px){{.klass-sboku{{border-left:none;padding-left:0;margin-top:1.5rem}}}}
 .prep-spisok{{list-style:none;margin:.4rem 0 0;padding:0;font-size:1.05rem}}
@@ -1339,50 +1408,61 @@ body{{padding-bottom:2rem}}
 </nav>
 
 <section class="str holst" id="s-start">
-  <!-- 🔴 СТРАНИЦА ЗАНИМАЕТ ВСЮ ШИРИНУ И ВСЮ ВЫСОТУ, а не жмётся в колонку.
-       Владелец 06.09: «не использовано пространство… как будто пытаешься
-       сэкономить, сгоняешь всё в узкие колонки, делаешь маленький шрифт».
-       Поэтому: три полосы во всю ширину, крупный единый шрифт, и кривая
-       дракона фоном — она заполняет то, что иначе осталось бы пустотой. -->
+  <!-- 🔴 БОЛЬШИМИ БУКВАМИ — ИМЯ КЛАССА, А НЕ ДАТА ЗАНЯТИЯ. Владелец 06.09:
+       «не нужно, чтобы это было заголовком всего сайта… большим можно сказать
+       „математический класс, 9 класс, 179 школа“». Это сайт класса; ближайшее
+       занятие — то, что на нём сегодня написано, а не то, чем он является.
+       Позже сюда лягут алгебра и геометрия, и заголовок не придётся менять.
+
+       🔴 КРИВАЯ СТОИТ В СВОЁМ СТОЛБЦЕ, А НЕ ПОД ТЕКСТОМ. Она затем и нужна,
+       чтобы занять пустоту: «должна заполнять пустое пространство, а не быть
+       поверх текста». Поэтому сетка: слева содержание, справа — кривая. -->
   <div class="glav">
-    <div class="glav-fon">{krivaya_drakona(12)}</div>
+    <div class="glav-tekst">
+      <h1 class="glav-imya">Математический класс</h1>
+      <p class="glav-pod">9 класс · школа №&nbsp;179</p>
 
-    <div class="glav-skoro">
-      <span class="zag2">Ближайшее занятие</span>
-      <p class="skoro-den">{e(po_russki(DNI[blizh][2]))}, {e(DNI[blizh][0])}</p>
-      <p class="skoro-vremya">{VREMYA[blizh]}</p>
-      <p class="skoro-kab">{kabinety_skoro}</p>
-    </div>
+      <div class="glav-polosa">
+        <div>
+          <span class="zag2">Ближайшее занятие</span>
+          <p class="skoro-den">{e(po_russki(DNI[blizh][2]))}, {e(DNI[blizh][3])}</p>
+          <p class="skoro-vremya">{VREMYA[blizh]}</p>
+          <p class="skoro-kab">{kabinety_skoro}</p>
+        </div>
+        <div>
+          <span class="zag2">Расписание спецмата</span>
+          <table class="rasp"><tbody>
+            {"".join(f'<tr><td class="den-imya">{e(DNI[k][0])}</td>'
+                     f'<td class="den-vremya">{VREMYA[k]}</td></tr>' for k in DNI)}
+          </tbody></table>
+        </div>
+      </div>
 
-    <div class="glav-polosa">
       {tekushchij_listok}
-      <div class="glav-rasp">
-        <span class="zag2">Расписание</span>
-        <table class="rasp"><tbody>
-          {"".join(f'<tr><td class="den-imya">{e(DNI[k][0])}</td>'
-                   f'<td class="den-vremya">{VREMYA[k]}</td></tr>' for k in DNI)}
-        </tbody></table>
+
+      <div class="glav-polosa">
+        <div>
+          <span class="zag2">Кто ведёт</span>
+          <table class="vedut"><tbody>
+            <tr><td class="predmet">алгебра</td><td>Ольга Рыжая</td></tr>
+            <tr><td class="predmet">геометрия</td><td>Наталия Стрелкова</td></tr>
+            <tr><td class="predmet">спецмат</td><td>Даня Макаров, Ваня Яковлев</td></tr>
+            <tr><td class="predmet">классные руководители</td>
+                <td><span class="imya-celikom">Дарья Аракелова</span>,
+                    <span class="imya-celikom">Радий Скребцов</span></td></tr>
+          </tbody></table>
+        </div>
+        <div>
+          <span class="zag2">Преподаватели спецмата</span>
+          <ul class="prep-spisok">{spisok_prepodavatelej}</ul>
+          {byvshie_html}
+        </div>
       </div>
+
+      <p class="podpis">Кривая дракона Хартера&nbsp;— Хейтуэя: её разбирали на занятии</p>
     </div>
 
-    <div class="glav-polosa glav-lyudi">
-      <div class="glav-vedut">
-        <span class="zag2">Кто ведёт</span>
-        <table class="vedut"><tbody>
-          <tr><td class="predmet">алгебра</td><td>Ольга Рыжая</td></tr>
-          <tr><td class="predmet">геометрия</td><td>Наталия Стрелкова</td></tr>
-          <tr><td class="predmet">спецмат</td><td>Даня Макаров, Ваня Яковлев</td></tr>
-          <tr><td class="predmet">классные руководители</td><td>Дарья Аракелова, Радион Скребцов</td></tr>
-        </tbody></table>
-      </div>
-      <div class="glav-prepy">
-        <span class="zag2">Преподаватели спецмата</span>
-        <ul class="prep-spisok">{spisok_prepodavatelej}</ul>
-        {byvshie_html}
-      </div>
-    </div>
-
-    <p class="podpis">Школа №&nbsp;179 · математический класс · 9К и 9Л</p>
+    <div class="glav-risunok"><canvas id="drakon" aria-label="кривая дракона" role="img"></canvas></div>
   </div>
 </section>
 
