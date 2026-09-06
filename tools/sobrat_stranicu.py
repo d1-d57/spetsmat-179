@@ -49,6 +49,13 @@ VHOD_SKRIPT = r"""
   <div class="okno-fon" data-zakryt></div>
   <form class="okno-telo" id="forma-vhoda" method="post" action="/vhod">
     <h2>Вход</h2>
+    <!-- 🔴 СКРЫТОЕ ИМЯ ПОЛЬЗОВАТЕЛЯ СТОИТ ЗДЕСЬ НЕ ДЛЯ СЕРВЕРА — ОН ЕГО НЕ ЧИТАЕТ.
+         Менеджеры паролей сохраняют ПАРУ «логин + пароль» и форму без логина чаще
+         всего пропускают молча. С этим полем браузер предлагает запомнить вход и
+         подставляет его в следующий раз. Владелец 06.09: «нужно, чтобы после
+         входа пароль запоминался автоматически». -->
+    <input type="text" name="kto" value="организатор" autocomplete="username"
+           readonly hidden aria-hidden="true" tabindex="-1">
     <label for="parol">Пароль организатора</label>
     <input type="password" id="parol" name="parol" required autocomplete="current-password">
     <p class="okno-oshibka" id="vhod-oshibka" hidden>Неверный пароль.</p>
@@ -84,36 +91,30 @@ VHOD_SKRIPT = r"""
     if(ev.key === 'Escape' && !okno.hidden) zakryt();
   });
 
-  forma.addEventListener('submit', async function(ev){
-    ev.preventDefault();
-    oshibka.hidden = true;
-    let otvet;
-    try{
-      otvet = await fetch('/vhod', {method:'POST',
-        headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body: new URLSearchParams({parol: pole.value})});
-    }catch(err){
-      oshibka.textContent = 'Сервер недоступен: ' + err;
-      oshibka.hidden = false; return;
-    }
-    /* Сервер отвечает 302 на «/», fetch по нему переходит сам и кука ставится.
-       Неверный пароль — 401, и тогда мы остаёмся в окне. */
-    if(otvet.ok || otvet.redirected){ location.reload(); return; }
-    oshibka.textContent = otvet.status === 401
-      ? 'Неверный пароль.' : 'Не пустил: ответ сервера ' + otvet.status;
+  /* 🔴 ФОРМА ОТПРАВЛЯЕТСЯ БРАУЗЕРОМ, А НЕ СКРИПТОМ, И ЭТО ГЛАВНОЕ ЗДЕСЬ.
+     Раньше вход шёл через `fetch` с `preventDefault` — и менеджер паролей не
+     видел входа вовсе, поэтому не предлагал пароль сохранить и не подставлял
+     его потом. Владелец вводил пароль каждый раз заново.
+
+     Обычная отправка это чинит: браузер понимает, что произошёл вход, сервер
+     отвечает 302 на `/`, и человек оказывается ровно там же, где был, — то есть
+     обещание «остаюсь на той же странице» выполняется и без скрипта. Неверный
+     пароль возвращает на `/?vhod=ne-pustil`, и окно открывается снова с ошибкой.
+
+     Скрипт здесь только один: показать окно и запомнить, что оно было открыто. */
+  const adres = new URL(location.href);
+  if(adres.searchParams.get('vhod') === 'ne-pustil'){
+    otkryt();
+    oshibka.textContent = 'Неверный пароль.';
     oshibka.hidden = false;
-    pole.select();
-  });
+    adres.searchParams.delete('vhod');
+    history.replaceState(null, '', adres.pathname + adres.search + adres.hash);
+  }
 })();
 </script>"""
 
 
 PRAVKA_SKRIPT = r"""
-<div class="panel-pravok" id="panel-pravok">
-  <span class="skolko" id="skolko-pravok"></span>
-  <button type="button" id="sbrosit" class="vtoraya" disabled>Сбросить правки</button>
-  <button type="button" id="sohranit" class="glavnaya" disabled>Сохранить</button>
-</div>
 <div class="soob" id="soob"></div>
 <script>
 /* ── ПРАВКИ НАКАПЛИВАЮТСЯ, СОХРАНЯЕТ КНОПКА ────────────────────────────────────
@@ -146,18 +147,16 @@ PRAVKA_SKRIPT = r"""
     return 'правок';
   }
   function obnovit(){
-    /* 🔴 ПАНЕЛЬ ВИДНА ВСЕГДА, кнопки просто гаснут. Панель, появляющаяся только
-       при правке, не сообщает, что сохранение вообще существует, — и человек её
-       ищет. Владелец 06.09: «кнопки Сохранить не вижу». Видимая, но погашенная
-       кнопка отвечает на вопрос «а что тут вообще можно» до первого действия. */
+    /* 🔴 КНОПКИ ВСЕГДА НА ВИДУ, В ВЕРХНЕЙ ПАНЕЛИ, И ПРОСТО ГАСНУТ. Кнопка,
+       появляющаяся из ниоткуда, не сообщает, что сохранение вообще существует, —
+       владелец её искал. А подпись, объясняющая кнопку словами, не нужна вовсе:
+       число несохранённых правок стоит на самой кнопке, и этого достаточно. */
     const n = pravki.size;
     const est = n > 0;
     document.getElementById('sohranit').disabled = !est;
     document.getElementById('sbrosit').disabled = !est;
     panel.classList.toggle('est-pravki', est);
-    schyot.textContent = est
-      ? n + ' ' + slovo(n) + ' не сохранено'
-      : 'правок нет — можно менять распределение';
+    schyot.textContent = est ? ' ' + n : '';
   }
   function pomenyalos(el, klyuch, operacia){
     pravki.set(klyuch, operacia);
@@ -635,10 +634,28 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
                      % ("" if 3 <= len(ego) <= 4 else " ploho", len(ego))) \
                     if mozhno("videt-schyot") else ""
             gr = vybor_gruppy_prepoda(x, sl) if ADMIN else e(x["gruppa"] or "")
+            # 🔴 ОБА ДНЯ ВИДНЫ СРАЗУ, У КАЖДОГО ПРЕПОДАВАТЕЛЯ. Владелец 06.09:
+            # «„понедельник-четверг“ как текст не нужен, а кнопки нужны… рядом с
+            # каждым преподавателем». Общий переключатель дня отвечает на вопрос
+            # «что сегодня»; здесь нужен другой — «ходит ли он в этот день вообще».
+            #
+            # 🔴 ЭТО ПОКА ОТМЕТКА, А НЕ ВЫКЛЮЧАТЕЛЬ, И ВЫГЛЯДИТ ОНА ОТМЕТКОЙ.
+            # Признака «преподаватель работает по понедельникам» в базе нет: есть
+            # только его школьники по слотам, и отметка честно показывает именно
+            # их — закрашена, если в этот день у него кто-то есть. Нарисовать
+            # нажимаемую кнопку без своего поля в схеме значило бы поставить
+            # выключатель, который ничего не выключает. Это предмет захода про
+            # слой занятия, и там же появится настоящее «работает в этот день».
+            dni_metki = "".join(
+                '<span class="den-metka%s" title="%s">%s</span>' % (
+                    "" if any(r["teacher_id"] == x["id"] for r in shk_dnya[k]) else " pusto",
+                    e(DNI[k][0]), e(DNI[k][0][:2]))
+                for k in DNI)
             ryady.append(
                 f'<tr data-i="{e(x["name"].lower())}" data-tid="{x["id"]}">'
                 f'<td class="tp"><b>{e(x["name"])}</b></td>'
                 f'<td class="td-deti">{deti}</td>'
+                + f'<td class="tdni">{dni_metki}</td>'
                 + schet
                 + f'<td class="tg">{gr}</td>'
                 + (f'<td class="tk"><span data-tolko-gost>{kab_html(kl, x["gruppa"])}'
@@ -765,6 +782,39 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
                                                 for k in ("В", "Д", "Н")))
         svodka.append(f"  листки: 9кл {len(l9)} · 8кл {len(l8)}")
 
+    # ── ДАННЫЕ ДЛЯ СТРАНИЦЫ КЛАССА ──────────────────────────────────────────
+    # Всё, что можно посчитать, считается из базы. Вписано руками только то, чего
+    # в базе нет: кто какой предмет ведёт и кто классный руководитель — этого
+    # система не знает и знать пока негде.
+    klassy = {}
+    for r in shk:
+        if r["class"]:
+            klassy[r["class"]] = klassy.get(r["class"], 0) + 1
+
+    # 🔴 НЕ-ЛЮДИ ИЗ СПИСКА ВЫКИДЫВАЮТСЯ. В таблице преподавателей живут служебные
+    # строки «отсутствует» и «НС» — это не люди, а способ сказать «никого». Дом у
+    # этого знания один и он не здесь: `veb/sobrat_fajl.NE_LYUDI`.
+    from veb.sobrat_fajl import NE_LYUDI
+    vse_prepy = c.execute("select name, aktiven from teachers order by name").fetchall()
+    seychas = sorted({r["name"] for r in vse_prepy
+                      if r["name"] not in NE_LYUDI and r["aktiven"]},
+                     key=lambda s: s.lower())
+    ranshe = sorted({r["name"] for r in vse_prepy
+                     if r["name"] not in NE_LYUDI and not r["aktiven"]},
+                    key=lambda s: s.lower())
+    spisok_prepodavatelej = "".join(f"<li>{e(n)}</li>" for n in seychas)
+    byvshie_html = ('<div class="zag2 ranshe-zag">Вели раньше</div>'
+                    '<ul class="prep-spisok ranshe">'
+                    + "".join(f"<li>{e(n)}</li>" for n in ranshe) + "</ul>") if ranshe else ""
+
+    # Кабинеты в подписи расписания: показываем те, что известны, и честно молчим,
+    # когда их нет. Владелец назначает их накануне, и «уточняются» — нормальное
+    # состояние, а не дефект.
+    izvestnye = [f'{kod}&nbsp;{e(kabinety_dnya["pn"][kod])}'
+                 for kod in ("В", "Д", "Н") if kabinety_dnya["pn"].get(kod)]
+    kabinety_podpis = ("кабинеты: " + " · ".join(izvestnye)) if izvestnye \
+        else '<span class="net">кабинеты уточняются</span>'
+
     # ── ЧЕМ РЕЖИМЫ ОТЛИЧАЮТСЯ, ЦЕЛИКОМ И В ОДНОМ МЕСТЕ ───────────────────────
     # Гость видит кнопку «Вход». Организатор — метку режима, кнопку «Выход» и
     # скрипт правки. Больше ничем: вся остальная разметка у них общая, потому
@@ -773,9 +823,18 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     # оставлена в `href` нарочно: без JavaScript она по-прежнему работает и ведёт
     # на настоящую страницу входа. Окно — улучшение поверх работающего, а не
     # замена его на то, что ломается при первой же ошибке в скрипте.
-    vhod_knopka = ('<span class="rezhim">режим правки</span>'
-                   '<a class="vhod" href="/vyhod">Выход</a>' if ADMIN
-                   else '<a class="vhod" href="/vhod" data-otkryt-vhod>Вход</a>')
+    # 🔴 СОХРАНИТЬ И СБРОСИТЬ СТОЯТ РЯДОМ С ВЫХОДОМ, В ВЕРХНЕЙ ПАНЕЛИ. Нижняя
+    # плашка убрана: она занимала низ экрана постоянно и объясняла сама себя
+    # фразой, которой владелец не поверил ни секунды («правок нет — можно менять
+    # распределение»). Кнопке не нужна подпись — ей нужно быть на виду и гаснуть,
+    # когда нажимать нечего. Число несохранённых правок стоит на самой кнопке.
+    verh_prava = ('<span class="verh-prava" id="panel-pravok">'
+                  '<button type="button" id="sbrosit" class="vtoraya" disabled>Сбросить</button>'
+                  '<button type="button" id="sohranit" class="glavnaya" disabled>'
+                  'Сохранить<span class="schyot-pravok" id="skolko-pravok"></span></button>'
+                  '<a class="vhod" href="/vyhod">Выход</a></span>' if ADMIN
+                  else '<span class="verh-prava">'
+                       '<a class="vhod" href="/vhod" data-otkryt-vhod>Вход</a></span>')
     # Окно входа лежит в странице ВСЕГДА, у обеих ролей: так каркас у них
     # совпадает буквально, и гейту нечего прощать.
     skripty = VHOD_SKRIPT + (PRAVKA_SKRIPT if ADMIN else "")
@@ -917,6 +976,39 @@ tr:hover td{{background:var(--accent-soft)}}
    преподавателя и не переносились, оставляя дыру. Крестик занимает НОЛЬ ширины,
    пока на таблетку не навели мышь, — поэтому у гостя и у организатора список
    ровно одинаковой ширины. Элемент один и тот же; правку добавляет data-org. */
+/* Отметки дней у преподавателя: закрашена — в этот день у него есть школьники. */
+.tdni{{white-space:nowrap;width:1%;padding-right:1.2rem}}
+.den-metka{{display:inline-block;font-family:var(--sans);font-size:.78rem;font-weight:600;
+  letter-spacing:.03em;text-transform:uppercase;padding:.18em .5em;border-radius:6px;
+  margin-right:.3rem;background:var(--accent-soft);color:var(--accent);
+  border:1px solid transparent}}
+.den-metka.pusto{{background:none;color:var(--faint);border-color:var(--rule)}}
+/* ── СТРАНИЦА КЛАССА. Ни одного повтора имени сайта: оно стоит наверху. ── */
+.klass{{display:grid;grid-template-columns:minmax(0,1fr) 17rem;gap:0 3rem;align-items:start}}
+@media(max-width:900px){{.klass{{grid-template-columns:1fr}}}}
+.klass-shapka{{font-family:var(--sans);font-size:1.05rem;color:var(--muted);margin:0 0 .2rem}}
+.klass-cifry{{font-family:var(--sans);font-size:1.5rem;margin:0 0 1.6rem;font-weight:400}}
+.klass-cifry b{{font-weight:600}}
+.plitka{{border:1px solid var(--rule);border-radius:12px;padding:1rem 1.3rem;
+  background:var(--panel);margin:0 0 1rem;max-width:34rem}}
+.rasp,.vedut{{width:100%;border-collapse:collapse;font-size:1.05rem}}
+.rasp td,.vedut td{{border:none;padding:.28rem 0;vertical-align:baseline}}
+.rasp .den-imya{{font-weight:600;width:11rem}}
+.rasp .den-vremya{{font-family:var(--sans);white-space:nowrap}}
+.vedut .predmet{{color:var(--muted);font-family:var(--sans);font-size:.95rem;width:11rem}}
+.kab-podpis{{font-family:var(--sans);font-size:.95rem;color:var(--muted);margin:.6rem 0 0}}
+.klass-sboku{{border-left:1px solid var(--rule);padding-left:2rem}}
+@media(max-width:900px){{.klass-sboku{{border-left:none;padding-left:0;margin-top:1.5rem}}}}
+.prep-spisok{{list-style:none;margin:.4rem 0 0;padding:0;font-size:1.05rem}}
+.prep-spisok li{{padding:.2rem 0}}
+.prep-spisok.ranshe{{color:var(--muted);font-size:.98rem}}
+.ranshe-zag{{margin-top:1.4rem}}
+/* ── ЛИСТКИ: восьмой класс двумя столбцами, чтобы не тянуться одной колонкой. ── */
+.dva-listka{{display:grid;grid-template-columns:1fr 1fr;gap:0 3rem;align-items:start}}
+@media(max-width:900px){{.dva-listka{{grid-template-columns:1fr}}}}
+/* Переключатель дня стоит в той же строке, что и вкладки, а не отдельной полосой. */
+.tabbar-rasp .dni{{margin-left:auto;display:flex;gap:.25rem;align-self:center}}
+.tabbar-rasp .dni label{{font-size:.98rem;padding:.3em .9rem}}
 /* ── СТРОКА НЕ ПЕРЕНОСИТСЯ. Перенос был не косметикой, а поломкой: список
    переставал читаться колонкой, и на месте переноса зияла дыра. Причина —
    раздутые выпадающие списки, съедавшие место у фамилии. Лечится тем же, чем
@@ -980,24 +1072,28 @@ button.glavnaya:hover{{opacity:.88}}
 button.vtoraya{{color:var(--muted)}}
 button.vtoraya:hover{{color:var(--text)}}
 /* ── ПАНЕЛЬ НЕСОХРАНЁННЫХ ПРАВОК ── */
-.panel-pravok{{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;
-  align-items:center;gap:1rem;padding:.8rem 1.4rem;background:var(--panel);
-  border-top:2px solid var(--warm);box-shadow:0 -6px 24px rgba(0,0,0,.18);
-  font-family:var(--sans)}}
-.panel-pravok{{border-top:2px solid var(--rule)}}
-.panel-pravok.est-pravki{{border-top-color:var(--warm)}}
-.panel-pravok .skolko{{font-weight:600;color:var(--muted);margin-right:auto}}
-.panel-pravok.est-pravki .skolko{{color:var(--warm)}}
+/* ── ВЕРХНЯЯ ПАНЕЛЬ: имя, разделы, поиск, права. Одна строка на всё. ── */
+.menu .im{{font-weight:600;font-size:1.05rem;margin-right:1.4rem;white-space:nowrap;
+  color:var(--text);padding:0;background:none;cursor:default}}
+.menu .im:hover{{background:none}}
+.poisk-verh{{flex:1 1 18rem;max-width:34rem;margin:0 1.2rem;min-width:10rem}}
+.poisk-verh .poisk{{margin:0;font-size:1rem;padding:.42em .8em;width:100%}}
+.poisk-verh .spisok{{top:2.6rem}}
+.poisk-verh #nashli{{position:absolute;left:0;right:0;top:2.6rem;z-index:19}}
+.verh-prava{{display:flex;align-items:center;gap:.5rem;margin-left:auto;white-space:nowrap}}
+.verh-prava button{{padding:.38em 1em;font-size:.98rem}}
+.schyot-pravok{{font-variant-numeric:tabular-nums}}
+.est-pravki .glavnaya{{box-shadow:0 0 0 3px var(--accent-soft)}}
 button.glavnaya[disabled],button.vtoraya[disabled]{{opacity:.45;cursor:default}}
 button.glavnaya[disabled]:hover{{opacity:.45}}
 /* Панель занимает низ экрана — страница не должна прятать под ней последние строки. */
-body{{padding-bottom:4.5rem}}
+body{{padding-bottom:2rem}}
 /* Тронутое, но не сохранённое — видно глазом и не спутаешь с сохранённым. */
 .tronuto{{background:rgba(201,116,58,.10);outline:2px solid rgba(201,116,58,.35);
   outline-offset:2px;border-radius:6px}}
 .tabl.snyato{{text-decoration:line-through;opacity:.55}}
 /* Ответ сервера человеку. Отказ виден внизу экрана и не пропускается. */
-.soob{{position:fixed;left:0;right:0;bottom:3.6rem;z-index:60;font-family:var(--sans);
+.soob{{position:fixed;left:0;right:0;bottom:0;z-index:60;font-family:var(--sans);
   font-size:1.05rem;padding:.7rem 1.2rem;display:none}}
 .soob.idet{{display:block;background:var(--accent-soft);color:var(--text)}}
 .soob.ploho{{display:block;background:#c0392b;color:#fff;font-weight:600}}
@@ -1067,64 +1163,93 @@ body{{padding-bottom:4.5rem}}
 <input class="rd" type="radio" name="str" id="p-start" checked>
 <input class="rd" type="radio" name="str" id="p-list">
 <input class="rd" type="radio" name="str" id="p-rasp">
+
+<!-- ВЕРХНЯЯ ПАНЕЛЬ. Имя сайта стоит ОДИН раз и здесь; разделы больше не повторяют
+     своё название заголовком внутри себя. Поиск живёт тут же и работает на всех
+     разделах — искать надо там, где смотришь, а не там, где нашлось место. -->
 <nav class="menu">
-  <label class="im" for="p-start">Спецмат 9 класс</label>
+  <span class="im">Спецмат&nbsp;· 9&nbsp;класс</span>
+  <label for="p-start">Класс</label>
   <label for="p-list">Листки</label>
   <label for="p-rasp">Распределение</label>
-  {vhod_knopka}
+  <div class="podskazki poisk-verh">
+    <input class="poisk" id="poisk" placeholder="Поиск — школьник, преподаватель, листок" autocomplete="off">
+    <div class="spisok" id="spisok" hidden></div>
+    <div id="nashli"></div>
+  </div>
+  {verh_prava}
 </nav>
 
 <section class="str holst" id="s-start">
-  <div class="oblozhka">
-    <h1>Спецмат · 9 класс</h1>
-    <p class="data">9К и 9Л</p>
-    <div class="raspisanie">
-      <div class="zag2">Расписание</div>
-      <div class="rasp-str"><b>понедельник</b> 14:15&nbsp;&mdash;&nbsp;15:55</div>
-      <div class="rasp-str"><b>четверг</b> 13:10&nbsp;&mdash;&nbsp;15:00</div>
-      <div class="rasp-str"><span class="net">кабинеты уточняются</span></div>
+  <div class="klass">
+    <div class="klass-glavnoe">
+      <p class="klass-shapka">Школа №&nbsp;179 · математический класс</p>
+      <p class="klass-cifry"><b>{len(shk)}</b> школьников · <b>9К</b> {klassy.get("9К", 0)} · <b>9Л</b> {klassy.get("9Л", 0)}</p>
+
+      <div class="plitka">
+        <div class="zag2">Занятия</div>
+        <table class="rasp"><tbody>
+          <tr><td class="den-imya">понедельник</td><td class="den-vremya">14:15&nbsp;—&nbsp;15:55</td></tr>
+          <tr><td class="den-imya">четверг</td><td class="den-vremya">13:10&nbsp;—&nbsp;15:00</td></tr>
+        </tbody></table>
+        <p class="kab-podpis">{kabinety_podpis}</p>
+      </div>
+
+      <div class="plitka">
+        <div class="zag2">Кто ведёт</div>
+        <table class="vedut"><tbody>
+          <tr><td class="predmet">алгебра</td><td>Ольга Рыжая</td></tr>
+          <tr><td class="predmet">геометрия</td><td>Наталия Стрелкова</td></tr>
+          <tr><td class="predmet">спецмат</td><td>Даня Макаров, Ваня Яковлев</td></tr>
+          <tr><td class="predmet">классные<br>руководители</td><td>Дарья Аракелова · Радий Юрьевич Скрипцов</td></tr>
+        </tbody></table>
+      </div>
     </div>
-    <div class="podskazki bolshoj">
-      <input class="poisk poisk-big" id="poisk" placeholder="Поиск по сайту — школьник, преподаватель, листок" autocomplete="off">
-      <div class="spisok" id="spisok" hidden></div>
-      <div id="nashli"></div>
-    </div>
+
+    <aside class="klass-sboku">
+      <div class="zag2">Преподаватели спецмата</div>
+      <ul class="prep-spisok">{spisok_prepodavatelej}</ul>
+      {byvshie_html}
+    </aside>
   </div>
 </section>
 
 <section class="str holst" id="s-list">
-  <h1>Листки</h1>
-  <input class="rd" type="radio" name="lst" id="l-9" checked>
-  <input class="rd" type="radio" name="lst" id="l-8">
-  <div class="tabbar"><label for="l-9">9 класс</label><label for="l-8">8 класс</label></div>
+  <input class="rd" type="radio" name="lst" id="l-8" checked>
+  <input class="rd" type="radio" name="lst" id="l-9">
+  <div class="tabbar"><label for="l-8">8 класс</label><label for="l-9">9 класс</label></div>
+  <section class="vid" id="w-8">
+    <div class="dva-listka">
+      <div>
+        <p class="polug">первое полугодие</p>
+        <table class="listki"><tbody>{stroki_8(L8_PERVOE, "listki-8kl")}</tbody></table>
+      </div>
+      <div>
+        <p class="polug">второе полугодие</p>
+        <table class="listki"><tbody>{stroki_8(L8_VTOROE, "listki-8kl")}</tbody></table>
+      </div>
+    </div>
+  </section>
   <section class="vid" id="w-9">
     <table class="listki"><tbody>{stroki_9()}</tbody></table>
-  </section>
-  <section class="vid" id="w-8">
-    <p class="polug">первое полугодие</p>
-    <table class="listki"><tbody>{stroki_8(L8_PERVOE, "listki-8kl")}</tbody></table>
-    <p class="polug">второе полугодие</p>
-    <table class="listki"><tbody>{stroki_8(L8_VTOROE, "listki-8kl")}</tbody></table>
   </section>
 </section>
 
 <section class="str holst" id="s-rasp">
-  <div class="shapka-str">
-    <h1>Распределение</h1>
-    <input class="poisk poisk-str" id="poisk-r" placeholder="Фамилия школьника или имя преподавателя" autocomplete="off">
-    <div class="dni">
-      <label for="d-pn">понедельник</label><label for="d-cht">четверг</label>
-    </div>
-  </div>
-
+  <!-- Ни заголовка «Распределение», ни отдельной строки под поиск: название
+       раздела уже стоит во вкладке наверху, повторять его нечем и незачем.
+       Вкладки и переключатель дня — одной строкой. -->
   <input class="rd" type="radio" name="vk" id="t-shk" checked>
   <input class="rd" type="radio" name="vk" id="t-prep">
   <input class="rd" type="radio" name="vk" id="t-В">
   <input class="rd" type="radio" name="vk" id="t-Д">
   <input class="rd" type="radio" name="vk" id="t-Н">
-  <div class="tabbar">
+  <div class="tabbar tabbar-rasp">
     <label for="t-shk">школьникам</label><label for="t-prep">преподавателям</label>
     <label for="t-В">В</label><label for="t-Д">Д</label><label for="t-Н">Н</label>
+    <span class="dni">
+      <label for="d-pn">понедельник</label><label for="d-cht">четверг</label>
+    </span>
   </div>
   <section class="vid" id="v-shk">
     <div class="den den-pn">{vid_vse("pn")}</div>

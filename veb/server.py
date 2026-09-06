@@ -728,7 +728,20 @@ class Handler(BaseHTTPRequestHandler):
         submitted = (form.get("parol", [""])[0] or "")
         role = vhod._check_password(submitted)
         if role is None:
-            self._send_html(401, _BAD_LOGIN_HTML)
+            # 🔴 ВОЗВРАЩАЕМ НА САЙТ, А НЕ НА ОТДЕЛЬНУЮ СТРАНИЦУ ОШИБКИ. Прежде здесь
+            # отдавалась самостоятельная страничка «Неверный пароль» — та самая
+            # «странная заглушка песочного цвета», о которой сказал владелец. Теперь
+            # человек остаётся там же, где был, и окно входа открывается снова с
+            # ошибкой: это делает `?vhod=ne-pustil` в адресе.
+            #
+            # Ответ 302, а не 401, потому что форма отправляется БРАУЗЕРОМ, а не
+            # скриптом: обычная отправка — единственный способ, которым менеджер
+            # паролей вообще узнаёт, что был вход, и предлагает пароль запомнить.
+            # Ради этого же 302 стоит и на успехе.
+            self.send_response(302)
+            self.send_header("Location", "/?vhod=ne-pustil")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
             return
         self.send_response(302)
         self.send_header("Location", "/")
