@@ -824,7 +824,7 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
             # школьников 20, кабинет: пн 303, чт 307». Кто старший, видно по
             # самой вкладке; повторять это здесь нечем.
             nizhnyaya = ('<div class="gruppa-niz" data-org="pravit-kabinety">'
-                         f'<span class="gruppa-cifry">преподавателей <b>{len(svoi)}</b>'
+                         f'<span class="gruppa-cifry">принимающих <b>{len(svoi)}</b>'
                          f' · школьников <b>{len(deti)}</b></span>'
                          f'<span class="kab-polya">кабинет {polya}</span></div>')
         else:
@@ -981,14 +981,20 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     # этого знания один и он не здесь: `veb/sobrat_fajl.NE_LYUDI`.
     from veb.sobrat_fajl import NE_LYUDI
     vse_prepy = c.execute("select name, aktiven from teachers order by name").fetchall()
+    # 🔴 ЧЕТВЕРО ВЕДУЩИХ В СПИСОК ПРИНИМАЮЩИХ НЕ ПОПАДАЮТ. Они уже названы выше,
+    # в «кто ведёт», и второе упоминание — то самое повторение, от которого мы
+    # избавляемся по всему сайту. Владелец: «мы и так введём алгебру, геометрию и
+    # спецмат, это не нужно». Список от этого короче и крупнее.
+    VEDUT = {"Ольга Рыжая", "Наталия Стрелкова", "Даня Макаров", "Ваня Яковлев"}
     seychas = sorted({r["name"] for r in vse_prepy
-                      if r["name"] not in NE_LYUDI and r["aktiven"]},
+                      if r["name"] not in NE_LYUDI and r["aktiven"]
+                      and r["name"] not in VEDUT},
                      key=lambda s: s.lower())
     ranshe = sorted({r["name"] for r in vse_prepy
                      if r["name"] not in NE_LYUDI and not r["aktiven"]},
                     key=lambda s: s.lower())
     spisok_prepodavatelej = "".join(f"<li>{e(n)}</li>" for n in seychas)
-    byvshie_html = ('<div class="zag2 ranshe-zag">Вели раньше</div>'
+    byvshie_html = ('<div class="zag2 ranshe-zag">Принимали раньше</div>'
                     '<ul class="prep-spisok ranshe">'
                     + "".join(f"<li>{e(n)}</li>" for n in ranshe) + "</ul>") if ranshe else ""
 
@@ -1192,9 +1198,18 @@ tr:hover td{{background:var(--accent-soft)}}
    содержание лежит НА ней двумя потоками. Не колонка текста и колонка картинки:
    так картинка не взаимодействует с текстом, а просто стоит рядом. ── */
 .glav{{position:relative;min-height:calc(100vh - 7rem);display:flex;
-  flex-direction:column;overflow:hidden}}
-.glav-risunok{{position:absolute;top:-14%;right:-26%;width:118%;height:132%;
-  z-index:0;pointer-events:none}}
+  flex-direction:column}}
+/* 🔴 ХОЛСТ ВЫХОДИТ ЗА КРАЯ ЭКРАНА, А НЕ ОБРЫВАЕТСЯ ВНУТРИ НЕГО. Раньше он был
+   меньше страницы, и кривая кончалась ровной вертикалью посреди экрана — прямая
+   линия там, где у фрактала её быть не может, и глаз цепляется именно за неё.
+   Владелец: «кривая обрезана… её нельзя так делать, надо её до конца пустить».
+   Отступы в vw/vh и отрицательные — чтобы холст перекрывал поля `.holst` и
+   уходил за границу окна со всех сторон. */
+/* Верхний край уходит ПОД панель меню — она непрозрачна и кривую скрывает.
+   Иначе под панелью оставалась ровная горизонталь: у фрактала прямых границ
+   не бывает, и глаз цепляется именно за неё. */
+.glav-risunok{{position:absolute;left:-6vw;right:-6vw;top:-18vh;bottom:-10vh;
+  z-index:0;pointer-events:none;overflow:hidden}}
 /* Тише, чем хочется: кривая обязана попадаться на глаза и не мешать читать.
    Владелец: «должна быть незаметной, не сильно выбивать содержание». */
 #drakon{{width:100%;height:100%;opacity:.20}}
@@ -1209,37 +1224,47 @@ tr:hover td{{background:var(--accent-soft)}}
 @media(max-width:940px){{.glav-setka{{grid-template-columns:1fr;align-items:start}}}}
 /* Главное — листок. Он и набран крупнее всего, что рядом. */
 .blok-listok{{margin:0 0 2.2rem}}
-.listok-imya{{font-size:clamp(1.9rem,3.6vw,3.1rem);font-weight:600;margin:.25rem 0 0;
+.listok-imya{{font-size:clamp(2.2rem,4.2vw,3.8rem);font-weight:600;margin:.25rem 0 0;
   line-height:1.08}}
 .listok-nom{{color:var(--faint);margin-right:.5rem}}
 .listok-ver{{margin:.8rem 0 0}}
-.ver.bolshoj{{font-size:1.2rem;padding:.3em 1.1em;margin:0 .5rem 0 0}}
+.ver.bolshoj{{font-size:1.4rem;padding:.32em 1.2em;margin:0 .55rem 0 0}}
 /* Ближайшее занятие — строкой под листком, мелко. День и время важнее даты. */
-.skoro-stroka{{font-family:var(--sans);margin:1rem 0 0;display:flex;
-  align-items:baseline;gap:.6rem;flex-wrap:wrap;font-size:1rem;color:var(--muted)}}
-.skoro-stroka b{{font-size:1.35rem;color:var(--text);font-weight:700}}
-.skoro-chas{{font-size:1.35rem;color:var(--accent);font-weight:600;white-space:nowrap}}
+.skoro-stroka{{font-family:var(--sans);margin:1.1rem 0 0;display:flex;
+  align-items:baseline;gap:.7rem;flex-wrap:wrap;font-size:1.15rem;color:var(--muted)}}
+.skoro-stroka b{{font-size:1.6rem;color:var(--text);font-weight:700}}
+.skoro-chas{{font-size:1.6rem;color:var(--accent);font-weight:600;white-space:nowrap}}
 .skoro-data{{color:var(--faint)}}
 .skoro-kab b{{color:var(--text);font-weight:600}}
 /* «Кто ведёт» — второй по величине блок после листка: владелец просил
    «кто ведёт побольше, центр там». */
-.vedut{{border-collapse:collapse;font-size:clamp(1.2rem,1.9vw,1.6rem)}}
+/* 🔴 СТРОКИ ЗАГЛАВНОЙ НЕ ПОДСВЕЧИВАЮТСЯ ПОД МЫШКОЙ. Общее правило таблиц
+   зажигало строку «алгебра» бирюзовой подложкой, и владелец справедливо
+   усомнился, нарочно ли это: подсветка обещает, что по строке можно нажать,
+   а нажимать здесь нечего. Она уместна в распределении, где строку правят.
+.vedut tr:hover td{{background:none}} */
+.vedut tr:hover td{{background:none}}
+.vedut{{border-collapse:collapse;font-size:clamp(1.35rem,2vw,1.8rem)}}
 .vedut td{{border:none;padding:.28rem 0;vertical-align:baseline}}
-.vedut .predmet{{color:var(--muted);padding-right:2rem;white-space:nowrap;
-  font-family:var(--sans);font-size:1.02rem}}
+.vedut .predmet{{color:var(--muted);padding-right:2.2rem;white-space:nowrap;
+  font-family:var(--sans);font-size:1.15rem}}
 .imya-celikom{{white-space:nowrap}}
 /* Боковое — поверх кривой, мельче, с воздухом между блоками. */
 .glav-sboku{{display:flex;flex-direction:column;gap:1.8rem}}
 .sboku-blok{{}}
-.rasp{{border-collapse:collapse;font-size:1.08rem}}
-.rasp td{{border:none;padding:.22rem 0;vertical-align:baseline}}
-.rasp .den-imya{{font-weight:600;padding-right:1.6rem}}
+/* Боковая колонка набрана крупно нарочно: мелким она занимала нижнюю треть,
+   а верх оставался пустым. Владелец: «увеличить шрифт… за счёт этого меньше
+   будет пустого места». */
+.rasp{{border-collapse:collapse;font-size:clamp(1.25rem,1.5vw,1.7rem)}}
+.rasp td{{border:none;padding:.34rem 0;vertical-align:baseline}}
+.rasp .den-imya{{font-weight:600;padding-right:2rem}}
 .rasp .den-vremya{{white-space:nowrap;color:var(--muted);font-family:var(--sans)}}
-.prep-spisok{{list-style:none;margin:.4rem 0 0;padding:0;font-size:1.02rem;
-  columns:2;column-gap:1.6rem}}
-.prep-spisok li{{padding:.12rem 0;break-inside:avoid}}
-.prep-spisok.ranshe{{columns:1;color:var(--muted);font-size:.96rem}}
-.ranshe-zag{{margin-top:1rem}}
+.prep-spisok{{list-style:none;margin:.5rem 0 0;padding:0;
+  font-size:clamp(1.15rem,1.35vw,1.5rem);columns:2;column-gap:2rem}}
+.prep-spisok li{{padding:.2rem 0;break-inside:avoid}}
+.prep-spisok.ranshe{{columns:2;color:var(--muted);font-size:clamp(1.02rem,1.15vw,1.25rem)}}
+.ranshe-zag{{margin-top:1.4rem}}
+.zag2{{font-size:clamp(.82rem,.95vw,1rem)}}
 .klass-sboku{{border-left:1px solid var(--rule);padding-left:2rem}}
 @media(max-width:900px){{.klass-sboku{{border-left:none;padding-left:0;margin-top:1.5rem}}}}
 .prep-spisok{{list-style:none;margin:.4rem 0 0;padding:0;font-size:1.05rem}}
@@ -1416,7 +1441,7 @@ body{{padding-bottom:2rem}}
   <label for="p-list">Листки</label>
   <label for="p-rasp">Распределение</label>
   <div class="podskazki poisk-verh">
-    <input class="poisk" id="poisk" placeholder="Поиск — школьник, преподаватель, листок" autocomplete="off">
+    <input class="poisk" id="poisk" placeholder="Поиск — школьник, принимающий, листок" autocomplete="off">
     <div class="spisok" id="spisok" hidden></div>
     <div id="nashli"></div>
   </div>
@@ -1445,7 +1470,6 @@ body{{padding-bottom:2rem}}
              в строку под листком и набрана мелко: «7 сент» вместо «7 сентября»,
              потому что длинная дата давила на то, ради чего блок существует. -->
         <div class="blok-listok">
-          <span class="zag2">Листок по спецмату</span>
           {tekushchij_listok}
           <p class="skoro-stroka">
             <b>{e(DNI[blizh][3])}</b> <span class="skoro-chas">{VREMYA[blizh]}</span>
@@ -1476,7 +1500,7 @@ body{{padding-bottom:2rem}}
           </tbody></table>
         </div>
         <div class="sboku-blok">
-          <span class="zag2">Преподаватели спецмата</span>
+          <span class="zag2">Принимающие</span>
           <ul class="prep-spisok">{spisok_prepodavatelej}</ul>
           {byvshie_html}
         </div>
@@ -1516,7 +1540,7 @@ body{{padding-bottom:2rem}}
   <input class="rd" type="radio" name="vk" id="t-Д">
   <input class="rd" type="radio" name="vk" id="t-Н">
   <div class="tabbar tabbar-rasp">
-    <label for="t-shk">школьникам</label><label for="t-prep">преподавателям</label>
+    <label for="t-shk">школьникам</label><label for="t-prep">принимающим</label>
     <label for="t-В">В</label><label for="t-Д">Д</label><label for="t-Н">Н</label>
     <span class="zanyatie">{zanyatie_verh}</span>
     {kabinety_verh}
