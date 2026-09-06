@@ -68,20 +68,64 @@ from veb.sobrat_fajl import blizhajshee_zanyatie
 SLOT_DEFAULT = 1  # The page shows one slot at a time.
 PORT_DEFAULT = 8765
 
-# 🔴 ТУМБЛЕР СВОБОДНОЙ ПРАВКИ. True — распределение правится БЕЗ пароля (решение
-# владельца на сегодня: строку меняет несколько человек, пароль загораживал).
-# False — правка снова требует куки организатора; механизм входа для этого никуда
-# не девался, он живой и всё это время проверяется тестами.
-# Перебивается переменной окружения SPETSMAT_VEB_SVOBODNAYA_PRAVKA=0.
-SVOBODNAYA_PRAVKA = os.environ.get("SPETSMAT_VEB_SVOBODNAYA_PRAVKA", "1") != "0"
+# 🔴 ТУМБЛЕР СВОБОДНОЙ ПРАВКИ, И ОН СНОВА ЗАКРЫТ (владелец, 2026-09-06). Цель
+# сегодняшнего дня сформулирована им дословно: зайти на сайт, нажать кнопку входа,
+# ввести пароль организатора — и попасть на редактирование распределения; «больше
+# за паролем ничего быть не должно». Свободная правка была решением 04.09, когда
+# кнопки входа на публичной странице не существовало вовсе и пароль стоял на
+# критическом пути; теперь кнопка есть, и путь через неё короче прежнего.
+# 🔴 ОТКАТ — БЕЗ ВЫКАТКИ: `SPETSMAT_VEB_SVOBODNAYA_PRAVKA=1` в `secrets/veb.env`
+# плюс перезапуск юнита возвращает прежнее поведение. Публичная половина сайта
+# паролем не закрыта и не будет: за паролем ровно один экран — правка.
+SVOBODNAYA_PRAVKA = os.environ.get("SPETSMAT_VEB_SVOBODNAYA_PRAVKA", "0") != "0"
+
+KOREN_PROEKTA = Path(__file__).resolve().parent.parent
+# Публичная страница — ФАЙЛ на диске, и это не лень, а свойство: гость получает
+# байты, пересобранные последней успешной правкой, даже если сборка сейчас сломана.
+PUBLICHNAYA = KOREN_PROEKTA / "docs" / "index.html"
+INSTRUMENT_SBORKI = KOREN_PROEKTA / "tools" / "sobrat_stranicu.py"
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 MATERIALS_DIR = Path("/Users/ivanyakovlev/Documents/GitHub/materials/spetsmat-2026")
 
-GLAVNAYA_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\x93\xd0\xbb\xd0\xb0\xd0\xb2\xd0\xbd\xd0\xb0\xd1\x8f</title></head><body><p>\xd0\xa1\xd1\x82\xd1\x80\xd0\xb0\xd0\xbd\xd0\xb8\xd1\x86\xd0\xb0 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
-LISTKI_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\x9b\xd0\xb8\xd1\x81\xd1\x82\xd0\xba\xd0\xb8</title></head><body><p>\xd0\x9b\xd0\xb8\xd1\x81\xd1\x82\xd0\xba\xd0\xb8 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
-UROVNI_STUB = b"<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>\xd0\xa3\xd1\x80\xd0\xbe\xd0\xb2\xd0\xbd\xd0\xb8</title></head><body><p>\xd0\xa2\xd0\xb5\xd0\xba\xd1\x81\xd1\x82 \xd0\xbf\xd1\x80\xd0\xbe \xd1\x83\xd1\x80\xd0\xbe\xd0\xb2\xd0\xbd\xd0\xb8 \xd0\xb2 \xd1\x80\xd0\xb0\xd0\xb7\xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xba\xd0\xb5.</p></body></html>"
+# 🔴 ЗАГЛУШЕК `GLAVNAYA_STUB` · `LISTKI_STUB` · `UROVNI_STUB` ЗДЕСЬ БОЛЬШЕ НЕТ.
+# Они печатали «Страница в разработке» на случай, если шаблон не найдётся, — и
+# после переезда сайта именно они были бы единственным способом снова увидеть
+# старый песочный вид, от которого владелец просил избавиться навсегда. Сами
+# шаблоны лежат в `arhiv/veb-templates/` с объяснением, чем они были.
+
+
+
+def _sborka_vozmozhna() -> None:
+    """Можно ли вообще пересобрать публичную страницу. Зовётся ДО записи в базу.
+
+    🔴 ПОРЯДОК ЗДЕСЬ — ЭТО И ЕСТЬ ТРЕБОВАНИЕ «БАЗА НЕ ИЗМЕНИЛАСЬ». Проверка стоит
+    ПЕРЕД правкой, поэтому исчезнувший инструмент или закрытые права на `docs/`
+    отказывают до того, как в базе что-нибудь поменялось. Если бы проверкой был
+    сам факт сборки после записи, отказ приходил бы на уже изменённые данные — то
+    есть ровно то расхождение «база новая, страница вчерашняя», от которого уходим.
+
+    Падает исключением, а не возвращает False: текст исключения уезжает человеку.
+    """
+    if not INSTRUMENT_SBORKI.is_file():
+        raise FileNotFoundError(
+            "нет %s — публичную страницу нечем пересобрать" % INSTRUMENT_SBORKI)
+    papka = PUBLICHNAYA.parent
+    if not papka.is_dir():
+        raise FileNotFoundError("нет папки %s" % papka)
+    cel = PUBLICHNAYA if PUBLICHNAYA.exists() else papka
+    if not os.access(cel, os.W_OK):
+        raise PermissionError(
+            "нет права записи в %s — публичную страницу некуда пересобрать" % cel)
+
+
+def _peresobrat() -> list:
+    """Пересобрать публичную страницу из базы. Падает громко и наружу."""
+    from tools.sobrat_stranicu import sobrat
+    svodka: list = []
+    sobrat(svodka)
+    return svodka
 
 
 def _static_content_type(path: str) -> str:
@@ -447,40 +491,28 @@ class Handler(BaseHTTPRequestHandler):
         elif path in vhod.marshruty():
             # /vhod and /vyhod handled by marshruty
             pass  # already handled above; actually marshruty is only /vhod and /vyhod
-        # Reading endpoints open without cookie
-        # `/glavnaya` — прощающий синоним корня. Шаблоны S3 ссылаются на него,
-        # контракт волны кладёт главную на `/`; 404 в шапке каждой страницы дороже
-        # одной лишней строки (решение оркестратора при сведении, 2026-09-04).
-        if path in ("/", "/glavnaya"):
-            glavnaya = TEMPLATES_DIR / "glavnaya.html"
-            if glavnaya.is_file():
-                self._send_html(200, glavnaya.read_bytes())
-            else:
-                self._send_html(200, GLAVNAYA_STUB)
+        # 🔴 КОРЕНЬ — ОДИН И ТОТ ЖЕ САЙТ ДЛЯ ВСЕХ, РАЗНИЦУ ДЕЛАЕТ КУКА. Гостю
+        # уходит файл `docs/index.html`, пересобранный последней успешной правкой;
+        # организатору — та же страница, порождённая ТЕМ ЖЕ кодом, но с органами
+        # правки в разделе распределения. Отдельной админки с собственной вёрсткой
+        # больше нет: две вёрстки одного и того же уже разъезжались, и разъезд был
+        # виден глазом на списке преподавателей.
+        if path == "/":
+            self._send_html(200, self._koren())
+            return
+        # 🔴 ТРИ ЛИШНИЕ СТРАНИЦЫ УВОДЯТ НА ЛЕНДИНГ. Владелец: «если заходишь на
+        # листок — остаёшься на лендинге и видишь статичную версию». Их прежние
+        # заглушки он видел на сервере и раздражался; сами шаблоны уехали в `arhiv/`.
+        if path in ("/glavnaya", "/listki", "/listki-8"):
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
             return
         if path == "/raspredelenie":
             index = (TEMPLATES_DIR / "index.html").read_bytes()
             self._send_html(200, index)
             return
-        # 🔴 РОУТЫ ОТДАЮТ ШАБЛОНЫ S3, А НЕ JSON. Правка оркестратора при сведении
-        # 2026-09-04: S1 сделала эти три роута JSON-эндпойнтами, а S3 написала под них
-        # HTML-шаблоны — и они не отдавались никогда. Снаружи это выглядело как 200 с
-        # пустой страницей, то есть БЕЛЫЙ ЭКРАН, ровно тот, о котором предупреждал
-        # контракт имён волны. Ни один тест этого не видел: тесты судили код ответа.
-        # JSON остаётся доступен под /api/listki, /api/listki-8, /api/urovni.
-        for _put, _shablon in (("/listki", "listki.html"),
-                               ("/listki-8", "listki8.html"),
-):
-            if path == _put:
-                _fajl = TEMPLATES_DIR / _shablon
-                if _fajl.is_file():
-                    self._send_html(200, _fajl.read_bytes())
-                else:
-                    # Надёжность выше функционала: заглушка, а не 500.
-                    self._send_html(200, ("<h1>%s</h1><p>Страница ещё не собрана.</p>" % _put).encode("utf-8"))
-                return
-
-
         if path == "/api/teachers":
             self._send_json(200, _all_teachers(self._connection()))
             return
@@ -492,6 +524,26 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, _build_views(self._connection(), slot))
             return
         self._send_json(404, {"error": "not found"})
+
+    def _koren(self) -> bytes:
+        """Байты корневой страницы: гостю — файл, организатору — живой рендер.
+
+        🔴 ГОСТЬ ПОЛУЧАЕТ ФАЙЛ, А НЕ РЕНДЕР, И ЭТО НАРОЧНО. Файл пересобирается
+        после каждой успешной правки, поэтому он не устаревает; зато если сборка
+        сломана, публичная половина сайта продолжает работать вчерашними байтами
+        вместо того, чтобы отдать 500 всем сразу. Организатор рендерится живьём:
+        он единственный, кому нужно видеть базу секунда-в-секунду, и он же тот,
+        кто узнает о поломке сборки первым — его правка просто не пройдёт.
+        """
+        if vhod.rol(self.headers) == "organizator":
+            from tools.sobrat_stranicu import sobrat_html
+            return sobrat_html("admin").encode("utf-8")
+        if not PUBLICHNAYA.is_file():
+            # Файла нет вовсе — собрать его прямо сейчас. Падение здесь честнее
+            # заглушки: отдавать «страница в разработке» на боевом адресе значит
+            # прятать поломку ровно от того, кто может её починить.
+            _peresobrat()
+        return PUBLICHNAYA.read_bytes()
 
     def _read_slot(self) -> Optional[int]:
         from urllib.parse import parse_qs
@@ -532,6 +584,56 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _s_peresborkoj(self, rabota) -> None:
+        """Правка → пересборка публичной страницы → и только потом ответ.
+
+        🔴 СБОРКА УПАЛА — СОХРАНЕНИЕ ТОЖЕ УПАЛО. Решение владельца 2026-09-06, и у
+        него есть цена, о которой он предупреждён: сохранение чуть медленнее.
+        Альтернатива дороже — пропустить правку при упавшей сборке значит вернуться
+        ровно к тому, от чего уходим: база новая, публичная страница вчерашняя, и
+        никто об этом не знает, пока кто-нибудь не сверит их глазами.
+
+        Ответ обработчика БУФЕРИЗУЕТСЯ, а не уходит сразу: 200, отправленный до
+        пересборки, — это обещание, которое некому взять назад. Обработчиков три,
+        и `_send_json` они зовут из десятка мест — перехват на одном методе дешевле
+        и надёжнее, чем возврат кода через все ветки.
+        """
+        bufer = []
+        nastoyashchij = self._send_json
+        self._send_json = lambda status, payload: bufer.append((status, payload))
+        try:
+            rabota()
+        finally:
+            self._send_json = nastoyashchij
+        status, payload = bufer[-1] if bufer else (500, {"error": "обработчик не ответил"})
+        if not 200 <= status < 300:
+            self._send_json(status, payload)
+            return
+        try:
+            _peresobrat()
+        except Exception as exc:  # noqa: BLE001 — текст обязан доехать до человека
+            # Сюда попадаем только если сборка сломалась МЕЖДУ проверкой и записью:
+            # база уже изменена, страница — нет. Молчать об этом нельзя.
+            self._send_json(500, {"error":
+                "правка СОХРАНЕНА в базу, но публичная страница НЕ пересобрана: "
+                "%s: %s. Страница показывает прежние данные." % (type(exc).__name__, exc)})
+            return
+        if isinstance(payload, dict):
+            payload = dict(payload)
+            payload["stranica_peresobrana"] = True
+        self._send_json(status, payload)
+
+    def _sborka_nevozmozhna(self) -> bool:
+        """Отказать ДО записи, если пересобрать страницу будет нечем."""
+        try:
+            _sborka_vozmozhna()
+        except Exception as exc:  # noqa: BLE001
+            self._send_json(500, {"error":
+                "правка НЕ применена: публичную страницу нечем пересобрать — "
+                "%s: %s" % (type(exc).__name__, exc)})
+            return True
+        return False
+
     def do_POST(self) -> None:
         path = urlparse(self.path).path
         if path == "/vhod":
@@ -546,44 +648,53 @@ class Handler(BaseHTTPRequestHandler):
             # и листки — права у трёх правящих роутов одинаковые.
             if self._pravka_zapreshchena():
                 return
-            try:
-                p = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-            except (ValueError, TypeError):
-                self._send_json(400, {"error": "нечитаемое тело"})
+            if self._sborka_nevozmozhna():
                 return
-            gruppa, kabinet = p.get("gruppa"), (p.get("kabinet") or "").strip()
-            if gruppa not in ("В", "Д", "Н") or not kabinet:
-                self._send_json(400, {"error": "нужны gruppa (В|Д|Н) и kabinet"})
-                return
-            from datetime import date as _d
-            den = p.get("data") or _d.today().isoformat()
-            conn = self._connection()
-            conn.execute(
-                "insert or replace into kabinet_na_den (data, gruppa, kabinet) values (?,?,?)",
-                (den, gruppa, kabinet))
-            conn.commit()
-            self._send_json(200, {"gruppa": gruppa, "kabinet": kabinet, "data": den})
+            self._s_peresborkoj(self._post_kabinety)
             return
         if path == "/api/prepodavateli":
             if self._pravka_zapreshchena():
                 return
-            self._post_prepodavateli()
+            if self._sborka_nevozmozhna():
+                return
+            self._s_peresborkoj(self._post_prepodavateli)
             return
         if path == "/api/enrollment":
-            # 🔴 ПРАВКА БЕЗ ПАРОЛЯ — решение владельца 2026-09-04, дословно:
-            # «просто сделать страницу без пароля, дать ссылку, где можно править всё».
-            # Причина: распределение сегодня меняет НЕ ОДИН человек, а несколько, и
-            # пароль встал на критический путь.
-            #
-            # 🔴 МЕХАНИЗМ ВХОДА НЕ УДАЛЁН И РАБОТАЕТ. `veb/vhod.py`, роуты `/vhod` и
-            # `/vyhod`, подпись куки, роли — всё на месте и проверяется тестами.
-            # Чтобы вернуть пароль ЗАВТРА, достаточно снять `if not SVOBODNAYA_PRAVKA`
-            # ниже: одна строка, никакой миграции и никакого восстановления кода.
+            # 🔴 ПРАВКА ЗА ПАРОЛЕМ — решение владельца 2026-09-06 (см. SVOBODNAYA_PRAVKA).
+            # Публичная половина сайта при этом открыта всем и пароля не спрашивает.
             if self._pravka_zapreshchena():
                 return
-            self._post_enrollment()
+            if self._sborka_nevozmozhna():
+                return
+            self._s_peresborkoj(self._post_enrollment)
             return
         self._send_json(404, {"error": "not found"})
+
+    def _post_kabinety(self) -> None:
+        """🔴 КАБИНЕТ ГРУППЫ НА ДЕНЬ. Владелец: «если завтра у меня будет другой
+        кабинет, я захожу через админпанель и меняю закрепление В на другой
+        кабинет — и всё отображается сразу везде». Правка одной строки меняет
+        кабинет у всех людей группы, потому что он вычисляется, а не хранится.
+        🔴 Владелец 2026-09-05: кабинеты правят те же люди, что распределение
+        и листки — права у трёх правящих роутов одинаковые.
+        """
+        try:
+            p = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        except (ValueError, TypeError):
+            self._send_json(400, {"error": "нечитаемое тело"})
+            return
+        gruppa, kabinet = p.get("gruppa"), (p.get("kabinet") or "").strip()
+        if gruppa not in ("В", "Д", "Н") or not kabinet:
+            self._send_json(400, {"error": "нужны gruppa (В|Д|Н) и kabinet"})
+            return
+        from datetime import date as _d
+        den = p.get("data") or _d.today().isoformat()
+        conn = self._connection()
+        conn.execute(
+            "insert or replace into kabinet_na_den (data, gruppa, kabinet) values (?,?,?)",
+            (den, gruppa, kabinet))
+        conn.commit()
+        self._send_json(200, {"gruppa": gruppa, "kabinet": kabinet, "data": den})
 
     def _post_vhod(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")
@@ -652,23 +763,57 @@ class Handler(BaseHTTPRequestHandler):
             connection.execute("update teachers set kabinet = ? where id = ?",
                                (payload.get("kabinet"), tid))
         elif deystvie == "gruppa":
-            # 🔴 ШКОЛЬНИКИ ЕДУТ С ЧЕЛОВЕКОМ, и отдельной правки для этого нет.
-            # Ребёнок закреплён за преподавателем, а группа ребёнка из него и
-            # вычисляется (`_build_views`) — поэтому одна строка переводит и его
-            # самого, и всех его школьников, и ни одна из них не может отстать.
+            # 🔴 ПРЕПОДАВАТЕЛЬ УХОДИТ — ДЕТИ ОСТАЮТСЯ. Правило владельца 06.09,
+            # дословно: «смена группы у преподавателя → все его дети автоматически
+            # открепляются и остаются в своих группах; преподаватель приходит в
+            # новую группу без детей». Это ПРАВИЛО, а не побочный эффект.
+            #
+            # 🔴 ЭТО ОБРАТНОЕ ПРЕЖНЕМУ ПОВЕДЕНИЮ, И ПОТОМУ НАПИСАНО ЯВНО. Раньше
+            # школьники ехали за человеком: их `students.gruppa` переписывалась на
+            # новую. Владелец назвал ровно противоположное — ребёнок занимается в
+            # своей группе, и уход преподавателя не должен переселять ребёнка.
+            #
+            # Порядок здесь и есть содержание правила: СНАЧАЛА запоминаем каждому
+            # ребёнку его ТЕКУЩУЮ группу (иначе после закрытия строки её негде
+            # взять — она вычислялась из преподавателя), ПОТОМ закрываем строки
+            # закрепления, и только ПОТОМ двигаем самого преподавателя.
             gruppa = payload.get("gruppa")
             if gruppa not in ("В", "Д", "Н"):
                 self._send_json(400, {"error": "группа: В | Д | Н"})
                 return
-            connection.execute("update teachers set gruppa = ? where id = ?", (gruppa, tid))
-            # Своя память группы у ЕГО школьников тоже переезжает: иначе, сняв
-            # ребёнка после перевода, мы вернули бы его в покинутую группу.
             _obespechit_gruppu_shkolnika(connection)
-            connection.execute(
-                "update students set gruppa = ? where id in ("
-                "  select student_id from enrollment"
-                "  where teacher_id = ? and valid_to = ?)",
-                (gruppa, tid, "9999-12-31"))
+            staraya = connection.execute(
+                "select gruppa from teachers where id = ?", (tid,)).fetchone()
+            staraya = staraya["gruppa"] if staraya else None
+            otkrepleny = []
+            if staraya and staraya != gruppa:
+                deti = connection.execute(
+                    "select id, student_id, valid_from from enrollment "
+                    "where teacher_id = ? and valid_to = ?",
+                    (tid, "9999-12-31")).fetchall()
+                segodnya = datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat()
+                for stroka in deti:
+                    connection.execute(
+                        "update students set gruppa = ? where id = ?",
+                        (staraya, stroka["student_id"]))
+                    if stroka["valid_from"] >= segodnya:
+                        # Интервал, ещё НЕ НАЧАВШИЙСЯ, удаляется, а не закрывается:
+                        # схема требует `valid_from < valid_to`, а терять тут нечего —
+                        # по такой строке ребёнок ещё ни к кому не сходил. Тот же
+                        # приём и то же `>=`, что в `_snyat_shkolnika`, и по той же
+                        # причине: `valid_from` открытых строк лежит в будущем.
+                        connection.execute("delete from enrollment where id = ?",
+                                           (stroka["id"],))
+                    else:
+                        connection.execute(
+                            "update enrollment set valid_to = ? where id = ?",
+                            (segodnya, stroka["id"]))
+                    otkrepleny.append(stroka["student_id"])
+            connection.execute("update teachers set gruppa = ? where id = ?", (gruppa, tid))
+            connection.commit()
+            self._send_json(200, {"ok": True, "otkrepleny": otkrepleny,
+                                  "iz_gruppy": staraya, "v_gruppu": gruppa})
+            return
         else:
             self._send_json(400, {
                 "error": "деиствие: dobavit | ubrat | vernut | kabinet | gruppa"})
@@ -699,12 +844,19 @@ class Handler(BaseHTTPRequestHandler):
         standing = repo.open_row(student_id, slot)
         itog = {"snyat": True, "gruppa": gruppa or None}  # наружу — по-прежнему None
         if standing is not None:
-            if standing.valid_from == den:
-                # 🔴 Интервал, ОТКРЫТЫЙ СЕГОДНЯ, УДАЛЯЕТСЯ, а не закрывается.
+            if standing.valid_from >= den:
+                # 🔴 Интервал, КОТОРЫЙ ЕЩЁ НЕ НАЧАЛСЯ, УДАЛЯЕТСЯ, а не закрывается.
                 # Закрыть его сегодняшним днём схема не даёт: `check (valid_from
-                # < valid_to)`. И терять тут нечего — за сегодня никакого «раньше»
-                # ещё не было, ребёнок ни к кому не успел сходить. История
-                # прошлых дней не трогается вовсе, ровно как в правке на месте.
+                # < valid_to)`. И терять тут нечего — ребёнок по этой строке ещё
+                # ни разу ни к кому не сходил. История прошлых дней не трогается.
+                # 🔴 БЫЛО `== den`, СТАЛО `>= den`, и это не косметика: `valid_from`
+                # у открытых строк лежит В БУДУЩЕМ — их ставит импорт датой
+                # БЛИЖАЙШЕГО занятия, а не сегодняшним днём. Замер на живой базе
+                # 2026-09-06: из 106 открытых строк 24 стоят на 2026-09-07 и 8 на
+                # 2026-09-10. На них `== den` не срабатывал, дело доходило до
+                # `close(valid_to=den)` с `valid_to < valid_from`, и схема роняла
+                # правку. То есть тридцать два ребёнка из пятидесяти трёх сегодня
+                # не откреплялись вовсе.
                 conn.execute("delete from enrollment where id = ?", (standing.id,))
                 itog["udalen"] = standing.id
             else:
@@ -774,14 +926,38 @@ class Handler(BaseHTTPRequestHandler):
         except NotEnrolled:
             # No open row to move from — try to assign instead.  This is the path
             # taken when the page is the FIRST place that opens an interval for
-            # this child (the import did not see the child for some reason).
+            # this child (the import did not see the child for some reason), and
+            # ALSO the path back after a detach: крестик и смена группы
+            # преподавателя закрывают строку, а вернуть ребёнка можно только сюда.
+            #
+            # 🔴 НАЧАЛО ИНТЕРВАЛА — НЕ ВСЕГДА СЕГОДНЯ, И БЕЗ ЭТОГО ОТКРЕПЛЕНИЕ
+            # НЕОБРАТИМО. Закрытые строки этого ребёнка могут кончаться В БУДУЩЕМ:
+            # `valid_to` им ставит импорт датой ближайшего занятия. Новый интервал,
+            # открытый сегодняшним днём, пересекается с таким закрытым, и частичный
+            # уникальный индекс отвечает «intervals for one (student_id, weekday)
+            # must not overlap» — то есть ребёнка, которого только что открепили,
+            # обратно прикрепить НЕЧЕМ.
+            #
+            # Найдено живым прогоном на боевой базе 2026-09-06: после проверки
+            # правила «смена группы преподавателя открепляет детей» три открепления
+            # из шести не восстанавливались через интерфейс, и состояние пришлось
+            # чинить SQL-ом по снимку. Критерий готовности требует «вернуть как
+            # было» — значит обратимость и есть часть работы, а не удобство.
+            #
+            # Берём максимум из сегодня и последнего `valid_to` закрытых строк:
+            # раньше него открывать нельзя, позже — незачем.
+            granica = conn.execute(
+                "select max(valid_to) from enrollment "
+                "where student_id = ? and slot = ? and valid_to <> ?",
+                (student_id, slot, "9999-12-31")).fetchone()[0]
+            nachalo = max(effective_from, granica) if granica else effective_from
             try:
                 opened = service.assign(
                     student_id=student_id,
                     teacher_id=teacher_id,
                     room="000",  # placeholder — caller must follow up via move if wrong
                     slot=slot,
-                    valid_from=effective_from,
+                    valid_from=nachalo,
                 )
             except EnrollmentError as exc:
                 self._send_json(409, {"error": str(exc)})
@@ -797,12 +973,22 @@ class Handler(BaseHTTPRequestHandler):
             # попытка молча не проходит — а он правит распределение перед занятием и
             # переставляет одного и того же ребёнка по нескольку раз.
             #
-            # ЧТО ДЕЛАЕМ: интервал, ОТКРЫТЫЙ СЕГОДНЯ, правим НА МЕСТЕ. Истории это не
-            # теряет: за сегодняшний день никакого «раньше» ещё не было — ребёнок не
-            # успел ни к кому сходить. История прошлых дней не трогается вовсе.
+            # ЧТО ДЕЛАЕМ: интервал, КОТОРЫЙ ЕЩЁ НЕ НАЧАЛСЯ (открыт сегодня или
+            # позже), правим НА МЕСТЕ. Истории это не теряет: по такой строке
+            # ребёнок ни к кому сходить не успел. Прошлое не трогается вовсе.
+            #
+            # 🔴 УСЛОВИЕ РАСШИРЕНО С «== сегодня» ДО «>= сегодня», И БЕЗ ЭТОГО
+            # ТРЕТЬ ДЕТЕЙ НЕ ПРАВИЛАСЬ ВООБЩЕ. Открытые строки несут `valid_from`
+            # ближайшего ЗАНЯТИЯ, а не сегодняшнюю дату: их так ставит импорт. На
+            # живой базе 2026-09-06 это 24 строки на 2026-09-07 и 8 на 2026-09-10.
+            # Для них `move` давал `MoveNotForward`, а ветка «правим на месте» не
+            # узнавала свой случай и отвечала 409. Найдено прогоном, не чтением:
+            # первая же попытка сменить преподавателя первому по алфавиту ребёнку
+            # вернула отказ.
             standing = repo.open_row(student_id, slot)
-            if standing is None or standing.valid_from != effective_from:
-                self._send_json(409, {"error": "интервал открыт не сегодня — правка на месте небезопасна"})
+            if standing is None or standing.valid_from < effective_from:
+                self._send_json(409, {"error":
+                    "интервал открыт раньше сегодняшнего дня — правка на месте небезопасна"})
                 return
             if standing.teacher_id == teacher_id:
                 self._send_json(200, {"bez_izmenenij": True})
