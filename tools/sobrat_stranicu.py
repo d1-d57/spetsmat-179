@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-# TOOL-CONTRACT: called-by-hand — зовётся при выкладке статики на GitHub Pages.
+# TOOL-CONTRACT: called-by-code — зовётся `veb/server.py::_peresobrat` после КАЖДОЙ
+# успешной записи в базу, и руками при выкладке статики. Прежний контракт
+# `called-by-hand` был верен ровно до появления сервера: снимок старел, пока база
+# жила, и внешняя версия расходилась с внутренней.
 """Собирает САМОДОСТАТОЧНУЮ статику по ТЗ 07_TZ-SAJT.md.
 
 Три страницы, меню из трёх пунктов строкой сверху (§1: «может быть, наверху, чтобы
@@ -8,6 +11,11 @@
 Данные вмораживаются на момент сборки: Pages отдаёт статику, ей не нужен ни сервер,
 ни база, и чтение переживает выключенный ноутбук — в этом смысл разделения (§7).
 """
+# Мак владельца несёт Python 3.9, сервер — 3.12. `list | None` в аннотации на 3.9
+# исполняется и падает; с этим импортом аннотации не вычисляются вовсе, и один и
+# тот же файл работает в обоих местах. Проверено запуском на обоих.
+from __future__ import annotations
+
 import html
 import pathlib
 import sqlite3
@@ -16,42 +24,213 @@ import sys
 KOREN = pathlib.Path(__file__).resolve().parent.parent
 DATA = KOREN / "data" / "spetsmat.db"
 VYHOD = KOREN / "docs" / "index.html"
-MAT = KOREN.parent / "materials" / "spetsmat-2026"
+# 🔴 ЛИСТКИ ИЩУТСЯ ТАМ, КУДА ВЕДУТ ССЫЛКИ. Было `KOREN.parent / "materials" /
+# "spetsmat-2026"` — СОСЕДНИЙ репозиторий на маке владельца, которого на сервере
+# нет вовсе (`ls /opt/materials` → No such file or directory). Ссылки при этом
+# всегда были относительные, вида `href="listki/16A-derevya.pdf"`, то есть от
+# `docs/`. Пока сборку звали руками с мака, расхождение не проявлялось; первая же
+# пересборка на сервере вычистила бы обе таблицы листков молча — проверка
+# существования файла не находила бы НИ ОДНОГО.
+MAT = KOREN / "docs"
 
 # 🔴 ДНИ ЗАНЯТИЙ БЕРУТСЯ ИЗ ОДНОГО ДОМА — `veb/sobrat_fajl.py`. Вписанные руками
 # `DATA_NA` и `DATA_SLOVAMI` отсюда убраны: их никто не читал, а датой они
 # повторяли ту самую строку, которая звала субботу четвергом.
 sys.path.insert(0, str(KOREN))
-from veb.sobrat_fajl import blizhajshij_den  # noqa: E402
+from veb.sobrat_fajl import DNI_ZANYATIJ, blizhajshij_den  # noqa: E402
 
 
 def e(s):
     return html.escape(str(s if s is not None else ""))
 
 
-def sobrat():
+ADMIN_SKRIPT = r"""
+<div class="soob" id="soob"></div>
+<script>
+/* ── РЕЖИМ ОРГАНИЗАТОРА ────────────────────────────────────────────────────────
+   Правка уходит в базу СРАЗУ и страница перечитывается. Показанное на экране
+   обязано быть тем, что В БАЗЕ, а не тем, что помнит вкладка: браузер, который
+   рисует успех, не дождавшись сервера, врёт ровно в тот момент, когда сервер
+   отказал. Поэтому «сохраняю…» → ответ → перезагрузка, и никакой правки на
+   месте. Выбранные вкладка и день переживают перезагрузку через sessionStorage,
+   иначе каждая правка отбрасывала бы человека на первый экран. */
+(function(){
+  const soob = document.getElementById('soob');
+
+  function pomnit(){
+    const s = {};
+    document.querySelectorAll('input.rd').forEach(i => { if (i.checked) s[i.name] = i.id; });
+    try { sessionStorage.setItem('spetsmat-vybor', JSON.stringify(s)); } catch (err) {}
+  }
+  (function vernut(){
+    let s;
+    try { s = JSON.parse(sessionStorage.getItem('spetsmat-vybor') || '{}'); }
+    catch (err) { return; }
+    Object.keys(s).forEach(function(k){
+      const el = document.getElementById(s[k]);
+      if (el) el.checked = true;
+    });
+  })();
+
+  async function poslat(put, telo){
+    soob.textContent = 'сохраняю…';
+    soob.className = 'soob idet';
+    let otvet;
+    try {
+      otvet = await fetch(put, {method:'POST',
+        headers:{'Content-Type':'application/json'}, body: JSON.stringify(telo)});
+    } catch (err) {
+      soob.textContent = 'НЕ СОХРАНЕНО: сервер недоступен (' + err + ')';
+      soob.className = 'soob ploho';
+      return;
+    }
+    let dannye = {};
+    try { dannye = await otvet.json(); } catch (err) {}
+    if (!otvet.ok) {
+      /* 🔴 ОТКАЗ ВИДЕН ЧЕЛОВЕКУ ДОСЛОВНО. Сборка публичной страницы падает —
+         падает и сохранение, и он обязан понять, что его правка НЕ применилась. */
+      soob.textContent = 'НЕ СОХРАНЕНО (' + otvet.status + '): '
+        + (dannye.error || 'сервер отказал') + '. Правка НЕ применилась.';
+      soob.className = 'soob ploho';
+      return;
+    }
+    pomnit();
+    location.reload();
+  }
+
+  document.addEventListener('change', function(ev){
+    const el = ev.target;
+    if (!el.classList || !el.classList.contains('org')) return;
+    const sl = +el.dataset.slot;
+    if (el.classList.contains('pr-sel')) {
+      if (el.value) {
+        poslat('/api/enrollment', {student_id:+el.dataset.sid, slot:sl,
+                                   teacher_id:+el.value});
+      } else {
+        /* «— нет —» при выбранной группе — это ступень «в группе, человека нет». */
+        const gr = el.parentElement.querySelector('.gr-sel');
+        poslat('/api/enrollment', {student_id:+el.dataset.sid, slot:sl,
+                                   teacher_id:null, gruppa: gr ? gr.value : ''});
+      }
+    } else if (el.classList.contains('gr-sel')) {
+      /* Смена группы снимает преподавателя: он остался в своей группе, а
+         ребёнок ушёл в другую. Пустое значение — это «нигде», ВЫБОР человека. */
+      poslat('/api/enrollment', {student_id:+el.dataset.sid, slot:sl,
+                                 teacher_id:null, gruppa: el.value});
+    } else if (el.classList.contains('tgr-sel')) {
+      poslat('/api/prepodavateli', {deystvie:'gruppa', teacher_id:+el.dataset.tid,
+                                    gruppa: el.value});
+    } else if (el.classList.contains('kab-inp')) {
+      /* Кабинет назначается ГРУППЕ на КОНКРЕТНЫЙ ДЕНЬ — дата берётся из поля,
+         а не из «сегодня»: страница показывает два дня сразу, и «сегодня» из
+         них не совпадает ни с одним. */
+      const k = el.value.trim();
+      if (!k) { el.value = el.defaultValue; return; }
+      poslat('/api/kabinety', {gruppa: el.dataset.gruppa, kabinet: k,
+                               data: el.dataset.data});
+    }
+  });
+
+  document.addEventListener('click', function(ev){
+    const krest = ev.target.closest('.tabl');
+    if (krest) {
+      if (!krest.closest('.otkryt')) return;   /* крестики ещё не открыты */
+      poslat('/api/enrollment', {student_id:+krest.dataset.snyat,
+                                 slot:+krest.dataset.slot, teacher_id:null,
+                                 gruppa: krest.dataset.gruppa});
+      return;
+    }
+    /* Клик по фамилии преподавателя открывает крестики у ЕГО школьников. */
+    const imya = ev.target.closest('.prep-tab .tp, #s-rasp .kol-pr .para .kto');
+    if (imya) {
+      const ryad = imya.closest('tr, .para');
+      if (ryad) ryad.classList.toggle('otkryt');
+    }
+  });
+})();
+</script>"""
+
+
+def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
+    """Собирает страницу и ВОЗВРАЩАЕТ её. Один рендерер на оба режима.
+
+    🔴 ЗДЕСЬ ЖИВЁТ ГЛАВНОЕ РЕШЕНИЕ ЭТОГО ФАЙЛА: гость и организатор смотрят на
+    страницу, порождённую ОДНИМ И ТЕМ ЖЕ кодом. Режим добавляет органы правки в
+    те же места, где у гостя стоит текст, и НЕ трогает окружающую разметку.
+    Пока рендерера было два — сайт и админка, — они разъезжались: расхождение
+    видно было глазом на списке преподавателей, и «привести к похожему виду
+    руками» лечило его ровно до следующей правки. Разъехаться нельзя, если код
+    один; это и есть проверка «взять блок из гостевой и из админской и сверить».
+
+    `rezhim`: `"gost"` — то, что лежит в `docs/index.html` и что видят все;
+    `"admin"` — то же самое плюс выпадающие списки, счётчики и крестики.
+    `svodka`: если передан список, в него дописываются строки отчёта сборки.
+    """
+    if rezhim not in ("gost", "admin"):
+        raise ValueError("режим: gost | admin")
+    ADMIN = rezhim == "admin"
     c = sqlite3.connect(DATA)
     c.row_factory = sqlite3.Row
 
-    # 🔴 РАСПРЕДЕЛЕНИЕ ЗАВИСИТ ОТ ДНЯ. Занятия по четвергам и субботам, и кабинет
-    # у группы в эти дни может быть РАЗНЫЙ. Поэтому строим оба дня сразу, а на
-    # странице переключатель; по умолчанию открывается ближайший (в пятницу и
-    # субботу — суббота, иначе четверг).
-    # 🔴 ДЕНЬ СЧИТАЕТСЯ, А НЕ ВПИСЫВАЕТСЯ. Было вписано: четверг `2026-09-05` —
-    # это СУББОТА, суббота `2026-09-06` — это ВОСКРЕСЕНЬЕ. Страница честно
-    # печатала неверные дни, и ни один гейт этого не видел: вписанная строка
-    # всегда согласна сама с собой. Проверяется одной строкой:
-    #   python3 -c "from datetime import date;print(date(2026,9,5).weekday())"
-    # Оба дня сейчас ОДИНАКОВЫ по составу — решение владельца 04.09: пока
-    # преподаватели ходят и в четверг, и в субботу, раскладка одна. Здесь
-    # чинится ИМЯ дня, а не раскладка.
-    DNI = {"cht": ("четверг", 1, blizhajshij_den(3)),
-           "sub": ("суббота", 2, blizhajshij_den(5))}
+    # 🔴 РАСПРЕДЕЛЕНИЕ ЗАВИСИТ ОТ ДНЯ. Занятия по понедельникам и четвергам, и
+    # кабинет у группы в эти дни может быть РАЗНЫЙ. Поэтому строим оба дня сразу,
+    # а на странице переключатель; по умолчанию открывается ближайший.
+    # 🔴 ДЕНЬ СЧИТАЕТСЯ, А НЕ ВПИСЫВАЕТСЯ. Вписанная руками дата протухает молча:
+    # так `2026-09-05` уже звался здесь четвергом, будучи субботой. Ни один гейт
+    # этого не видел — вписанная строка всегда согласна сама с собой. Проверяется
+    # одной строкой:
+    #   python3 -c "from datetime import date;print(date(2026,9,7).weekday())"
+    # Оба дня сейчас ОДИНАКОВЫ по составу, и это по-прежнему так. Здесь чинится
+    # ИМЯ дня, а не раскладка.
+    # 🔴 ПОНЕДЕЛЬНИК И ЧЕТВЕРГ, И ЭТО ПРАВКА ПОДПИСЕЙ, А НЕ ДАННЫХ. В
+    # `migrations/003_slot_vmesto_weekday.sql` записано weekday=1 → slot=1,
+    # weekday=4 → slot=2, то есть слот 1 — понедельник, слот 2 — четверг, и так уже
+    # давно. Отстали только имена дней: код до сих пор звал их четвергом и субботой.
+    # `enrollment` не трогается ни строкой.
+    # Имена и номера дней НЕ вписаны здесь, а взяты из `veb/sobrat_fajl.DNI_ZANYATIJ` —
+    # того самого «одного дома», который этот файл и объявляет. Вписанная копия уже
+    # однажды разошлась с домом и печатала на странице неверные дни.
+    _dni_po_poryadku = sorted(DNI_ZANYATIJ)          # пн, затем чт
+    DNI = {("pn", "cht")[i]: (DNI_ZANYATIJ[w], i + 1, blizhajshij_den(w))
+           for i, w in enumerate(_dni_po_poryadku)}
+    # 🔴 КАБИНЕТ НА ДЕНЬ, А ЕСЛИ НА ЭТОТ ДЕНЬ ЕЩЁ НЕ НАЗНАЧЕН — ПОСЛЕДНИЙ
+    # ИЗВЕСТНЫЙ, И ЭТО ВИДНО. Владелец ставит привязку накануне вечером, поэтому
+    # «на послезавтра строки нет» — обычное состояние, а не потеря данных. Голый
+    # `where data = ?` в этом состоянии печатал «кабинет не назначен» у всех трёх
+    # групп разом, и переезд подписей дней (четверг+суббота → понедельник+четверг)
+    # сделал бы это состоянием по умолчанию: строк на новые дни в базе просто нет.
+    # Точное совпадение печатается как есть; последний известный несёт `title` с
+    # датой, откуда он взят, — читатель обязан отличать одно от другого.
     kabinety_dnya = {}
+    otkuda_kabinet = {}
     for kl, (_, _, dat) in DNI.items():
-        kabinety_dnya[kl] = {r["gruppa"]: r["kabinet"] for r in c.execute(
+        tochno = {r["gruppa"]: r["kabinet"] for r in c.execute(
             "select gruppa, kabinet from kabinet_na_den where data = ?", (dat,))}
-    kabinety = kabinety_dnya["cht"]
+        proshloe = {}
+        for r in c.execute("select data, gruppa, kabinet from kabinet_na_den "
+                           "where data < ? order by data", (dat,)):
+            proshloe[r["gruppa"]] = (r["kabinet"], r["data"])
+        svedeno, istochnik = {}, {}
+        for kod in ("В", "Д", "Н"):
+            if kod in tochno:
+                svedeno[kod] = tochno[kod]
+            elif kod in proshloe:
+                svedeno[kod], istochnik[kod] = proshloe[kod]
+        kabinety_dnya[kl] = svedeno
+        otkuda_kabinet[kl] = istochnik
+
+    def kab_html(kl, kod):
+        """Чип кабинета. Пусто — честное «не назначен», а не выдуманный номер."""
+        k = kabinety_dnya[kl].get(kod)
+        if not k:
+            return '<span class="net">кабинет не назначен</span>'
+        ot = otkuda_kabinet[kl].get(kod)
+        podpis = (f' title="на этот день ещё не назначен; кабинет с {e(ot)}"'
+                  if ot else "")
+        klass = "kab staryj" if ot else "kab"
+        return f'<span class="{klass}"{podpis}>{e(k)}</span>'
+
+    kabinety = kabinety_dnya["pn"]
     gruppy = {r["kod"]: r["starshij"] for r in c.execute(
         "select kod, starshij from gruppy order by kod")}
     prep = {r["id"]: dict(r) for r in c.execute(
@@ -68,7 +247,7 @@ def sobrat():
         """, (slot,)).fetchall()
 
     shk_dnya = {kl: shkolniki(sl) for kl, (_, sl, _) in DNI.items()}
-    shk = shk_dnya["cht"]
+    shk = shk_dnya["pn"]
 
     def gr_shk(r, pr=None):
         pr = pr or prep
@@ -78,21 +257,91 @@ def sobrat():
     def kab_shk(r):
         return kabinety.get(gr_shk(r))
 
+    def vybor_prepoda(r, sl):
+        """Выпадающий список преподавателей — там же, где у гостя стоит его имя."""
+        opts = ['<option value=""%s>— нет —</option>'
+                % (" selected" if not r["teacher_id"] else "")]
+        for x in sorted(prep.values(), key=lambda z: z["name"]):
+            vybran = " selected" if x["id"] == r["teacher_id"] else ""
+            opts.append(f'<option value="{x["id"]}"{vybran}>{e(x["name"])}</option>')
+        return (f'<select class="org pr-sel" data-sid="{r["id"]}" data-slot="{sl}">'
+                + "".join(opts) + '</select>')
+
+    def vybor_gruppy(r, sl, tek):
+        """Выпадающий список группы. «нигде» — это ВЫБОР, а не пустота."""
+        opts = ['<option value=""%s>нигде</option>' % (" selected" if not tek else "")]
+        for kod in ("В", "Д", "Н"):
+            opts.append('<option value="%s"%s>%s</option>'
+                        % (kod, " selected" if tek == kod else "", kod))
+        return (f'<select class="org gr-sel" data-sid="{r["id"]}" data-slot="{sl}">'
+                + "".join(opts) + '</select>')
+
     def para_shk(r, kl, pokazat_kab=True):
-        """Строка «школьник → его преподаватель»."""
+        """Строка «школьник → его преподаватель».
+
+        Гостю — имя преподавателя и кабинет текстом. Организатору — В ТОМ ЖЕ
+        МЕСТЕ два выпадающих списка: преподаватель и группа. Буква класса
+        (К · И · Л) стоит только у организатора: ребёнку она не нужна, а тому,
+        кто раскладывает людей по группам, нужна. Буквы группы у гостя нет —
+        решение владельца 06.09: она дублирует кабинет и добавляет шум.
+        """
         kab = kabinety_dnya[kl]
+        sl = DNI[kl][1]
         t_ = prep.get(r["teacher_id"])
         g = gr_shk(r)
-        hvost = ""
-        if t_:
+        klass = (f' <span class="kl">{e(r["class"])}</span>' if ADMIN and r["class"] else "")
+        if ADMIN:
+            hvost = vybor_prepoda(r, sl) + vybor_gruppy(r, sl, g)
+        elif t_:
             hvost = e(t_["name"])
-            if pokazat_kab and kab.get(g):
-                hvost += f' <span class="kab">{e(kab.get(g))}</span>'
+            if pokazat_kab and g and kab.get(g):
+                hvost += " " + kab_html(kl, g)
         else:
             hvost = "—"
         return (f'<div class="para" data-i="{e((r["surname"] + " " + r["name"]).lower())}">'
-                f'<span class="kto"><b>{e(r["surname"])}</b> {e(r["name"])}</span>'
+                f'<span class="kto"><b>{e(r["surname"])}</b> {e(r["name"])}{klass}</span>'
                 f'<span class="komu">{hvost}</span></div>')
+
+    def vybor_gruppy_prepoda(x, sl):
+        """Группа преподавателя. Смена — правило, а не побочный эффект.
+
+        Владелец 06.09: преподаватель уходит в другую группу — все его дети
+        ОТКРЕПЛЯЮТСЯ и остаются в своих группах, преподаватель приходит в новую
+        группу без детей. Само правило исполняет `/api/prepodavateli`, здесь
+        только орган.
+        """
+        pusto = " selected disabled" if not x["gruppa"] else " disabled"
+        opts = [f'<option value=""{pusto}>—</option>']
+        for kod in ("В", "Д", "Н"):
+            opts.append('<option value="%s"%s>%s</option>'
+                        % (kod, " selected" if x["gruppa"] == kod else "", kod))
+        return (f'<select class="org tgr-sel" data-tid="{x["id"]}" data-slot="{sl}">'
+                + "".join(opts) + '</select>')
+
+    def deti_prepoda(x, ego, sl, melko=False):
+        """Список школьников преподавателя. Крестик = ОТКРЕПИТЬ, и только в админке.
+
+        Ребёнок остаётся в СВОЕЙ группе — поэтому крестик несёт группу самого
+        преподавателя, а не пустоту: снятый без группы ребёнок провалился бы в
+        «нигде», а его никто никуда не переводил.
+        """
+        if not ego:
+            return '<span class="net">—</span>'
+        # \U0001f534 ОДНА И ТА ЖЕ РАЗМЕТКА В ОБОИХ РЕЖИМАХ, И РАЗЛИЧАЕТ ИХ РОВНО
+        # ОРГАН ПРАВКИ. Фамилия — всегда `<span class="det">`; у организатора она
+        # ЗАВЁРНУТА в кнопку с крестиком, и это единственная разница. Запятые в
+        # таблице преподавателей рисует CSS, а не строка — иначе гостевой вариант
+        # был бы одним текстовым узлом, админский двадцатью элементами, и «сверить
+        # блок списка из гостевой и из админской» стало бы сравнением несравнимого.
+        zpt = "" if melko else " zpt"
+        def imya(r):
+            return f'<span class="det{zpt}">{e(r["surname"])}</span>'
+        if not ADMIN:
+            return "".join(imya(r) for r in ego)
+        return "".join(
+            f'<button class="tabl" data-snyat="{r["id"]}" data-slot="{sl}"'
+            f' data-gruppa="{e(x["gruppa"] or "")}" title="открепить">'
+            f'{imya(r)}<span class="x">\u00d7</span></button>' for r in ego)
 
     def para_prep(x, kl, pokazat_gruppu=True):
         """Строка «преподаватель → его школьники».
@@ -102,27 +351,40 @@ def sobrat():
         и так все из одной группы и одного кабинета, это шум.
         """
         kab = kabinety_dnya[kl]
-        ego = sorted(r["surname"] for r in shk_dnya[kl] if r["teacher_id"] == x["id"])
+        sl = DNI[kl][1]
+        ego = sorted((r for r in shk_dnya[kl] if r["teacher_id"] == x["id"]),
+                     key=lambda r: r["surname"])
         redko = ""
         metki = ""
         if pokazat_gruppu:
             if x["gruppa"]:
                 metki += f' <span class="gr">{e(x["gruppa"])}</span>'
-            if kab.get(x["gruppa"]):
-                metki += f' <span class="kab">{e(kab.get(x["gruppa"]))}</span>'
-        deti_html = ("".join(f'<span>{e(d)}</span>' for d in ego)
-                     or '<span class="net">—</span>')
+            if x["gruppa"] and kab.get(x["gruppa"]):
+                metki += " " + kab_html(kl, x["gruppa"])
+        if ADMIN:
+            metki += ' <span class="sch%s">%d</span>' % (
+                "" if 3 <= len(ego) <= 4 else " ploho", len(ego))
+        deti_html = deti_prepoda(x, ego, sl, melko=True)
         return (f'<div class="para" data-i="{e(x["name"].lower())}">'
                 f'<span class="kto"><b>{e(x["name"])}</b>{redko}{metki}</span>'
                 f'<span class="komu deti">{deti_html}</span></div>')
 
     def vid_vse(kl):
-        """Вкладка «все»: школьники двумя столбцами, каждому — его преподаватель."""
+        """Вкладка «школьникам»: ТРИ столбца, каждому — его преподаватель.
+
+        🔴 ЧИТАЕТСЯ ПО СТОЛБЦАМ, А НЕ ПО СТРОКАМ, и столбцов три (решение
+        владельца 06.09). Фамилии идут сверху вниз внутри столбца, поэтому
+        человека можно найти по букве; раскладка по строкам заставляла
+        просматривать каждую строку целиком.
+        """
         deti = shk_dnya[kl]
-        pol = (len(deti) + 1) // 2
-        return ('<div class="dva">'
-                f'<div class="kol">{"".join(para_shk(r, kl) for r in deti[:pol])}</div>'
-                f'<div class="kol">{"".join(para_shk(r, kl) for r in deti[pol:])}</div></div>')
+        n = len(deti)
+        a = (n + 2) // 3
+        b = a + (n - a + 1) // 2
+        kolonki = (deti[:a], deti[a:b], deti[b:])
+        return ('<div class="tri">' + "".join(
+            f'<div class="kol">{"".join(para_shk(r, kl) for r in stolb)}</div>'
+            for stolb in kolonki) + '</div>')
 
     def vid_prepodavateli(kl):
         """Вкладка преподавателей ТАБЛИЦЕЙ: колонки обязаны стоять ровно.
@@ -131,17 +393,27 @@ def sobrat():
         кабинет самое неважное и уходит вправо.
         """
         kab = kabinety_dnya[kl]
+        sl = DNI[kl][1]
         ryady = []
         for x in sorted(prep.values(), key=lambda z: z["name"]):
-            ego = sorted(r["surname"] for r in shk_dnya[kl] if r["teacher_id"] == x["id"])
-            deti = e(", ".join(ego)) if ego else '<span class="net">—</span>'
+            ego = sorted((r for r in shk_dnya[kl] if r["teacher_id"] == x["id"]),
+                         key=lambda r: r["surname"])
+            deti = deti_prepoda(x, ego, sl)
             k = kab.get(x["gruppa"])
+            # 🔴 СЧЁТЧИК — ТОЛЬКО В АДМИНКЕ. Норма 3–4; красным 0, 1, 2 и 5+.
+            # Гостю нагрузка преподавателя не нужна и является техническим числом
+            # (ТЗ §2.5), а тому, кто раскладывает людей, она и есть главный сигнал.
+            schet = ('<td class="tsch%s">%d</td>'
+                     % ("" if 3 <= len(ego) <= 4 else " ploho", len(ego))) if ADMIN else ""
+            gr = vybor_gruppy_prepoda(x, sl) if ADMIN else e(x["gruppa"] or "")
             ryady.append(
-                f'<tr data-i="{e(x["name"].lower())}">'
+                f'<tr data-i="{e(x["name"].lower())}" data-tid="{x["id"]}">'
                 f'<td class="tp"><b>{e(x["name"])}</b></td>'
                 f'<td class="td-deti">{deti}</td>'
-                f'<td class="tg">{e(x["gruppa"] or "")}</td>'
-                + (f'<td class="tk"><span class="kab">{e(k)}</span></td>' if k else '<td class="tk"></td>')
+                + schet
+                + f'<td class="tg">{gr}</td>'
+                + (f'<td class="tk">{kab_html(kl, x["gruppa"])}</td>' if k
+                   else '<td class="tk"></td>')
                 + '</tr>')
         return '<table class="prep-tab"><tbody>' + "".join(ryady) + '</tbody></table>'
     def vkladka_gruppy(kod, kl):
@@ -154,9 +426,21 @@ def sobrat():
         kab = kabinety_dnya[kl].get(kod)
         deti = [r for r in shk_dnya[kl] if gr_shk(r) == kod]
         svoi = sorted((x for x in prep.values() if x["gruppa"] == kod), key=lambda x: x["name"])
-        shapka = (f'<p class="shapka"><b>{e(star)}</b> · '
-                  + (f'кабинет <span class="kab">{e(kab)}</span>' if kab else '<span class="net">кабинет не назначен</span>')
-                  + f' · преподавателей {len(svoi)} · школьников {len(deti)}</p>')
+        # 🔴 У ГОСТЯ — ТОЛЬКО КАБИНЕТ. Имя старшего и числа «преподавателей N ·
+        # школьников M» — техническая служебная информация (ТЗ §2.5) и живут
+        # только в админке. Ради них же на вкладке группы не хватало экрана.
+        if ADMIN:
+            # 🔴 КАБИНЕТ ПРАВИТСЯ И ЗДЕСЬ. Нынешняя админка это умеет, и
+            # переезд вида не имеет права терять умение — поле пишет ровно на ТОТ
+            # день, который сейчас показан, потому что кабинет назначается группе
+            # на конкретный день, а страница показывает два дня сразу.
+            pole = (f'кабинет <input class="org kab-inp" data-gruppa="{e(kod)}" '
+                    f'data-data="{e(DNI[kl][2])}" value="{e(kab or "")}" '
+                    f'size="5" placeholder="—">')
+            shapka = (f'<p class="shapka"><b>{e(star)}</b> · ' + pole
+                      + f' · преподавателей {len(svoi)} · школьников {len(deti)}</p>')
+        else:
+            shapka = f'<p class="shapka">кабинет {kab_html(kl, kod)}</p>' 
         return (shapka + '<div class="dva">'
                 + f'<div class="kol">{"".join(para_shk(r, kl, pokazat_kab=False) for r in deti)}</div>'
                 + f'<div class="kol kol-pr">{"".join(para_prep(x, kl, pokazat_gruppu=False) for x in svoi)}</div>'
@@ -224,7 +508,23 @@ def sobrat():
 
     zhdut = [r for r in shk if r["teacher_id"] not in prep]
 
-    VYHOD.write_text(f"""<!doctype html>
+    if svodka is not None:
+        svodka.append(f"  режим {rezhim} · школьников {len(shk)} · преподавателей "
+                      f"{len(prep)} · ждут назначения {len(zhdut)}")
+        svodka.append("  группы: " + " · ".join(f"{k}→{kabinety.get(k,'—')}"
+                                                for k in ("В", "Д", "Н")))
+        svodka.append(f"  листки: 9кл {len(l9)} · 8кл {len(l8)}")
+
+    # ── ЧЕМ РЕЖИМЫ ОТЛИЧАЮТСЯ, ЦЕЛИКОМ И В ОДНОМ МЕСТЕ ───────────────────────
+    # Гость видит кнопку «Вход». Организатор — метку режима, кнопку «Выход» и
+    # скрипт правки. Больше ничем: вся остальная разметка у них общая, потому
+    # что порождена одним кодом.
+    vhod_knopka = ('<span class="rezhim">режим правки</span>'
+                   '<a class="vhod" href="/vyhod">Выход</a>' if ADMIN
+                   else '<a class="vhod" href="/vhod">Вход</a>')
+    admin_skript = ADMIN_SKRIPT if ADMIN else ""
+
+    return f"""<!doctype html>
 <html lang="ru">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -251,6 +551,7 @@ body{{margin:0;background:var(--bg);color:var(--text);font-family:var(--serif);f
 h1{{font-family:var(--sans);font-size:2.1rem;font-weight:600;letter-spacing:-.02em;margin:0}}
 .data{{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 1.6rem}}
 .oblozhka p{{font-size:1.3rem;line-height:1.5;max-width:52em;margin:0 0 .8em}}
+.rasp-str{{font-size:1.15rem;padding:.15em 0}}
 .raspisanie{{border:1px solid var(--rule);border-radius:10px;padding:1.1rem 1.4rem;
   margin:1.6rem 0 0;background:var(--panel);max-width:52em}}
 .zag2{{font-family:var(--sans);font-size:.85rem;font-weight:600;letter-spacing:.09em;
@@ -278,6 +579,7 @@ th{{font-family:var(--sans);font-size:.8rem;font-weight:600;letter-spacing:.09em
 td{{padding:.5rem 1.1rem .5rem 0;border-bottom:1px solid var(--rule);vertical-align:baseline}}
 tr:hover td{{background:var(--accent-soft)}}
 .kl{{color:var(--muted);font-family:var(--sans);font-size:.9rem}}
+.kab.staryj{{background:none;border:1px dashed var(--rule);color:var(--muted)}}
 .kab{{font-family:var(--sans);font-weight:600;background:var(--chip);border-radius:7px;
   padding:.1em .55em;white-space:nowrap}}
 .gr{{font-family:var(--sans);font-weight:600;color:var(--accent)}}
@@ -329,12 +631,51 @@ tr:hover td{{background:var(--accent-soft)}}
 .kol-pr .para{{font-size:1.75rem}}
 .kol-pr .komu.deti{{font-size:1.55rem}}
 .kol-pr .komu.deti span{{margin-left:.7rem}}
+/* Запятая между фамилиями рисуется CSS: у гостя и у организатора один и тот же
+   элемент `.det`, и разметка обоих режимов отличается ровно кнопкой-органом. */
+.zpt:not(:last-child)::after{{content:", "}}
+.tabl .zpt:not(:last-child)::after{{content:none}}
+/* ── ТРИ СТОЛБЦА на вкладке школьников: читается сверху вниз по столбцу. ── */
+.tri{{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 2rem;align-items:start}}
+@media(max-width:1100px){{.tri{{grid-template-columns:1fr 1fr}}}}
+@media(max-width:760px){{.tri{{grid-template-columns:1fr}}}}
+/* Кнопка входа — справа в том же меню, тем же шрифтом, что и его пункты. */
+.vhod{{margin-left:auto;font-family:var(--sans);font-weight:600;font-size:1.05rem;
+  color:var(--accent);text-decoration:none;padding:.35em 1rem;border:1px solid var(--accent);
+  border-radius:8px;white-space:nowrap}}
+.vhod:hover{{background:var(--accent);color:var(--panel)}}
+.rezhim{{font-family:var(--sans);font-weight:600;font-size:.95rem;color:var(--warm);
+  margin-left:auto;margin-right:.8rem;white-space:nowrap}}
+.rezhim+.vhod{{margin-left:0}}
+/* ── ОРГАНЫ ПРАВКИ. Стоят там же, где у гостя текст, и больше нигде. ── */
+.org{{font:inherit;font-family:var(--sans);font-size:.95rem;color:var(--text);
+  background:var(--panel);border:1px solid var(--rule);border-radius:7px;
+  padding:.12em .3em;margin-left:.4rem;max-width:11rem}}
+.org:hover,.org:focus{{border-color:var(--accent);outline:none}}
+.tsch{{font-family:var(--sans);font-weight:600;text-align:center;width:1%;
+  white-space:nowrap;color:var(--muted)}}
+.tsch.ploho,.sch.ploho{{color:#c0392b}}
+.sch{{font-family:var(--sans);font-weight:600;font-size:.8em;color:var(--muted)}}
+/* Крестик = открепить. Появляется по клику на фамилии преподавателя, не раньше:
+   восемнадцать всегда видимых крестиков — это приглашение промахнуться. */
+.tabl{{font:inherit;font-family:var(--sans);background:var(--chip);
+  border:1px solid transparent;border-radius:7px;padding:.1em .5em;
+  margin:.1em .25em .1em 0;cursor:default;color:var(--text)}}
+.tabl .x{{display:none;color:#c0392b;font-weight:700;margin-left:.35em}}
+.otkryt .tabl{{cursor:pointer;border-color:#c0392b}}
+.otkryt .tabl .x{{display:inline}}
+.otkryt .tp b{{color:#c0392b}}
+/* Ответ сервера человеку. Отказ виден внизу экрана и не пропускается. */
+.soob{{position:fixed;left:0;right:0;bottom:0;z-index:60;font-family:var(--sans);
+  font-size:1.05rem;padding:.7rem 1.2rem;display:none}}
+.soob.idet{{display:block;background:var(--accent-soft);color:var(--text)}}
+.soob.ploho{{display:block;background:#c0392b;color:#fff;font-weight:600}}
 /* Таблица преподавателей: колонки ровные, кабинет уходит вправо. */
 .prep-tab{{width:100%;border-collapse:collapse}}
 .prep-tab td{{padding:.55rem .8rem .55rem 0;border-bottom:1px solid var(--rule);
   vertical-align:baseline;font-size:1.75rem}}
 .prep-tab .tp{{white-space:nowrap;width:1%;padding-right:2rem}}
-.prep-tab .td-deti{{color:var(--muted);font-family:var(--sans);font-size:1.55rem;
+.prep-tab .td-deti{{color:var(--muted);font-family:var(--sans);font-size:1.25rem;
   width:auto;padding-right:2rem}}
 .prep-tab tr.skryt{{display:none}}
 .prep-tab .tg{{font-family:var(--sans);font-weight:600;color:var(--accent);
@@ -347,13 +688,13 @@ tr:hover td{{background:var(--accent-soft)}}
 .dni label{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1.05rem;
   color:var(--muted);padding:.35em 1.1rem;border:1px solid var(--rule);border-radius:9px}}
 .dni label:hover{{color:var(--text)}}
+#d-pn:checked~.holst .dni label[for=d-pn],
 #d-cht:checked~.holst .dni label[for=d-cht],
-#d-sub:checked~.holst .dni label[for=d-sub],
-#d-cht:checked~#s-rasp .dni label[for=d-cht],
-#d-sub:checked~#s-rasp .dni label[for=d-sub]{{color:var(--accent);border-color:var(--accent);
+#d-pn:checked~#s-rasp .dni label[for=d-pn],
+#d-cht:checked~#s-rasp .dni label[for=d-cht]{{color:var(--accent);border-color:var(--accent);
   background:var(--accent-soft)}}
 .den{{display:none}}
-#d-cht:checked~#s-rasp .den-cht,#d-sub:checked~#s-rasp .den-sub{{display:block}}
+#d-pn:checked~#s-rasp .den-pn,#d-cht:checked~#s-rasp .den-cht{{display:block}}
 .poisk-str{{margin:0;max-width:32rem;flex:1 1 18rem}}
 @media(max-width:900px){{.dva{{grid-template-columns:1fr}}
   .kol{{border-right:none;padding-right:0}}}}
@@ -390,8 +731,8 @@ tr:hover td{{background:var(--accent-soft)}}
 @media(max-width:760px){{.menu,.holst{{padding-left:1.1rem;padding-right:1.1rem}}.fajly{{columns:1}}}}
 </style>
 
-<input class="rd" type="radio" name="den" id="d-cht" checked>
-<input class="rd" type="radio" name="den" id="d-sub">
+<input class="rd" type="radio" name="den" id="d-pn" checked>
+<input class="rd" type="radio" name="den" id="d-cht">
 <input class="rd" type="radio" name="str" id="p-start" checked>
 <input class="rd" type="radio" name="str" id="p-list">
 <input class="rd" type="radio" name="str" id="p-rasp">
@@ -399,6 +740,7 @@ tr:hover td{{background:var(--accent-soft)}}
   <label class="im" for="p-start">Спецмат 9 класс</label>
   <label for="p-list">Листки</label>
   <label for="p-rasp">Распределение</label>
+  {vhod_knopka}
 </nav>
 
 <section class="str holst" id="s-start">
@@ -407,7 +749,9 @@ tr:hover td{{background:var(--accent-soft)}}
     <p class="data">9К и 9Л</p>
     <div class="raspisanie">
       <div class="zag2">Расписание</div>
-      <div>Занятия по четвергам и субботам. <span class="net">время пока не указано</span></div>
+      <div class="rasp-str"><b>понедельник</b> 14:15&nbsp;&mdash;&nbsp;15:55</div>
+      <div class="rasp-str"><b>четверг</b> 13:10&nbsp;&mdash;&nbsp;15:00</div>
+      <div class="rasp-str"><span class="net">кабинеты уточняются</span></div>
     </div>
     <div class="podskazki bolshoj">
       <input class="poisk poisk-big" id="poisk" placeholder="Поиск по сайту — школьник, преподаватель, листок" autocomplete="off">
@@ -438,7 +782,7 @@ tr:hover td{{background:var(--accent-soft)}}
     <h1>Распределение</h1>
     <input class="poisk poisk-str" id="poisk-r" placeholder="Фамилия школьника или имя преподавателя" autocomplete="off">
     <div class="dni">
-      <label for="d-cht">четверг</label><label for="d-sub">суббота</label>
+      <label for="d-pn">понедельник</label><label for="d-cht">четверг</label>
     </div>
   </div>
 
@@ -452,16 +796,16 @@ tr:hover td{{background:var(--accent-soft)}}
     <label for="t-В">В</label><label for="t-Д">Д</label><label for="t-Н">Н</label>
   </div>
   <section class="vid" id="v-shk">
+    <div class="den den-pn">{vid_vse("pn")}</div>
     <div class="den den-cht">{vid_vse("cht")}</div>
-    <div class="den den-sub">{vid_vse("sub")}</div>
   </section>
   <section class="vid" id="v-prep">
+    <div class="den den-pn">{vid_prepodavateli("pn")}</div>
     <div class="den den-cht">{vid_prepodavateli("cht")}</div>
-    <div class="den den-sub">{vid_prepodavateli("sub")}</div>
   </section>
   {"".join(f'<section class="vid" id="v-{k}">'
-           f'<div class="den den-cht">{vkladka_gruppy(k, "cht")}</div>'
-           f'<div class="den den-sub">{vkladka_gruppy(k, "sub")}</div></section>'
+           f'<div class="den den-pn">{vkladka_gruppy(k, "pn")}</div>'
+           f'<div class="den den-cht">{vkladka_gruppy(k, "cht")}</div></section>'
            for k in ("В", "Д", "Н"))}
 </section>
 
@@ -493,12 +837,12 @@ document.addEventListener('click',e=>{{if(!e.target.closest('.podskazki'))spisok
 
 // Поиск на РАСПРЕДЕЛЕНИИ: прячет строки, не совпавшие с фамилией или именем.
 // Работает разом во всех вкладках и в обоих днях — искать надо там, где смотришь.
-// 🔴 ПО УМОЛЧАНИЮ — БЛИЖАЙШЕЕ ЗАНЯТИЕ. Занятия по четвергам и субботам: в пятницу
-// и субботу ближайшее — суббота, в остальные дни — четверг. Страница статическая,
-// поэтому день выбирается при открытии, а не при сборке.
+// 🔴 ПО УМОЛЧАНИЮ — БЛИЖАЙШЕЕ ЗАНЯТИЕ. Занятия по понедельникам и четвергам:
+// во вторник, среду и четверг ближайшее — четверг, в остальные дни — понедельник.
+// Страница статическая, поэтому день выбирается при открытии, а не при сборке.
 (function(){{
-  const d=new Date().getDay();          // 0 вс · 5 пт · 6 сб
-  if(d===5||d===6) document.getElementById('d-sub').checked=true;
+  const d=new Date().getDay();          // 0 вс · 1 пн · 4 чт
+  if(d>=2&&d<=4) document.getElementById('d-cht').checked=true;
 }})();
 
 const pr=document.getElementById('poisk-r');
@@ -510,11 +854,23 @@ pr.addEventListener('input',e=>{{
   }});
 }});
 </script>
-""", encoding="utf-8")
+{admin_skript}
+"""
+
+
+def sobrat(svodka: list | None = None) -> int:
+    """Пишет ГОСТЕВУЮ страницу в `docs/index.html`. Зовётся руками и из сервера.
+
+    \U0001f534 ПАДАЕТ ГРОМКО. Ни одного `except` вокруг: сервер зовёт эту функцию
+    после каждой успешной записи в базу и обязан упасть вместе с ней. Тихая
+    сборка вернула бы ровно то, от чего уходим, — новую базу при вчерашней
+    странице, о которой никто не знает.
+    """
+    svodka = [] if svodka is None else svodka
+    VYHOD.write_text(sobrat_html("gost", svodka), encoding="utf-8")
     print(f"собрано: {VYHOD}")
-    print(f"  школьников {len(shk)} · преподавателей {len(prep)} · ждут назначения {len(zhdut)}")
-    print(f"  группы: " + " · ".join(f"{k}→{kabinety.get(k,'—')}" for k in ("В","Д","Н")))
-    print(f"  листки: 9кл {len(l9)} · 8кл {len(l8)}")
+    for stroka in svodka:
+        print(stroka)
     return 0
 
 
