@@ -37,7 +37,45 @@ MAT = KOREN / "docs"
 # `DATA_NA` и `DATA_SLOVAMI` отсюда убраны: их никто не читал, а датой они
 # повторяли ту самую строку, которая звала субботу четвергом.
 sys.path.insert(0, str(KOREN))
-from veb.sobrat_fajl import DNI_ZANYATIJ, blizhajshij_den  # noqa: E402
+from veb.sobrat_fajl import DNI_ZANYATIJ, SOKR_DNYA, blizhajshij_den  # noqa: E402
+
+
+def krivaya_drakona(shagov: int = 12) -> str:
+    """SVG кривой дракона — фоновый графический элемент заглавной.
+
+    🔴 РИСУЕТСЯ ЗДЕСЬ, А НЕ ПОДКЛЮЧАЕТСЯ ФАЙЛОМ. Готовые картинки кривой лежат в
+    СОСЕДНЕМ репозитории `materials/krivaya-drakona`, и ссылаться на них значило бы
+    повторить ту же ошибку, что уже стоила листков: путь в чужую папку, которой на
+    сервере нет. Кривая дракона строится в пятнадцать строк, поэтому дешевле
+    построить, чем принести.
+
+    Как строится: слово складок. На каждом шаге к слову приписывается поворот
+    налево и зеркально-обращённое предыдущее слово — это и есть определение кривой
+    через складывание полоски бумаги пополам. Дальше повороты разворачиваются в
+    ломаную единичными шагами.
+
+    Кривая уместна не как украшение: это предмет занятия, разобранный с этими же
+    детьми, и на их странице он к месту.
+    """
+    povoroty = []
+    for _ in range(shagov):
+        povoroty = povoroty + [1] + [-x for x in reversed(povoroty)]
+    napravlenie, x, y = 0, 0, 0
+    tochki = [(0, 0)]
+    shag = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+    for p_ in povoroty + [0]:
+        dx, dy = shag[napravlenie]
+        x, y = x + dx, y + dy
+        tochki.append((x, y))
+        napravlenie = (napravlenie + (1 if p_ == 1 else -1)) % 4
+    xs = [a for a, _ in tochki]
+    ys = [b for _, b in tochki]
+    minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
+    put = "M" + " L".join(f"{a - minx},{b - miny}" for a, b in tochki)
+    return (f'<svg class="drakon" viewBox="0 0 {maxx - minx} {maxy - miny}" '
+            f'role="img" aria-label="кривая дракона" preserveAspectRatio="xMidYMid meet">'
+            f'<path d="{put}" fill="none" stroke="currentColor" stroke-width="1" '
+            f'stroke-linecap="square" stroke-linejoin="miter"/></svg>')
 
 
 def e(s):
@@ -387,7 +425,7 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
         return f"{den} {MESYACY[mes - 1]}"
 
     _dni_po_poryadku = sorted(DNI_ZANYATIJ)          # пн, затем чт
-    DNI = {("pn", "cht")[i]: (DNI_ZANYATIJ[w], i + 1, blizhajshij_den(w))
+    DNI = {("pn", "cht")[i]: (DNI_ZANYATIJ[w], i + 1, blizhajshij_den(w), SOKR_DNYA[w])
            for i, w in enumerate(_dni_po_poryadku)}
     # 🔴 КАБИНЕТ НА ДЕНЬ, А ЕСЛИ НА ЭТОТ ДЕНЬ ЕЩЁ НЕ НАЗНАЧЕН — ПОСЛЕДНИЙ
     # ИЗВЕСТНЫЙ, И ЭТО ВИДНО. Владелец ставит привязку накануне вечером, поэтому
@@ -399,7 +437,7 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     # датой, откуда он взят, — читатель обязан отличать одно от другого.
     kabinety_dnya = {}
     otkuda_kabinet = {}
-    for kl, (_, _, dat) in DNI.items():
+    for kl, (_, _, dat, _sokr) in DNI.items():
         tochno = {r["gruppa"]: r["kabinet"] for r in c.execute(
             "select gruppa, kabinet from kabinet_na_den where data = ?", (dat,))}
         proshloe = {}
@@ -442,7 +480,7 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
             order by s.surname, s.name
         """, (slot,)).fetchall()
 
-    shk_dnya = {kl: shkolniki(sl) for kl, (_, sl, _) in DNI.items()}
+    shk_dnya = {kl: shkolniki(sl) for kl, (_, sl, _, _s) in DNI.items()}
     shk = shk_dnya["pn"]
 
     def gr_shk(r, pr=None):
@@ -663,7 +701,7 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
             dni_metki = "".join(
                 '<span class="den-metka%s" title="%s">%s</span>' % (
                     "" if any(r["teacher_id"] == x["id"] for r in shk_dnya[k]) else " pusto",
-                    e(DNI[k][0]), e(DNI[k][0][:2]))
+                    e(DNI[k][0]), e(DNI[k][3]))
                 for k in DNI)
             ryady.append(
                 f'<tr data-i="{e(x["name"].lower())}" data-tid="{x["id"]}">'
@@ -702,20 +740,25 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
             # ради второго поля — лишний ход. Это ЕДИНСТВЕННОЕ место, где кабинет
             # вводится: в списках распределения у организатора его нет вовсе.
             polya = "".join(
-                f'<label class="kab-pole">{e(DNI[k][0])}'
+                f'<label class="kab-pole">{e(DNI[k][3])}'
                 f'<input class="org kab-inp" data-gruppa="{e(kod)}"'
                 f' data-data="{e(DNI[k][2])}"'
                 f' value="{e(kabinety_dnya[k].get(kod) or "")}"'
                 f' size="5" placeholder="—"></label>'
                 for k in DNI)
+            # 🔴 БЕЗ «СТАРШИЙ ИМЯРЕК». Владелец 06.09: «там всё равно не нужно
+            # писать „Старший Ваня Яковлев“ — просто: преподавателей 6,
+            # школьников 20, кабинет: пн 303, чт 307». Кто старший, видно по
+            # самой вкладке; повторять это здесь нечем.
             nizhnyaya = ('<div class="gruppa-niz" data-org="pravit-kabinety">'
-                         f'<span class="gruppa-cifry">старший <b>{e(star)}</b>'
-                         f' · преподавателей {len(svoi)} · школьников {len(deti)}</span>'
+                         f'<span class="gruppa-cifry">преподавателей <b>{len(svoi)}</b>'
+                         f' · школьников <b>{len(deti)}</b></span>'
                          f'<span class="kab-polya">кабинет {polya}</span></div>')
         else:
-            nizhnyaya = ('<div class="gruppa-niz" data-tolko-gost>'
-                         f'<span class="gruppa-cifry">старший <b>{e(star)}</b></span>'
-                         f'<span class="kab-polya">кабинет {kab_html(kl, kod)}</span></div>')
+            # 🔴 У ГОСТЯ НИЖНЕЙ ПАНЕЛИ НЕТ ВОВСЕ. Кабинет уже стоит наверху, в
+            # строке вкладок, и повторять его внизу значит писать одно дважды —
+            # ровно то, от чего избавляемся по всему сайту.
+            nizhnyaya = ""
 
         return ('<div class="dva">'
                 + f'<div class="kol">{"".join(para_shk(r, kl, pokazat_kab=False) for r in deti)}</div>'
@@ -835,7 +878,8 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     if mozhno("pereklyuchat-dni"):
         zanyatie_verh = (
             '<span class="dni" data-org="pereklyuchat-dni">'
-            + "".join(f'<label for="d-{k}">{e(DNI[k][0])}</label>' for k in DNI)
+            + "".join(f'<label for="d-{k}" title="{e(DNI[k][0])}">{e(DNI[k][3])}</label>'
+                      for k in DNI)
             + "</span>")
     else:
         zanyatie_verh = (
@@ -939,7 +983,7 @@ h1{{font-family:var(--sans);font-size:2.1rem;font-weight:600;letter-spacing:-.02
 .rasp-str{{font-size:1.15rem;padding:.15em 0}}
 .raspisanie{{border:1px solid var(--rule);border-radius:10px;padding:1.1rem 1.4rem;
   margin:1.6rem 0 0;background:var(--panel);max-width:52em}}
-.zag2{{font-family:var(--sans);font-size:.85rem;font-weight:600;letter-spacing:.09em;
+.zag2{{font-family:var(--sans);font-size:.82rem;font-weight:700;letter-spacing:.1em;
   text-transform:uppercase;color:var(--faint);margin:0 0 .5em}}
 .str,.vid{{display:none}}
 #p-start:checked~#s-start,#p-list:checked~#s-list,#p-rasp:checked~#s-rasp{{display:block}}
@@ -1071,26 +1115,46 @@ tr:hover td{{background:var(--accent-soft)}}
 /* ── СТРАНИЦА КЛАССА. Ни одного повтора имени сайта: оно стоит наверху. ── */
 .klass{{display:grid;grid-template-columns:minmax(0,1fr) 17rem;gap:0 3rem;align-items:start}}
 @media(max-width:900px){{.klass{{grid-template-columns:1fr}}}}
-/* Ближайшее занятие — самое крупное на странице: за этим и заходят. */
-.skoro-blok{{margin:0 0 2.4rem}}
-.skoro-den{{font-size:2.6rem;font-weight:600;letter-spacing:-.02em;margin:.1rem 0 0;
-  line-height:1.1}}
-.skoro-vremya{{font-family:var(--sans);font-size:1.9rem;color:var(--accent);margin:.1rem 0 0}}
-.skoro-kab{{font-family:var(--sans);font-size:1.25rem;color:var(--muted);margin:.5rem 0 0}}
+/* ── ЗАГЛАВНАЯ. Полосы во всю ширину, крупный ЕДИНЫЙ шрифт, кривая фоном. ── */
+.glav{{position:relative;min-height:calc(100vh - 9rem);display:flex;flex-direction:column}}
+.glav-fon{{position:absolute;inset:0;z-index:0;display:flex;align-items:center;
+  justify-content:flex-end;pointer-events:none;overflow:hidden}}
+/* Кривая дракона — предмет занятия, а не украшение, и потому приглушена до фона:
+   она должна попадаться на глаза, а не спорить с текстом. */
+.drakon{{width:min(46vw,720px);height:auto;color:var(--accent);opacity:.10;
+  transform:translateX(8%)}}
+@media(prefers-color-scheme:dark){{:root:not([data-theme=light]) .drakon{{opacity:.13}}}}
+.glav>*:not(.glav-fon){{position:relative;z-index:1}}
+.zag2{{display:block}}
+.glav-skoro{{padding:1.5rem 0 2rem}}
+.skoro-den{{font-size:clamp(2.4rem,5.2vw,4.4rem);font-weight:600;letter-spacing:-.025em;
+  margin:.2rem 0 0;line-height:1.05}}
+.skoro-vremya{{font-size:clamp(1.7rem,3.4vw,2.9rem);color:var(--accent);
+  margin:.15rem 0 0;font-weight:600}}
+.skoro-kab{{font-size:clamp(1.1rem,2vw,1.5rem);color:var(--muted);margin:.6rem 0 0}}
 .skoro-kab b{{color:var(--text);font-weight:600}}
-/* Текущий листок — второе по важности и тоже крупно. */
-.listok-blok{{margin:0 0 2.4rem}}
-.listok-imya{{font-size:2rem;font-weight:600;margin:.1rem 0 0;line-height:1.15}}
-.listok-nom{{color:var(--faint);font-family:var(--sans);margin-right:.5rem}}
-.listok-ver{{margin:.7rem 0 0}}
-.ver.bolshoj{{font-size:1.2rem;padding:.25em 1em;margin:0 .4rem 0 0}}
-.vedut-blok{{margin:0 0 1.5rem}}
-.vedut{{width:100%;border-collapse:collapse;font-size:1.2rem;max-width:34rem}}
+/* Полосы: две колонки, обе широкие. Между полосами — воздух, а не пустота. */
+.glav-polosa{{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);
+  gap:2rem 4rem;padding:2rem 0;border-top:1px solid var(--rule);align-items:start}}
+@media(max-width:900px){{.glav-polosa{{grid-template-columns:1fr;gap:2rem}}}}
+.listok-imya{{font-size:clamp(1.6rem,3vw,2.5rem);font-weight:600;margin:.2rem 0 0;
+  line-height:1.1}}
+.listok-nom{{color:var(--faint);margin-right:.5rem}}
+.listok-ver{{margin:.8rem 0 0}}
+.ver.bolshoj{{font-size:1.25rem;padding:.3em 1.1em;margin:0 .5rem 0 0}}
+.rasp{{border-collapse:collapse;font-size:clamp(1.1rem,1.8vw,1.45rem)}}
+.rasp td{{border:none;padding:.25rem 0;vertical-align:baseline}}
+.rasp .den-imya{{font-weight:600;padding-right:2rem}}
+.rasp .den-vremya{{white-space:nowrap;color:var(--muted)}}
+.vedut{{border-collapse:collapse;font-size:clamp(1.05rem,1.7vw,1.35rem)}}
 .vedut td{{border:none;padding:.3rem 0;vertical-align:baseline}}
-.vedut .predmet{{color:var(--muted);font-family:var(--sans);font-size:1rem;width:13rem}}
-/* Подпись: то, что важно знать, но не первым. */
-.podpis{{font-family:var(--sans);font-size:.95rem;color:var(--faint);
-  margin:2.5rem 0 0;padding-top:1rem;border-top:1px solid var(--rule)}}
+.vedut .predmet{{color:var(--muted);padding-right:2rem;white-space:nowrap}}
+.glav-lyudi{{margin-top:auto}}
+.glav-prepy .prep-spisok{{columns:2;column-gap:2.5rem;font-size:1.1rem}}
+.glav-prepy .prep-spisok.ranshe{{columns:1;font-size:1rem}}
+/* Подпись: то, что важно знать, но не первым. Линия внизу — и только внизу. */
+.podpis{{font-size:1rem;color:var(--faint);margin:0;padding:1.2rem 0 0;
+  border-top:1px solid var(--rule)}}
 .klass-sboku{{border-left:1px solid var(--rule);padding-left:2rem}}
 @media(max-width:900px){{.klass-sboku{{border-left:none;padding-left:0;margin-top:1.5rem}}}}
 .prep-spisok{{list-style:none;margin:.4rem 0 0;padding:0;font-size:1.05rem}}
@@ -1275,40 +1339,51 @@ body{{padding-bottom:2rem}}
 </nav>
 
 <section class="str holst" id="s-start">
-  <!-- 🔴 СВЕРХУ — ТО, ЗА ЧЕМ СЮДА ЗАХОДЯТ, И КРУПНО. Владелец 06.09: «размер
-       текста должен занимать большую часть места, и текст должен быть полезным…
-       школьникам не важно, что их 53 и что это 179-я школа». Числа класса ушли
-       в подпись внизу; наверху — когда занятие, где оно и что сейчас решаем. -->
-  <div class="klass">
-    <div class="klass-glavnoe">
-      <div class="skoro-blok">
-        <div class="zag2">Ближайшее занятие</div>
-        <p class="skoro-den">{e(po_russki(DNI[blizh][2]))}, {e(DNI[blizh][0])}</p>
-        <p class="skoro-vremya">{VREMYA[blizh]}</p>
-        <p class="skoro-kab">{kabinety_skoro}</p>
-      </div>
+  <!-- 🔴 СТРАНИЦА ЗАНИМАЕТ ВСЮ ШИРИНУ И ВСЮ ВЫСОТУ, а не жмётся в колонку.
+       Владелец 06.09: «не использовано пространство… как будто пытаешься
+       сэкономить, сгоняешь всё в узкие колонки, делаешь маленький шрифт».
+       Поэтому: три полосы во всю ширину, крупный единый шрифт, и кривая
+       дракона фоном — она заполняет то, что иначе осталось бы пустотой. -->
+  <div class="glav">
+    <div class="glav-fon">{krivaya_drakona(12)}</div>
 
+    <div class="glav-skoro">
+      <span class="zag2">Ближайшее занятие</span>
+      <p class="skoro-den">{e(po_russki(DNI[blizh][2]))}, {e(DNI[blizh][0])}</p>
+      <p class="skoro-vremya">{VREMYA[blizh]}</p>
+      <p class="skoro-kab">{kabinety_skoro}</p>
+    </div>
+
+    <div class="glav-polosa">
       {tekushchij_listok}
-
-      <div class="vedut-blok">
-        <div class="zag2">Кто ведёт</div>
-        <table class="vedut"><tbody>
-          <tr><td class="predmet">алгебра</td><td>Ольга Рыжая</td></tr>
-          <tr><td class="predmet">геометрия</td><td>Наталия Стрелкова</td></tr>
-          <tr><td class="predmet">спецмат</td><td>Даня Макаров, Ваня Яковлев</td></tr>
-          <tr><td class="predmet">классные руководители</td><td>Дарья Аракелова, Радий Юрьевич Скребцов</td></tr>
+      <div class="glav-rasp">
+        <span class="zag2">Расписание</span>
+        <table class="rasp"><tbody>
+          {"".join(f'<tr><td class="den-imya">{e(DNI[k][0])}</td>'
+                   f'<td class="den-vremya">{VREMYA[k]}</td></tr>' for k in DNI)}
         </tbody></table>
       </div>
     </div>
 
-    <aside class="klass-sboku">
-      <div class="zag2">Преподаватели спецмата</div>
-      <ul class="prep-spisok">{spisok_prepodavatelej}</ul>
-      {byvshie_html}
-    </aside>
-  </div>
+    <div class="glav-polosa glav-lyudi">
+      <div class="glav-vedut">
+        <span class="zag2">Кто ведёт</span>
+        <table class="vedut"><tbody>
+          <tr><td class="predmet">алгебра</td><td>Ольга Рыжая</td></tr>
+          <tr><td class="predmet">геометрия</td><td>Наталия Стрелкова</td></tr>
+          <tr><td class="predmet">спецмат</td><td>Даня Макаров, Ваня Яковлев</td></tr>
+          <tr><td class="predmet">классные руководители</td><td>Дарья Аракелова, Радион Скребцов</td></tr>
+        </tbody></table>
+      </div>
+      <div class="glav-prepy">
+        <span class="zag2">Преподаватели спецмата</span>
+        <ul class="prep-spisok">{spisok_prepodavatelej}</ul>
+        {byvshie_html}
+      </div>
+    </div>
 
-  <p class="podpis">Школа №&nbsp;179 · математический класс · 9К и 9Л · {len(shk)} школьников</p>
+    <p class="podpis">Школа №&nbsp;179 · математический класс · 9К и 9Л</p>
+  </div>
 </section>
 
 <section class="str holst" id="s-list">
