@@ -311,6 +311,7 @@ VOZMOZHNOSTI = {
         "pravit-kabinety",        # поля кабинета в шапке группы
         "videt-schyot",           # счётчики нагрузки и числа по группам
         "videt-klass",            # буква класса у школьника
+        "pereklyuchat-dni",       # переключатель понедельник/четверг вместо даты
     }),
 }
 
@@ -372,6 +373,19 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     # Имена и номера дней НЕ вписаны здесь, а взяты из `veb/sobrat_fajl.DNI_ZANYATIJ` —
     # того самого «одного дома», который этот файл и объявляет. Вписанная копия уже
     # однажды разошлась с домом и печатала на странице неверные дни.
+    # 🔴 ВРЕМЯ ЗАНЯТИЙ ЖИВЁТ ЗДЕСЬ, ОДНОЙ СТРОКОЙ НА ДЕНЬ. Раньше оно стояло
+    # прямо в разметке расписания, и второе место, где его надо показать (шапка
+    # распределения), пришлось бы писать копией — то есть завести вторую правду
+    # о том же. Продиктовано владельцем 06.09.
+    VREMYA = {"pn": "14:15\u2009—\u200915:55", "cht": "13:10\u2009—\u200915:00"}
+    MESYACY = ("января", "февраля", "марта", "апреля", "мая", "июня",
+               "июля", "августа", "сентября", "октября", "ноября", "декабря")
+
+    def po_russki(iso):
+        """`2026-09-07` → `7 сентября`. Дата на странице читается человеком."""
+        god, mes, den = (int(x) for x in iso.split("-"))
+        return f"{den} {MESYACY[mes - 1]}"
+
     _dni_po_poryadku = sorted(DNI_ZANYATIJ)          # пн, затем чт
     DNI = {("pn", "cht")[i]: (DNI_ZANYATIJ[w], i + 1, blizhajshij_den(w))
            for i, w in enumerate(_dni_po_poryadku)}
@@ -663,32 +677,30 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
                 + '</tr>')
         return '<table class="prep-tab"><tbody>' + "".join(ryady) + '</tbody></table>'
     def vkladka_gruppy(kod, kl):
-        """Группа — ОДИН столбец: половина экрана пустой быть не должна.
+        """Группа: слева школьники, справа преподаватели, служебное — ВНИЗУ.
 
-        Группа и кабинет у каждой строки не печатаются: на вкладке группы они
-        одинаковы у всех и стоят один раз в шапке.
+        🔴 ШАПКИ НАВЕРХУ БОЛЬШЕ НЕТ, И ЭТО РЕШЕНИЕ ВЛАДЕЛЬЦА 06.09. Там стояли
+        имя старшего и числа «преподавателей 6 · школьников 20» — и то и другое
+        он назвал лишним в самом заметном месте экрана: «и так понятно, кто
+        руководитель… надо вынести». Верхняя строка отдана тому, ради чего сюда
+        пришли, — спискам.
+
+        Служебное переехало ПОД список преподавателей, в свою рамку: числа, а у
+        организатора ещё и поля кабинета на оба дня. Оно нужно, но не первым.
         """
         star = gruppy[kod]
         kab = kabinety_dnya[kl].get(kod)
         deti = [r for r in shk_dnya[kl] if gr_shk(r) == kod]
-        svoi = sorted((x for x in prep.values() if x["gruppa"] == kod), key=lambda x: x["name"])
-        # 🔴 У ГОСТЯ — ТОЛЬКО КАБИНЕТ. Имя старшего и числа «преподавателей N ·
-        # школьников M» — техническая служебная информация (ТЗ §2.5) и живут
-        # только в админке. Ради них же на вкладке группы не хватало экрана.
+        svoi = sorted((x for x in prep.values() if x["gruppa"] == kod),
+                      key=lambda x: x["name"])
+        sl = DNI[kl][1]
+
         if mozhno("pravit-kabinety"):
             # 🔴 КАБИНЕТЫ — ДВУМЯ ПОЛЯМИ, ПОНЕДЕЛЬНИК И ЧЕТВЕРГ, НА ОДНОМ ЭКРАНЕ.
-            # Владелец 06.09, дословно: «у каждой аудитории должно быть два поля —
-            # понедельник и четверг; можно будет ввести в понедельник название или
-            # номер кабинета и в четверг другой». Кабинет назначается группе НА
-            # ДЕНЬ, и дни могут расходиться.
-            #
-            # Оба поля видны сразу, а не по переключателю дня: правят их вместе,
-            # накануне вечером, и перещёлкивать ради второго поля — лишний ход.
-            # Для ПРОСМОТРА переключатель дня остаётся, для ПРАВКИ всё на одном
-            # экране. Разные задачи заслуживают разного устройства.
-            #
-            # 🔴 ЭТО ЕДИНСТВЕННОЕ МЕСТО, ГДЕ КАБИНЕТ ВВОДИТСЯ. В списках школьников
-            # у организатора его нет вовсе — там правят людей, а не помещения.
+            # Владелец: «у каждой аудитории должно быть два поля — понедельник и
+            # четверг». Правят их вместе, накануне вечером; перещёлкивать день
+            # ради второго поля — лишний ход. Это ЕДИНСТВЕННОЕ место, где кабинет
+            # вводится: в списках распределения у организатора его нет вовсе.
             polya = "".join(
                 f'<label class="kab-pole">{e(DNI[k][0])}'
                 f'<input class="org kab-inp" data-gruppa="{e(kod)}"'
@@ -696,22 +708,21 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
                 f' value="{e(kabinety_dnya[k].get(kod) or "")}"'
                 f' size="5" placeholder="—"></label>'
                 for k in DNI)
-            shapka = ('<p class="shapka">'
-                      f'<span data-org="videt-schyot"><b>{e(star)}</b> · '
-                      f'преподавателей {len(svoi)} · школьников {len(deti)}</span>'
-                      f'<span class="kab-polya" data-org="pravit-kabinety">'
-                      f'кабинет {polya}</span></p>')
+            nizhnyaya = ('<div class="gruppa-niz" data-org="pravit-kabinety">'
+                         f'<span class="gruppa-cifry">старший <b>{e(star)}</b>'
+                         f' · преподавателей {len(svoi)} · школьников {len(deti)}</span>'
+                         f'<span class="kab-polya">кабинет {polya}</span></div>')
         else:
-            # Кабинет у гостя и поля правки у организатора — это одно и то же
-            # место шапки, занятое по-разному. Помечено с обеих сторон, чтобы
-            # гейт снимал надстройку и там, и там, а каркас `<p class="shapka">`
-            # оставался общим.
-            shapka = ('<p class="shapka"><span data-tolko-gost>кабинет '
-                      + kab_html(kl, kod) + '</span></p>')
-        return (shapka + '<div class="dva">'
+            nizhnyaya = ('<div class="gruppa-niz" data-tolko-gost>'
+                         f'<span class="gruppa-cifry">старший <b>{e(star)}</b></span>'
+                         f'<span class="kab-polya">кабинет {kab_html(kl, kod)}</span></div>')
+
+        return ('<div class="dva">'
                 + f'<div class="kol">{"".join(para_shk(r, kl, pokazat_kab=False) for r in deti)}</div>'
-                + f'<div class="kol kol-pr">{"".join(para_prep(x, kl, pokazat_gruppu=False) for x in svoi)}</div>'
-                + '</div>')
+                + '<div class="kol kol-pr"><div class="prep-ramka">'
+                + "".join(para_prep(x, kl, pokazat_gruppu=False) for x in svoi)
+                + "</div>" + nizhnyaya + "</div>"
+                + "</div>")
 
     # ── ЛИСТКИ ────────────────────────────────────────────────────────────────
     # Номер и название по СМЫСЛУ, а не имя файла. Ведущие нули убраны, слово
@@ -781,6 +792,63 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
         svodka.append("  группы: " + " · ".join(f"{k}→{kabinety.get(k,'—')}"
                                                 for k in ("В", "Д", "Н")))
         svodka.append(f"  листки: 9кл {len(l9)} · 8кл {len(l8)}")
+
+    # ── ЧТО СТОИТ НА ГЛАВНОЙ ────────────────────────────────────────────────
+    # Кабинеты ближайшего занятия — по группам, одной строкой. Неизвестные не
+    # выдумываются: их просто нет в строке.
+    def _kab_skoro(k):
+        est = [(kod, kabinety_dnya[k].get(kod)) for kod in ("В", "Д", "Н")]
+        est = [(kod, v) for kod, v in est if v]
+        return " · ".join(f'{kod}&nbsp;<b>{e(v)}</b>' for kod, v in est) if est \
+            else '<span class="net">кабинеты уточняются</span>'
+
+    # 🔴 ТЕКУЩИЙ ЛИСТОК — САМОЕ ПОЛЕЗНОЕ, ЧТО ЗДЕСЬ МОЖЕТ СТОЯТЬ. Школьник заходит
+    # узнать, что решать; всё остальное на главной он уже знает. Берётся ПОСЛЕДНИЙ
+    # листок девятого класса, у которого есть хоть один файл на диске, — то есть
+    # тот, что выдан. Ни одного файла нет — блока нет вовсе, а не пустая рамка.
+    def _tekushchij():
+        for nom, tema, versii in reversed(L9):
+            zhivye = [(z, f) for z, f in versii if est("listki", f)]
+            if zhivye:
+                ssylki = " ".join(
+                    f'<a class="ver bolshoj" href="listki/{e(f)}">{e(z)}</a>'
+                    for z, f in zhivye)
+                return ('<div class="listok-blok"><div class="zag2">Сейчас решаем</div>'
+                        f'<p class="listok-imya"><span class="listok-nom">{e(nom)}</span>'
+                        f' {e(tema)}</p><p class="listok-ver">{ssylki}</p></div>')
+        return ""
+
+    kabinety_skoro = _kab_skoro(min(DNI, key=lambda k: DNI[k][2]))
+    tekushchij_listok = _tekushchij()
+
+    # ── ПРАВАЯ ЧАСТЬ СТРОКИ ВКЛАДОК ─────────────────────────────────────────
+    # 🔴 ГОСТЮ — БЛИЖАЙШЕЕ ЗАНЯТИЕ, А НЕ ПЕРЕКЛЮЧАТЕЛЬ ДНЯ. Владелец 06.09: «для
+    # распределения на общей странице не нужна вкладка понедельник и четверг —
+    # имеется в виду распределение на ближайшее занятие… лучше написать „7 сентября“
+    # и время сразу». Человек, зашедший посмотреть, куда идти, спрашивает «куда мне
+    # СЕГОДНЯ», а не «покажи мне четверг».
+    #
+    # 🔴 ОРГАНИЗАТОРУ ПЕРЕКЛЮЧАТЕЛЬ ОСТАЁТСЯ: он правит оба дня и обязан видеть оба.
+    # Это ровно то, что уровни доступа и означают: не другая страница, а другой
+    # набор возможностей на том же месте.
+    blizh = min(DNI, key=lambda k: DNI[k][2])
+    if mozhno("pereklyuchat-dni"):
+        zanyatie_verh = (
+            '<span class="dni" data-org="pereklyuchat-dni">'
+            + "".join(f'<label for="d-{k}">{e(DNI[k][0])}</label>' for k in DNI)
+            + "</span>")
+    else:
+        zanyatie_verh = (
+            f'<span class="skoro" data-tolko-gost>{e(po_russki(DNI[blizh][2]))}'
+            f' · {e(DNI[blizh][0])} · {VREMYA[blizh]}</span>')
+
+    # 🔴 КАБИНЕТ ГРУППЫ ПЕРЕЕХАЛ НАВЕРХ, В ТУ ЖЕ СТРОКУ. Он занимал отдельную
+    # строку под вкладками — ради одного числа. Показывается только на вкладке
+    # своей группы; какая вкладка открыта, знает CSS, а не скрипт.
+    kabinety_verh = "".join(
+        f'<span class="kab-verh kab-verh-{kod}" data-tolko-gost>'
+        + kab_html(blizh, kod) + "</span>"
+        for kod in ("В", "Д", "Н")) if not ADMIN else ""
 
     # ── ДАННЫЕ ДЛЯ СТРАНИЦЫ КЛАССА ──────────────────────────────────────────
     # Всё, что можно посчитать, считается из базы. Вписано руками только то, чего
@@ -978,25 +1046,51 @@ tr:hover td{{background:var(--accent-soft)}}
    ровно одинаковой ширины. Элемент один и тот же; правку добавляет data-org. */
 /* Отметки дней у преподавателя: закрашена — в этот день у него есть школьники. */
 .tdni{{white-space:nowrap;width:1%;padding-right:1.2rem}}
-.den-metka{{display:inline-block;font-family:var(--sans);font-size:.78rem;font-weight:600;
-  letter-spacing:.03em;text-transform:uppercase;padding:.18em .5em;border-radius:6px;
-  margin-right:.3rem;background:var(--accent-soft);color:var(--accent);
+.den-metka{{display:inline-block;font-family:var(--sans);font-size:.66rem;font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase;padding:.1em .34em;border-radius:4px;
+  margin-right:.22rem;background:var(--accent-soft);color:var(--accent);
   border:1px solid transparent}}
 .den-metka.pusto{{background:none;color:var(--faint);border-color:var(--rule)}}
+/* ── БЛИЖАЙШЕЕ ЗАНЯТИЕ И КАБИНЕТ — В СТРОКЕ ВКЛАДОК, а не отдельной полосой. ── */
+.tabbar-rasp .zanyatie{{margin-left:auto;align-self:center;display:flex;align-items:center;gap:.3rem}}
+.skoro{{font-family:var(--sans);font-size:1rem;color:var(--muted);white-space:nowrap}}
+.kab-verh{{display:none;align-self:center;margin-left:.9rem}}
+#t-В:checked~.tabbar .kab-verh-В,#t-Д:checked~.tabbar .kab-verh-Д,
+#t-Н:checked~.tabbar .kab-verh-Н{{display:inline-block}}
+/* ── ГРУППА: преподаватели в рамке, служебное — под ними. ── */
+.prep-ramka{{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  padding:.5rem 0}}
+.gruppa-niz{{margin-top:1rem;border:1px solid var(--rule);border-radius:11px;
+  padding:.7rem 1.1rem;background:var(--panel);display:flex;align-items:center;
+  gap:1.2rem;flex-wrap:wrap;font-family:var(--sans);font-size:.98rem;color:var(--muted)}}
+.gruppa-niz b{{color:var(--text)}}
+.gruppa-cifry{{white-space:nowrap}}
+/* Строки списков подсвечиваются под мышкой — видно, на чём стоишь. */
+#s-rasp .para:hover{{background:var(--accent-soft);border-radius:6px}}
+.prep-tab tr:hover td{{background:var(--accent-soft)}}
 /* ── СТРАНИЦА КЛАССА. Ни одного повтора имени сайта: оно стоит наверху. ── */
 .klass{{display:grid;grid-template-columns:minmax(0,1fr) 17rem;gap:0 3rem;align-items:start}}
 @media(max-width:900px){{.klass{{grid-template-columns:1fr}}}}
-.klass-shapka{{font-family:var(--sans);font-size:1.05rem;color:var(--muted);margin:0 0 .2rem}}
-.klass-cifry{{font-family:var(--sans);font-size:1.5rem;margin:0 0 1.6rem;font-weight:400}}
-.klass-cifry b{{font-weight:600}}
-.plitka{{border:1px solid var(--rule);border-radius:12px;padding:1rem 1.3rem;
-  background:var(--panel);margin:0 0 1rem;max-width:34rem}}
-.rasp,.vedut{{width:100%;border-collapse:collapse;font-size:1.05rem}}
-.rasp td,.vedut td{{border:none;padding:.28rem 0;vertical-align:baseline}}
-.rasp .den-imya{{font-weight:600;width:11rem}}
-.rasp .den-vremya{{font-family:var(--sans);white-space:nowrap}}
-.vedut .predmet{{color:var(--muted);font-family:var(--sans);font-size:.95rem;width:11rem}}
-.kab-podpis{{font-family:var(--sans);font-size:.95rem;color:var(--muted);margin:.6rem 0 0}}
+/* Ближайшее занятие — самое крупное на странице: за этим и заходят. */
+.skoro-blok{{margin:0 0 2.4rem}}
+.skoro-den{{font-size:2.6rem;font-weight:600;letter-spacing:-.02em;margin:.1rem 0 0;
+  line-height:1.1}}
+.skoro-vremya{{font-family:var(--sans);font-size:1.9rem;color:var(--accent);margin:.1rem 0 0}}
+.skoro-kab{{font-family:var(--sans);font-size:1.25rem;color:var(--muted);margin:.5rem 0 0}}
+.skoro-kab b{{color:var(--text);font-weight:600}}
+/* Текущий листок — второе по важности и тоже крупно. */
+.listok-blok{{margin:0 0 2.4rem}}
+.listok-imya{{font-size:2rem;font-weight:600;margin:.1rem 0 0;line-height:1.15}}
+.listok-nom{{color:var(--faint);font-family:var(--sans);margin-right:.5rem}}
+.listok-ver{{margin:.7rem 0 0}}
+.ver.bolshoj{{font-size:1.2rem;padding:.25em 1em;margin:0 .4rem 0 0}}
+.vedut-blok{{margin:0 0 1.5rem}}
+.vedut{{width:100%;border-collapse:collapse;font-size:1.2rem;max-width:34rem}}
+.vedut td{{border:none;padding:.3rem 0;vertical-align:baseline}}
+.vedut .predmet{{color:var(--muted);font-family:var(--sans);font-size:1rem;width:13rem}}
+/* Подпись: то, что важно знать, но не первым. */
+.podpis{{font-family:var(--sans);font-size:.95rem;color:var(--faint);
+  margin:2.5rem 0 0;padding-top:1rem;border-top:1px solid var(--rule)}}
 .klass-sboku{{border-left:1px solid var(--rule);padding-left:2rem}}
 @media(max-width:900px){{.klass-sboku{{border-left:none;padding-left:0;margin-top:1.5rem}}}}
 .prep-spisok{{list-style:none;margin:.4rem 0 0;padding:0;font-size:1.05rem}}
@@ -1181,27 +1275,28 @@ body{{padding-bottom:2rem}}
 </nav>
 
 <section class="str holst" id="s-start">
+  <!-- 🔴 СВЕРХУ — ТО, ЗА ЧЕМ СЮДА ЗАХОДЯТ, И КРУПНО. Владелец 06.09: «размер
+       текста должен занимать большую часть места, и текст должен быть полезным…
+       школьникам не важно, что их 53 и что это 179-я школа». Числа класса ушли
+       в подпись внизу; наверху — когда занятие, где оно и что сейчас решаем. -->
   <div class="klass">
     <div class="klass-glavnoe">
-      <p class="klass-shapka">Школа №&nbsp;179 · математический класс</p>
-      <p class="klass-cifry"><b>{len(shk)}</b> школьников · <b>9К</b> {klassy.get("9К", 0)} · <b>9Л</b> {klassy.get("9Л", 0)}</p>
-
-      <div class="plitka">
-        <div class="zag2">Занятия</div>
-        <table class="rasp"><tbody>
-          <tr><td class="den-imya">понедельник</td><td class="den-vremya">14:15&nbsp;—&nbsp;15:55</td></tr>
-          <tr><td class="den-imya">четверг</td><td class="den-vremya">13:10&nbsp;—&nbsp;15:00</td></tr>
-        </tbody></table>
-        <p class="kab-podpis">{kabinety_podpis}</p>
+      <div class="skoro-blok">
+        <div class="zag2">Ближайшее занятие</div>
+        <p class="skoro-den">{e(po_russki(DNI[blizh][2]))}, {e(DNI[blizh][0])}</p>
+        <p class="skoro-vremya">{VREMYA[blizh]}</p>
+        <p class="skoro-kab">{kabinety_skoro}</p>
       </div>
 
-      <div class="plitka">
+      {tekushchij_listok}
+
+      <div class="vedut-blok">
         <div class="zag2">Кто ведёт</div>
         <table class="vedut"><tbody>
           <tr><td class="predmet">алгебра</td><td>Ольга Рыжая</td></tr>
           <tr><td class="predmet">геометрия</td><td>Наталия Стрелкова</td></tr>
           <tr><td class="predmet">спецмат</td><td>Даня Макаров, Ваня Яковлев</td></tr>
-          <tr><td class="predmet">классные<br>руководители</td><td>Дарья Аракелова · Радий Юрьевич Скрипцов</td></tr>
+          <tr><td class="predmet">классные руководители</td><td>Дарья Аракелова, Радий Юрьевич Скребцов</td></tr>
         </tbody></table>
       </div>
     </div>
@@ -1212,6 +1307,8 @@ body{{padding-bottom:2rem}}
       {byvshie_html}
     </aside>
   </div>
+
+  <p class="podpis">Школа №&nbsp;179 · математический класс · 9К и 9Л · {len(shk)} школьников</p>
 </section>
 
 <section class="str holst" id="s-list">
@@ -1247,9 +1344,8 @@ body{{padding-bottom:2rem}}
   <div class="tabbar tabbar-rasp">
     <label for="t-shk">школьникам</label><label for="t-prep">преподавателям</label>
     <label for="t-В">В</label><label for="t-Д">Д</label><label for="t-Н">Н</label>
-    <span class="dni">
-      <label for="d-pn">понедельник</label><label for="d-cht">четверг</label>
-    </span>
+    <span class="zanyatie">{zanyatie_verh}</span>
+    {kabinety_verh}
   </div>
   <section class="vid" id="v-shk">
     <div class="den den-pn">{vid_vse("pn")}</div>
