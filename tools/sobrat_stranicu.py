@@ -908,6 +908,17 @@ tr:hover td{{background:var(--accent-soft)}}
    преподавателя и не переносились, оставляя дыру. Крестик занимает НОЛЬ ширины,
    пока на таблетку не навели мышь, — поэтому у гостя и у организатора список
    ровно одинаковой ширины. Элемент один и тот же; правку добавляет data-org. */
+/* ── СТРОКА НЕ ПЕРЕНОСИТСЯ. Перенос был не косметикой, а поломкой: список
+   переставал читаться колонкой, и на месте переноса зияла дыра. Причина —
+   раздутые выпадающие списки, съедавшие место у фамилии. Лечится тем же, чем
+   в рабочем файле распределения: фамилии отдаётся всё оставшееся место, а поля
+   получают фиксированную ширину и не растягиваются. */
+#s-rasp .para{{flex-wrap:nowrap}}
+#s-rasp .para .kto{{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+#s-rasp .para .komu{{flex:0 0 auto;white-space:nowrap}}
+#s-rasp .para .komu.deti{{flex:1 1 auto;white-space:normal}}
+.org.pr-sel{{max-width:10.5rem;flex:0 0 auto}}
+.org.gr-sel{{max-width:4.2rem;flex:0 0 auto}}
 .tabl{{display:inline-flex;align-items:center;gap:0;padding:.14em .55em;
   border:1px solid var(--rule);border-radius:999px;background:var(--panel);
   font-family:var(--sans);font-size:.85rem;line-height:1.25;color:var(--text);
