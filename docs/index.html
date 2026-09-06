@@ -161,7 +161,12 @@ tr:hover td{background:var(--accent-soft)}
 /* ── ЗАГЛАВНАЯ. Кривая — подложка во весь экран с выходом за края;
    содержание лежит НА ней двумя потоками. Не колонка текста и колонка картинки:
    так картинка не взаимодействует с текстом, а просто стоит рядом. ── */
-.glav{position:relative;min-height:calc(100vh - 7rem);display:flex;
+/* 🔴 ЗАГЛАВНАЯ РОВНО В ЭКРАН, БЕЗ ПРОКРУТКИ. Кривая выходит за края, и без
+   обрезки на самой секции это давало полосы прокрутки вбок и вниз: страница
+   становилась больше окна. Обрезаем по секции — она во всю ширину окна, поэтому
+   видимого шва не появляется, а прокрутка исчезает. */
+#s-start{overflow:hidden;padding-bottom:1rem}
+.glav{position:relative;min-height:calc(100vh - 9.5rem);display:flex;
   flex-direction:column}
 /* 🔴 ХОЛСТ ВЫХОДИТ ЗА КРАЯ ЭКРАНА, А НЕ ОБРЫВАЕТСЯ ВНУТРИ НЕГО. Раньше он был
    меньше страницы, и кривая кончалась ровной вертикалью посреди экрана — прямая
@@ -179,12 +184,12 @@ tr:hover td{background:var(--accent-soft)}
 #drakon{width:100%;height:100%;opacity:.20}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]) #drakon{opacity:.24}}
 .glav-shapka,.glav-setka{position:relative;z-index:1}
-.glav-imya{font-size:clamp(2.4rem,5.4vw,4.6rem);font-weight:600;letter-spacing:-.03em;
+.glav-imya{font-size:clamp(2.6rem,6.2vw,5.6rem);font-weight:600;letter-spacing:-.03em;
   line-height:1.02;margin:1.2rem 0 0}
 .glav-pod{font-family:var(--sans);font-size:clamp(1.05rem,1.8vw,1.4rem);
   color:var(--muted);margin:.5rem 0 0}
-.glav-setka{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,.85fr);
-  gap:2.5rem 4rem;margin-top:auto;padding:2.5rem 0 1rem;align-items:end}
+.glav-setka{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);
+  gap:2.5rem 4rem;margin-top:auto;padding:2rem 0 0;align-items:end}
 @media(max-width:940px){.glav-setka{grid-template-columns:1fr;align-items:start}}
 /* Главное — листок. Он и набран крупнее всего, что рядом. */
 .blok-listok{margin:0 0 2.2rem}
@@ -206,34 +211,31 @@ tr:hover td{background:var(--accent-soft)}
    зажигало строку «алгебра» бирюзовой подложкой, и владелец справедливо
    усомнился, нарочно ли это: подсветка обещает, что по строке можно нажать,
    а нажимать здесь нечего. Она уместна в распределении, где строку правят.
-.vedut tr:hover td{background:none} */
-.vedut tr:hover td{background:none}
+#s-start tr:hover td{background:none} */
+#s-start tr:hover td{background:none}
 .vedut{border-collapse:collapse;font-size:clamp(1.35rem,2vw,1.8rem)}
-.vedut td{border:none;padding:.28rem 0;vertical-align:baseline}
-.vedut .predmet{color:var(--muted);padding-right:2.2rem;white-space:nowrap;
-  font-family:var(--sans);font-size:1.15rem}
+.vedut td{border:none;padding:.4rem 0;vertical-align:baseline}
+.vedut .predmet{color:var(--muted);padding-right:2.4rem;white-space:nowrap;
+  font-family:var(--sans);font-size:clamp(1.15rem,1.35vw,1.5rem)}
 .imya-celikom{white-space:nowrap}
 /* Боковое — поверх кривой, мельче, с воздухом между блоками. */
-.glav-sboku{display:flex;flex-direction:column;gap:1.8rem}
+.glav-sboku{display:flex;flex-direction:column;gap:2.4rem;justify-content:flex-end}
 .sboku-blok{}
 /* Боковая колонка набрана крупно нарочно: мелким она занимала нижнюю треть,
    а верх оставался пустым. Владелец: «увеличить шрифт… за счёт этого меньше
    будет пустого места». */
-.rasp{border-collapse:collapse;font-size:clamp(1.25rem,1.5vw,1.7rem)}
-.rasp td{border:none;padding:.34rem 0;vertical-align:baseline}
+.rasp{border-collapse:collapse;font-size:clamp(1.4rem,1.9vw,2.2rem)}
+.rasp td{border:none;padding:.45rem 0;vertical-align:baseline}
 .rasp .den-imya{font-weight:600;padding-right:2rem}
 .rasp .den-vremya{white-space:nowrap;color:var(--muted);font-family:var(--sans)}
-.prep-spisok{list-style:none;margin:.5rem 0 0;padding:0;
-  font-size:clamp(1.15rem,1.35vw,1.5rem);columns:2;column-gap:2rem}
-.prep-spisok li{padding:.2rem 0;break-inside:avoid}
-.prep-spisok.ranshe{columns:2;color:var(--muted);font-size:clamp(1.02rem,1.15vw,1.25rem)}
+.prep-spisok{list-style:none;margin:.6rem 0 0;padding:0;
+  font-size:clamp(1.3rem,1.7vw,2rem);columns:2;column-gap:2.2rem}
+.prep-spisok li{padding:.28rem 0;break-inside:avoid}
+.prep-spisok.ranshe{columns:2;color:var(--muted);font-size:clamp(1.1rem,1.35vw,1.55rem)}
 .ranshe-zag{margin-top:1.4rem}
 .zag2{font-size:clamp(.82rem,.95vw,1rem)}
 .klass-sboku{border-left:1px solid var(--rule);padding-left:2rem}
 @media(max-width:900px){.klass-sboku{border-left:none;padding-left:0;margin-top:1.5rem}}
-.prep-spisok{list-style:none;margin:.4rem 0 0;padding:0;font-size:1.05rem}
-.prep-spisok li{padding:.2rem 0}
-.prep-spisok.ranshe{color:var(--muted);font-size:.98rem}
 .ranshe-zag{margin-top:1.4rem}
 /* ── ЛИСТКИ: восьмой класс двумя столбцами, чтобы не тянуться одной колонкой. ── */
 .dva-listka{display:grid;grid-template-columns:1fr 1fr;gap:0 3rem;align-items:start}
