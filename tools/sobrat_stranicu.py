@@ -941,8 +941,9 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     if listok_tema:
         versii_html = "".join(
             f'<a href="listki/{e(f)}">{e(z)}</a>' for z, f in listok_versii)
-        listok_stroka = (f'<span class="tihoe">{e(listok_nom)}</span> '
-                         f'<b>{e(listok_tema)}</b>'
+        # 🔒 Ни `<b>`, ни `class="tihoe"`: карточка набрана одним цветом и одним
+        # весом целиком (см. закреплённую схему в разделе `.blok-listok`).
+        listok_stroka = (f'{e(listok_nom)} {e(listok_tema)}'
                          f'<span class="listok-ver">{versii_html}</span>')
 
     kabinety_skoro = _kab_skoro(min(DNI, key=lambda k: DNI[k][2]))
@@ -1213,8 +1214,23 @@ tr:hover td{{background:var(--accent-soft)}}
    становилась больше окна. Обрезаем по секции — она во всю ширину окна, поэтому
    видимого шва не появляется, а прокрутка исчезает. */
 #s-start{{overflow:hidden;padding-bottom:1rem}}
+/* 🔴 НА ЗАГЛАВНОЙ СТРОКИ НЕ ПОДСВЕЧИВАЮТСЯ. Общая подсветка `tr:hover` создана
+   для таблиц, по строкам которых нажимают. На заглавной нажимать не по чему, и
+   бирюзовая полоса под мышкой обещает действие, которого нет. Владелец дважды:
+   «когда я навожу на понедельник… выделяется бирюзовая подсветка. Очень
+   странно». Гасим по всей секции, а не по одной таблице. */
+#s-start tr:hover td,#s-start tr:hover th{{background:none}}
 .glav{{position:relative;min-height:calc(100vh - 9.5rem);display:flex;
   flex-direction:column}}
+/* 🔴 ЗАГЛАВНАЯ ДОХОДИТ РОВНО ДО НИЖНЕГО КРАЯ ОКНА. Секция обрезает холст по
+   себе (`overflow:hidden`), и пока она кончалась выше окна, кривая обрывалась
+   ровной горизонталью, а под ней лежала пустая полоса. Владелец: «у тебя опять
+   обрезалась картинка — нижней части нет, нет кривого дракона».
+   6.3rem = высота меню (4rem) + отступы секции сверху и снизу. Правило
+   включено только там, где меню стоит одной строкой: если оно переносится,
+   точная высота перестаёт сходиться и появилась бы полоса прокрутки. */
+@media(min-width:1100px){{.glav{{min-height:calc(100vh - 6.3rem)}}
+  #s-start{{margin-bottom:-2rem}}}}
 /* 🔴 ХОЛСТ ВЫХОДИТ ЗА КРАЯ ЭКРАНА, А НЕ ОБРЫВАЕТСЯ ВНУТРИ НЕГО. Раньше он был
    меньше страницы, и кривая кончалась ровной вертикалью посреди экрана — прямая
    линия там, где у фрактала её быть не может, и глаз цепляется именно за неё.
@@ -1256,28 +1272,45 @@ tr:hover td{{background:var(--accent-soft)}}
   gap:2.5rem 4rem;margin-top:2.5vh;padding:0;align-items:stretch;flex:1 1 auto}}
 .glav-glavnoe{{display:flex;flex-direction:column;justify-content:space-between;
   gap:2rem;padding-bottom:.5rem}}
+/* Карточка опускается отступом сверху в самом правиле `.blok-listok` ниже —
+   отдельным правилом здесь его гасило `margin:0` оттуда же: при равной силе
+   побеждает то, что стоит в файле ниже. */
 @media(max-width:940px){{.glav-setka{{grid-template-columns:1fr;align-items:start}}}}
 /* Главное — листок. Он и набран крупнее всего, что рядом. */
-/* ── КАРТОЧКА БЛИЖАЙШЕГО ЛИСТКА. ОДИН ШРИФТ, ОДИН КЕГЛЬ, ДВА ЦВЕТА.
-   🔴 РАЗНОРОДНОСТЬ БЫЛА НЕ В РАЗМЕРЕ, А В ЧИСЛЕ РАЗНЫХ ВЕЩЕЙ НА ОДНОМ КЛОЧКЕ.
-   Владелец сосчитал: «на одной карточке 10 разных визуальных элементов… и эти
-   кнопки, и четыре цвета, и куча разных размеров шрифтов». Так и было: две
-   гарнитуры, четыре кегля, четыре цвета и три плашки с фоном.
-   Осталось: одна гарнитура, ОДИН кегль на все три строки, основной цвет для
-   содержания и приглушённый для служебного. Акцентным — только ссылки на
-   версии, потому что по ним нажимают. Ни одной плашки. */
-.blok-listok{{margin:0;max-width:34rem;font-family:var(--sans);
-  font-size:clamp(1.35rem,1.65vw,1.85rem);line-height:1.45}}
-.blok-listok p{{margin:.15rem 0 0;color:var(--text)}}
-.blok-listok .tihoe{{color:var(--muted)}}
-.blok-listok b{{font-weight:600}}
+/* ── 🔒 КАРТОЧКА БЛИЖАЙШЕГО ЛИСТКА — ЗАКРЕПЛЁННАЯ СХЕМА. НЕ УСЛОЖНЯТЬ.
+   Схему стережёт `proverit_shemu()`: страница не соберётся, если её нарушить.
+
+   ОДНА гарнитура, ОДИН кегль, ОДНА насыщенность, ОДИН цвет на всё содержание.
+   Серым набрана только подпись сверху — тем же служебным стилем, что и
+   подписи соседних блоков.
+
+   Так вышло не с первого раза. Сначала на карточке стояли две гарнитуры,
+   четыре кегля, четыре цвета и три плашки с фоном; владелец сосчитал:
+   «на одной карточке 10 разных визуальных элементов». Потом осталось
+   четыре цвета и смесь жирного с нежирным — и это оказалось той же ошибкой
+   помельче: «серый, желтовато-серый, белый и голубой… здесь должно быть
+   максимум два цвета. Либо всё жирное, либо всё нежирное. Нельзя смешивать
+   жирное и нежирное в одном месте — так не работает».
+
+   Отсюда три запрета, которые и проверяются на сборке:
+   ЗАПРЕЩЕНО жирное начертание внутри карточки;
+   ЗАПРЕЩЁН акцентный цвет — в том числе на ссылках версий;
+   ЗАПРЕЩЕНЫ приглушённые и служебные цвета в строках карточки. */
+/* `margin-top` опускает ОДНУ карточку: колонка разложена `space-between`, и
+   «кто ведёт» остаётся приколоченным к нижнему краю. Владелец: «сам блок
+   опустить вниз, не меняя ничего другого». */
+.blok-listok{{margin:4.5rem 0 0;max-width:34rem;font-family:var(--sans);
+  font-size:clamp(1.35rem,1.65vw,1.85rem);line-height:1.45;font-weight:400}}
+.blok-listok p{{margin:.15rem 0 0;color:var(--text);font-weight:400}}
 .listok-kogda{{margin-top:.4rem}}
-/* Версии — просто ссылки в ряд, а не кнопки: плашка с фоном была третьим
-   сортом объекта на карточке, где и так тесно. */
+/* Версии — ссылки того же цвета и веса, что и текст вокруг. Голубой на них
+   был четвёртым цветом на карточке из четырёх строк; подчёркивание под мышкой
+   показывает, что по ним нажимают, и не вводит ни одного нового цвета. */
 .listok-ver{{margin-left:.3rem;white-space:nowrap}}
-.listok-ver a{{color:var(--accent);text-decoration:none;padding:0 .28rem;
-  font-weight:600}}
+.listok-ver a{{color:inherit;text-decoration:none;padding:0 .28rem;
+  font-weight:inherit}}
 .listok-ver a:hover{{text-decoration:underline}}
+.blok-listok .net{{color:inherit}}
 .vedut{{border-collapse:collapse;font-size:clamp(1.6rem,2.5vw,2.5rem)}}
 .vedut td{{border:none;padding:.5rem 0;vertical-align:baseline}}
 .vedut .predmet{{color:var(--muted);padding-right:2.6rem;white-space:nowrap;
@@ -1508,10 +1541,10 @@ body{{padding-bottom:2rem}}
              карточка, а не как четыре разных куска. -->
         <div class="blok-listok">
           <span class="zag2">следующий спецмат</span>
-          <p class="listok-kogda"><b>{e(DNI[blizh][3])} {e(po_russki_kratko(DNI[blizh][2]))}</b>
-            <span class="tihoe">·</span> {VREMYA[blizh]}</p>
+          <p class="listok-kogda">{e(DNI[blizh][3])} {e(po_russki_kratko(DNI[blizh][2]))}
+            · {VREMYA[blizh]}</p>
           <p class="listok-stroka">{listok_stroka}</p>
-          <p class="tihoe">{kabinety_skoro}</p>
+          <p class="listok-kab">{kabinety_skoro}</p>
         </div>
 
         <div class="blok-vedut">
@@ -1546,8 +1579,10 @@ body{{padding-bottom:2rem}}
 </section>
 
 <section class="str holst" id="s-list">
-  <input class="rd" type="radio" name="lst" id="l-8" checked>
-  <input class="rd" type="radio" name="lst" id="l-9">
+  <!-- Открывается девятый класс: он сейчас идёт. Владелец: «листки должны
+       открываться по умолчанию не с 8 класса, а сразу с 9». -->
+  <input class="rd" type="radio" name="lst" id="l-8">
+  <input class="rd" type="radio" name="lst" id="l-9" checked>
   <div class="tabbar"><label for="l-8">8 класс</label><label for="l-9">9 класс</label></div>
   <section class="vid" id="w-8">
     <div class="dva-listka">
@@ -1772,6 +1807,52 @@ def proverit_karkas(roli=("organizator",)) -> list:
     return bedy
 
 
+# ── 🔒 ЗАМОК ВИЗУАЛЬНОЙ СХЕМЫ ЗАГЛАВНОЙ ─────────────────────────────────────
+# Владелец 07.09: «дальше нужно эту визуальную схему максимально закрепить,
+# чтобы её случайно не правили и не портили». Комментарий такого не удержит:
+# схему ломают не назло, а мимоходом — дописав жирное слово или подкрасив
+# ссылку. Поэтому она проверяется на каждой сборке, рядом с проверкой каркаса,
+# и нарушение означает, что страница не собирается вовсе.
+#
+# Стережётся ровно то, что владелец назвал вслух: одна насыщенность и не более
+# двух цветов на карточке ближайшего листка.
+SHEMA_KARTOCHKI_ZAPRETY = (
+    ("<b>", "жирное начертание"),
+    ("<strong", "жирное начертание"),
+    ('class="tihoe"', "приглушённый цвет"),
+    ('class="net"', "служебный цвет"),
+    ('class="gr"', "акцентный цвет"),
+    ('class="kab"', "плашка"),
+    ('class="ver"', "плашка версии"),
+)
+
+
+def _kartochka(html: str) -> str:
+    """Кусок разметки между открытием и закрытием карточки листка."""
+    n = html.find('<div class="blok-listok">')
+    if n < 0:
+        return ""
+    k = html.find('<div class="blok-vedut">', n)
+    return html[n:k if k > 0 else len(html)]
+
+
+def proverit_shemu() -> list:
+    """Сверить карточку листка с закреплённой схемой. Пустой список — цела."""
+    bedy = []
+    for rezhim in ("gost", "admin"):
+        kusok = _kartochka(sobrat_html(rezhim))
+        if not kusok:
+            bedy.append(f"режим «{rezhim}»: карточка ближайшего листка исчезла")
+            continue
+        for obrazec, chem in SHEMA_KARTOCHKI_ZAPRETY:
+            if obrazec in kusok:
+                bedy.append(
+                    f"режим «{rezhim}»: в карточке ближайшего листка появилось "
+                    f"{chem} ({obrazec}). Схема закреплена: одна гарнитура, один "
+                    f"кегль, одна насыщенность, один цвет на всё содержание.")
+    return bedy
+
+
 def sobrat(svodka: list | None = None) -> int:
     """Пишет ГОСТЕВУЮ страницу в `docs/index.html`. Зовётся руками и из сервера.
 
@@ -1790,6 +1871,12 @@ def sobrat(svodka: list | None = None) -> int:
         raise AssertionError(
             "каркас гостя и роли разошёлся — страница не собрана:\n" + "\n".join(bedy))
     svodka.append("  каркас: гость и организатор совпадают побайтово ✅")
+    bedy = proverit_shemu()
+    if bedy:
+        raise AssertionError(
+            "визуальная схема карточки нарушена — страница не собрана:\n"
+            + "\n".join(bedy))
+    svodka.append("  схема карточки: один вес, один цвет ✅")
     VYHOD.write_text(sobrat_html("gost", svodka), encoding="utf-8")
     print(f"собрано: {VYHOD}")
     for stroka in svodka:
