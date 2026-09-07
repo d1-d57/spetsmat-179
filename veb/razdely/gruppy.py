@@ -99,7 +99,8 @@ def vkladka_gruppy(kt, kod):
             + "".join(para_shk(kt, r, pokazat_kab=False) for r in deti)
             + "</div>"
             + '<div class="kol kol-pr"><div class="prep-ramka">'
-            + shapka_dnej(kt)
+            # Шапки «ПН · ЧТ» здесь нет: дни подписаны в самих строках карточки,
+            # и вторая подпись поверх них стояла бы над чужими столбцами.
             + "".join(para_prep(kt, x, pokazat_gruppu=False) for x in svoi)
             + "</div>" + nizhnyaya + "</div>"
             + "</div>")
