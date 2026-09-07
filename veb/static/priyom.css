@@ -1,0 +1,93 @@
+/* Приём задач — the marking grid, used STANDING, on a phone, during the lesson.
+ *
+ * 🔴 THE PALETTE IS THE SITE'S AND NOT A NEW ONE (`doc/DIZAJN-ZAKREPLENO.md` §2).  The
+ * names below are exactly those `veb/obshchee/karkas.py` declares, with the same values
+ * and the same dark-theme swap, because this page is served on its own rather than
+ * inside that скелет and therefore has to carry the declaration.  🔴 NO COLOUR IS
+ * WRITTEN IN HEX ANYWHERE BUT `:root` — the rule that keeps a second list of colours
+ * from drifting away from the first.  A new colour is not introduced here at all.
+ *
+ * 🔴 THE CELL IS SIZED BY THE FINGER, NOT BY THE TEXT.  44px is the smallest target a
+ * standing adult hits reliably; the grid uses 52 and lets the cell grow with the row.
+ * The заход says it in one line: this is tapped on a phone, standing, not at a desk.
+ */
+
+:root{--bg:#fbfaf6;--panel:#fffdf8;--text:#211f1b;--muted:#726c60;--rule:#e7e2d6;
+  --accent:#2f6e8e;--accent-soft:#e8f0f4;--warm:#c9743a;--faint:#b7ae9c;--chip:#e7e0d2;
+  --krasn:#b3402a;--krasn-fon:rgba(179,64,42,.08);
+  --sans:"Source Sans 3",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1b1e22;--panel:#23272c;
+  --text:#dcd8d0;--muted:#9a948a;--rule:#343a41;--accent:#7fb6d2;--accent-soft:#22333d;
+  --warm:#e0946a;--faint:#6b6f75;--chip:#333a41;
+  --krasn:#e8836a;--krasn-fon:rgba(232,131,106,.12)}}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--serif);font-size:20px}
+
+.verh{position:sticky;top:0;z-index:40;display:flex;gap:1rem;align-items:baseline;
+  padding:.9rem 1.2rem;background:var(--panel);border-bottom:1px solid var(--rule);
+  font-family:var(--sans)}
+.verh h1{font-size:1.35rem;font-weight:600;letter-spacing:-.02em;margin:0}
+.verh .vyh{margin-left:auto;color:var(--muted);text-decoration:none;font-size:1rem}
+.verh .vyh:hover{color:var(--text)}
+.holst{padding:1rem 1.2rem 3rem}
+
+/* Выбор листка. Плашки здесь ЗАКОННЫ: их много в ряд и они читаются как список
+ * кнопок — тот же случай, что вкладка «Листки». Запрет на плашки касается карточки
+ * заглавной (`DIZAJN-ZAKREPLENO` §4.3), а не всякого блока сайта. */
+.listki{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1.2rem;font-family:var(--sans)}
+.listki a{display:inline-block;padding:.45em .8em;border-radius:8px;
+  background:var(--chip);color:var(--text);text-decoration:none;font-size:1rem}
+.listki a:hover{background:var(--accent-soft)}
+.listki a.tek{background:var(--accent);color:var(--panel);font-weight:600}
+
+.zag2{font-family:var(--sans);font-size:1.15rem;font-weight:600;margin:0 0 .7rem}
+.net{color:var(--muted)}
+.net a{color:var(--accent)}
+
+/* Решётка. Первые три столбца — ученик, принимающий и долг — стоят на одной строке
+ * с клетками: это условие мандата, а не оформление. Шапка и первый столбец липкие,
+ * потому что на телефоне решётка шире экрана в обе стороны. */
+.setka{border-collapse:collapse;font-family:var(--sans);font-size:1rem}
+.setka th,.setka td{border:1px solid var(--rule);padding:0;text-align:center}
+.setka thead th{position:sticky;top:3.4rem;z-index:20;background:var(--panel);
+  font-weight:600;padding:.5em .6em;color:var(--muted)}
+.setka .kto{position:sticky;left:0;z-index:10;background:var(--panel);
+  text-align:left;padding:.4em .7em;white-space:nowrap}
+.setka .kto b{font-weight:600}
+.setka .prep,.setka .dolg{padding:.4em .7em;color:var(--muted);white-space:nowrap}
+.setka .dolg .est{color:var(--krasn);font-weight:600}
+.setka .dolg .net0{color:var(--faint)}
+.setka .zn{font-size:.95rem}
+
+/* Свои сверху И цветом — ровно как в кондуите, и класс ставится на СВОИХ: у общего
+ * пароля своих нет вовсе, и правило «не чужой» покрасило бы им всех до одного. */
+.setka tr.moi .kto{background:var(--accent-soft)}
+.setka tr.chuzh .kto{background:var(--panel);color:var(--muted)}
+
+/* Клетка — цель пальца. Знак крупный: на неё смотрят с вытянутой руки. */
+.kl{width:52px;height:52px;min-width:44px;min-height:44px;display:block;
+  border:0;margin:0;padding:0;background:none;cursor:pointer;
+  font:inherit;font-size:1.35rem;line-height:52px;color:var(--text);
+  -webkit-tap-highlight-color:transparent}
+.kl:hover{background:var(--accent-soft)}
+.kl:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.kl[disabled]{opacity:.55;cursor:progress}
+.kl.solved{color:var(--accent);font-weight:600}
+.kl.retracted{color:var(--warm)}
+.kl.empty{color:var(--faint)}
+
+/* 🔴 НА ТЕЛЕФОНЕ ПРИНИМАЮЩИЙ НЕ ПРЯЧЕТСЯ, И ЭТО НЕ ВОПРОС ВКУСА.  Первая редакция
+ * этого файла снимала столбец «Принимает» узким экраном ради места — то есть ломала
+ * условие мандата («долг ученика стоит на той же строке, что и принимающий его
+ * преподаватель») ровно на том устройстве, ради которого страница написана: её
+ * держат в руке на занятии.  Место находится ужиманием, а не снятием. */
+@media(max-width:700px){
+  body{font-size:18px}
+  .holst{padding:.8rem .6rem 3rem}
+  .setka .kto,.setka .prep,.setka .dolg{padding:.35em .45em;font-size:.9rem}
+  .setka .prep{max-width:7em;overflow:hidden;text-overflow:ellipsis}
+  .kl{width:48px;height:48px;line-height:48px}
+}
