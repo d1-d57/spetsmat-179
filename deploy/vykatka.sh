@@ -35,6 +35,16 @@ UNIT_VEB="${SPETSMAT_UNIT_VEB:-spetsmat-veb.service}"
 UNIT_BOT="${SPETSMAT_UNIT_BOT:-spetsmat-bot.service}"
 PYTHON="${PYTHON:-python3}"
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=15"
+
+# 🔴 `--checksum` IS LOAD-BEARING, NOT A TUNING KNOB.  Without it rsync decides by size and
+# modification time, and a fresh clone or a second worktree gives every file a new mtime, so
+# a deploy that changes nothing reports the WHOLE TREE as changed.  Two things break on that,
+# both silently: the telegram bot gets restarted on every single deploy because `bot/` looks
+# touched -- paying the two-instance window for nothing, which the project forbids -- and the
+# pending-migration check below goes red every time, so the door refuses always and is
+# therefore routed around by hand.  Measured live on 2026-09-07: by mtime 142 files "changed"
+# and by content 3 did.  Comparing content costs a read of 30 MB and buys an honest answer.
+SVERKA="--checksum"
 OZHIDANIE_200=30          # seconds the site is given to answer 200 after the restart
 DRY_RUN=0
 CLOCK=""
@@ -285,7 +295,8 @@ say "is a migration pending?"
 if [ "$DRY_RUN" = 1 ]; then
   echo "  would compare $CHECKOUT/migrations/ with $TARGET/migrations/"
 else
-  novye="$(rsync -rn --out-format='%n' -e "$SSH" ./migrations/ "$SERVER:$TARGET/migrations/" | grep -v '/$' || true)"
+  novye="$(rsync -an $SVERKA --itemize-changes -e "$SSH" ./migrations/ "$SERVER:$TARGET/migrations/" \
+      | awk '$1 ~ /^[<>ch]/ {print $2}' || true)"
   if [ -n "$novye" ]; then
     cat >&2 <<EOF
 REFUSED: migrations/ has changed and this door does not apply migrations by itself.
@@ -309,7 +320,7 @@ fi
 # arguments are transferred; two invocations do.
 
 say "rsync veb/  (the modules others import)"
-run rsync -a --itemize-changes "${NE_VYKATYVAEM[@]}" -e "$SSH" ./veb "$SERVER:$TARGET/"
+run rsync -a $SVERKA --itemize-changes "${NE_VYKATYVAEM[@]}" -e "$SSH" ./veb "$SERVER:$TARGET/"
 
 say "rsync the rest"
 IZMENENO=""
@@ -318,7 +329,7 @@ if [ "$DRY_RUN" = 1 ]; then
 else
   ostalnoe=()
   for P in "${VYKATYVAEM[@]}"; do [ "$P" = "veb" ] || ostalnoe+=("./$P"); done
-  IZMENENO="$(rsync -a --itemize-changes "${NE_VYKATYVAEM[@]}" -e "$SSH" \
+  IZMENENO="$(rsync -a $SVERKA --itemize-changes "${NE_VYKATYVAEM[@]}" -e "$SSH" \
       "${ostalnoe[@]}" "$SERVER:$TARGET/" | awk '$1 ~ /^[<>ch]/ {print $2}')"
   echo "${IZMENENO:-  nothing changed outside veb/}"
 fi
