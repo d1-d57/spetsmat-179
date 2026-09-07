@@ -605,6 +605,18 @@ PRAVKA_SKRIPT = r"""
   document.addEventListener('change', function(ev){
     const el = ev.target;
     if(!el.classList || !el.classList.contains('org')) return;
+    /* Вид кнопки меняется в тот же миг, что и её состояние: страница
+       перечитывается позже, а рука уже отпустила кнопку. */
+    if(el.classList.contains('otsut-chk') || el.classList.contains('totsut-chk')){
+      el.closest('.otsut').classList.toggle('pusto', !el.checked);
+    }
+    if(el.classList.contains('svyaz-chk')){
+      const z = el.closest('.zamok');
+      z.classList.toggle('otkryt', !el.checked);
+      z.querySelector('span').textContent = el.checked ? '\uD83D\uDD12' : '\uD83D\uDD13';
+      return;                       /* замок ничего не пишет в базу: он про то,
+                                       как правятся ДРУГИЕ поля этой строки */
+    }
     const sl = +el.dataset.slot;
     if(el.classList.contains('pr-sel')){
       const sid = +el.dataset.sid;
@@ -622,8 +634,9 @@ PRAVKA_SKRIPT = r"""
            понедельник человек становится и четверговым — иначе каждую правку
            пришлось бы делать дважды, а забытая половина расходится молча. */
         const stroka = el.closest('.para');
-        const raznye = stroka && stroka.querySelector('.svyaz-chk')
-                       && stroka.querySelector('.svyaz-chk').checked;
+        /* Замок ЗАЖАТ — дни связаны (владелец: «изначально они зажаты»). */
+      const zamok = stroka && stroka.querySelector('.svyaz-chk');
+      const raznye = !!zamok && !zamok.checked;
         const polya = (!raznye && stroka) ? stroka.querySelectorAll('.pr-sel') : [el];
         polya.forEach(function(p){
           p.value = el.value;
@@ -953,6 +966,14 @@ VKLADKA_SKRIPT = r"""
 
    Поэтому: адрес сильнее памяти, и проверка идёт по префиксу, а не по одному
    пути. Скрипт стоит ПОСЛЕДНИМ (см. `skripty`), чтобы перебить восстановление. */
+/* Панель занятий закрывается кликом мимо неё: она перекрывает таблицу, а
+   отдельная кнопка «закрыть» — ещё один предмет на экране, где их и так много. */
+document.addEventListener('click', function(ev){
+  var kal = document.getElementById('p-kal');
+  if(!kal || !kal.checked) return;
+  if(ev.target.closest('.zan-navig')) return;
+  kal.checked = false;
+});
 var _put = location.pathname.replace(/\/+$/, '');
 if(_put === '/raspredelenie' || _put.indexOf('/raspredelenie/') === 0){
   var rasp = document.getElementById('p-rasp');
@@ -1024,19 +1045,18 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
         # только сегодня — *«я могу пойти назад или вперёд, например, вперёд на
         # текущем распределении, на 2-3 занятия поставить, что этот преподаватель
         # болеет»*. Рядом — дверь в постоянное, и она названа словом, а не значком.
-        from veb.razdely.zanyatie import sosednee_zanyatie
+        from veb.razdely.zanyatie import panel_vybora, sosednee_zanyatie
         den = kt.den
         zanyatie_verh = (
             '<span class="zan-navig">'
             f'<a class="strelka" href="/raspredelenie?den={e(sosednee_zanyatie(den, -1))}"'
-            f' title="предыдущее занятие">←</a>'
-            f'<label class="data-zan" for="p-den" title="выбрать дату">'
+            f' title="предыдущее занятие" aria-label="предыдущее занятие">‹</a>'
+            f'<label class="data-zan" for="p-kal" title="выбрать занятие">'
             f'{e(kt.DNI["den"][0])}, {e(kt.po_russki_kratko(den))}</label>'
-            f'<input class="vybor-daty" id="p-den" type="date" name="den" value="{e(den)}"'
-            f' aria-label="выбрать дату" onchange="location.href=\'/raspredelenie?den=\'+this.value">'
             f'<a class="strelka" href="/raspredelenie?den={e(sosednee_zanyatie(den, +1))}"'
-            f' title="следующее занятие">→</a>'
+            f' title="следующее занятие" aria-label="следующее занятие">›</a>'
             f'<a class="k-drugomu" href="/raspredelenie/postoyannoe">Постоянное</a>'
+            + panel_vybora(den) +
             "</span>")
     elif kt.ADMIN:
         # На постоянном — дверь в обратную сторону: к ближайшему занятию.
@@ -1289,10 +1309,37 @@ tr:hover td{{background:var(--accent-soft)}}
   font-size:1.05rem}}
 .para .komu.deti{{white-space:normal;text-align:right}}
 .para .komu.deti span{{display:inline-block;margin-left:.55rem}}
-.kol-pr .para{{padding:.45rem 0}}
-.kol-pr .para{{font-size:1.75rem}}
-.kol-pr .komu.deti{{font-size:1.55rem}}
-.kol-pr .komu.deti span{{margin-left:.7rem}}
+/* 🔴 ИМЯ — СТРОКОЙ, ДЕТИ — РЯДОМ ПОД НИМ, ВО ВСЮ ШИРИНУ. Владелец 07.09:
+   «сбоку в углу школьники — они должны быть спокойно расположены в ряд на всю
+   ширину, а не сжаты к правой стороне… почему-то обрезалась Наталья Стрелкова,
+   хотя там куча места». Прижатые вправо, они делили строку с именем и толкали
+   его в многоточие; в столбик под именем места хватает обоим.
+   Имя здесь НЕ обрезается вовсе: строка отдана ему целиком. */
+.kol-pr .para{{flex-direction:column;align-items:stretch;gap:.15rem;
+  padding:.5rem 0;font-size:1.45rem}}
+.kol-pr .para .kto{{overflow:visible;text-overflow:clip;white-space:normal;
+  flex:0 0 auto}}
+/* Дети идут СЛЕВА НАПРАВО во всю ширину карточки: `margin-left:auto` из общего
+   правила `.para .komu` прижимал их к правому краю, и последние фамилии уезжали
+   за границу колонки — ровно то, что владелец увидел как «сжаты к правой
+   стороне» и «обрезалась Наталья Стрелкова, хотя там куча места». */
+#s-rasp .kol-pr .komu.deti,.kol-pr .komu.deti{{margin-left:0;margin-right:auto;
+  text-align:left;font-size:1rem;white-space:normal;display:flex;flex-wrap:wrap;
+  align-items:baseline;gap:.15rem .35rem;flex:1 1 100%;min-width:0}}
+.kol-pr .komu.deti span{{display:inline-flex;margin-left:0}}
+#s-rasp .kol-pr .para{{flex-wrap:wrap;flex-direction:column}}
+#s-rasp .kol-pr .para .kto{{white-space:normal;overflow:visible;
+  text-overflow:clip;flex:0 0 auto}}
+/* Счётчик в карточке — в конце ряда детей, а не за краем. */
+.kol-pr .komu.deti .sch{{margin-left:.3rem}}
+/* День в карточке принимающего — своей строкой: подпись слева, дети за ней.
+   Так видно, что списков ДВА и они разные, — а слитый ряд читался как один. */
+.den-ryad{{display:flex;align-items:baseline;gap:.4rem;flex:1 1 100%;min-width:0}}
+.den-podpis{{flex:0 0 1.8rem;color:var(--faint);font-family:var(--sans);
+  font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}}
+.deti-ryad{{display:flex;flex-wrap:wrap;align-items:baseline;gap:.15rem .3rem;
+  flex:1 1 auto;min-width:0}}
+.den-ryad .sch{{flex:0 0 auto;margin-left:.3rem}}
 /* Запятая между фамилиями рисуется CSS: у гостя и у организатора один и тот же
    элемент `.det`, и разметка обоих режимов отличается ровно кнопкой-органом. */
 .zpt:not(:last-child)::after{{content:", "}}
@@ -1311,9 +1358,16 @@ tr:hover td{{background:var(--accent-soft)}}
   padding:.12em .3em;margin-left:.4rem;max-width:11rem}}
 .org:hover,.org:focus{{border-color:var(--accent);outline:none}}
 .tsch{{font-family:var(--sans);font-weight:600;text-align:center;width:1%;
-  white-space:nowrap;color:var(--muted)}}
-.tsch.ploho,.sch.ploho{{color:#c0392b}}
-.sch{{font-family:var(--sans);font-weight:600;font-size:.8em;color:var(--muted)}}
+  white-space:nowrap;color:var(--accent)}}
+/* 🔴 ЧИСЛО НЕ КРАСНЕЕТ — КРАСНЕЕТ МЕСТО. Владелец 07.09: «цифра 5 плохо
+   выглядит. Лучше писать 5 синим, а красным подчёркивать, выделять поле — не
+   обязательно красным, каким-то менее ярким, красноватым». Красная цифра среди
+   серых читается как ошибка ЧИСЛА; подсвеченное поле читается как «здесь
+   перебор», а это и есть смысл. */
+.tsch.ploho,.sch.ploho{{color:var(--accent);background:var(--krasn-fon);
+  border-radius:6px;padding:.05em .4em}}
+.sch{{font-family:var(--sans);font-weight:600;font-size:.8em;color:var(--accent)}}
+
 /* Крестик = открепить. Появляется по клику на фамилии преподавателя, не раньше:
    восемнадцать всегда видимых крестиков — это приглашение промахнуться. */
 /* ── ТАБЛЕТКА ФАМИЛИИ. Приём взят из рабочего файла распределения владельца:
@@ -1510,6 +1564,23 @@ tr:hover td{{background:var(--accent-soft)}}
 #s-rasp .para .komu{{flex:0 0 auto;white-space:nowrap}}
 #s-rasp .para .komu.deti{{flex:1 1 auto;white-space:normal}}
 .org.pr-sel{{max-width:9.6rem;flex:0 0 auto}}
+/* 🔴 НА ВКЛАДКАХ ГРУПП КОЛОНКА ВДВОЕ УЖЕ: там рядом стоит список принимающих.
+   Поля здесь компактнее ровно настолько, чтобы фамилия школьника помещалась
+   целиком — она в этой таблице главное, а имя преподавателя и так повторено
+   справа, в его карточке. */
+#v-В .org.pr-sel,#v-Д .org.pr-sel,#v-Н .org.pr-sel{{max-width:8.6rem}}
+#v-В .org.gr-sel,#v-Д .org.gr-sel,#v-Н .org.gr-sel{{width:3.2rem;flex:0 0 3.2rem}}
+#v-В .otsut,#v-Д .otsut,#v-Н .otsut{{font-size:.76rem;padding:.12em .45em}}
+/* 🔴 ИМЯ ПЕРЕНОСИТСЯ, А НЕ ОБРЕЗАЕТСЯ. Владелец 07.09: «посмотри, как обрезалась
+   вёрстка текста — это просто жесть. Слева в куче мест имена обрезались, хотя
+   место есть». На вкладках групп колонка вдвое уже (рядом стоит список
+   принимающих), и самая длинная фамилия в неё не влезает никогда — сколько ни
+   ужимай поля. Многоточие прячет то, ради чего в таблицу и смотрят; перенос
+   стоит одной лишней строки и не прячет ничего. */
+#v-В .kol .para,#v-Д .kol .para,#v-Н .kol .para{{flex-wrap:wrap}}
+#v-В .kol .kto,#v-Д .kol .kto,#v-Н .kol .kto{{white-space:normal;overflow:visible;
+  text-overflow:clip;flex:1 1 9rem}}
+#v-В .kol .komu,#v-Д .kol .komu,#v-Н .kol .komu{{flex:0 0 auto}}
 /* 🔴 ШИРИНА ФИКСИРОВАНА, А НЕ ОГРАНИЧЕНА СВЕРХУ. При `max-width` поле группы
    мерилось по своему тексту — «нигде» шире, чем «В», — и на эту разницу ехали
    ВЛЕВО оба столбца дня: замер верификатора, левый край поля «пн» гулял от 245
@@ -1635,15 +1706,21 @@ body{{padding-bottom:2rem}}
    у четверга своя граница слева — иначе он читается как продолжение понедельника. */
 .prep-tab td.dv-cht{{border-left:1px solid var(--rule)}}
 .tdni{{white-space:nowrap;width:1%;padding-right:1.2rem}}
-/* 🔴 ГАЛОЧКА ДНЯ — ОДИН ЭЛЕМЕНТ, В КОТОРОМ ВИДНО И ДЕНЬ, И ОТВЕТ. Отдельный
-   квадратик с подписью сбоку занимал бы вдвое больше места в строке, где важнее
-   имена; здесь подпись САМА и есть кнопка, а бледная — значит «не приходит». */
-.den-gal{{display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;
-  font-family:var(--sans);font-size:.9rem;font-weight:700;color:var(--accent);
-  border:1px solid var(--accent);border-radius:8px;padding:.14em .5em;
-  margin-right:.35rem;background:var(--accent-soft)}}
+/* 🔴 ЭТО КНОПКИ, А НЕ ГАЛОЧКИ, И КВАДРАТИКА В НИХ НЕТ. Владелец 07.09: «там не
+   нужна галочка, нужна просто кнопка, на которую можно нажать. Квадратик не
+   нужен. Чем больше таких элементов, тем сложнее и хуже выглядит». На экране их
+   по одной на каждого из 54 школьников, и квадратик рядом с каждым словом даёт
+   вдвое больше предметов, чем ответов. Сам `input` остаётся — он и есть
+   состояние, и он же делает кнопку доступной с клавиатуры, — но его не видно. */
+.den-gal input,.otsut input,.zamok input{{position:absolute;width:1px;height:1px;
+  opacity:0;pointer-events:none}}
+.den-gal,.otsut,.zamok{{display:inline-flex;align-items:center;cursor:pointer;
+  font-family:var(--sans);font-weight:600;line-height:1.2;white-space:nowrap;
+  border-radius:7px;border:1px solid transparent;transition:none}}
+.den-gal{{font-size:.88rem;color:var(--accent);border-color:var(--accent);
+  background:var(--accent-soft);padding:.16em .55em;margin-right:.3rem}}
 .den-gal.pusto{{color:var(--faint);border-color:var(--rule);background:none}}
-.den-gal input{{margin:0;accent-color:var(--accent)}}
+.den-gal:hover{{border-color:var(--accent)}}
 /* Гостю — та же метка без органа: закрашена, если человек в этот день приходит. */
 .den-metka{{display:inline-block;font-family:var(--sans);font-size:.9rem;font-weight:700;
   color:var(--accent);border:1px solid var(--accent);border-radius:8px;
@@ -1651,21 +1728,21 @@ body{{padding-bottom:2rem}}
 .den-metka.pusto{{color:var(--faint);border-color:var(--rule);background:none}}
 /* Вместо кнопки «Сохранить» на экране занятия — строка о том, что её нет и почему. */
 .srazu{{font-family:var(--sans);font-size:.9rem;color:var(--muted);margin-right:.9rem}}
-/* «×2» — связаны ли дни. Отмечена — дни разные и правятся по отдельности. */
-.raznye{{display:inline-flex;align-items:center;gap:.2rem;cursor:pointer;
-  font-family:var(--sans);font-size:.8rem;font-weight:700;color:var(--warm);
-  margin-left:.35rem;white-space:nowrap}}
-.raznye.pusto{{color:var(--faint)}}
-.raznye input{{margin:0;accent-color:var(--warm)}}
-/* Отметка «отсутствует» на экране занятия — одна и та же у школьника и у
-   принимающего. Тот же орган, что галочка дня, и намеренно тот же вид: человек
-   не должен изучать два разных переключателя. */
-.otsut{{display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;
-  font-family:var(--sans);font-size:.85rem;font-weight:700;color:var(--warm);
-  border:1px solid var(--warm);border-radius:8px;padding:.1em .45em;margin-left:.45rem;
-  white-space:nowrap}}
-.otsut.pusto{{color:var(--faint);border-color:var(--rule)}}
-.otsut input{{margin:0;accent-color:var(--warm)}}
+
+/* «Отсутствует» — одна и та же кнопка у школьника и у принимающего: тот же
+   орган, то же слово, тот же вид. Ненажатая — тихая, серая; нажатая — тёплая
+   заливка, потому что это состояние, в котором человек СЕГОДНЯ отсутствует, и
+   его надо видеть краем глаза, не читая. */
+.otsut{{font-size:.82rem;color:var(--faint);border-color:var(--rule);
+  padding:.14em .6em;margin-left:.5rem}}
+.otsut:hover{{color:var(--warm);border-color:var(--warm)}}
+.otsut:not(.pusto){{color:var(--warm);border-color:var(--warm);
+  background:var(--krasn-fon)}}
+/* Замок связки дней: зажат — дни правятся вместе, открыт — врозь. */
+.zamok{{font-size:.95rem;padding:.06em .3em;margin:0 .15rem;border-color:transparent;
+  color:var(--accent)}}
+.zamok.otkryt{{color:var(--faint);opacity:.75}}
+.zamok:hover{{border-color:var(--rule)}}
 /* Пока правка одного занятия едет в базу — строка приглушена. Она уезжает сразу,
    без кнопки, и человеку нужен признак, что нажатие принято. */
 .para.idet,tr.idet{{opacity:.45}}
@@ -1674,12 +1751,49 @@ body{{padding-bottom:2rem}}
 #s-rasp .para.net .kto{{color:var(--faint)}}
 #s-rasp .para.krasn .kto b{{color:var(--krasn)}}
 /* Шапка страницы занятия: дата — орган, стрелки рядом, дверь в постоянное — справа. */
-.zan-navig{{display:flex;align-items:center;gap:.5rem;margin-left:auto;
-  font-family:var(--sans)}}
-.data-zan{{cursor:pointer;color:var(--accent);font-size:1.05rem;font-weight:600;
-  border-bottom:1px dashed var(--rule);white-space:nowrap}}
-.data-zan:hover{{border-bottom-color:var(--accent)}}
-.vybor-daty{{width:0;height:0;opacity:0;border:0;padding:0;margin:0}}
+.zan-navig{{display:flex;align-items:center;gap:.35rem;margin-left:auto;
+  font-family:var(--sans);position:relative}}
+/* 🔴 СТРЕЛКИ ОПИСАНЫ ЗДЕСЬ, И ИМЕННО ПОЭТОМУ ОНИ БОЛЬШЕ НЕ СИНЕ-ФИОЛЕТОВЫЕ.
+   Класс `.strelka` был описан в `veb/static/zanyatie.css` — файле СТАРОЙ
+   отдельной страницы занятия. Внутри сайта его нет, и ссылки красились
+   браузером по умолчанию: непосещённая синяя, посещённая фиолетовая. Владелец:
+   «почему загорается стрелочка неправильного цвета?.. превращают сайт в дизайн
+   из какого-то 1998 года». Цвет ссылки, заданный браузером, — всегда чужой. */
+.zan-navig .strelka{{display:inline-flex;align-items:center;justify-content:center;
+  width:1.9rem;height:1.9rem;border-radius:8px;text-decoration:none;
+  color:var(--muted);font-size:1.05rem;line-height:1;border:1px solid var(--rule)}}
+.zan-navig .strelka:hover{{color:var(--accent);border-color:var(--accent);
+  background:var(--accent-soft)}}
+.data-zan{{cursor:pointer;color:var(--text);font-size:1.05rem;font-weight:600;
+  white-space:nowrap;padding:.28em .7em;border:1px solid var(--rule);
+  border-radius:8px}}
+.data-zan:hover{{border-color:var(--accent);color:var(--accent)}}
+/* 🔴 ПАНЕЛЬ ЗАНЯТИЙ ВМЕСТО СИСТЕМНОГО КАЛЕНДАРЯ. Владелец 07.09: «нам не нужен
+   календарь — у нас занятия два раза в неделю… нужна своя кастомная большая
+   панель, на которой легко достичь расписание года в кратком виде». Календарь
+   предлагает 365 дней, из которых годятся 64, и заставляет человека отсеивать
+   то, что система знает сама. Здесь весь год стоит месяцами, занятие — кнопкой
+   с числом и днём; прошедшие приглушены, сегодняшнее обведено. */
+.kal-panel{{display:none;position:absolute;top:calc(100% + .5rem);right:0;z-index:60;
+  max-height:70vh;overflow:auto;padding:.9rem 1.1rem;border:1px solid var(--rule);
+  border-radius:12px;background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.28);
+  min-width:34rem}}
+#p-kal:checked~.kal-panel{{display:block}}
+.zan-navig #p-kal:checked~.data-zan,.data-zan:has(~#p-kal:checked){{
+  border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}}
+.kal-mesyac{{display:flex;align-items:baseline;gap:.6rem;padding:.25rem 0}}
+.kal-mesyac+.kal-mesyac{{border-top:1px solid var(--rule)}}
+.kal-imya{{flex:0 0 6.5rem;color:var(--muted);font-size:.9rem}}
+.kal-dni{{display:flex;flex-wrap:wrap;gap:.3rem}}
+.kal-den{{display:inline-flex;align-items:baseline;gap:.18rem;text-decoration:none;
+  color:var(--text);font-size:.95rem;font-weight:600;padding:.18em .5em;
+  border:1px solid var(--rule);border-radius:7px;min-width:2.9rem;
+  justify-content:center}}
+.kal-den:hover{{border-color:var(--accent);color:var(--accent);
+  background:var(--accent-soft)}}
+.kal-den.bylo{{color:var(--faint);border-color:transparent}}
+.kal-den.tut{{color:var(--panel);background:var(--accent);border-color:var(--accent)}}
+.kal-sokr{{font-size:.72rem;font-weight:400;opacity:.75}}
 .k-drugomu{{font-size:.92rem;text-decoration:none;color:var(--muted);
   border:1px solid var(--rule);border-radius:9px;padding:.35em .8em;white-space:nowrap}}
 .k-drugomu:hover{{color:var(--accent);border-color:var(--accent)}}

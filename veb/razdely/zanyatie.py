@@ -40,6 +40,7 @@ from datetime import date, timedelta
 from html import escape
 
 from core.services.room import day_in_words
+from veb.sobrat_fajl import SOKR_DNYA
 from core.services.sostav_na_den import (OTSUTSTVUET, SostavService, is_lesson_day,
                                           slot_of)
 from infra.enrollment_repo import SqliteEnrollmentRepo
@@ -318,3 +319,77 @@ def otsutstvuyushchie_prepodavateli(c, den: str) -> frozenset:
     return frozenset(r[0] for r in c.execute(
         "select teacher_id from teacher_attendance "
         "where session_id = ? and status = ?", (ryad[0], OTSUTSTVUET)))
+
+
+#: Учебный год начинается в сентябре и кончается в мае: два месяца лета в панели
+#: занятий не нужны никому и только удлиняют её.
+MESYACY_GODA = (9, 10, 11, 12, 1, 2, 3, 4, 5)
+
+MESYAC_IMENA = {9: "сентябрь", 10: "октябрь", 11: "ноябрь", 12: "декабрь",
+                1: "январь", 2: "февраль", 3: "март", 4: "апрель", 5: "май"}
+
+
+def zanyatia_goda(vokrug: str) -> list:
+    """Все дни занятий учебного года, в который попадает названная дата.
+
+    🔴 СВОЙ ВЫБОР, А НЕ СИСТЕМНЫЙ КАЛЕНДАРЬ. Владелец 07.09: *«нажимаю на
+    „четверг“, хочу выбрать другую дату — открывается календарик. Что это за
+    смешная история? Нам не нужен календарь — у нас занятия два раза в неделю»*.
+    Календарь предлагает 365 дней, из которых годятся 64: он заставляет человека
+    отсеивать то, что система знает и так.
+
+    Год считается от сентября: дата до сентября принадлежит году, начавшемуся в
+    прошлом календарном. Каникулы здесь НЕ вырезаны — их расписание в проекте
+    нигде не записано, а выдумывать даты каникул в коде значит однажды спрятать
+    занятие, которое было.
+    """
+    moment = date.fromisoformat(vokrug)
+    nachalo_goda = moment.year if moment.month >= 9 else moment.year - 1
+    den = date(nachalo_goda, 9, 1)
+    konec = date(nachalo_goda + 1, 5, 31)
+    vse = []
+    while den <= konec:
+        if is_lesson_day(den.isoformat()):
+            vse.append(den)
+        den += timedelta(days=1)
+    return vse
+
+
+def panel_vybora(den: str) -> str:
+    """Панель занятий года: месяц — строка, занятие — кнопка с числом.
+
+    Ровно то, что просил владелец: *«сделай большой прямоугольник, который
+    раскрывается на полэкрана… эти 32 недели можно запаковать так, чтобы в каждой
+    неделе можно было выбрать один или другой день»*. Месяцами, а не четвертями,
+    потому что месяц — единственная разметка года, которая в проекте уже есть и
+    не требует ввода дат каникул.
+
+    Панель открывается той же чекбокс-механикой, что и вкладки: без JavaScript
+    она тоже работает.
+    """
+    segodnya = date.today()
+    po_mesyacam = {}
+    for d in zanyatia_goda(den):
+        po_mesyacam.setdefault((d.year, d.month), []).append(d)
+
+    stroki = []
+    for (god, mesyac), dni in sorted(po_mesyacam.items(),
+                                     key=lambda p: (p[0][0], p[0][1])):
+        knopki = []
+        for d in dni:
+            iso = d.isoformat()
+            klassy = ["kal-den"]
+            if iso == den:
+                klassy.append("tut")
+            if d < segodnya:
+                klassy.append("bylo")
+            knopki.append(
+                '<a class="%s" href="/raspredelenie?den=%s" title="%s">'
+                '%d<span class="kal-sokr">%s</span></a>'
+                % (" ".join(klassy), iso, escape(day_in_words(iso)),
+                   d.day, SOKR_DNYA[d.weekday()]))
+        stroki.append('<div class="kal-mesyac"><span class="kal-imya">%s</span>'
+                      '<span class="kal-dni">%s</span></div>'
+                      % (escape(MESYAC_IMENA[mesyac]), "".join(knopki)))
+    return ('<input class="rd" type="checkbox" id="p-kal">'
+            '<div class="kal-panel">%s</div>' % "".join(stroki))

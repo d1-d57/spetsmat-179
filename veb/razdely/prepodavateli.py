@@ -56,7 +56,7 @@ def galochka_dnya(kt, x, kl):
     return ('<label class="den-gal%s" data-org="pravit-raspredelenie"'
             ' title="%s — %s">'
             '<input class="org den-chk" type="checkbox" data-tid="%s" data-slot="%d"%s>'
-            "%s</label>"
+            "<span>%s</span></label>"
             % ("" if est else " pusto", e(kt.DNI[kl][0]),
                "приходит" if est else "не приходит",
                x["id"], sl, " checked" if est else "",
@@ -137,7 +137,15 @@ def ego_deti(kt, x, kl):
 
 
 def para_prep(kt, x, pokazat_gruppu=True):
-    """Строка «преподаватель → его школьники», ОБА ДНЯ РЯДОМ.
+    """Карточка принимающего в группе: имя строкой, под ним день за днём.
+
+    🔴 ДНИ ИДУТ СТРОКАМИ, А НЕ ОДНИМ РЯДОМ, И ЭТО ПОПРАВКА ВЛАДЕЛЬЦА 07.09: *«у
+    тебя такие широкие строки — на первой строке имя преподавателя, ниже, в этой
+    же большой по вертикали строке, список в понедельник, ещё ниже список в
+    четверг»*. Слитый ряд читался как один список из семи фамилий, в котором
+    четверо повторяются, — а это два списка по трое, и они разные.
+
+    На занятии день один, и подпись ему не нужна: она стоит в шапке страницы.
 
     🔴 ТОЛЬКО ФАМИЛИИ школьников: с именами строка не влезает (замечание
     владельца 04.09). Группа и кабинет на вкладке ГРУППЫ не печатаются — там
@@ -146,7 +154,7 @@ def para_prep(kt, x, pokazat_gruppu=True):
     metki = ""
     if pokazat_gruppu and x["gruppa"]:
         metki += f' <span class="gr">{e(x["gruppa"])}</span>'
-    yacheyki = []
+    stroki = []
     for kl in kt.DNI:
         ego = ego_deti(kt, x, kl)
         sl = kt.DNI[kl][1]
@@ -157,13 +165,17 @@ def para_prep(kt, x, pokazat_gruppu=True):
                      + kt.kab_html(kl, x["gruppa"]) + "</span>")
         schyot = ""
         if kt.mozhno("videt-schyot"):
-            schyot = ('<span class="sch%s" data-org="videt-schyot"> %d</span>'
+            schyot = ('<span class="sch%s" data-org="videt-schyot">%d</span>'
                       % ("" if 3 <= len(ego) <= 4 else " ploho", len(ego)))
-        yacheyki.append(f'<span class="dv dv-{kl}">'
-                        + deti_prepoda(kt, x, ego, sl) + schyot + hvost + "</span>")
+        podpis = ("" if kt.den
+                  else f'<span class="den-podpis">{e(kt.DNI[kl][3])}</span>')
+        stroki.append(f'<span class="den-ryad dv-{kl}">{podpis}'
+                      '<span class="deti-ryad">'
+                      + deti_prepoda(kt, x, ego, sl) + hvost + "</span>"
+                      + schyot + "</span>")
     return (f'<div class="para" data-i="{e(x["name"].lower())}">'
             f'<span class="kto"><b>{e(x["name"])}</b>{metki}</span>'
-            f'<span class="komu deti">{"".join(yacheyki)}</span></div>')
+            f'<span class="komu deti">{"".join(stroki)}</span></div>')
 
 
 def otsutstvie_prepoda(kt, x):
@@ -184,7 +196,7 @@ def otsutstvie_prepoda(kt, x):
     net = x["id"] in kt.otsutstvuyut_prepoda
     return ('<label class="otsut%s" data-org="pravit-raspredelenie" title="%s">'
             '<input class="org totsut-chk" type="checkbox" data-tid="%s"'
-            ' data-den="%s"%s>отсутствует</label>'
+            ' data-den="%s"%s><span>отсутствует</span></label>'
             % ("" if net else " pusto",
                "сегодня его нет" if net else "отметить, что его сегодня нет",
                x["id"], e(kt.den), " checked" if net else ""))
@@ -214,11 +226,18 @@ def vid_prepodavateli(kt):
     каждому дню отдельно, дни отмечены галочками, группа одна. На занятии столбец
     один, а вместо галочек дней — отметка «сегодня его нет».
     """
-    zagolovki = ("приходит" if not kt.den else "сегодня")
-    ryady = ['<tr class="prep-shapka"><td class="tp"></td>'
-             + "".join(f'<td class="td-deti">{e(kt.DNI[k][3])}</td>' for k in kt.DNI)
-             + f'<td class="tdni">{zagolovki}</td><td class="tg">группа</td>'
-             + '<td class="tk"></td></tr>']
+    # 🔴 НА ЗАНЯТИИ ШАПКИ НЕТ ВОВСЕ. Владелец 07.09: *«верхняя строка над словом
+    # „Александр Тертерян“ на вкладке „принимающие“ — ненужная информация… надо
+    # убирать лишнюю информацию, это очень важно, потому что информации много»*.
+    # Подписывать один столбец днём, который написан в шапке страницы, — это
+    # третье повторение одного и того же на одном экране.
+    ryady = []
+    if not kt.den:
+        ryady.append(
+            '<tr class="prep-shapka"><td class="tp"></td>'
+            + "".join(f'<td class="td-deti">{e(kt.DNI[k][3])}</td>' for k in kt.DNI)
+            + '<td class="tdni">приходит</td><td class="tg">группа</td>'
+            + '<td class="tk"></td></tr>')
     for x in vidimye_prepodavateli(kt):
         deti_yach = []
         for kl in kt.DNI:
