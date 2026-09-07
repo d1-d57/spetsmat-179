@@ -84,10 +84,22 @@ body{margin:0;background:var(--bg);color:var(--text);
  * условие мандата («долг ученика стоит на той же строке, что и принимающий его
  * преподаватель») ровно на том устройстве, ради которого страница написана: её
  * держат в руке на занятии.  Место находится ужиманием, а не снятием. */
+.setka .kto .inic{display:none}
+
+/* 🔴 НА ТЕЛЕФОНЕ ВСЕ ТРИ СТОЛБЦА ОСТАЮТСЯ, НО УЖИМАЮТСЯ — иначе они съедают экран
+ * целиком и до клеток не добраться.  Найдено живым прогоном в браузере при 375px:
+ * «Ученик», «Принимает» и «Долг» занимали всю ширину, ни одной клетки в кадре не
+ * было — страница, написанная для телефона, на телефоне не работала.  Имя ученика
+ * сжимается до инициала (однофамильцы всё ещё различимы), принимающий — до первого
+ * слова, и решётка начинается в пределах экрана. */
 @media(max-width:700px){
   body{font-size:18px}
-  .holst{padding:.8rem .6rem 3rem}
-  .setka .kto,.setka .prep,.setka .dolg{padding:.35em .45em;font-size:.9rem}
-  .setka .prep{max-width:7em;overflow:hidden;text-overflow:ellipsis}
-  .kl{width:48px;height:48px;line-height:48px}
+  .holst{padding:.8rem .4rem 3rem}
+  .setka .kto,.setka .prep,.setka .dolg{padding:.3em .4em;font-size:.82rem}
+  .setka .kto{max-width:9.2em;overflow:hidden;text-overflow:ellipsis}
+  .setka .kto .imya{display:none}
+  .setka .kto .inic{display:inline}
+  .setka .prep{max-width:4.6em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .setka thead th{padding:.4em .3em;font-size:.8rem}
+  .kl{width:48px;height:48px;line-height:48px;font-size:1.25rem}
 }

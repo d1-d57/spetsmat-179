@@ -281,7 +281,9 @@ def _reshyotka(listok, zadachi, deti, svoi, prepody, dolgi, sostoyaniya) -> str:
         klass = ' class="moi"' if u.id in svoi else (' class="chuzh"' if svoi else "")
         stroki.append(
             f'<tr{klass}>'
-            f'<td class="kto"><b>{e(u.surname)}</b> {e(u.name)}</td>'
+            f'<td class="kto"><b>{e(u.surname)}</b> '
+            f'<span class="imya">{e(u.name)}</span>'
+            f'<span class="inic">{e((u.name or " ")[0])}.</span></td>'
             f'<td class="prep">{e(prepody.get(u.id, "—"))}</td>'
             f'<td class="dolg">{_dolg(dolg)}</td>'
             f'{"".join(kletki)}</tr>')
