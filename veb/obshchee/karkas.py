@@ -1331,7 +1331,80 @@ body{{padding-bottom:2rem}}
 .fajly{{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}}
 .fajly li{{padding:.4em 0;border-bottom:1px solid var(--rule);break-inside:avoid}}
 .fajly a{{color:var(--accent);text-decoration:none;font-size:1.05rem}}
-@media(max-width:760px){{.menu,.holst{{padding-left:1.1rem;padding-right:1.1rem}}.fajly{{columns:1}}}}{lich_stili}{kond_stili}
+@media(max-width:760px){{.menu,.holst{{padding-left:1.1rem;padding-right:1.1rem}}.fajly{{columns:1}}}}
+
+/* ═══ 🔴 ТЕЛЕФОН. ВСЁ НИЖЕ — ТОЛЬКО ВНУТРИ МЕДИАЗАПРОСОВ, ДЕСКТОП НЕ МЕНЯЕТСЯ.
+   Требование владельца 07.09: «твоя задача не менять ничего, кроме мобильной
+   версии, но её нужно довести до идеала на всех экранах, в первую очередь на
+   главном, во вторую на странице с приёмом/кондуитом».
+
+   ЧТО БЫЛО СЛОМАНО, ИЗМЕРЕНО НА ЖИВОЙ СТРАНИЦЕ ПРИ 375px, А НЕ НА ГЛАЗ:
+   страница переполнялась вбок на 145px — `.glav-glavnoe` занимала 502px при
+   экране 375. Виновата не сетка (она уже `minmax(0,1fr)` и с 940px в одну
+   колонку), а `.blok-listok{{width:max-content}}`: карточка растягивалась по
+   самой длинной своей строке — списку фамилий «302 · Бирюков, Будылин,
+   Искеева, Тухватулин-Йалчын» — и распирала колонку изнутри. Следом за ней
+   уезжал вправо весь блок «кто ведёт», и имена преподавателей обрезались
+   краем экрана: владелец видел «Ольга Р», «Даня Ма», «Ваня Яко».
+
+   Второе: кегли главной заданы `clamp(...vw...)`, и их НИЖНЯЯ граница считана
+   под ноутбук — `.vedut` держал 25.6px, `.rasp` 22.4px на экране в 375
+   пикселей. `vw` тут не спасает: при узком экране включается именно минимум.
+   Поэтому телефон получает свои размеры, а не масштабированные ноутбучные.
+
+   🔴 Ни одно правило отсюда не действует шире 760px: закреплённый десктопный
+   вид (`doc/DIZAJN-ZAKREPLENO.md`) остаётся ровно таким, каким владелец его
+   принял, и эталонные числа §5 снимаются при 1440×900 как раньше. ═══ */
+@media(max-width:760px){{
+  /* Карточка ближайшего листка. Схема не трогается — те же гарнитура, кегли,
+     цвета и ноль плашек, что стережёт `proverit_shemu()`; меняется ТОЛЬКО то,
+     что карточка перестаёт быть шире экрана. */
+  .blok-listok{{width:auto;max-width:100%;margin-top:2rem}}
+  .listok-kogda,.listok-stroka,.listok-kab{{white-space:normal;overflow-wrap:anywhere}}
+  .listok-imya{{font-size:2.1rem}}
+
+  /* «Кто ведёт» — предмет и имя в одной строке, но кеглем, который помещается. */
+  .vedut{{font-size:1.05rem;width:100%}}
+  .vedut td{{padding:.32rem 0}}
+  .vedut .predmet{{padding-right:.9rem;font-size:.95rem;white-space:normal}}
+
+  /* Расписание и списки преподавателей: одна колонка вместо двух — на 375px
+     вторая колонка давала по два слова в строке. */
+  .rasp{{font-size:1.05rem;width:100%}}
+  .rasp .den-imya{{padding-right:.9rem}}
+  .rasp td{{padding:.3rem 0}}
+  .prep-spisok{{columns:1;font-size:1rem}}
+  .prep-spisok.ranshe{{columns:1;font-size:.92rem}}
+
+  /* Заголовок и воздух: на телефоне первый экран должен показывать не только
+     название, но и то, ради чего страницу открыли. */
+  .glav-imya{{font-size:2.5rem;line-height:1.05}}
+  .glav-pod{{font-size:1rem}}
+  .glav-setka{{gap:1.5rem 0;margin-top:1rem}}
+  /* На ноутбуке колонка растянута на всю высоту и раскладывает блоки
+     `space-between`; на телефоне высоты нет, и та же раскладка оставляла между
+     заголовком и карточкой пустую треть экрана. */
+  .glav-glavnoe{{justify-content:flex-start;gap:1.5rem;padding-bottom:0}}
+  .glav-sboku{{gap:1.5rem}}
+  .glav{{min-height:0}}
+
+  /* Шапка занимала 174px — почти четверть экрана, и это до всякого содержания.
+     Меню прокручивается вбок одной строкой вместо того, чтобы переноситься. */
+  .menu{{padding:.55rem 1.1rem;gap:.2rem;flex-wrap:nowrap;overflow-x:auto;
+    -webkit-overflow-scrolling:touch}}
+  .menu::-webkit-scrollbar{{display:none}}
+  .menu .im{{font-size:.98rem;margin-right:.7rem}}
+  .menu label{{font-size:.98rem;padding:.3em .7rem;white-space:nowrap}}
+  .poisk{{font-size:1rem;padding:.5em .7em}}
+}}
+
+/* Совсем узкие телефоны (iPhone SE и ему подобные): на 320 точках заголовок в
+   2.5rem встаёт впритык к краю, и запаса не остаётся ни на что. */
+@media(max-width:380px){{
+  .glav-imya{{font-size:2.05rem}}
+  .listok-imya{{font-size:1.85rem}}
+  .glav-pod{{font-size:.95rem}}
+}}{lich_stili}{kond_stili}
 </style>
 
 <input class="rd" type="radio" name="den" id="d-pn" checked>

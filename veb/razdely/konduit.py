@@ -398,6 +398,58 @@ def stili(kt) -> str:
   padding-right:1.2rem}}
 #s-kond .kond-lich .skolko{{color:var(--muted);white-space:nowrap;padding-right:1.2rem;
   font-family:var(--sans);font-size:.9rem}}
+
+/* ═══ 🔴 ТЕЛЕФОН. ТОЛЬКО ВНУТРИ ЭТОГО ЗАПРОСА — ДЕСКТОПНЫЙ ВИД КОНДУИТА,
+   ПРИНЯТЫЙ ВЛАДЕЛЬЦЕМ, НЕ МЕНЯЕТСЯ НИ ОДНИМ ПРАВИЛОМ.
+
+   Кондуит — это то место, где на занятии ставят плюсики, и до сегодняшнего дня
+   на телефоне он был непригоден: столбец с фамилией занимал 250 из 375 точек,
+   и в кадр помещались ДВА столбца задач из тринадцати. Мерено на живой странице
+   при 375px, а не на глаз.
+
+   Три вещи, и все три — про палец, а не про красоту:
+   1. Фамилия ужимается и обрезается многоточием. Не снимается: по ней узнают
+      строку. Столбец остаётся липким слева — прокручивая решётку вбок, видно,
+      чью строку отмечаешь.
+   2. Клетка получает 44 точки высоты — меньший размер взрослый стоя не попадает.
+      Ширина при этом ужимается, чтобы столбцов в кадре стало больше.
+   3. Кегли уменьшены: они заданы под ноутбук и на телефоне просто крупные.
+
+   ⚠ Обёртки с `overflow` здесь по-прежнему НЕТ — по той же причине, что описана
+   выше: она стала бы ближайшим прокручиваемым предком и оторвала бы липкую шапку
+   от окна. Решётка прокручивается страницей, а `position:sticky` на первом
+   столбце работает и так. ═══ */
+@media(max-width:760px){{
+  #s-kond .kond-imya{{font-size:1.2rem;margin:0 0 .6rem}}
+  #s-kond .kond{{font-size:.9rem;max-width:none}}
+  #s-kond .kond thead th{{font-size:.78rem;padding:.4rem .2rem}}
+  /* 🔴 НА ТЕЛЕФОНЕ ВИДНА ФАМИЛИЯ ЦЕЛИКОМ, А НЕ ПОЛОВИНА ФАМИЛИИ И ПОЛОВИНА
+     ИМЕНИ. Первая редакция просто обрезала ячейку многоточием — и резала по
+     фамилии: «Афанасьев…», «Белеванце…». Фамилия и есть то, по чему узнают
+     строку, поэтому на узком экране прячется ИМЯ. Разметка при этом не
+     трогается: фамилия уже лежит в `<b>`, а имя — голым текстом рядом, так что
+     нулевой кегль на ячейке гасит имя, а `<b>` возвращает себе свой. */
+  #s-kond .kond td.kto{{width:7.2rem;max-width:7.2rem;overflow:hidden;
+    padding:.2rem .4rem .2rem 0;font-size:0}}
+  #s-kond .kond td.kto b,#s-kond .kond td.kto label{{font-size:.8rem;
+    display:block;overflow:hidden;text-overflow:ellipsis}}
+  #s-kond .kond tbody tr.moi td.kto{{padding-left:.55rem}}
+  #s-kond .kond td.kto label{{display:block;overflow:hidden;text-overflow:ellipsis}}
+  /* Клетка — цель пальца: 44 точки в высоту, компактнее в ширину. */
+  #s-kond .kond tbody td+td{{min-width:2.5em;height:44px;padding:.2rem;
+    font-size:1.05rem}}
+  #s-kond .kond .iz{{font-size:.62rem}}
+  /* Заголовок раздела и галочка «только мои» переносятся, а не сжимают друг друга. */
+  #s-kond .kond-verh{{gap:.6rem}}
+  #s-kond .kond-moi{{font-size:.9rem;padding:.3em .7rem}}
+}}
+
+/* На 320 точках столбец фамилии съедал бы больше трети экрана. */
+@media(max-width:380px){{
+  #s-kond .kond td.kto{{width:6.2rem;max-width:6.2rem}}
+  #s-kond .kond td.kto b,#s-kond .kond td.kto label{{font-size:.76rem}}
+  #s-kond .kond tbody td+td{{min-width:2.2em}}
+}}
 #s-kond .kond-lich i{{display:inline-block;font-style:normal;font-family:var(--sans);
   font-size:.85rem;background:var(--chip);border-radius:6px;padding:.05em .45em;
   margin:0 .25em .25em 0}}
