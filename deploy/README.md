@@ -4,8 +4,27 @@ Everything here is the harness, not the bot. The bot's own code (`bot/`, `core/`
 `config.py`) is untouched by this position, deliberately — see "the one line `bot/` must
 call" below, which is a debt handed to the next position rather than an edit made here.
 
-There is no server yet, and getting one is a separate decision. Every piece below is
-therefore provable on a laptop, and the way to prove each one is written next to it.
+## 🔴 The server exists. Read this before anything else here
+
+| | |
+| --- | --- |
+| address | `http://159.194.254.52/` — ssh `ivan@159.194.254.52`, `sudo` without a password |
+| the tree | `/opt/spetsmat-bot` — **a plain directory of files, NOT a git checkout** |
+| the site | `spetsmat-veb.service` → `python3 -m veb.server --bind 127.0.0.1 --port 8765`, nginx in front |
+| the bot | `spetsmat-bot.service` |
+| deployed by | `bash deploy/vykatka.sh` from a laptop checkout — rsync over ssh, never `git pull` |
+| rolled back by | `bash deploy/vykatka.sh --otkat` |
+
+**This file used to open by declaring that no server existed and that getting one was a
+separate decision.** The server has existed since 2026-09-04 and has run lessons on it.
+`deploy/vykatka.sh` beside it opened by calling itself a pull-migrate-restart and ran
+`git pull` in a directory that has no `.git`. Two passes in a row therefore worked out how to
+deploy by hand, live, on the production machine, and the second one wrote down what the first
+had already paid for. The cost of a runbook that lies is not that it is unhelpful — it is
+that it is believed.
+
+Everything below the deploy section is still provable on a laptop, and the way to prove each
+piece is written next to it.
 
 ## Install
 
@@ -78,14 +97,57 @@ perfectly happy.
 
 ## Deploy
 
+Run it **from a laptop checkout**, not on the server. It rsyncs a named list of paths over
+ssh and restarts the site; there is no `git pull` anywhere, because there is no checkout on
+the other end to pull into.
+
 ```
-bash deploy/vykatka.sh                        # pull, migrate, restart
+bash deploy/vykatka.sh                            # deploy
+bash deploy/vykatka.sh --otkat                    # restore the latest snapshot, restart
 bash deploy/vykatka.sh --proba --chas-zanyatia    # must REFUSE, rc=3
 bash deploy/vykatka.sh --proba --svobodnyj-chas   # must proceed, rc=0
 ```
 
-Exit codes: `0` deployed, `3` refused because a lesson is running, `4` the checkout is
-dirty, `5` the bot did not come back.
+Exit codes: `0` deployed · `3` refused, a lesson is running · `4` the rolled-out paths have
+uncommitted changes · `5` a step failed · `6` deployed and rolled back, the site never
+answered 200 · `7` a migration is pending and a human must decide.
+
+### 🔴 What is never rolled out — the list lives in the script, not in your head
+
+| path | why |
+| --- | --- |
+| `data/` | the LIVE database — today's marks of 53 pupils and 14 teachers. The laptop copy is not a fresher version of it but an older, different one: on 2026-09-04 the server knew `Полина Романова` where the laptop knew only `Полина`. Overwriting it loses a school day |
+| `secrets/` | `veb.env` with the two shared passwords, `veb-lichnye-paroli.json` with the hashes of the personal ones. The laptop files are not the same files, and this repository is public |
+| `docs/index.html` | the server rebuilds it itself after every save. A copy pushed from here is overwritten within the minute, and until then it shows the wrong day's data |
+
+### The order of the transfer is machinery, not tidiness
+
+`veb/` goes first and `tools/` after it. `tools/sobrat_stranicu.py` imports `veb.razdely` and
+`veb.obshchee`, and `veb/server.py` calls that tool after **every** successful write to the
+database. Send the tool first and there is a window in which the live server imports a
+package that is not yet on disk — every save inside that window is a 500. The script does two
+rsync passes for this reason; one invocation makes no promise about order.
+
+### Rollback
+
+Every deploy takes a snapshot of exactly what it is about to overwrite, into
+`/opt/spetsmat-bot-bak-<ISO>/`, **before the first byte moves**, and writes the path into
+`/opt/spetsmat-bot-bak-POSLEDNYAYA`. `--otkat` reads that pointer, restores, restarts and
+waits for 200.
+
+You rarely have to type it: after the restart the script polls the public URL for 200 for
+thirty seconds, and if the answer never comes it **rolls itself back** and then reports.
+The owner's rule of 2026-09-07 — the site matters more than any feature that did not get
+deployed, so the site comes back first and the diagnosis happens afterwards, on a site
+that is up.
+
+### Migrations are not applied by this door
+
+The old script applied them from the laptop against the laptop's database, which on a push
+deploy is the wrong database. Applying them to the live one is a decision about a school's
+data, not a step in a transfer — so when `migrations/` has changed, the script refuses with
+`rc=7` and prints the command to apply them deliberately. A door that silently skipped them
+would be lying in the other direction.
 
 **The refusal during a lesson is the most useful line in the script**, and it is the first
 thing that runs. Two instances of one bot cannot poll Telegram at once — the second gets
@@ -147,8 +209,9 @@ CODE, not a broken network — a broken network is what `Restart=always` handles
 recovers from it by itself. So:
 
 1. `journalctl -u spetsmat-bot.service -n 100` — the traceback is there;
-2. fix or `git revert`, then `bash deploy/vykatka.sh` (which will refuse if a lesson is
-   running, and it is right to);
+2. fix or `git revert`, then `bash deploy/vykatka.sh` from your laptop (which will refuse
+   if a lesson is running, and it is right to). If the site rather than the bot is down,
+   `bash deploy/vykatka.sh --otkat` first and diagnose afterwards;
 3. `systemctl reset-failed spetsmat-bot.service` before restarting by hand, or the burst
    counter is still full.
 
