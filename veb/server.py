@@ -676,9 +676,26 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(200,
                             zanyatie.stranica(self._connection(), den).encode("utf-8"))
             return
+        # 🔴 ПОСТОЯННОЕ — ЭТО РАЗДЕЛ САМОГО САЙТА, А НЕ ТРЕТЬЯ ВЁРСТКА ТОГО ЖЕ.
+        # Здесь отдавался `veb/templates/index.html` — отдельная страница, которую
+        # целиком рисует браузер (`fetch('/api/view?slot=' + SLOT)`, и `SLOT = 1`
+        # вписан в неё намертво, то есть четверга она не показывала никогда). Тот
+        # редактор постоянного, который владелец знает и называет словами
+        # «школьникам · принимающим · В · Д · Н», — раздел `s-rasp` этой самой
+        # страницы: он собирается на сервере из базы, он один и тот же у гостя и у
+        # организатора, и правку он уже умеет. Двух вёрсток одного и того же на
+        # этом сайте больше нет — ровно по той же причине, по какой отдельной
+        # админки с собственной вёрсткой не стало (см. развилку `/` выше).
+        #
+        # Адрес и его смысл не меняются: `/raspredelenie/postoyannoe` — постоянное,
+        # `/raspredelenie` — занятие. Вкладку распределения открывает
+        # `karkas.VKLADKA_SKRIPT` по этому самому пути.
+        #
+        # `veb/templates/index.html` не тронут ни строкой: он остаётся исходником
+        # файлового режима, который собирает `veb/sobrat_fajl.py` (вне зоны этого
+        # захода), и его судьба — решение владельца, а не побочный эффект.
         if path == "/raspredelenie/postoyannoe":
-            index = (TEMPLATES_DIR / "index.html").read_bytes()
-            self._send_html(200, index)
+            self._send_html(200, self._koren())
             return
         if path == "/api/teachers":
             self._send_json(200, _all_teachers(self._connection()))

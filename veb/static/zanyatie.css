@@ -31,12 +31,24 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
 .verh{display:flex;align-items:baseline;gap:1.1rem;flex-wrap:wrap;margin:0 0 1.5rem;
   padding-bottom:.9rem;border-bottom:2px solid var(--rule)}
 h1{font-size:1.85rem;font-weight:600;margin:0;letter-spacing:-.015em}
-.data{font-size:1.2rem;color:var(--accent)}
 .pod{color:var(--muted);font-size:1rem}
 
+/* 🔴 ДАТА — ОРГАН, А НЕ ПОДПИСЬ, И ВЫГЛЯДИТ ОНА ОРГАНОМ. Она стоит справа, внутри
+   навигации по датам, между стрелками; пунктир снизу — тот же приём, каким на этой
+   странице уже помечено «обычно у»: наведи и нажми. Ни одного нового цвета: акцент
+   уже был цветом даты, когда она была подписью. */
+.data{font-size:1.2rem;color:var(--accent);cursor:pointer;
+  border-bottom:1px dashed var(--rule);padding-bottom:.05em}
+.data:hover{border-bottom-color:var(--accent)}
+
 .navig{display:flex;align-items:baseline;gap:.4rem;margin-left:auto}
-.navig input{font:inherit;font-size:.95rem;padding:.3em .5em;border-radius:8px;
-  border:1px solid var(--rule);background:var(--panel);color:var(--text)}
+/* Настоящее поле даты держит календарь и submit; на экране его нет — на экране
+   дата словами. Не `display:none`: у скрытого так поля браузер отказывается
+   открывать календарь, а без календаря клик по дате ничего не даёт. */
+.vybor-daty{width:0;height:0;opacity:0;border:0;padding:0;margin:0}
+.navig input.data-zapasnaya{font:inherit;font-size:.95rem;padding:.3em .5em;
+  border-radius:8px;border:1px solid var(--rule);background:var(--panel);
+  color:var(--text)}
 .strelka{text-decoration:none;color:var(--muted);font-size:1.2rem;padding:0 .3em}
 .strelka:hover{color:var(--accent)}
 

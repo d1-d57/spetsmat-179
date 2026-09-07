@@ -733,6 +733,27 @@ KONDUIT_SKRIPT = """
 """
 
 
+# 🔴 THE PERMANENT ARRANGEMENT HAS ITS OWN ADDRESS, AND A CSS TAB CANNOT BE OPENED
+# BY ONE — SO THREE LINES OPEN IT. `/raspredelenie/postoyannoe` serves this very page
+# (`veb/server.py`), and which tab is `checked` is decided by
+# `tools/sobrat_stranicu.sobrat_html`, which lies OUTSIDE the зона of this заход: the
+# switch is therefore made here, where the зона reaches, and not by editing the file
+# that builds the page.
+#
+# It runs for every role, guest included, and that is deliberate: the guest build
+# `docs/index.html` is served at that address too, and a guest following the link from
+# the lesson page must land on the same section as everybody else. It touches nothing
+# on any other address — `/` opens exactly as it did.
+VKLADKA_SKRIPT = r"""
+<script>
+if(location.pathname.replace(/\/+$/, '') === '/raspredelenie/postoyannoe'){
+  var rasp = document.getElementById('p-rasp');
+  if(rasp) rasp.checked = true;
+}
+</script>
+"""
+
+
 def skripty(kt, drakon_skript: str) -> str:
     """The scripts of the page. Not the frame — its behaviour.
 
@@ -747,8 +768,14 @@ def skripty(kt, drakon_skript: str) -> str:
     """
     # Окно входа лежит в странице ВСЕГДА, у обеих ролей: так каркас у них
     # совпадает буквально, и гейту нечего прощать.
-    return (drakon_skript + VHOD_SKRIPT + (PRAVKA_SKRIPT if kt.ADMIN else "")
-            + (KONDUIT_SKRIPT if kt.mozhno("videt-konduit") else ""))
+    # 🔴 VKLADKA_SKRIPT GOES LAST, AND THE ORDER IS LOAD-BEARING. `PRAVKA_SKRIPT`
+    # restores the tab the visitor last had open out of `sessionStorage`, inline and
+    # immediately; standing before it, the address-driven switch would be overwritten
+    # by yesterday's choice and `/raspredelenie/postoyannoe` would open on «Класс».
+    return (drakon_skript + VHOD_SKRIPT
+            + (PRAVKA_SKRIPT if kt.ADMIN else "")
+            + (KONDUIT_SKRIPT if kt.mozhno("videt-konduit") else "")
+            + VKLADKA_SKRIPT)
 
 
 def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> str:
@@ -919,9 +946,9 @@ body{{margin:0;background:var(--bg);color:var(--text);font-family:var(--serif);f
   padding:.9rem 3rem;background:var(--panel);border-bottom:1px solid var(--rule);
   font-family:var(--sans);flex-wrap:wrap}}
 .menu .im{{font-weight:600;font-size:1.05rem;margin-right:1.6rem;white-space:nowrap}}
-.menu label{{cursor:pointer;font-weight:600;font-size:1.05rem;color:var(--muted);
-  padding:.35em 1rem;border-radius:8px}}
-.menu label:hover{{color:var(--text);background:var(--accent-soft)}}
+.menu label,.menu a.ssyl{{cursor:pointer;font-weight:600;font-size:1.05rem;color:var(--muted);
+  padding:.35em 1rem;border-radius:8px;text-decoration:none}}
+.menu label:hover,.menu a.ssyl:hover{{color:var(--text);background:var(--accent-soft)}}
 .holst{{padding:1.3rem 3rem 2rem;max-width:none}}
 h1{{font-family:var(--sans);font-size:2.1rem;font-weight:600;letter-spacing:-.02em;margin:0}}
 .data{{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 1.6rem}}
@@ -934,7 +961,7 @@ h1{{font-family:var(--sans);font-size:2.1rem;font-weight:600;letter-spacing:-.02
 .str,.vid{{display:none}}
 #p-start:checked~#s-start,#p-list:checked~#s-list,#p-rasp:checked~#s-rasp{{display:block}}
 #p-start:checked~.menu label[for=p-start],#p-list:checked~.menu label[for=p-list],
-#p-rasp:checked~.menu label[for=p-rasp]{{color:var(--accent);background:var(--accent-soft)}}
+#p-rasp:checked~.menu .ssyl-rasp{{color:var(--accent);background:var(--accent-soft)}}
 input.rd{{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}}
 .tabbar{{display:flex;gap:.25rem;border-bottom:2px solid var(--rule);margin:0 0 1rem;flex-wrap:wrap}}
 .tabbar label{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1.1rem;
@@ -1431,7 +1458,7 @@ body{{padding-bottom:2rem}}
     -webkit-overflow-scrolling:touch}}
   .menu::-webkit-scrollbar{{display:none}}
   .menu .im{{font-size:.98rem;margin-right:.7rem}}
-  .menu label{{font-size:.98rem;padding:.3em .7rem;white-space:nowrap}}
+  .menu label,.menu a.ssyl{{font-size:.98rem;padding:.3em .7rem;white-space:nowrap}}
   .poisk{{font-size:1rem;padding:.5em .7em}}
 }}
 
@@ -1452,12 +1479,25 @@ body{{padding-bottom:2rem}}
 
 <!-- ВЕРХНЯЯ ПАНЕЛЬ. Имя сайта стоит ОДИН раз и здесь; разделы больше не повторяют
      своё название заголовком внутри себя. Поиск живёт тут же и работает на всех
-     разделах — искать надо там, где смотришь, а не там, где нашлось место. -->
+     разделах — искать надо там, где смотришь, а не там, где нашлось место.
+
+     🔴 «РАСПРЕДЕЛЕНИЕ» IS A LINK, NOT A TAB, AND IT LEADS TO THE LESSON.
+     Owner's решение 1 of 2026-09-07. The tab it used to be opened the STANDING
+     arrangement, so the page written for «кто у кого сегодня» was reachable by
+     nobody: the owner pressed «Распределение», landed in the editor of the
+     permanent layer and concluded the work had not been merged. The permanent
+     layer keeps its own address, `/raspredelenie/postoyannoe`, and the button
+     that says what it is stands on the lesson page — «чтобы ты случайно всё не
+     начинал править постоянное распределение».
+
+     The radio `p-rasp` below stays: it is what SHOWS the standing section, and
+     `/raspredelenie/postoyannoe` checks it (VKLADKA_SKRIPT). Removing it would
+     take the section off the site altogether. -->
 <nav class="menu">
   <span class="im">Ключики</span>{lich_metka}
   <label for="p-start">Класс</label>
   <label for="p-list">Листки</label>
-  <label for="p-rasp">Распределение</label>{kond_metka}
+  <a class="ssyl ssyl-rasp" href="/raspredelenie">Распределение</a>{kond_metka}
   <div class="podskazki poisk-verh">
     <input class="poisk" id="poisk" placeholder="Поиск — школьник, принимающий, листок" autocomplete="off">
     <div class="spisok" id="spisok" hidden></div>

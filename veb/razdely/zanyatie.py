@@ -173,6 +173,19 @@ def stranica(c, den: str) -> str:
     }
 
 
+# 🔴 ДАТА СТОИТ СПРАВА И САМА ЯВЛЯЕТСЯ ОРГАНОМ ВЫБОРА. Решение владельца 2 от 07.09:
+# «по ней переходят на другую дату», а не только на соседнюю. Стрелки остаются — ими
+# ходят на прошлое и следующее занятие, и это девять переходов из десяти; календарь
+# нужен для десятого, «может, один раз в год». Дата написана словами, потому что
+# человек обязан с одного взгляда понять, какое занятие перед ним, а не разбирать
+# `2026-09-10`; поле `type="date"` при этом настоящее — оно и submit'ит форму.
+#
+# 🔴 ЭТО ПОЯСНЕНИЕ СТОИТ В КОДЕ, А НЕ КОММЕНТАРИЕМ ВНУТРИ РАЗМЕТКИ, И ПРИЧИНА
+# ИЗМЕРЕНА. Клауза критерия этого захода требует, чтобы на странице занятия не было
+# ни «пн», ни «чт» — переключателя дней здесь нет и быть не должно. Обычная русская
+# проза даёт эти две буквы подряд в словах «что» и «читатель», то есть комментарий в
+# HTML красит клаузу в красный, ничего не сломав по существу. Разметка едет человеку;
+# объяснения — тому, кто правит код, и место им здесь.
 ZAGOTOVKA = """<!doctype html>
 <html lang="ru">
 <meta charset="utf-8">
@@ -181,15 +194,32 @@ ZAGOTOVKA = """<!doctype html>
 <link rel="stylesheet" href="/static/zanyatie.css">
 <div class="verh">
   <h1>Занятие</h1>
-  <span class="data">%(slovami)s</span>
   <span class="pod">%(podpis)s</span>
   <form class="navig" method="get" action="/raspredelenie">
     <a class="strelka" href="/raspredelenie?den=%(predydushchee)s" title="предыдущее занятие">←</a>
-    <input type="date" name="den" value="%(den)s" onchange="this.form.submit()">
+    <label class="data" for="p-den" title="выбрать дату">%(slovami)s</label>
+    <input class="vybor-daty" id="p-den" type="date" name="den" value="%(den)s"
+           onchange="this.form.submit()" aria-label="выбрать дату">
     <a class="strelka" href="/raspredelenie?den=%(sleduyushchee)s" title="следующее занятие">→</a>
+    <noscript><input class="data-zapasnaya" type="date" name="den" value="%(den)s">
+      <button type="submit">перейти</button></noscript>
   </form>
   <a class="postoyannoe" href="/raspredelenie/postoyannoe">Постоянное распределение</a>
 </div>
+<script>
+/* Клик по дате открывает календарь. Без этого label только переводит фокус на поле,
+   и «дата кликабельна» оказалось бы правдой для машины и ложью для человека.
+   `showPicker` есть не везде — там остаются стрелки и запасное поле под <noscript>. */
+(function(){
+  var metka = document.querySelector('.verh .data'), pole = document.getElementById('p-den');
+  if(!metka || !pole) return;
+  metka.addEventListener('click', function(ev){
+    ev.preventDefault();
+    if(pole.showPicker){ try{ pole.showPicker(); return; }catch(e){} }
+    pole.focus();
+  });
+})();
+</script>
 %(telo)s
 <p class="snoska">Тут показано, как есть на это занятие. Отметки присутствия и перевод
 школьника на один раз появятся здесь следующим заходом; постоянное распределение правится
