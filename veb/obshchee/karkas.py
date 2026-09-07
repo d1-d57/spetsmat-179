@@ -1376,7 +1376,12 @@ body{{padding-bottom:2rem}}
 #v-shk .para .komu,#v-prep .para .komu,#v-В .para .komu,#v-Д .para .komu,
 #v-Н .para .komu{{display:flex;align-items:baseline;justify-content:flex-end;
   gap:.4rem;min-width:0}}
-.para .komu .dv{{flex:0 1 10.5rem;min-width:0;text-align:right}}
+/* 🔴 СТОЛБЕЦ ДНЯ НЕ СЖИМАЕТСЯ (`flex:0 0`), И ЭТО И ЕСТЬ «ОДНА ТАБЛИЧКА». Со
+   сжатием ширина столбца зависела бы от длины имени в СВОЕЙ строке, столбцы
+   разъезжались бы по вертикали, и таблицу нельзя было бы читать сверху вниз —
+   а читают её именно так. На узком экране раскладка и так уходит в одну колонку
+   (медиазапрос ниже), поэтому фиксированная ширина здесь ничего не ломает. */
+.para .komu .dv{{flex:0 0 10.5rem;min-width:0;text-align:right}}
 .para .komu .dv .org{{max-width:100%;width:100%}}
 .shapka-dnej{{border-bottom:2px solid var(--rule);color:var(--faint);
   font-family:var(--sans);font-size:.85rem;letter-spacing:.06em;text-transform:uppercase}}
