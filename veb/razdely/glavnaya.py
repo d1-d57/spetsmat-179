@@ -31,6 +31,7 @@ from veb.razdely.listki import (
     L8_VTOROE,
     L9,
     est,
+    srok,
     tekushchij,
 )
 from veb.razdely.shkolniki import gr_shk, kab_shk
@@ -168,6 +169,15 @@ def razdel(kt) -> str:
         listok_stroka = (f'{e(listok_nom)} {e(listok_tema)}'
                          f'<span class="listok-ver">{versii_html}</span>')
 
+    # 🔴 СРОК: НЕТ ЛИСТКА — НЕТ СТРОКИ ВОВСЕ, а не строка о том, что его нет.
+    # Ровно этим карточка отличается от соседнего `kab_skoro()`, который на
+    # неизвестных данных отдаёт `class="net"` внутрь карточки: запрещённый
+    # образец, на котором сборка — а с ней и сохранение в админке — упадёт в
+    # первый же день без данных. Здесь пустая строка гасит саму разметку.
+    srok_stroka = srok()
+    srok_html = (f'\n          <p class="listok-srok">{e(srok_stroka)}</p>'
+                 if srok_stroka else "")
+
     kabinety_skoro = kab_skoro(kt, kt.blizh)
     tekushchij_listok = tekushchij()
 
@@ -240,7 +250,7 @@ def razdel(kt) -> str:
           <span class="zag2">следующий спецмат</span>
           <p class="listok-kogda">{e(kt.DNI[kt.blizh][3])} {e(kt.po_russki_kratko(kt.DNI[kt.blizh][2]))}
             · {VREMYA[kt.blizh]}</p>
-          <p class="listok-stroka">{listok_stroka}</p>
+          <p class="listok-stroka">{listok_stroka}</p>{srok_html}
           <p class="listok-kab">{kabinety_skoro}</p>
         </div>
 
