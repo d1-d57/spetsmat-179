@@ -142,7 +142,11 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str
                 kletki.append(f'<td>{vzyato}<span class="iz">/{len(zad)}</span></td>')
             else:
                 kletki.append('<td class="pusto">·</td>')
-        klass = ' class="chuzh"' if u.id in chuzhoj else ""
+        # Тот же признак, что и в разрезе одного листка: класс ставится на СВОИХ.
+        # 07.09 он стоял только там, и на общей вкладке свои не выделялись вовсе —
+        # владелец увидел это раньше, чем я.
+        klass = (' class="chuzh"' if u.id in chuzhoj
+                 else (' class="moi"' if chuzhoj else ""))
         stroki.append(
             f'<tr{klass}><td class="kto"><label for="k-u{u.id}">'
             f'<b>{e(u.surname)}</b> {e(u.name)}</label></td>{"".join(kletki)}</tr>')
@@ -296,9 +300,14 @@ def stili(kt) -> str:
    остаётся единственным способом их найти, а владелец просил видеть их и в
    общем списке. Ни одного нового цвета: `--accent` уже несёт «моё» по всему
    сайту, `--accent-soft` — фон выбранной вкладки. */
+#s-kond .kond tbody tr.moi td{{background:var(--accent-soft)}}
 #s-kond .kond tbody tr.moi td.kto{{color:var(--accent);
-  box-shadow:inset .18rem 0 0 0 var(--accent)}}
+  box-shadow:inset .22rem 0 0 0 var(--accent)}}
 #s-kond .kond tbody tr.moi td.kto b{{color:var(--accent)}}
+/* Наведение обязано оставаться отличимым от «своей» строки, иначе выделение
+   съедает подсветку: у своих строк фон уже накрашен, поэтому наведение
+   различается рамкой на клетке и полосой столбца, а не цветом фона. */
+#s-kond .kond tbody tr.moi:hover td{{background:var(--chip)}}
 #s-kond .kond-verh{{display:flex;align-items:baseline;justify-content:space-between;
   gap:1.5rem;flex-wrap:wrap}}
 #s-kond .kond-moi{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1rem;
