@@ -55,11 +55,23 @@ class ErrorHandler(BaseHTTPRequestHandler):
         pass
 
 
-def _serve(port: int, handler):
-    srv = HTTPServer(("127.0.0.1", port), handler)
-    t = threading.Thread(target=srv.serve_forever, daemon=True)
-    t.start()
-    return srv
+def _serve(handler):
+    """Порт выдаёт ядро (0 = любой свободный), а не мы.
+
+    Зашитые номера портов уже уронили этот файл с «Address already in use», когда рядом
+    шёл другой прогон: тест краснел не от кода, а от соседа.
+    """
+    srv = HTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, srv.server_address[1]
+
+
+def _svobodnyj_port() -> int:
+    """Порт, на котором ГАРАНТИРОВАННО никто не слушает — для случая «молчат оба»."""
+    import socket as _s
+    with _s.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 def _nastroit(tmp_path, monkeypatch, host: str):
@@ -83,9 +95,9 @@ def test_443_otfiltrovan_kogda_http_zhiv_a_https_molchit(tmp_path, monkeypatch, 
     при фильтрации на пути. Именно этот признак — http жив, https молчит — сторож и обязан
     отличать от смерти сайта, потому что действия у них противоположные.
     """
-    srv = _serve(18771, NashSajtHandler)
+    srv, port = _serve(NashSajtHandler)
     try:
-        _nastroit(tmp_path, monkeypatch, "localhost:18771")
+        _nastroit(tmp_path, monkeypatch, "localhost:%d" % port)
         code = storozh_sajta.main([])
         vyvod = capsys.readouterr().out
         assert code == 1
@@ -101,7 +113,7 @@ def test_443_otfiltrovan_kogda_http_zhiv_a_https_molchit(tmp_path, monkeypatch, 
 
 def test_mertv_kogda_molchat_oba(tmp_path, monkeypatch, capsys):
     """Ни один порт не отвечает — сайт лёг, и вот это уже «поднимать сервер»."""
-    _nastroit(tmp_path, monkeypatch, "localhost:18999")
+    _nastroit(tmp_path, monkeypatch, "localhost:%d" % _svobodnyj_port())
     code = storozh_sajta.main([])
     vyvod = capsys.readouterr().out
     assert code == 1
@@ -147,10 +159,10 @@ def test_zhiv_na_zhivom_portu(tmp_path, monkeypatch):
     До 07.09 сверка была регистрозависимой и по первым 512 байтам; живой сайт, отдающий
     200 и заголовок «… — распределение», сторож объявлял мёртвым.
     """
-    srv = _serve(18765, NashSajtHandler)
+    srv, port = _serve(NashSajtHandler)
     try:
-        _nastroit(tmp_path, monkeypatch, "localhost:18765")
-        proverka = storozh_sajta.probe("http://localhost:18765")
+        _nastroit(tmp_path, monkeypatch, "localhost:%d" % port)
+        proverka = storozh_sajta.probe("http://localhost:%d" % port)
         assert proverka.passed
         assert proverka.otvetil_seteviy
     finally:
@@ -160,9 +172,9 @@ def test_zhiv_na_zhivom_portu(tmp_path, monkeypatch):
 
 def test_banner_ne_schitaetsya_zhivym(tmp_path, monkeypatch):
     """200 без нашего содержимого — чужая страница на нашем месте, а не живой сайт."""
-    srv = _serve(18766, BannerHandler)
+    srv, port = _serve(BannerHandler)
     try:
-        proverka = storozh_sajta.probe("http://localhost:18766")
+        proverka = storozh_sajta.probe("http://localhost:%d" % port)
         assert not proverka.passed
         assert proverka.otvetil_seteviy  # сеть-то дошла
     finally:
@@ -171,9 +183,9 @@ def test_banner_ne_schitaetsya_zhivym(tmp_path, monkeypatch):
 
 
 def test_500_eto_otvet_a_ne_tishina(tmp_path, monkeypatch):
-    srv = _serve(18767, ErrorHandler)
+    srv, port = _serve(ErrorHandler)
     try:
-        proverka = storozh_sajta.probe("http://localhost:18767")
+        proverka = storozh_sajta.probe("http://localhost:%d" % port)
         assert not proverka.passed
         assert proverka.otvetil_seteviy
     finally:
@@ -201,7 +213,7 @@ def test_staryj_adres_ostayotsya_zapasnym(tmp_path, monkeypatch):
 # ── Тревога только на смене состояния ─────────────────────────────────────────
 
 def test_trevoga_na_smene_sostoyania(tmp_path, monkeypatch, capsys):
-    _nastroit(tmp_path, monkeypatch, "localhost:18998")
+    _nastroit(tmp_path, monkeypatch, "localhost:%d" % _svobodnyj_port())
     (tmp_path / "state.json").write_text(json.dumps({"last_verdict": "жив"}), encoding="utf-8")
     code = storozh_sajta.main([])
     vyvod = capsys.readouterr().out
@@ -211,9 +223,59 @@ def test_trevoga_na_smene_sostoyania(tmp_path, monkeypatch, capsys):
 
 
 def test_tiho_gasit_trevogu(tmp_path, monkeypatch, capsys):
-    _nastroit(tmp_path, monkeypatch, "localhost:18997")
+    _nastroit(tmp_path, monkeypatch, "localhost:%d" % _svobodnyj_port())
     (tmp_path / "state.json").write_text(json.dumps({"last_verdict": "жив"}), encoding="utf-8")
     code = storozh_sajta.main(["--tiho"])
     vyvod = capsys.readouterr().out
     assert code == 1
     assert "ALARM:" not in vyvod
+
+
+# ── Третья беда: TLS дошёл, но сертификату верить нельзя ──────────────────────
+
+def test_prosrochennyj_sertifikat_eto_ne_filtracia(monkeypatch):
+    """Провал проверки сертификата ДОКАЗЫВАЕТ, что 443 доходит, а не опровергает это.
+
+    Рукопожатие зашло достаточно далеко, чтобы сервер предъявил сертификат; фильтрация на
+    пути такого не допускает. Без этой ветки сторож на просроченном сертификате печатал бы
+    «СЕРВЕР НЕ ТРОГАТЬ, вопрос к провайдеру» — то есть самое вредное из возможных действий
+    ровно тогда, когда чинить надо именно сервер. Найдено верификатором захода на живом
+    expired.badssl.com; текущий сертификат годен до 05.12.2026.
+    """
+    import ssl as _ssl
+
+    def upal(*a, **k):
+        raise _ssl.SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate has expired")
+
+    monkeypatch.setattr(storozh_sajta.urllib.request, "urlopen", upal)
+    proverka = storozh_sajta.probe("https://math-kluychiki.ru")
+    assert not proverka.passed
+    assert proverka.sertifikat_krasnyj
+    # Вот это поле и решает: сеть ДОШЛА.
+    assert proverka.otvetil_seteviy
+    assert postavit_diagnoz(_zhiv("http"), proverka) == storozh_sajta.SERTIFIKAT
+
+
+def test_dejstvie_po_sertifikatu_shlyot_na_server_a_ne_k_provajderu():
+    dejstvie = storozh_sajta.DEJSTVIE[storozh_sajta.SERTIFIKAT]
+    assert "certbot renew" in dejstvie
+    assert "не фильтрация" in dejstvie
+
+
+def test_rukopozhatie_bez_sertifikata_ostayotsya_molchaniem(monkeypatch):
+    """А вот обычный обрыв TLS — по-прежнему молчание сети и по-прежнему фильтрация.
+
+    Граница между двумя ветками проходит по тому, предъявил ли сервер сертификат, и её
+    надо держать: стоит записать в «сертификат» любую ошибку TLS, и ветка фильтрации
+    опустеет.
+    """
+    import ssl as _ssl
+
+    def upal(*a, **k):
+        raise _ssl.SSLError(1, "[SSL: WRONG_VERSION_NUMBER] wrong version number")
+
+    monkeypatch.setattr(storozh_sajta.urllib.request, "urlopen", upal)
+    proverka = storozh_sajta.probe("https://math-kluychiki.ru")
+    assert not proverka.sertifikat_krasnyj
+    assert not proverka.otvetil_seteviy
+    assert postavit_diagnoz(_zhiv("http"), proverka) == storozh_sajta.OTFILTROVAN

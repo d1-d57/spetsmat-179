@@ -76,6 +76,7 @@ TIMEOUT_SECONDS = 15
 ZHIV = "жив"
 MERTV = "мёртв"
 OTFILTROVAN = "443 отфильтрован"
+SERTIFIKAT = "сертификат не проходит проверку"
 HTTP_LEG = "http лёг"
 NE_SMOG = "не смог проверить"
 
@@ -85,6 +86,7 @@ DEJSTVIE = {
     ZHIV: "ничего не делать",
     MERTV: "поднимать сайт: deploy/podnyat_sajt.sh, затем systemctl status spetsmat-veb",
     OTFILTROVAN: "СЕРВЕР НЕ ТРОГАТЬ — он отвечает по http. Фильтрация на пути: вопрос к провайдеру",
+    SERTIFIKAT: "чинить СЕРВЕР: certbot renew, затем systemctl reload nginx. 443 доходит — это не фильтрация",
     HTTP_LEG: "https жив, http молчит — смотреть блок listen 80 в nginx, сайт у владельца работает",
     NE_SMOG: "проверить нечем — смотреть адрес и сеть самой машины-сторожа",
 }
@@ -103,6 +105,10 @@ class OneCheck:
     passed: bool
     otvetil_seteviy: bool
     detail: str
+    # TLS дошёл до сервера, но предъявленному сертификату верить нельзя.  Держится
+    # отдельным полем, а не выводится из текста detail: разбирать сообщение об ошибке
+    # строкой — значит поставить диагноз в зависимость от формулировок OpenSSL.
+    sertifikat_krasnyj: bool = False
 
 
 @dataclass(frozen=True)
@@ -177,6 +183,17 @@ def probe(url: str) -> OneCheck:
         return OneCheck(name, False, True, "мёртв: status=%d" % exc.code)
     except (urllib.error.URLError, socket.timeout, ssl.SSLError, OSError) as exc:
         reason = getattr(exc, "reason", exc)
+        # 🔴 ПРОВАЛЕННАЯ ПРОВЕРКА СЕРТИФИКАТА — ЭТО ДОКАЗАТЕЛЬСТВО, ЧТО 443 ДОХОДИТ, а не
+        # опровержение.  Рукопожатие зашло достаточно далеко, чтобы сервер успел предъявить
+        # сертификат; фильтрация на пути такого не допускает.  Без этой ветки просроченный
+        # сертификат сваливался в «443 отфильтрован» — то есть сторож печатал «СЕРВЕР НЕ
+        # ТРОГАТЬ, вопрос к провайдеру» ровно в том случае, когда чинить надо именно сервер.
+        # Найдено верификатором захода на живом эталоне expired.badssl.com; текущий
+        # сертификат годен до 05.12.2026, так что случай наступит сам, если продление
+        # однажды не сработает.
+        if isinstance(reason, ssl.SSLCertVerificationError) or isinstance(exc, ssl.SSLCertVerificationError):
+            return OneCheck(name, False, True, "сертификат не проходит проверку: %s" % reason,
+                            sertifikat_krasnyj=True)
         return OneCheck(name, False, False, "молчит на уровне сети: %s" % reason)
     if not 200 <= status < 300:
         return OneCheck(name, False, True, "мёртв: status=%d" % status)
@@ -190,14 +207,18 @@ def probe(url: str) -> OneCheck:
 def postavit_diagnoz(po_http: OneCheck, po_https: OneCheck) -> str:
     """The whole point of the module: two probes in, one of five words out.
 
-    The order of the branches is the order of how bad the news is, and the filtering branch
-    is deliberately NARROW.  It fires only when http carries our content while https produced
+    The certificate branch stands BEFORE the filtering one on purpose: a certificate we do
+    not trust is proof that 443 arrives, and it sends the reader to the server, not to the
+    provider.  The order of the remaining branches is the order of how bad the news is, and
+    the filtering branch is deliberately NARROW.  It fires only when http carries our content while https produced
     no network answer at all -- because that, and nothing weaker, is what the 2026-09-06
     measurement looked like.  Anything else that merely "does not work over https" is left as
     мёртв, so that the filtering verdict keeps meaning what it says.
     """
     if po_http.passed and po_https.passed:
         return ZHIV
+    if po_https.sertifikat_krasnyj:
+        return SERTIFIKAT
     if po_http.passed and not po_https.otvetil_seteviy:
         return OTFILTROVAN
     if po_https.passed and not po_http.otvetil_seteviy:
@@ -232,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
         checks: tuple[OneCheck, ...] = (OneCheck("adres", False, False, "не смог проверить: ни ADRES-SAJTA.txt, ни ADRES.txt"),)
         outcome = NE_SMOG
     else:
+        print("адрес: %s" % host)
         po_http = probe("http://" + host)
         po_https = probe("https://" + host)
         checks = (po_http, po_https)
