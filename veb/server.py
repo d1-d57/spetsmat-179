@@ -915,6 +915,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._s_peresborkoj(self._post_enrollment)
             return
+        # 🔴 ТА ЖЕ РАЗВИЛКА, ЧТО В `do_GET`, И ОНА ОБЯЗАНА БЫТЬ ЗДЕСЬ ТОЖЕ.  Раздел,
+        # объявивший свои пути через `marshruty()`, объявил их для СЕБЯ, а не для одного
+        # метода: приём задач пишет отметку, то есть его дверь — POST, и без этой строки
+        # она возвращала бы 404 при полностью зелёной странице.  Найдено живым прогоном
+        # (`/api/priyom` отвечал 404 на POST и 200 на GET), правка разрешена ПРАВКОЙ 3
+        # захода `veb-priyom-zadach` — и ничего больше в этом файле она не трогает.
+        chuzhie = _marshruty_razdelov()
+        if path in chuzhie:
+            if chuzhie[path](self) is not False:
+                return
+
         self._send_json(404, {"error": "not found"})
 
     def _post_kabinety(self) -> None:
