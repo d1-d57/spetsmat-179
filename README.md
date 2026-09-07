@@ -64,6 +64,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-05.md`** (Хэндофф в сессию 2026-09-05)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-08.md`** (Хэндофф в сессию 2026-09-08)
+
 **`zhurnal/2026-09-02_spetsmat-bot/NADEZHNOST-zakaz-na-resyorch.md`** (надёжность: разбор топологии, оффлайн-очередь тапов, бэкапы и заказ на ресёрч Р1-Р7)
 
 **`zhurnal/2026-09-02_spetsmat-bot/NAVIGATOR.md`** (навигатор арки 2026-09-02_spetsmat-bot (ориентация, читается первым): Кондуит спецмата в телеграме)
@@ -125,6 +128,15 @@
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-04-3.md`** (Выгрузка сессии 2026-09-04 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-04.md`** (Выгрузка сессии 2026-09-04 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-07-2.md`** (Выгрузка сессии 2026-09-07 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-07-3.md`** (Выгрузка сессии 2026-09-07 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-07.md`** (Выгрузка сессии 2026-09-07 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_N0-dovezti-rabotu-noch-0904.md`** (довезти в git работу ночи 04.09: две регрессии и вся волна ОСНОВАНИЕ, двумя коммитами)
 
@@ -238,6 +250,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_dozabivka-dolgov-sklejki.md`** (закрыть долги заходa склейки: права у кабинетов, опечатка except Value, красные тесты enrollment)
 
 
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_dve-stranicy-raspredelenia.md`** (разделить навигацию: Распределение ведёт на ближайшее занятие с датой сверху, постоянное — отдельной страницей с колонками пн и чт)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_https-i-domen.md`** (HTTPS на math-kluychiki.ru: сертификат, редиректы с http и с IP, сторож на новый адрес)
 
