@@ -1315,8 +1315,13 @@ tr:hover td{{background:var(--accent-soft)}}
    хотя там куча места». Прижатые вправо, они делили строку с именем и толкали
    его в многоточие; в столбик под именем места хватает обоим.
    Имя здесь НЕ обрезается вовсе: строка отдана ему целиком. */
-.kol-pr .para{{flex-direction:column;align-items:stretch;gap:.15rem;
-  padding:.5rem 0;font-size:1.45rem}}
+/* 🔴 КАРТОЧКЕ ВЕРНУЛИ ВЫСОТУ. Владелец 07.09: «ты стал гораздо больше места
+   уделять на каждого преподавателя… сейчас ты её обратно случайно сжал. Сделай
+   обратно её широкой». Имя крупное, дни под ним, между строками воздух: этот
+   столбец читают издалека, стоя, посреди занятия. */
+.kol-pr .para{{flex-direction:column;align-items:stretch;gap:.35rem;
+  padding:.85rem 0;font-size:1.5rem}}
+.kol-pr .komu.deti{{font-size:1.05rem}}
 .kol-pr .para .kto{{overflow:visible;text-overflow:clip;white-space:normal;
   flex:0 0 auto}}
 /* Дети идут СЛЕВА НАПРАВО во всю ширину карточки: `margin-left:auto` из общего
@@ -1334,12 +1339,17 @@ tr:hover td{{background:var(--accent-soft)}}
 .kol-pr .komu.deti .sch{{margin-left:.3rem}}
 /* День в карточке принимающего — своей строкой: подпись слева, дети за ней.
    Так видно, что списков ДВА и они разные, — а слитый ряд читался как один. */
-.den-ryad{{display:flex;align-items:baseline;gap:.4rem;flex:1 1 100%;min-width:0}}
-.den-podpis{{flex:0 0 1.8rem;color:var(--faint);font-family:var(--sans);
-  font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}}
-.deti-ryad{{display:flex;flex-wrap:wrap;align-items:baseline;gap:.15rem .3rem;
+.den-ryad{{display:flex;align-items:baseline;gap:.5rem;flex:1 1 100%;min-width:0}}
+.den-podpis{{flex:0 0 1.7rem;color:var(--faint);font-family:var(--sans);
+  font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}}
+.deti-ryad{{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem .35rem;
   flex:1 1 auto;min-width:0}}
-.den-ryad .sch{{flex:0 0 auto;margin-left:.3rem}}
+/* 🔴 ЧИСЛО СТОИТ СВОЕЙ КОЛОНКОЙ, А НЕ ТАМ, ГДЕ КОНЧИЛИСЬ ФАМИЛИИ. Владелец 07.09:
+   «почему съехали цифры? Почему цифры ни на одном уровне? Должно быть на одном
+   уровне, должна быть колонка, в которой цифры». Число, стоящее вплотную к
+   последней фамилии, каждую строку начинается в новом месте, и глазу приходится
+   искать его заново — а читают этот столбец сверху вниз, одним движением. */
+.den-ryad .sch{{flex:0 0 2.2rem;margin-left:auto;text-align:right}}
 /* Запятая между фамилиями рисуется CSS: у гостя и у организатора один и тот же
    элемент `.det`, и разметка обоих режимов отличается ровно кнопкой-органом. */
 .zpt:not(:last-child)::after{{content:", "}}
@@ -1357,15 +1367,31 @@ tr:hover td{{background:var(--accent-soft)}}
   background:var(--panel);border:1px solid var(--rule);border-radius:7px;
   padding:.12em .3em;margin-left:.4rem;max-width:11rem}}
 .org:hover,.org:focus{{border-color:var(--accent);outline:none}}
-.tsch{{font-family:var(--sans);font-weight:600;text-align:center;width:1%;
-  white-space:nowrap;color:var(--accent)}}
+/* Столбец с числом: узкий, по правому краю, одинаковый во всех строках — по нему
+   читают нагрузку сверху вниз, а не ищут число в конце каждого списка. */
+.prep-tab td.tsch{{font-family:var(--sans);font-weight:600;text-align:right;
+  width:2.4rem;padding-right:.9rem;white-space:nowrap;color:var(--accent)}}
+/* Строки таблицы принимающих — просторнее: их читают издалека, стоя. */
+.prep-tab td{{padding-top:.5rem;padding-bottom:.5rem}}
 /* 🔴 ЧИСЛО НЕ КРАСНЕЕТ — КРАСНЕЕТ МЕСТО. Владелец 07.09: «цифра 5 плохо
    выглядит. Лучше писать 5 синим, а красным подчёркивать, выделять поле — не
    обязательно красным, каким-то менее ярким, красноватым». Красная цифра среди
    серых читается как ошибка ЧИСЛА; подсвеченное поле читается как «здесь
    перебор», а это и есть смысл. */
-.tsch.ploho,.sch.ploho{{color:var(--accent);background:var(--krasn-fon);
-  border-radius:6px;padding:.05em .4em}}
+/* 🔴 ПОДСВЕЧИВАЕТСЯ СТРОКА, А НЕ ЧИСЛО. Владелец 07.09: «я предлагал выделять не
+   цифру 5 красноватым цветом, а всю строчку… точно так же, если у школьника не
+   назначены преподаватели, это тоже должно подчёркиваться». Подсвеченное число —
+   это «неверное число»; подсвеченная строка — «здесь разберись», и разбираются
+   именно со строкой. */
+.tsch.ploho,.sch.ploho{{color:var(--accent)}}
+tr:has(.tsch.ploho),.para:has(.sch.ploho),.den-ryad:has(.sch.ploho){{
+  background:var(--krasn-fon)}}
+#s-rasp .para.krasn{{background:var(--krasn-fon)}}
+#s-rasp .para.krasn .kto b{{color:var(--text)}}
+/* Подсветка не должна обрывать строку по краям колонки: она идёт от края до края. */
+tr:has(.tsch.ploho) td:first-child,.para:has(.sch.ploho),#s-rasp .para.krasn{{
+  border-radius:8px}}
+.den-ryad:has(.sch.ploho){{border-radius:8px;padding:.1rem .35rem;margin:0 -.35rem}}
 .sch{{font-family:var(--sans);font-weight:600;font-size:.8em;color:var(--accent)}}
 
 /* Крестик = открепить. Появляется по клику на фамилии преподавателя, не раньше:
@@ -1692,8 +1718,13 @@ body{{padding-bottom:2rem}}
    а читают её именно так. На узком экране раскладка и так уходит в одну колонку
    (медиазапрос ниже), поэтому фиксированная ширина здесь ничего не ломает. */
 .para .komu .dv{{flex:0 0 9.6rem;min-width:0;text-align:right}}
-/* Пустая ячейка шапки ровно под полем группы — та же ширина, что у него. */
+/* Пустые ячейки шапки ровно под замком и полем группы — те же ширины, что у них. */
 .para .komu .dv-gr{{flex:0 0 3.8rem}}
+.para .komu .dv-zam{{flex:0 0 1.7rem}}
+/* Подпись дня — мелкая и ровно над своим столбцом; крупная подпись съедала
+   высоту строки и толкала последнего школьника за нижний край экрана. */
+.shapka-dnej{{font-size:.72rem;padding:.1rem 0}}
+.shapka-dnej .komu .dv{{color:var(--faint)}}
 .para .komu .dv .org{{max-width:100%;width:100%}}
 .shapka-dnej{{border-bottom:2px solid var(--rule);color:var(--faint);
   font-family:var(--sans);font-size:.85rem;letter-spacing:.06em;text-transform:uppercase}}
@@ -1764,9 +1795,11 @@ body{{padding-bottom:2rem}}
   color:var(--muted);font-size:1.05rem;line-height:1;border:1px solid var(--rule)}}
 .zan-navig .strelka:hover{{color:var(--accent);border-color:var(--accent);
   background:var(--accent-soft)}}
-.data-zan{{cursor:pointer;color:var(--text);font-size:1.05rem;font-weight:600;
-  white-space:nowrap;padding:.28em .7em;border:1px solid var(--rule);
-  border-radius:8px}}
+/* Кнопка даты не выше строки вкладок: её рамка налезала на линию под вкладками,
+   и на наведении это читалось как сбой вёрстки (замечание владельца 07.09). */
+.data-zan{{cursor:pointer;color:var(--text);font-size:1.02rem;font-weight:600;
+  white-space:nowrap;padding:.18em .65em;border:1px solid var(--rule);
+  border-radius:8px;line-height:1.35}}
 .data-zan:hover{{border-color:var(--accent);color:var(--accent)}}
 /* 🔴 ПАНЕЛЬ ЗАНЯТИЙ ВМЕСТО СИСТЕМНОГО КАЛЕНДАРЯ. Владелец 07.09: «нам не нужен
    календарь — у нас занятия два раза в неделю… нужна своя кастомная большая
@@ -1774,20 +1807,25 @@ body{{padding-bottom:2rem}}
    предлагает 365 дней, из которых годятся 64, и заставляет человека отсеивать
    то, что система знает сама. Здесь весь год стоит месяцами, занятие — кнопкой
    с числом и днём; прошедшие приглушены, сегодняшнее обведено. */
-.kal-panel{{display:none;position:absolute;top:calc(100% + .5rem);right:0;z-index:60;
-  max-height:70vh;overflow:auto;padding:.9rem 1.1rem;border:1px solid var(--rule);
-  border-radius:12px;background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.28);
-  min-width:34rem}}
+/* 🔴 ПАНЕЛЬ ЗАНИМАЕТ МЕСТО, КОТОРОЕ У НЕЁ ЕСТЬ. Владелец 07.09: «у тебя огромное
+   пространство есть, которое ты можешь занять расписанием… сделай его шире —
+   кнопки больше, в два раза шире, чтобы всё было видно, удобная навигация,
+   ничего не вылезало в две строки». Узкая панель ломала каждый месяц на две
+   строки и превращала год в лестницу. */
+.kal-panel{{display:none;position:absolute;top:calc(100% + .6rem);right:0;z-index:60;
+  max-height:76vh;overflow:auto;padding:1.1rem 1.4rem;border:1px solid var(--rule);
+  border-radius:14px;background:var(--panel);box-shadow:0 16px 40px rgba(0,0,0,.32);
+  width:min(64rem,92vw)}}
 #p-kal:checked~.kal-panel{{display:block}}
 .zan-navig #p-kal:checked~.data-zan,.data-zan:has(~#p-kal:checked){{
   border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}}
-.kal-mesyac{{display:flex;align-items:baseline;gap:.6rem;padding:.25rem 0}}
+.kal-mesyac{{display:flex;align-items:center;gap:.9rem;padding:.42rem 0}}
 .kal-mesyac+.kal-mesyac{{border-top:1px solid var(--rule)}}
-.kal-imya{{flex:0 0 6.5rem;color:var(--muted);font-size:.9rem}}
-.kal-dni{{display:flex;flex-wrap:wrap;gap:.3rem}}
-.kal-den{{display:inline-flex;align-items:baseline;gap:.18rem;text-decoration:none;
-  color:var(--text);font-size:.95rem;font-weight:600;padding:.18em .5em;
-  border:1px solid var(--rule);border-radius:7px;min-width:2.9rem;
+.kal-imya{{flex:0 0 7rem;color:var(--muted);font-size:.95rem}}
+.kal-dni{{display:flex;flex-wrap:wrap;gap:.4rem}}
+.kal-den{{display:inline-flex;align-items:baseline;gap:.25rem;text-decoration:none;
+  color:var(--text);font-size:1.02rem;font-weight:600;padding:.3em .75em;
+  border:1px solid var(--rule);border-radius:9px;min-width:4rem;
   justify-content:center}}
 .kal-den:hover{{border-color:var(--accent);color:var(--accent);
   background:var(--accent-soft)}}

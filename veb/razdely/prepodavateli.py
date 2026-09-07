@@ -235,7 +235,12 @@ def vid_prepodavateli(kt):
     if not kt.den:
         ryady.append(
             '<tr class="prep-shapka"><td class="tp"></td>'
-            + "".join(f'<td class="td-deti">{e(kt.DNI[k][3])}</td>' for k in kt.DNI)
+            + "".join(f'<td class="td-deti">{e(kt.DNI[k][3])}</td>'
+                      # `data-org` обязателен: у гостя счётчиков нет вовсе, и гейт
+                      # каркаса снимает эту ячейку вместе с остальными органами.
+                      + ('<td class="tsch" data-org="videt-schyot"></td>'
+                         if kt.mozhno("videt-schyot") else "")
+                      for k in kt.DNI)
             + '<td class="tdni">приходит</td><td class="tg">группа</td>'
             + '<td class="tk"></td></tr>')
     for x in vidimye_prepodavateli(kt):
@@ -246,11 +251,15 @@ def vid_prepodavateli(kt):
             # 🔴 СЧЁТЧИК — ТОЛЬКО В АДМИНКЕ. Норма 3–4; красным 0, 1, 2 и 5+.
             # Гостю нагрузка преподавателя не нужна и является техническим числом
             # (ТЗ §2.5), а тому, кто раскладывает людей, она и есть главный сигнал.
-            schyot = ('<span class="tsch%s" data-org="videt-schyot"> %d</span>'
+            # 🔴 ЧИСЛО — СВОЯ ЯЧЕЙКА, А НЕ ХВОСТ СПИСКА. Владелец 07.09: «цифры
+            # выставлены не там, где нужно… всё должно быть в своих столбцах».
+            # Внутри ячейки с фамилиями число начинается там, где кончились
+            # фамилии, то есть в каждой строке в новом месте.
+            schyot = ('<td class="tsch%s" data-org="videt-schyot">%d</td>'
                       % ("" if 3 <= len(ego) <= 4 else " ploho", len(ego))) \
                      if kt.mozhno("videt-schyot") else ""
             deti_yach.append(f'<td class="td-deti dv-{kl}">'
-                             + deti_prepoda(kt, x, ego, sl) + schyot + "</td>")
+                             + deti_prepoda(kt, x, ego, sl) + "</td>" + schyot)
         if kt.den:
             otmetka = otsutstvie_prepoda(kt, x) if kt.ADMIN else (
                 '<span class="den-metka%s" data-tolko-gost>нет</span>'

@@ -125,3 +125,27 @@ def test_a_pupil_left_without_a_teacher_that_day_is_still_on_the_lesson_screen(b
         attendance=SqliteAttendance(baza),
     ).sostav(chetverg)
     assert bez_roster.mesta == (), "без списка школьников служба отвечает как раньше"
+
+
+def test_the_holidays_are_missing_from_the_year_of_lessons():
+    """Каникулы вырезаны из панели занятий — по расписанию, присланному владельцем.
+
+    🔴 ДАТЫ ЖИВУТ ОДНИМ СПИСКОМ, И ОБ ЭТОМ ЕСТЬ ПРЕДУПРЕЖДЕНИЕ В САМОМ ИСТОЧНИКЕ:
+    «к сожалению, бывают изменения по ходу учебного года». Поэтому проверяется не
+    число занятий (оно поменяется вместе с расписанием), а три конкретных дня
+    внутри каникул и два соседних рабочих — то, что список вообще применяется.
+
+    Панель — навигация, а не запрет: занятие в такой день по-прежнему открывается
+    прямым адресом `?den=…`, и это нарочно.
+    """
+    from veb.razdely.zanyatie import kanikuly, zanyatia_goda
+
+    god = {d.isoformat() for d in zanyatia_goda("2026-09-10")}
+
+    for vnutri in ("2026-10-26", "2027-01-05", "2027-03-16"):
+        assert kanikuly(vnutri), vnutri
+        assert vnutri not in god, f"{vnutri} — каникулы, в панели ему не место"
+
+    for rabochij in ("2026-10-22", "2026-11-02", "2027-03-22"):
+        assert not kanikuly(rabochij), rabochij
+        assert rabochij in god, f"{rabochij} — занятие, оно обязано быть в панели"

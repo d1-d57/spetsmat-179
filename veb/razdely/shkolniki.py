@@ -330,6 +330,10 @@ def shapka_dnej(kt):
         return ""
     metki = "".join(f'<span class="dv dv-{kl}">{e(kt.DNI[kl][3])}</span>'
                     for kl in kt.DNI)
+    # 🔴 ПУСТЫЕ ЯЧЕЙКИ ПОД ЗАМОК И ГРУППУ. Владелец 07.09: «понедельник стоит не
+    # над колонкой для понедельника, четверг не над колонкой для четверга, он
+    # стоит над замочком». Подпись съезжает ровно на ширину органов, которых в
+    # шапке нет, — значит они в ней должны быть, пустыми.
     # 🔴 ПУСТАЯ ЯЧЕЙКА ПОД ПОЛЕ ГРУППЫ — ИНАЧЕ ШАПКА СТОИТ НЕ НАД СВОИМИ
     # СТОЛБЦАМИ. У организатора в строке есть третий орган, группа; без такой же
     # пустой ячейки в шапке подписи съезжают на его ширину, и «ПН» повисает над
@@ -337,7 +341,9 @@ def shapka_dnej(kt):
     # Ячейка несёт `data-org`, поэтому у гостя её нет — как нет у него и самого
     # поля группы, и каркасы остаются равными побайтово.
     if kt.ADMIN:
-        metki += ('<span class="dv dv-gr" data-org="pravit-raspredelenie">'
+        metki += ('<span class="dv dv-zam" data-org="pravit-raspredelenie">'
+                  "</span>"
+                  '<span class="dv dv-gr" data-org="pravit-raspredelenie">'
                   "</span>")
     return ('<div class="para shapka-dnej"><span class="kto"></span>'
             f'<span class="komu">{metki}</span></div>')
