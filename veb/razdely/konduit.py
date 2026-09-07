@@ -117,26 +117,7 @@ def _daty(kt) -> dict:
     """)}
 
 
-def _svodka(na_uchyote, listki, sdano_vsego, sdano_na_uchyote, vybyli) -> str:
-    """The three numbers of the summary, with the gap between two of them named.
-
-    🔴 THE TOTAL AND THE GRID DO NOT COUNT THE SAME PEOPLE, SO BOTH NUMBERS STAND
-    HERE. The грид draws the 53 on the roll; the total is the whole archive, all
-    57. Printing only the first would contradict `tools/export_xlsx.py`; printing
-    only the second would contradict the rows the reader can count. The
-    difference is a real fact about the year — pupils left and their work stays —
-    and a page that hides it makes its own reader wrong.
-    """
-    hvost = ""
-    if vybyli:
-        hvost = (f' · из них у {len(na_uchyote)} на учёте — '
-                 f'{sdano_na_uchyote:,}'.replace(",", " ")
-                 + f', остальное у {len(vybyli)} выбывших')
-    return (f'<p class="data">учеников {len(na_uchyote)} · листков {len(listki)} · '
-            f'сдано {sdano_vsego:,}'.replace(",", " ") + f'{hvost}</p>')
-
-
-def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj) -> str:
+def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str:
     """Cut one: the whole year on one grid — a row per pupil, a column per листок.
 
     In the cell "credited of total" for that листок. This is the view the owner
@@ -165,7 +146,7 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj) -> str:
         stroki.append(
             f'<tr{klass}><td class="kto"><label for="k-u{u.id}">'
             f'<b>{e(u.surname)}</b> {e(u.name)}</label></td>{"".join(kletki)}</tr>')
-    return (f'<section class="vid" id="n-vse">'
+    return (f'<section class="vid" id="n-{imya}">'
             f'<table class="kond"><thead><tr><th>Ученик</th>{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
@@ -188,7 +169,12 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj) -> str:
             for p in zad:
                 znak = SIGN[sostoyaniya[(u.id, p.id)]]
                 if znak == "1":
-                    kletki.append('<td class="vsyo">1</td>')
+                    # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: сдано — это ГАЛОЧКА, не единица.
+                    # Алфавит клетки от этого не меняется: `tools/export_xlsx.py`
+                    # по-прежнему пишет `1`, а решётка на экране рисует тот же
+                    # факт знаком, который читается быстрее. Снятое (`x`) и
+                    # пустое — как были.
+                    kletki.append('<td class="vsyo">✓</td>')
                 elif znak:
                     kletki.append(f'<td class="snyato">{znak}</td>')
                 else:
@@ -267,7 +253,7 @@ def stili(kt) -> str:
     the база.
     """
     _c, _p, na_uchyote, _v, listki, _z = _sobrat(kt)
-    klyuchi = ["vse"] + [str(sh.id) for sh in listki]
+    klyuchi = ["vse9", "vse8"] + [str(sh.id) for sh in listki]
     vkladki = "".join(
         f"#k-{k}:checked~#n-{k}{{display:block}}"
         f"#k-{k}:checked~.tabbar label[for=k-{k}]"
@@ -277,6 +263,21 @@ def stili(kt) -> str:
     lyudi = "".join(f"#k-u{u.id}:checked~#n-u{u.id}{{display:block}}" for u in na_uchyote)
     return f"""
 /* Кондуит — вкладка меню, её разделы и решётка. */
+/* 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: деление на классы, по умолчанию девятый.
+   Переключатель — те же скрытые радиокнопки, что и везде на этой странице:
+   ни строки JS. Вкладки чужого класса не прячутся `display:none` у меток,
+   а именно снимаются из потока — иначе полоса вкладок держала бы пустое
+   место там, где стояли восемнадцать листков восьмого класса. */
+#s-kond .kond-klassy{{display:flex;gap:.4rem;margin:.2rem 0 .9rem}}
+#s-kond .kond-klassy label{{cursor:pointer;font-family:var(--sans);font-weight:600;
+  font-size:1.05rem;color:var(--muted);padding:.35em 1.1rem;border-radius:8px;
+  border:1px solid var(--rule)}}
+#s-kond .kond-klassy label:hover{{color:var(--text);background:var(--accent-soft)}}
+#kl-9:checked~.kond-klassy label[for=kl-9],
+#kl-8:checked~.kond-klassy label[for=kl-8]{{color:var(--accent);
+  background:var(--accent-soft);border-color:var(--accent)}}
+#kl-9:checked~.tabbar .kl8{{display:none}}
+#kl-8:checked~.tabbar .kl9{{display:none}}
 #p-kond:checked~#s-kond{{display:block}}
 #p-kond:checked~.menu label[for=p-kond]{{color:var(--accent);background:var(--accent-soft)}}
 {vkladki}{lyudi}
@@ -293,19 +294,46 @@ def stili(kt) -> str:
   border-color:var(--accent)}}
 #k-moi:checked~.kond-verh .kond-moi::before{{content:"☑\\00a0"}}
 #s-kond .tabbar label{{padding:.4rem .7rem;font-size:1rem}}
-#s-kond table.kond{{font-size:.95rem;width:auto}}
-#s-kond .kond th.zn{{padding:0 .1rem .4rem;text-align:center;font-size:.7rem}}
-#s-kond .kond td.kto{{white-space:nowrap;padding-right:1.2rem;font-size:.95rem}}
+/* 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09. Решётка занимала половину доступной ширины при
+   шестнадцати задачах — на экране, где текстовая область тянется во всю ширину,
+   это читается как ошибка вёрстки, а не как замысел. Клетка расширена ВДВОЕ,
+   решётка получила линии, шапка закреплена, и наведение показывает столбец
+   целиком. Ни одного нового цвета: всё из уже объявленных переменных. */
+#s-kond table.kond{{font-size:.95rem;width:auto;border-collapse:separate;
+  border-spacing:0}}
+#s-kond .kond th.zn{{padding:.5rem .2rem;text-align:center;font-size:.78rem;
+  min-width:3em;border-bottom:2px solid var(--rule);border-left:1px solid var(--rule)}}
+#s-kond .kond thead th{{position:sticky;top:3.4rem;z-index:6;background:var(--panel)}}
+#s-kond .kond thead th:first-child{{left:0;z-index:7;text-align:left;
+  border-bottom:2px solid var(--rule)}}
+#s-kond .kond td.kto{{white-space:nowrap;padding:.3rem 1.2rem .3rem 0;font-size:.95rem;
+  position:sticky;left:0;z-index:4;background:var(--bg);
+  border-bottom:1px solid var(--rule)}}
 #s-kond .kond td.kto label{{cursor:pointer}}
 #s-kond .kond td.kto label:hover{{color:var(--accent)}}
 /* Каждая клетка КРОМЕ первой в строке — это клетка кондуита. Класс на ней не
    пишется: тридцать одна тысяча клеток × `class="z"` — четверть мегабайта на
    странице, которая обязана открываться на ноутбуке. */
-#s-kond .kond tbody td+td{{text-align:center;padding:.22rem .18rem;
-  font-family:var(--sans);font-size:.9rem;min-width:1.5em}}
+#s-kond .kond tbody td+td{{text-align:center;padding:.42rem .3rem;
+  font-family:var(--sans);font-size:1rem;min-width:3em;position:relative;
+  border-left:1px solid var(--rule);border-bottom:1px solid var(--rule)}}
 #s-kond .kond tbody td.vsyo{{color:var(--accent);font-weight:600}}
 #s-kond .kond tbody td.snyato{{color:var(--warm);font-weight:600}}
 #s-kond .kond tbody td.pusto{{color:var(--faint)}}
+/* Наведение: подсвечивается СТРОКА и весь СТОЛБЕЦ до самой шапки. Столбец
+   рисуется псевдоэлементом в полную высоту таблицы — так наведение на пустую
+   клетку показывает, о какой задаче речь, и делает это без единой строки JS.
+   ⚠ Обёртки с `overflow` здесь НЕТ намеренно: она сделала бы себя ближайшим
+   прокручиваемым предком, и шапка липла бы к её верху, а не к окну — то есть
+   ровно не то, что просили. Ширина решётки при двадцати одном столбце по 3em
+   укладывается в экран владельца 1710px; если когда-нибудь перестанет —
+   прокрутится страница целиком, и шапка останется на месте. */
+#s-kond .kond tbody tr:hover td{{background:var(--accent-soft)}}
+#s-kond .kond tbody tr:hover td.kto{{background:var(--accent-soft)}}
+#s-kond .kond tbody td+td:hover::after{{content:"";position:absolute;
+  left:0;width:100%;top:-100vh;height:200vh;background:var(--accent-soft);
+  z-index:-1;pointer-events:none}}
+#s-kond .kond tbody td+td:hover{{outline:2px solid var(--accent);outline-offset:-2px}}
 #s-kond .kond .iz{{color:var(--faint);font-size:.75rem}}
 #s-kond .kond-imya{{font-family:var(--sans);font-size:1.5rem;font-weight:600;margin:0 0 1rem}}
 #s-kond .kond-lich td{{vertical-align:baseline}}
@@ -359,15 +387,38 @@ def razdel(kt) -> str:
     else:
         galka = metka_galki = ""
 
-    radio = ('<input class="rd" type="radio" name="knd" id="k-vse" checked>'
+    # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: КОНДУИТ ДЕЛИТСЯ НА КЛАССЫ, ПО УМОЛЧАНИЮ ДЕВЯТЫЙ.
+    # Признак класса берётся из ЕДИНСТВЕННОГО места, где он уже объявлен —
+    # списка `L9` в `veb/razdely/listki.py`, откуда страница листков рисует
+    # раздел девятого класса. Второго источника не заводится: в таблице `sheets`
+    # признака класса нет вовсе, и завести его тут значило бы объявить схему
+    # данных из отрисовки.
+    from veb.razdely.listki import L9
+    nomera_9 = tuple(nom for nom, _tema, _versii in L9)
+    listki_9 = [sh for sh in listki if sh.number.startswith(nomera_9)]
+    listki_8 = [sh for sh in listki if sh not in listki_9]
+
+    radio = ('<input class="rd" type="radio" name="kl" id="kl-9" checked>'
+             '<input class="rd" type="radio" name="kl" id="kl-8">'
+             '<input class="rd" type="radio" name="knd" id="k-vse9" checked>'
+             '<input class="rd" type="radio" name="knd" id="k-vse8">'
              + "".join(f'<input class="rd" type="radio" name="knd" id="k-{sh.id}">'
                        for sh in listki)
              + "".join(f'<input class="rd" type="radio" name="knd" id="k-u{u.id}">'
                        for u in na_uchyote))
-    vkladki = ('<div class="tabbar"><label for="k-vse">Весь год</label>'
-               + "".join(f'<label for="k-{sh.id}">{e(sh.number)}</label>' for sh in listki)
+    klassy = ('<div class="kond-klassy">'
+              '<label for="kl-9">9 класс</label>'
+              '<label for="kl-8">8 класс</label></div>')
+    vkladki = ('<div class="tabbar">'
+               '<label class="kl9" for="k-vse9">Весь год</label>'
+               '<label class="kl8" for="k-vse8">Весь год</label>'
+               + "".join(f'<label class="kl9" for="k-{sh.id}">{e(sh.number)}</label>'
+                         for sh in listki_9)
+               + "".join(f'<label class="kl8" for="k-{sh.id}">{e(sh.number)}</label>'
+                         for sh in listki_8)
                + "</div>")
-    panely = (_obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj)
+    panely = (_obzor(na_uchyote, listki_9, zadachi, sostoyaniya, chuzhoj, "vse9")
+              + _obzor(na_uchyote, listki_8, zadachi, sostoyaniya, chuzhoj, "vse8")
               + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj)
                         for sh in listki)
               + "".join(_uchenik(u, listki, zadachi, sostoyaniya, daty)
@@ -377,6 +428,5 @@ def razdel(kt) -> str:
             f'{galka}{radio}'
             f'<div class="kond-verh"><div>'
             f'<h1>Кондуит</h1>'
-            f'{_svodka(na_uchyote, listki, sdano_vsego, sdano_na_uchyote, vybyli)}'
             f'</div>{metka_galki}</div>'
-            f'{vkladki}{panely}</section>')
+            f'{klassy}{vkladki}{panely}</section>')
