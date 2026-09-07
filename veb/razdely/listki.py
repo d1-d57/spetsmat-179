@@ -117,6 +117,34 @@ def tekushchij():
     return None, None, []
 
 
+# 🔴 СРОК ВЫВОДИТСЯ, А НЕ ХРАНИТСЯ — И ЭТО РЕШЕНИЕ ПРОЕКТА, НЕ ЭКОНОМИЯ.
+# `doc/model.md:38`: «Дедлайн листка наступает в момент выдачи следующего».
+# `doc/arhitektura.md:40`: «дедлайн листка есть выдача следующего, это свойство
+# данных, а не режим». Колонки `deadline` в `sheets` поэтому нет, и заводить её
+# значило бы молча отменить записанное решение — а не добавить поле.
+#
+# Следующий листок выдаётся на занятии, то есть срок текущего — ближайшее
+# занятие. Его дата уже стоит первой строкой карточки (`.listok-kogda`), и
+# второй раз она здесь НЕ называется: «второе упоминание — то самое повторение,
+# от которого мы избавляемся по всему сайту» (`glavnaya.py`, про список
+# принимающих). Строка называет срок и опирается на дату строкой выше.
+SROK_TEKST = "сдать на этом занятии"
+
+
+def srok() -> str:
+    """The current sheet's deadline in words, or "" when no sheet is out.
+
+    🔴 RETURNS "" RATHER THAN A PLACEHOLDER, ON PURPOSE. The card is under the
+    machine lock of `proverit_shemu()`, and the neighbouring `kab_skoro()` shows
+    exactly what must not be copied: on unknown data it emits
+    `<span class="net">кабинеты уточняются</span>` — a forbidden pattern that
+    would refuse the build, and with it the admin's ability to save. No data
+    here means no line at all, not a line saying there is no data.
+    """
+    _, tema, _ = tekushchij()
+    return SROK_TEKST if tema else ""
+
+
 def razdel(kt) -> str:
     """The whole sheets page: eighth class in two columns, ninth class open first."""
     return f"""<section class="str holst" id="s-list">
