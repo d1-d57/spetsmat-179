@@ -355,12 +355,16 @@ def stili(kt) -> str:
   border-spacing:0}}
 #s-kond .kond th.zn{{padding:.5rem .2rem;text-align:center;font-size:.78rem;
   min-width:3em;border-bottom:2px solid var(--rule);border-left:1px solid var(--rule)}}
-/* 🔴 4rem — это ИЗМЕРЕННАЯ высота меню (64px при корневом кегле 16px), а не
-   прикидка: при 3.4rem шапка уезжала под меню на десять пикселей, и владелец
-   это увидел. Меню — `position:sticky;top:0`, его высота задана его же
-   padding'ом .9rem сверху и снизу плюс строка 1.05rem. Изменится меню —
-   изменить и здесь; проверяется одной командой: высота `.menu` в браузере. */
-#s-kond .kond thead th{{position:sticky;top:4rem;z-index:6;background:var(--panel)}}
+/* 🔴 ШАПКА ЛИПНЕТ К НИЗУ МЕНЮ, И ВЫСОТУ МЕНЮ СООБЩАЕТ САМО МЕНЮ.
+   `--vysota-menu` ставит скрипт кондуита (`veb/obshchee/karkas.py`), измеряя живой
+   `.menu`; 4rem осталось запасным значением — это высота меню на ноутбуке (64px),
+   и она верна ровно там. Раньше это число стояло здесь жёстко, и на телефоне меню
+   в 53px оставляло под собой щель в 11px, а при переносе меню на две строки шапка
+   и вовсе оказывалась ПОД ним — снаружи это выглядело как «на телефоне шапка не
+   залипает». Прежний комментарий требовал «изменится меню — изменить и здесь»:
+   теперь менять нечего. */
+#s-kond .kond thead th{{position:sticky;top:var(--vysota-menu,4rem);z-index:6;
+  background:var(--panel)}}
 #s-kond .kond thead th:first-child{{left:0;z-index:7;text-align:left;
   border-bottom:2px solid var(--rule)}}
 #s-kond .kond td.kto{{white-space:nowrap;padding:.3rem 1.2rem .3rem 0;font-size:.95rem;

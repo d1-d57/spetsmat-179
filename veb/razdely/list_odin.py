@@ -45,22 +45,39 @@ def _obshchij_stil() -> str:
 # Layout of the sheet itself.  Only properties already defined by the shared stylesheet
 # are used, and every colour is a custom property of the site's palette.
 SVOI_STILI = """
-.listok{max-width:46em;padding:1.3rem 3rem 3rem}
-.listok h1{font-family:var(--sans);font-size:1.5rem;font-weight:600;margin:0 0 .2rem}
-.listok .tema{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 1.4rem}
-.listok .skachat{font-family:var(--sans);font-size:.95rem;margin:0 0 2rem}
+/* 🔴 КОЛОНКА ЖИВЁТ В `em`, А КЕГЛЬ — В ШИРИНЕ ОКНА. 46em это и есть «сколько символов в
+   строке»: мера в em не меняется, как бы ни рос шрифт. Поэтому чтобы текст занял всю
+   страницу, а строка осталась той же длины В СИМВОЛАХ, растить надо кегль, и колонка
+   растёт за ним сама. ВСЁ внутри колонки — поля, отступ под номер, зазор — тоже меряется
+   в `em`, иначе они остались бы в пикселях, съедали бы всё меньшую долю растущей строки,
+   и символов в строке становилось бы больше: замер показал +6 % при кегле 29px. При 20px
+   все числа дают ровно прежние пиксели (2.4em = 48px = прежние 3rem), так что вид на
+   ноутбуке не сдвинулся ни на пиксель. `calc(100vw/46)` — тот кегль, при котором 46em
+   ложатся точно в ширину окна.
+   ВЕРХНЕЙ ГРАНИЦЫ НЕТ НАМЕРЕННО. Она была (34px) — и на мониторе 1920 колонка вставала
+   в 1564px, оставляя справа 356px пустоты: ровно то, из-за чего страницу и правили.
+   Требование владельца дословно: «и на десктопе, и на мобильном телефоне текст задачи
+   должен быть во всю ширину экрана». Значит кегль растёт, сколько нужно, а не сколько
+   не жалко.
+   Нижняя граница 20px — размер шрифта сайта: на телефоне 100vw/46 дало бы нечитаемые 8px,
+   а колонка и без роста кегля упирается в оба края экрана, потому что 46em там шире
+   экрана. То есть «во всю ширину» держится на ВСЕХ размерах: до 920px — нижней границей,
+   выше — самим кеглем. */
+.listok{max-width:46em;padding:1.3em 2.4em 2.4em;
+  font-size:max(20px, calc(100vw / 46))}
+/* Всё внутри колонки меряется в `em`, а не в `rem`: иначе заголовок и подписи остались бы
+   прежними, пока текст растёт, и блок расслоился бы на два размера. Числа подобраны так,
+   что при кегле 20px вид ровно прежний: 1.2em = 24px = прежние 1.5rem. */
+.listok h1{font-family:var(--sans);font-size:1.2em;font-weight:600;margin:0 0 .2rem}
+.listok .tema{color:var(--muted);font-family:var(--sans);font-size:.8em;margin:0 0 1.4rem}
+.listok .skachat{font-family:var(--sans);font-size:.76em;margin:0 0 2rem}
 .listok .skachat a{color:var(--accent);text-decoration:none;margin-right:1.2rem}
 .listok .skachat a:hover{text-decoration:underline}
-.blok{display:flex;gap:1rem;margin:0 0 1.15rem;line-height:1.45}
+.blok{display:flex;gap:.8em;margin:0 0 .92em;line-height:1.45}
 .blok .nom{font-family:var(--sans);font-weight:600;color:var(--faint);
-  min-width:2.4rem;text-align:right;flex:none}
-.blok.proza{color:var(--muted);margin-bottom:1.5rem}
+  min-width:1.92em;text-align:right;flex:none}
+.blok.proza{color:var(--muted);margin-bottom:1.2em}
 .blok.proza .nom{visibility:hidden}
-/* The cells a problem can be checked off by.  They are the sheet's own labels — the
-   same strings the conduit uses for its columns — and a pupil needs to see them: on
-   16α the sub-items sit on problem 14, and a page that showed only the prose could not
-   say so. */
-.yachejki{font-family:var(--sans);font-size:.85rem;color:var(--faint);margin-top:.35rem}
 .nazad{font-family:var(--sans);font-size:.95rem;color:var(--muted);text-decoration:none}
 .nazad:hover{text-decoration:underline}
 @media(max-width:760px){.listok{padding-left:1.1rem;padding-right:1.1rem}}
@@ -92,20 +109,39 @@ def bloki(conn: sqlite3.Connection, nomer: str) -> tuple[dict | None, list[dict]
     return dict(listok), out
 
 
+def zagolovok(nomer: str, tema: str) -> str:
+    """«16А. Деревья» — ОДИН раз, каким бы ни был `title` в базе.
+
+    `sheets.title` хранит название ВМЕСТЕ с номером («16А. Деревья»), а страница
+    приписывала номер ещё раз и печатала «16А. 16А. Деревья». Чиню на выводе, а не в
+    базе: `title` в этой форме читают и другие места, и переписывать 30 строк живой
+    таблицы ради заголовка одной страницы — цена, несопоставимая с поводом.
+
+    Номер снимается ТОЛЬКО если он стоит в начале и отделён точкой: «16А. Деревья» → да,
+    а название вроде «16 задач про графы» не тронуто — там за числом нет точки.
+    """
+    tema = (tema or "").strip()
+    hvost = tema[len(nomer):].lstrip() if tema.startswith(nomer) else ""
+    if hvost.startswith("."):
+        tema = hvost[1:].strip()
+    return "%s. %s" % (nomer, tema) if tema else nomer
+
+
 def stranica(listok: dict, bloki_listka: list[dict]) -> str:
     """The whole page for one sheet."""
     nomer = listok["number"]
     tema = listok["title"] or ""
+    imya = zagolovok(nomer, tema)
     telo = []
     for blok in bloki_listka:
         if blok["kind"] == "task":
             zvezda = " ★" if blok["star"] else ""
-            metki = blok.get("yachejki") or []
-            podpis = ('<div class="yachejki">отмечается: %s</div>'
-                      % " · ".join(e(m) for m in metki)) if len(metki) > 1 else ""
+            # Подписи «отмечается: 1а · 1б» под задачей больше нет: владелец убрал её
+            # с этой страницы. Ячейки по-прежнему приезжают из `bloki()` — их читает
+            # кондуит, где они и нужны, — но школьнику, читающему условие, они лишние.
             telo.append(
-                '<div class="blok"><div class="nom">%s%s</div><div>%s%s</div></div>'
-                % (e(blok["num"] or ""), zvezda, e(blok["tex"]), podpis))
+                '<div class="blok"><div class="nom">%s%s</div><div>%s</div></div>'
+                % (e(blok["num"] or ""), zvezda, e(blok["tex"])))
         else:
             telo.append(
                 '<div class="blok proza"><div class="nom">·</div><div>%s</div></div>'
@@ -119,12 +155,12 @@ def stranica(listok: dict, bloki_listka: list[dict]) -> str:
     return f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{e(nomer)}. {e(tema)} — Ключики</title>
+<title>{e(imya)} — Ключики</title>
 <style>{_obshchij_stil()}{SVOI_STILI}</style></head>
 <body>
 <div class="menu"><span class="im">Ключики</span><a class="nazad" href="/">ко всем листкам</a></div>
 <main class="listok">
-  <h1>{e(nomer)}. {e(tema)}</h1>
+  <h1>{e(imya)}</h1>
   <p class="tema">Листок девятого класса</p>
   <p class="skachat"><a href="/listki/{e(nomer)}.pdf">Скачать PDF</a>
      <a href="/listki/{e(nomer)}.tex">Скачать TeX</a></p>

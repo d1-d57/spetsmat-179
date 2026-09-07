@@ -95,8 +95,14 @@ def test_stranica_pokazyvaet_zadachi_i_dve_ssylki_na_skachivanie(tmp_path):
     vnesti(conn, "16α", razobrat("16α")[0])
     listok, bloki = list_odin.bloki(conn, "16α")
     html = list_odin.stranica(listok, bloki)
-    assert "14в" in html            # the cell that did not exist before 2026-09-07
-    assert "10в" not in html        # the cell that never should have
+    # 🔴 ПОДПИСИ «отмечается: 14а · 14в» НА СТРАНИЦЕ БОЛЬШЕ НЕТ — владелец убрал её:
+    # школьнику, читающему условие, ячейки кондуита не нужны. Раньше этот тест держал
+    # обратное и проверял разбор листка ЧЕРЕЗ подпись; теперь разбор проверяется там,
+    # где он живёт, — `test_yachejki_*` выше, по составу `bloki`, — а страница отвечает
+    # за то, что на ней есть задачи и обе ссылки.
+    assert "отмечается" not in html
+    assert "14в" not in html
+    assert "Хозяйка испекла пирог" in html    # задача 15 — текст на месте
     assert "/listki/16α.pdf" in html
     assert "/listki/16α.tex" in html
 
