@@ -30,6 +30,14 @@ write to every sheet, and does not touch the network. ``--primenit`` performs th
     python3 ops/vygruzka_v_tablicu.py --primenit            # write for real
 """
 
+# TOOL-CONTRACT: called-by-hand
+#
+# Declared rather than left silent: `git_zona.py vlit-v-osnovnuyu` reports this file as
+# "влито, но не встроено" -- its cross-repo `has_live_trigger` scan only greps disciplina's
+# own `_generator/tools` and `.githooks`, so it cannot see this repo's `deploy/*.service`
+# ExecStart lines. The real live call point IS one: `deploy/spetsmat-vygruzka-v-tablicu.service`
+# runs `--primenit` nightly, and a person types the bare form for the probe.
+
 from __future__ import annotations
 
 import argparse

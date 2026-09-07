@@ -23,6 +23,14 @@ Three things are checked, each printing both numbers side by side:
     python3 ops/proverka_vygruzki.py --tablica <bad-id>     # forced-failure check (§6)
 """
 
+# TOOL-CONTRACT: called-by-hand
+#
+# Declared rather than left silent: `git_zona.py vlit-v-osnovnuyu` reports this file as
+# "влито, но не встроено" for the same reason `ops/vygruzka_v_tablicu.py` does -- its
+# cross-repo scan cannot see call sites outside disciplina's own tree. There genuinely is
+# no automatic caller: a verifier that ran itself right after the write it is meant to
+# check would not be the fresh, independent pass §3 of the заход asks for.
+
 from __future__ import annotations
 
 import argparse
