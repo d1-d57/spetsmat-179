@@ -31,6 +31,13 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
 .verh{display:flex;align-items:baseline;gap:1.1rem;flex-wrap:wrap;margin:0 0 1.5rem;
   padding-bottom:.9rem;border-bottom:2px solid var(--rule)}
 h1{font-size:1.85rem;font-weight:600;margin:0;letter-spacing:-.015em}
+/* 🔴 ПУТЬ НАЗАД НА САЙТ. Пока «Распределение» было вкладкой, эта страница жила
+   внутри сайта и уйти с неё было некуда — теперь она отдельная, и без этой
+   ссылки с неё можно выйти только кнопкой «назад» браузера (находка
+   верификатора). Имя сайта — ровно то же слово, что стоит в его меню. */
+.nazad{font-family:var(--sans);font-weight:600;font-size:1.05rem;color:var(--muted);
+  text-decoration:none;margin-right:.4rem}
+.nazad:hover{color:var(--accent)}
 .pod{color:var(--muted);font-size:1rem}
 
 /* 🔴 ДАТА — ОРГАН, А НЕ ПОДПИСЬ, И ВЫГЛЯДИТ ОНА ОРГАНОМ. Она стоит справа, внутри

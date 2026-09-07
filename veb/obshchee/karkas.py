@@ -1049,7 +1049,14 @@ tr:hover td{{background:var(--accent-soft)}}
 /* На общей вкладке школьников, наоборот, чуть плотнее — там 54 строки. */
 #v-shk .para{{font-size:1.08rem;padding:.26rem 0}}
 #v-shk .komu{{font-size:1rem}}
-.para .kto{{flex:0 0 auto;min-width:0}}
+/* 🔴 СЖИМАЕТСЯ ИМЯ, А НЕ СТОЛБЕЦ. Раньше `.kto` не сжимался вовсе, и самая
+   длинная фамилия выталкивала поля за правый край колонки — страница получала
+   горизонтальную прокрутку (замер верификатора: `scrollWidth` 1444 при окне
+   1440, три строки за границей). Столбцы дней обязаны стоять ровно; имя,
+   которое не влезло, честнее обрезать многоточием — оно целиком есть в
+   подсказке поиска и в самой строке при наведении. */
+.para .kto{{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}}
 .para .komu{{margin-left:auto;text-align:right;color:var(--muted);font-family:var(--sans);
   font-size:1.05rem}}
 .para .komu.deti{{white-space:normal;text-align:right}}
@@ -1274,8 +1281,12 @@ tr:hover td{{background:var(--accent-soft)}}
 #s-rasp .para .kto{{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 #s-rasp .para .komu{{flex:0 0 auto;white-space:nowrap}}
 #s-rasp .para .komu.deti{{flex:1 1 auto;white-space:normal}}
-.org.pr-sel{{max-width:10.5rem;flex:0 0 auto}}
-.org.gr-sel{{max-width:4.2rem;flex:0 0 auto}}
+.org.pr-sel{{max-width:9.6rem;flex:0 0 auto}}
+/* 🔴 ШИРИНА ФИКСИРОВАНА, А НЕ ОГРАНИЧЕНА СВЕРХУ. При `max-width` поле группы
+   мерилось по своему тексту — «нигде» шире, чем «В», — и на эту разницу ехали
+   ВЛЕВО оба столбца дня: замер верификатора, левый край поля «пн» гулял от 245
+   до 297 px в одной колонке, и таблица читалась лесенкой. */
+.org.gr-sel{{width:3.8rem;flex:0 0 3.8rem}}
 /* 🔴 НА ТЕЛЕФОНЕ ЗАПРЕТ ПЕРЕНОСА ПРЕВРАЩАЕТСЯ В ГОРИЗОНТАЛЬНУЮ ПРОКРУТКУ.
    Фамилия и два выпадающих списка в 375 пикселей не помещаются никак, и строка
    уезжает за край экрана — то есть лечение узкой колонки на большом экране
@@ -1381,7 +1392,9 @@ body{{padding-bottom:2rem}}
    разъезжались бы по вертикали, и таблицу нельзя было бы читать сверху вниз —
    а читают её именно так. На узком экране раскладка и так уходит в одну колонку
    (медиазапрос ниже), поэтому фиксированная ширина здесь ничего не ломает. */
-.para .komu .dv{{flex:0 0 10.5rem;min-width:0;text-align:right}}
+.para .komu .dv{{flex:0 0 9.6rem;min-width:0;text-align:right}}
+/* Пустая ячейка шапки ровно под полем группы — та же ширина, что у него. */
+.para .komu .dv-gr{{flex:0 0 3.8rem}}
 .para .komu .dv .org{{max-width:100%;width:100%}}
 .shapka-dnej{{border-bottom:2px solid var(--rule);color:var(--faint);
   font-family:var(--sans);font-size:.85rem;letter-spacing:.06em;text-transform:uppercase}}

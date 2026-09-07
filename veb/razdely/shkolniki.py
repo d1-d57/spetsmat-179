@@ -194,6 +194,15 @@ def shapka_dnej(kt):
     """
     metki = "".join(f'<span class="dv dv-{kl}">{e(kt.DNI[kl][3])}</span>'
                     for kl in kt.DNI)
+    # 🔴 ПУСТАЯ ЯЧЕЙКА ПОД ПОЛЕ ГРУППЫ — ИНАЧЕ ШАПКА СТОИТ НЕ НАД СВОИМИ
+    # СТОЛБЦАМИ. У организатора в строке есть третий орган, группа; без такой же
+    # пустой ячейки в шапке подписи съезжают на его ширину, и «ПН» повисает над
+    # четверговым полем (замер верификатора: подпись 325–493 px, поля 245–459).
+    # Ячейка несёт `data-org`, поэтому у гостя её нет — как нет у него и самого
+    # поля группы, и каркасы остаются равными побайтово.
+    if kt.ADMIN:
+        metki += ('<span class="dv dv-gr" data-org="pravit-raspredelenie">'
+                  "</span>")
     return ('<div class="para shapka-dnej"><span class="kto"></span>'
             f'<span class="komu">{metki}</span></div>')
 

@@ -193,6 +193,7 @@ ZAGOTOVKA = """<!doctype html>
 <title>Занятие %(slovami)s — распределение</title>
 <link rel="stylesheet" href="/static/zanyatie.css">
 <div class="verh">
+  <a class="nazad" href="/">Ключики</a>
   <h1>Занятие</h1>
   <span class="pod">%(podpis)s</span>
   <form class="navig" method="get" action="/raspredelenie">
