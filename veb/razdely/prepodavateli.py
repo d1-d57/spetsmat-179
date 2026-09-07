@@ -123,7 +123,16 @@ def deti_prepoda(kt, x, ego, sl):
 
 
 def ego_deti(kt, x, kl):
-    return sorted((r for r in kt.shk_dnya[kl] if r["teacher_id"] == x["id"]),
+    """Его школьники в этот день — БЕЗ отмеченных отсутствующими.
+
+    Владелец 07.09: *«он выпадает из моего списка, списка моей аудитории. Всё, я
+    про него больше не думаю»*. Заодно это чинит счётчик: преподаватель, у
+    которого двое из четырёх сегодня не пришли, ведёт двоих, и норма 3–4 должна
+    считаться по тем, кто здесь.
+    """
+    from veb.razdely.shkolniki import prishol
+    return sorted((r for r in kt.shk_dnya[kl]
+                   if r["teacher_id"] == x["id"] and prishol(r)),
                   key=lambda r: r["surname"])
 
 
@@ -157,18 +166,60 @@ def para_prep(kt, x, pokazat_gruppu=True):
             f'<span class="komu deti">{"".join(yacheyki)}</span></div>')
 
 
+def otsutstvie_prepoda(kt, x):
+    """«Отсутствует» — то же слово и тот же смысл, что у школьника.
+
+    🔴 ОДИН СТАТУС НА ОБОИХ, И ЭТО ПОПРАВКА ВЛАДЕЛЬЦА 07.09: *«у преподавателя или
+    у школьника должна быть возможность установить статус „отсутствует“. И всё»*.
+    Две разные кнопки с разными словами заставляли бы читателя гадать, одно ли это
+    состояние; оно одно.
+
+    🔴 ДВЕ РАЗНЫЕ ВЕЩИ, КОТОРЫЕ ЛЕГКО СПУТАТЬ, И ОНИ ЖИВУТ В РАЗНЫХ МЕСТАХ.
+    «Он вообще не ходит по четвергам» — постоянное, галочка дня
+    (`prepodavatel_ne_prihodit`). «Его сегодня нет» — одно занятие,
+    `teacher_attendance`, и ставится оно в том числе ВПЕРЁД: *«мы знаем, что
+    школьник или преподаватель будет отсутствовать в течение месяца… тогда мы это
+    можем проставить даже вперёд»*.
+    """
+    net = x["id"] in kt.otsutstvuyut_prepoda
+    return ('<label class="otsut%s" data-org="pravit-raspredelenie" title="%s">'
+            '<input class="org totsut-chk" type="checkbox" data-tid="%s"'
+            ' data-den="%s"%s>отсутствует</label>'
+            % ("" if net else " pusto",
+               "сегодня его нет" if net else "отметить, что его сегодня нет",
+               x["id"], e(kt.den), " checked" if net else ""))
+
+
+def vidimye_prepodavateli(kt):
+    """Кого показывать в этом экране.
+
+    На постоянном — всех активных. На занятии — только тех, кто в этот день
+    вообще ходит: владелец 07.09, *«в постоянном распределении мы зафиксируем,
+    что этот преподаватель вообще не ходит по четвергам, и тогда мы его не будем
+    видеть в текущем распределении на четверг»*.
+    """
+    vse = sorted(kt.prep.values(), key=lambda z: z["name"])
+    if not kt.den:
+        return vse
+    slot = kt.DNI[next(iter(kt.DNI))][1]
+    return [x for x in vse
+            if slot in kt.dni_prepodavatelej.get(x["id"], {slot})]
+
+
 def vid_prepodavateli(kt):
     """Вкладка преподавателей ТАБЛИЦЕЙ: колонки обязаны стоять ровно.
 
     Порядок владельца: преподаватель · школьники · дни · группа · кабинет —
-    кабинет самое неважное и уходит вправо. Школьники показаны по каждому дню
-    отдельно, дни отмечены галочками, а группа одна: решение владельца 07.09.
+    кабинет самое неважное и уходит вправо. На постоянном школьники показаны по
+    каждому дню отдельно, дни отмечены галочками, группа одна. На занятии столбец
+    один, а вместо галочек дней — отметка «сегодня его нет».
     """
+    zagolovki = ("приходит" if not kt.den else "сегодня")
     ryady = ['<tr class="prep-shapka"><td class="tp"></td>'
              + "".join(f'<td class="td-deti">{e(kt.DNI[k][3])}</td>' for k in kt.DNI)
-             + '<td class="tdni">приходит</td><td class="tg">группа</td>'
+             + f'<td class="tdni">{zagolovki}</td><td class="tg">группа</td>'
              + '<td class="tk"></td></tr>']
-    for x in sorted(kt.prep.values(), key=lambda z: z["name"]):
+    for x in vidimye_prepodavateli(kt):
         deti_yach = []
         for kl in kt.DNI:
             ego = ego_deti(kt, x, kl)
@@ -181,18 +232,23 @@ def vid_prepodavateli(kt):
                      if kt.mozhno("videt-schyot") else ""
             deti_yach.append(f'<td class="td-deti dv-{kl}">'
                              + deti_prepoda(kt, x, ego, sl) + schyot + "</td>")
-        dni_yach = "".join(
-            (galochka_dnya(kt, x, kl) if kt.ADMIN else metka_dnya(kt, x, kl))
-            for kl in kt.DNI)
+        if kt.den:
+            otmetka = otsutstvie_prepoda(kt, x) if kt.ADMIN else (
+                '<span class="den-metka%s" data-tolko-gost>нет</span>'
+                % ("" if x["id"] in kt.otsutstvuyut_prepoda else " pusto"))
+        else:
+            otmetka = "".join(
+                (galochka_dnya(kt, x, kl) if kt.ADMIN else metka_dnya(kt, x, kl))
+                for kl in kt.DNI)
         gostevoe = x["gruppa"] or "—"
-        gruppa_yach = (vybor_gruppy_prepoda(x, gostevoe) if kt.ADMIN
+        gruppa_yach = (vybor_gruppy_prepoda(x, gostevoe) if kt.ADMIN and not kt.den
                        else e(gostevoe))
         k = kt.kabinety_dnya[next(iter(kt.DNI))].get(x["gruppa"])
         ryady.append(
             f'<tr data-i="{e(x["name"].lower())}" data-tid="{x["id"]}">'
             f'<td class="tp"><b>{e(x["name"])}</b></td>'
             + "".join(deti_yach)
-            + f'<td class="tdni">{dni_yach}</td>'
+            + f'<td class="tdni">{otmetka}</td>'
             + f'<td class="tg">{gruppa_yach}</td>'
             + (f'<td class="tk"><span data-tolko-gost>'
                f'{kt.kab_html(next(iter(kt.DNI)), x["gruppa"])}'

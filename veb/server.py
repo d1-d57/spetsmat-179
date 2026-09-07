@@ -673,8 +673,22 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 self._send_json(400, {"error": "den must be YYYY-MM-DD"})
                 return
-            self._send_html(200,
-                            zanyatie.stranica(self._connection(), den).encode("utf-8"))
+            # 🔴 ТА ЖЕ СТРАНИЦА, ЧТО И ПОСТОЯННОЕ, ТОЛЬКО НА ДАТУ. Решение владельца
+            # 07.09: *«те же самые пять вкладок должны быть на сегодня… отличие этих
+            # двух менюшек минимальное»*. Прежняя версия рисовала здесь отдельный
+            # документ с карточками — витрину, на которой ничего нельзя было
+            # поправить, и без оглавления сайта; владелец увидел ровно это и назвал
+            # первым же вопросом «а где его менять?».
+            from tools.sobrat_stranicu import sobrat_html
+            rol = vhod.rol(self.headers)
+            kto = vhod.kto(self.headers)
+            if rol == "organizator":
+                rezhim = "admin" if kto is None else "admin:%d" % kto
+            elif rol == "prepod":
+                rezhim = "prepod" if kto is None else "prepod:%d" % kto
+            else:
+                rezhim = "gost"
+            self._send_html(200, sobrat_html(rezhim, den=den).encode("utf-8"))
             return
         # 🔴 ПОСТОЯННОЕ — ЭТО РАЗДЕЛ САМОГО САЙТА, А НЕ ТРЕТЬЯ ВЁРСТКА ТОГО ЖЕ.
         # Здесь отдавался `veb/templates/index.html` — отдельная страница, которую
@@ -941,6 +955,17 @@ class Handler(BaseHTTPRequestHandler):
             if self._sborka_nevozmozhna():
                 return
             self._s_peresborkoj(self._post_prepodavateli)
+            return
+        if path == "/api/zanyatie":
+            # 🔴 ПРАВКА НА ОДИН РАЗ, И ОНА СОХРАНЯЕТСЯ СРАЗУ. Владелец 07.09:
+            # *«распределение на день не нужно писать кнопку „Сохранить“ — там могут
+            # быть ошибки… как с кондуитом, там просто нужно сразу сохраняться. А
+            # постоянное распределение не нужно сохранять сразу, потому что там можно
+            # долго его двигать и в итоге прийти к оптимальному варианту»*. Две двери
+            # именно поэтому: у них разный момент записи, а не разные данные.
+            if self._pravka_zapreshchena():
+                return
+            self._post_zanyatie()
             return
         if path == "/api/enrollment":
             # 🔴 ПРАВКА ЗА ПАРОЛЕМ — решение владельца 2026-09-06 (см. SVOBODNAYA_PRAVKA).
@@ -1264,6 +1289,155 @@ class Handler(BaseHTTPRequestHandler):
                 itog["zakryt"] = standing.id
         conn.commit()
         self._send_json(200, itog)
+
+    def _post_zanyatie(self) -> None:
+        """Одно отклонение одного занятия: «сегодня у другого», «болеет», «его нет».
+
+        🔴 ЗАНЯТИЕ ХРАНИТ ТОЛЬКО ОТКЛОНЕНИЯ, И ЭТО НЕ ЭКОНОМИЯ МЕСТА, А СМЫСЛ.
+        `doc/TZ-sloj-zanyatia.md §2`: чего занятие не упоминает, то читается из
+        постоянного на лету. Поэтому «вернуть как обычно» — это УДАЛЕНИЕ строки, а
+        не запись новой, и поэтому же правка постоянного задним числом доезжает до
+        уже проведённых занятий сама.
+        """
+        try:
+            p = json.loads(self.rfile.read(
+                int(self.headers.get("Content-Length", 0))) or b"{}")
+        except (ValueError, TypeError):
+            self._send_json(400, {"error": "нечитаемое тело"})
+            return
+        den = (p.get("den") or "").strip()
+        try:
+            date.fromisoformat(den)
+        except ValueError:
+            self._send_json(400, {"error": "den must be YYYY-MM-DD"})
+            return
+
+        conn = self._connection()
+        from core.services.sostav_na_den import OTSUTSTVUET, PRISUTSTVUET, slot_of
+        if slot_of(den) is None:
+            self._send_json(400, {"error": "не день занятия"})
+            return
+
+        ryad = conn.execute("select id from sessions where held_on = ?", (den,)).fetchone()
+        if ryad is None:
+            # Первый экран, открытый на этот день, и заводит занятие: до него
+            # отклонений не существует, а значит нечего было и хранить.
+            kur = conn.execute("insert into sessions (held_on) values (?)", (den,))
+            session_id = kur.lastrowid
+            conn.commit()
+        else:
+            session_id = ryad["id"]
+
+        rod = p.get("rod")
+        if rod == "prepodavatel":
+            # «Сегодня его нет» — и его дети остаются на месте, краснея как
+            # нераспределённые: раздать их может только человек.
+            tid = p.get("teacher_id")
+            if not tid:
+                self._send_json(400, {"error": "нужен teacher_id"})
+                return
+            if p.get("net"):
+                # `answered_at` в схеме `not null`: таблицу завёл опрос
+                # преподавателей, и время ответа там обязательно. Отметка рукой —
+                # тоже ответ, и её время это момент, когда её поставили.
+                conn.execute(
+                    "insert or replace into teacher_attendance "
+                    "(session_id, teacher_id, status, answered_at) values (?, ?, ?, ?)",
+                    (session_id, int(tid), OTSUTSTVUET,
+                     datetime.now(ZoneInfo("Europe/Moscow")).isoformat(timespec="seconds")))
+            else:
+                conn.execute(
+                    "delete from teacher_attendance "
+                    "where session_id = ? and teacher_id = ?", (session_id, int(tid)))
+            conn.commit()
+            self._peresobrat_tiho()
+            self._send_json(200, {"ok": True, "den": den, "teacher_id": int(tid)})
+            return
+
+        sid = p.get("student_id")
+        if not sid:
+            self._send_json(400, {"error": "нужен student_id"})
+            return
+        sid = int(sid)
+        est = conn.execute(
+            "select teacher_id, status, gruppa from attendance "
+            "where session_id = ? and student_id = ?", (session_id, sid)).fetchone()
+
+        est_gruppa = est["gruppa"] if est is not None else None
+        if "net" in p:
+            # 🔴 «ОТСУТСТВУЕТ» — ОДНО СЛОВО НА ОБОИХ И ОДИН СТАТУС. Владелец 07.09
+            # поправил здесь предыдущую редакцию: *«болеет — неправильная кнопка…
+            # должна быть возможность установить статус „отсутствует“. И всё»*.
+            # «Болеет» называет причину, а на занятии она неизвестна: *«я не
+            # понимаю, он заболел или нет»*.
+            #
+            # Снятая отметка возвращает строку к «как обычно»: если ни
+            # переопределения преподавателя, ни группы дня нет — строка удаляется
+            # целиком, потому что «как обычно» это ОТСУТСТВИЕ отклонения.
+            status = OTSUTSTVUET if p.get("net") else PRISUTSTVUET
+            perepod = est["teacher_id"] if est is not None else None
+            if status == PRISUTSTVUET and perepod is None and est_gruppa is None:
+                conn.execute("delete from attendance "
+                             "where session_id = ? and student_id = ?", (session_id, sid))
+            else:
+                conn.execute(
+                    "insert or replace into attendance "
+                    "(session_id, student_id, teacher_id, status, gruppa) "
+                    "values (?, ?, ?, ?, ?)",
+                    (session_id, sid, perepod, status, est_gruppa))
+        elif "gruppa" in p:
+            # Третья ступень: «он в этой аудитории, к кому — ещё решаем». Выбор
+            # группы снимает сегодняшнего преподавателя: ребёнок стоит в группе, а
+            # не у человека, и держать оба ответа сразу значило бы показывать один
+            # из них наугад.
+            gruppa = (p.get("gruppa") or "").strip() or None
+            if gruppa not in (None, "В", "Д", "Н"):
+                self._send_json(400, {"error": "группа: В | Д | Н или пусто"})
+                return
+            status = est["status"] if est is not None else PRISUTSTVUET
+            conn.execute(
+                "insert or replace into attendance "
+                "(session_id, student_id, teacher_id, status, gruppa) "
+                "values (?, ?, ?, ?, ?)",
+                (session_id, sid, None, status, gruppa))
+        else:
+            # Перевод на один раз. Пустое значение — «как обычно», то есть снятие
+            # переопределения, а не «ни к кому».
+            syroj = p.get("teacher_id")
+            teacher_id = None if syroj in (None, "", 0) else int(syroj)
+            status = est["status"] if est is not None else PRISUTSTVUET
+            obychnyj = conn.execute(
+                "select teacher_id from enrollment where student_id = ? and slot = ? "
+                "and valid_to = '9999-12-31'", (sid, slot_of(den))).fetchone()
+            obychnyj = obychnyj["teacher_id"] if obychnyj is not None else None
+            if teacher_id is not None and teacher_id == obychnyj and status == PRISUTSTVUET:
+                # Вернули туда же, где он и так стоит: отклонения больше нет.
+                conn.execute("delete from attendance "
+                             "where session_id = ? and student_id = ?", (session_id, sid))
+            else:
+                # Назначенный человек отменяет группу дня: она была ответом на
+                # «пока не знаю, к кому», и вопрос только что закрылся.
+                conn.execute(
+                    "insert or replace into attendance "
+                    "(session_id, student_id, teacher_id, status, gruppa) "
+                    "values (?, ?, ?, ?, ?)",
+                    (session_id, sid, teacher_id, status,
+                     None if teacher_id is not None else est_gruppa))
+        conn.commit()
+        self._peresobrat_tiho()
+        self._send_json(200, {"ok": True, "den": den, "student_id": sid})
+
+    def _peresobrat_tiho(self) -> None:
+        """Пересобрать публичную страницу и НЕ уронить правку, если сборка сломана.
+
+        Правка в базе уже произошла и от сборки не зависит: 500 здесь означал бы
+        «не сохранилось» на экране при сохранённых данных — худшая из возможных
+        неправд.
+        """
+        try:
+            _peresobrat()
+        except Exception:
+            pass
 
     def _post_enrollment(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")

@@ -40,13 +40,19 @@ from datetime import date, timedelta
 from html import escape
 
 from core.services.room import day_in_words
-from core.services.sostav_na_den import SostavService, is_lesson_day, slot_of
+from core.services.sostav_na_den import (OTSUTSTVUET, SostavService, is_lesson_day,
+                                          slot_of)
 from infra.enrollment_repo import SqliteEnrollmentRepo
 from infra.room_repo import SqliteAttendance, SqliteSessions
 
 #: Опорная точка навигации: соседнее занятие в обе стороны (Р2 ТЗ — прошлое и будущее
 #: правятся одинаково, «может, один раз в год», но прятать нельзя).
 SHAG_DNEJ = 14
+
+
+def sosednee_zanyatie(den: str, napravlenie: int) -> str:
+    """Соседнее занятие в названную сторону. Публичное имя того же самого."""
+    return _sosednee(den, napravlenie)
 
 
 def _sosednee(den: str, napravlenie: int) -> str:
@@ -245,3 +251,70 @@ ZAGOTOVKA = """<!doctype html>
 за отдельной кнопкой.</p>
 </html>
 """
+
+
+def sostav_dnya_strokami(c, den: str, postoyannye) -> list:
+    """Школьники НА ЭТУ ДАТУ, в той же форме, в какой их ждут разделы страницы.
+
+    🔴 ЗАЧЕМ ПЕРЕВОДИТЬ СОСТАВ В «СТРОКИ». Разделы (`shkolniki`, `prepodavateli`,
+    `gruppy`) читают школьника как строку с полями `id · surname · name · class ·
+    teacher_id` — так их отдаёт постоянное распределение. Состав дня — другой
+    объект: у него два преподавателя (обычный и сегодняшний) и признак отсутствия.
+    Здесь он превращается в ту же строку плюс ДВА поля сверх неё, `bolet` и
+    `obychno`, и ровно поэтому один и тот же раздел рисует оба экрана: он видит
+    привычную строку, а лишние поля читает только там, где они есть.
+
+    🔴 `teacher_id` ЗДЕСЬ — СЕГОДНЯШНИЙ, А НЕ ПОСТОЯННЫЙ, и это содержание всего
+    экрана. Ребёнок, которого на один раз отдали другому, обязан быть в списке
+    ТОГО, у кого он сегодня: иначе на занятии его будут искать не там. Кем он
+    закреплён вообще — рядом, в `obychno`, и страница печатает это подписью
+    «обычно у ‹инициалы›».
+    """
+    sostav = SostavService(
+        enrollment=SqliteEnrollmentRepo(c),
+        sessions=SqliteSessions(c),
+        attendance=SqliteAttendance(c),
+        roster=_Uchashchiesya(c),
+    ).sostav(den)
+    po_id = {r["id"]: r for r in postoyannye}
+    stroki = []
+    for mesto in sostav.mesta:
+        osnova = po_id.get(mesto.student_id)
+        if osnova is None:
+            continue
+        stroki.append({
+            "id": mesto.student_id,
+            "surname": osnova["surname"],
+            "name": osnova["name"],
+            "class": osnova["class"],
+            # Сегодняшний преподаватель: постоянный, если сегодня ничего не меняли.
+            "teacher_id": mesto.segodnya,
+            # Отмечен отсутствующим — и это ЗАКОННОЕ состояние, а не потеря:
+            # такой школьник не краснеет, он просто сегодня не пришёл. Поле
+            # называется `net` тем же словом, что и кнопка: «отсутствует».
+            "net": mesto.otmechen_otsutstvuyushchim,
+            # Группа НА ЭТОТ ДЕНЬ, если её сегодня меняли руками.
+            "gruppa_dnya": getattr(mesto, "gruppa", None),
+            # У кого он вообще: подпись «обычно у …» и то, куда он вернётся сам.
+            "obychno": mesto.obychno,
+        })
+    stroki.sort(key=lambda r: (r["surname"], r["name"]))
+    return stroki
+
+
+def otsutstvuyushchie_prepodavateli(c, den: str) -> frozenset:
+    """Кто из принимающих отмечен отсутствующим на эту дату.
+
+    🔴 ЭТО ДРУГАЯ ТАБЛИЦА, ЧЕМ ГАЛОЧКИ ДНЕЙ, И РАЗНИЦА СМЫСЛОВАЯ. «Не ходит по
+    четвергам» — свойство человека, оно в `prepodavatel_ne_prihodit` и живёт в
+    постоянном распределении. «Сегодня заболел» — свойство ОДНОГО занятия, и оно
+    здесь, в `teacher_attendance`, рядом с отметками школьников того же дня.
+    Слить их в одну таблицу значило бы, что «заболел десятого» навсегда вычёркивает
+    человека из всех четвергов.
+    """
+    ryad = c.execute("select id from sessions where held_on = ?", (den,)).fetchone()
+    if ryad is None:
+        return frozenset()
+    return frozenset(r[0] for r in c.execute(
+        "select teacher_id from teacher_attendance "
+        "where session_id = ? and status = ?", (ryad[0], OTSUTSTVUET)))

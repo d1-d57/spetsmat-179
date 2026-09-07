@@ -36,6 +36,23 @@ def shkolniki(c, slot):
     """, (slot,)).fetchall()
 
 
+def pole(r, imya, po_umolchaniyu=None):
+    """Поле строки, которого может не быть вовсе.
+
+    🔴 СТРОКИ ЗДЕСЬ ДВУХ ПОРОД, И ЭТО НЕ НЕРЯШЛИВОСТЬ, А УСТРОЙСТВО. Постоянное
+    распределение отдаёт `sqlite3.Row` прямо из запроса; занятие — словарь,
+    собранный из состава дня, и у него есть поля, которых в первой породе нет
+    (`net`, `obychno`, `gruppa_dnya`). `Row` не знает метода `get` и на
+    незнакомом ключе бросает `IndexError` — одна такая строка уронила сборку
+    ВСЕЙ страницы на первом же прогоне. Спрашивать надо здесь, одним способом.
+    """
+    try:
+        znachenie = r[imya]
+    except (KeyError, IndexError):
+        return po_umolchaniyu
+    return po_umolchaniyu if znachenie is None else znachenie
+
+
 def gr_shk(kt, r, pr=None):
     pr = pr or kt.prep
     t_ = pr.get(r["teacher_id"])
@@ -79,8 +96,15 @@ def vybor_prepoda(kt, r, sl, gostevoj_tekst):
     if "—" in po_gruppam:
         opts.append('<optgroup label="без группы">'
                     + "".join(opt(x) for x in po_gruppam["—"]) + "</optgroup>")
+    # 🔴 `data-den` ОТЛИЧАЕТ ПРАВКУ НА ОДИН РАЗ ОТ ПРАВКИ НАВСЕГДА, И ЭТО ЕДИНСТВЕННОЕ,
+    # ЧЕМ ОНИ ОТЛИЧАЮТСЯ НА ЭКРАНЕ. Есть дата — правка едет в слой занятия и
+    # сохраняется СРАЗУ (владелец 07.09: *«распределение на день не нужно писать
+    # кнопку „Сохранить“… там просто нужно сразу сохраняться»*). Нет даты — это
+    # постоянное распределение, и правка копится до большой кнопки, *«потому что там
+    # можно долго его двигать и в итоге прийти к оптимальному варианту»*.
+    den = f' data-den="{e(kt.den)}"' if kt.den else ""
     return (f'<select class="org pr-sel" data-org="pravit-raspredelenie"'
-            f' data-gost="{e(gostevoj_tekst)}" data-sid="{r["id"]}" data-slot="{sl}">'
+            f' data-gost="{e(gostevoj_tekst)}" data-sid="{r["id"]}" data-slot="{sl}"{den}>'
             + "".join(opts) + '</select>')
 
 
@@ -141,8 +165,75 @@ def gruppa_lyuboj_den(kt, ryady):
     return None
 
 
+def _initsialy(kt, teacher_id):
+    """Кто он, коротко: «ИЯ» с полным именем в подсказке.
+
+    Форма не выдумана здесь: рабочая таблица владельца показывала преподавателей
+    инициалами, и он сказал, что это ровно то, что работает.
+    """
+    x = kt.prep.get(teacher_id)
+    if x is None:
+        return ("?", "преподаватель %s" % teacher_id)
+    polnoe = x["name"] or ""
+    return ("".join(part[0] for part in polnoe.split()[:2]) or "?", polnoe)
+
+
+def svyazka_dnej(kt, ryady):
+    """Галочка «дни разные»: связаны поля понедельника и четверга или нет.
+
+    🔴 СОСТОЯНИЕ НЕ ХРАНИТСЯ, А ЧИТАЕТСЯ ИЗ САМИХ ДАННЫХ, и это важнее, чем
+    кажется. Владелец 07.09: *«у каждого школьника два преподавателя, хотя по
+    умолчанию они должны быть одинаковыми. Значения должны быть привязаны, но
+    где-то, условно, можно нажать галочку, и тогда оно отвязывается»*. «Связаны»
+    здесь значит ровно «в оба дня стоит один и тот же человек» — это видно в
+    базе, и отдельный флажок «связано» мог бы с ней разойтись: у школьника
+    разные дни, а флажок говорит «связано», и следующая правка молча затрёт один
+    из них.
+
+    Поэтому галочка отмечена ровно тогда, когда дни РАЗОШЛИСЬ, и снять её —
+    значит свести их обратно одной правкой обоих полей.
+    """
+    znacheniya = {ryady[kl]["teacher_id"] for kl in kt.DNI}
+    raznye = len(znacheniya) > 1
+    return ('<label class="raznye%s" data-org="pravit-raspredelenie"'
+            ' title="%s"><input class="org svyaz-chk" type="checkbox"%s>×2</label>'
+            % ("" if raznye else " pusto",
+               "дни разные: поля правятся по отдельности" if raznye
+               else "дни связаны: правка одного меняет оба",
+               " checked" if raznye else ""))
+
+
+def otsutstvie(kt, r):
+    """«Отсутствует» — один статус на школьника и на принимающего, и одно слово.
+
+    🔴 СЛОВО ИМЕННО ЭТО, И ЭТО ПОПРАВКА ВЛАДЕЛЬЦА 07.09 К ПРЕДЫДУЩЕЙ РЕДАКЦИИ:
+    *«болеет — неправильная кнопка… у преподавателя или у школьника должна быть
+    возможность установить статус „отсутствует“. И всё»*. «Болеет» — догадка о
+    причине, а на занятии причина неизвестна: *«я не понимаю, он заболел или нет»*.
+    Экран обязан уметь работать при неполной информации, а не требовать диагноз.
+
+    🔴 ОТМЕЧЕННЫЙ ВЫПАДАЕТ, А НЕ СЕРЕЕТ. *«Он, например, выпадает из моего списка,
+    списка моей аудитории. Всё, я про него больше не думаю»*. Поэтому его нет ни в
+    карточке преподавателя, ни на вкладке группы; остаётся он ровно в одном месте —
+    в общем списке школьников, где стоит его же галочка, иначе снять её было бы
+    нечем.
+    """
+    otmechen = bool(pole(r, "net"))
+    return ('<label class="otsut%s" data-org="pravit-raspredelenie" title="%s">'
+            '<input class="org otsut-chk" type="checkbox" data-sid="%s"'
+            ' data-den="%s"%s>отсутствует</label>'
+            % ("" if otmechen else " pusto",
+               "сегодня его нет" if otmechen else "отметить, что его сегодня нет",
+               r["id"], e(kt.den), " checked" if otmechen else ""))
+
+
+def prishol(r) -> bool:
+    """Он сегодня здесь? Пустое поле `net` — обычный ответ «да»."""
+    return not pole(r, "net")
+
+
 def para_shk(kt, ryady, pokazat_kab=True):
-    """Строка «школьник → его преподаватель В КАЖДЫЙ ИЗ ДВУХ ДНЕЙ».
+    """Строка «школьник → его преподаватель»: на каждый день по полю.
 
     Гостю — имена преподавателей и кабинет текстом. Организатору — В ТЕХ ЖЕ
     МЕСТАХ выпадающие списки: по одному на день, плюс группа, которая у школьника
@@ -155,6 +246,12 @@ def para_shk(kt, ryady, pokazat_kab=True):
     разметке: на живой базе 53 школьника из 53 сегодня имеют один и тот же
     ответ на оба дня. Схлопнуть равные значения в одно поле значило бы прятать
     ровно тот орган, которым день и разводят.
+
+    🔴 НА ЭКРАНЕ ЗАНЯТИЯ ПОЛЕ ОДНО — потому что `kt.DNI` там из одного дня, — и
+    рядом появляются две вещи, которых у постоянного нет и быть не может:
+    отметка «болеет» и подпись «обычно у ‹кого›» у того, кого сегодня отдали
+    другому. Ни одной ветки «если это занятие» в разметке ниже нет: она вся в
+    том, что дней один, а не два.
     """
     osnova = ryady[next(iter(kt.DNI))]
     klass = (f'<span class="kl" data-org="videt-klass"> {e(osnova["class"])}</span>'
@@ -178,10 +275,35 @@ def para_shk(kt, ryady, pokazat_kab=True):
                 telo += '<span data-tolko-gost> ' + kt.kab_html(kl, g) + "</span>"
         yacheyki.append(f'<span class="dv dv-{kl}">{telo}</span>')
     hvost = "".join(yacheyki)
-    if kt.ADMIN:
-        hvost += vybor_gruppy(osnova, gruppa_lyuboj_den(kt, ryady))
-    return (f'<div class="para" data-i="{e((osnova["surname"] + " " + osnova["name"]).lower())}">'
-            f'<span class="kto"><b>{e(osnova["surname"])}</b> {e(osnova["name"])}{klass}</span>'
+    if kt.ADMIN and not kt.den:
+        hvost += svyazka_dnej(kt, ryady) + vybor_gruppy(osnova, gruppa_lyuboj_den(kt, ryady))
+    elif kt.ADMIN:
+        # 🔴 ТРИ СТУПЕНИ НУЖНЫ ИМЕННО НА ЗАНЯТИИ, А НЕ ТОЛЬКО В ШАБЛОНЕ. Владелец
+        # 07.09: *«ко мне пришёл новый ребёнок… он пока не распределённый, но он уже
+        # в моей аудитории, я должен это видеть»*. «В группе, но ни к кому не
+        # закреплён» — рабочее состояние середины занятия, и без него такого
+        # ребёнка некуда деть, кроме как приписать наугад.
+        hvost += vybor_gruppy_dnya(kt, osnova)
+    if kt.den and kt.ADMIN:
+        hvost += otsutstvie(kt, osnova)
+
+    # «Обычно у ‹инициалы›» — только там, где сегодня НЕ как обычно (ТЗ §3.3).
+    obychno = ""
+    if kt.den and pole(osnova, "obychno") and osnova["obychno"] != osnova["teacher_id"]:
+        kratko, polnoe = _initsialy(kt, osnova["obychno"])
+        obychno = ('<span class="obychno" title="обычно у %s">обычно у %s</span>'
+                   % (e(polnoe), e(kratko)))
+
+    klassy = "para"
+    if kt.den and pole(osnova, "net"):
+        # Серым — только здесь, в общем списке: это единственное место, где
+        # отсутствующий вообще показан, и показан он ради своей же галочки.
+        klassy += " net"
+    elif kt.den and not osnova["teacher_id"]:
+        klassy += " krasn"               # единственное красное на этом экране
+    return (f'<div class="{klassy}" data-i="{e((osnova["surname"] + " " + osnova["name"]).lower())}">'
+            f'<span class="kto"><b>{e(osnova["surname"])}</b> {e(osnova["name"])}{klass}'
+            f'{obychno}</span>'
             f'<span class="komu">{hvost}</span></div>')
 
 
@@ -192,6 +314,10 @@ def shapka_dnej(kt):
     Два столбца без подписи — две одинаковые фамилии подряд и никакого способа
     узнать, который из них четверг.
     """
+    # Один столбец не нуждается в подписи «какой это день»: она уже стоит в шапке
+    # страницы, датой и словом. Подписывают, когда столбцов два и их можно спутать.
+    if kt.den:
+        return ""
     metki = "".join(f'<span class="dv dv-{kl}">{e(kt.DNI[kl][3])}</span>'
                     for kl in kt.DNI)
     # 🔴 ПУСТАЯ ЯЧЕЙКА ПОД ПОЛЕ ГРУППЫ — ИНАЧЕ ШАПКА СТОИТ НЕ НАД СВОИМИ
@@ -226,3 +352,35 @@ def vid_vse(kt):
     return ('<div class="dva">'
             f'<div class="kol">{shapka}{"".join(para_shk(kt, r) for r in deti[:pol])}</div>'
             f'<div class="kol">{shapka}{"".join(para_shk(kt, r) for r in deti[pol:])}</div></div>')
+
+
+def vybor_gruppy_dnya(kt, r):
+    """Группа школьника НА ЭТО ЗАНЯТИЕ: «нигде · В · Д · Н».
+
+    Пишется в слой занятия, рядом с переводом к другому преподавателю, и живёт
+    ровно один день: назавтра он снова там, где его поставил шаблон.
+    """
+    # 🔴 ПОЛЕ ПОКАЗЫВАЕТ ТО, ЧТО ЕСТЬ, А НЕ ТО, ЧТО В НЁМ ЗАПИСАНО РУКАМИ. Группа
+    # на день пуста у всех, кого сегодня не двигали, — а стоят они при этом не
+    # «нигде», а у своего человека, то есть в его группе. Показывать «нигде»
+    # сорока пяти детям, которые на самом деле распределены, — врать в самом
+    # заметном месте экрана. «Нигде» остаётся ровно там, где оно правда: ни
+    # сегодняшнего преподавателя, ни поставленной руками группы.
+    tek = pole(r, "gruppa_dnya", "") or (gr_shk(kt, r) or "")
+    opts = ['<option value=""%s>нигде</option>' % (" selected" if not tek else "")]
+    for kod in ("В", "Д", "Н"):
+        opts.append('<option value="%s"%s>%s</option>'
+                    % (kod, " selected" if tek == kod else "", kod))
+    return (f'<select class="org grd-sel" data-org="pravit-raspredelenie"'
+            f' data-sid="{r["id"]}" data-den="{e(kt.den)}">'
+            + "".join(opts) + '</select>')
+
+
+def prisutstvuyushchie(kt, kl=None):
+    """Школьники, которые сегодня ЗДЕСЬ: без отмеченных отсутствующими.
+
+    На постоянном экране фильтровать нечего — там нет «сегодня», и функция
+    честно отдаёт всех.
+    """
+    kl = kl or next(iter(kt.DNI))
+    return [r for r in kt.shk_dnya[kl] if prishol(r)]
