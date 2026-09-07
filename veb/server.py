@@ -48,7 +48,7 @@ from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from zoneinfo import ZoneInfo
 
 import config
@@ -61,7 +61,9 @@ from core.services.enrollment import (
 )
 from infra.db import connect
 from infra.enrollment_repo import SqliteEnrollmentRepo
+from core.services.sostav_na_den import data_po_umolchaniyu
 from veb import vhod
+from veb.razdely import zanyatie
 from veb.sobrat_fajl import blizhajshee_zanyatie
 
 
@@ -664,11 +666,6 @@ class Handler(BaseHTTPRequestHandler):
         # потом мог только человек. Старая страница НЕ переделана и не тронута: она
         # ровно та же, что была, и лежит на своём отдельном адресе.
         if path == "/raspredelenie":
-            from urllib.parse import parse_qs
-
-            from core.services.sostav_na_den import data_po_umolchaniyu
-            from veb.razdely import zanyatie
-
             zapros = parse_qs(urlparse(self.path).query).get("den", [""])[0]
             try:
                 den = date.fromisoformat(zapros).isoformat() if zapros \

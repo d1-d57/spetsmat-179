@@ -35,6 +35,13 @@ touches nothing.  That default is not politeness — the thing it writes to is t
 school works on.
 """
 
+# TOOL-CONTRACT: called-by-hand
+#
+# This tool has no automatic call site and must not acquire one.  It writes to the base a
+# school works on, and the one decision it cannot make — «отсутствовал или ушёл» — belongs
+# to a human by construction (``doc/TZ-sloj-zanyatia.md §5а``: the two are indistinguishable
+# from inside the data).  A timer that ran it would be a timer that guessed.
+
 from __future__ import annotations
 
 import argparse
