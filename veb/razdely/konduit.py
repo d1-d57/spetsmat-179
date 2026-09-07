@@ -173,17 +173,28 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj) -> str:
             kletki = []
             for p in zad:
                 znak = SIGN[sostoyaniya[(u.id, p.id)]]
+                # 🔴 АДРЕС ПАРЫ НА КАЖДОЙ КЛЕТКЕ — ЭТО ВСЁ, ЧТО НУЖНО ДЛЯ ТАПА.
+                # Владелец 07.09: «я хочу, чтобы можно было нажимать на пустую
+                # клеточку на кондуите и чтобы там появлялась галочка… вид остаётся
+                # тем же самым, просто клетки должны тапаться». Поэтому здесь не
+                # появилось ни кнопки, ни формы, ни единого нового знака: те же
+                # `<td>` с теми же классами, плюс два атрибута, по которым скрипт
+                # каркаса знает, какую пару он отмечает. Запись идёт в ЕДИНСТВЕННУЮ
+                # дверь `veb/priyom.py::otmetka` (`/api/priyom`), то есть через
+                # `MarkingService`; второго журнала здесь по-прежнему нет, и этот
+                # раздел по-прежнему не пишет в базу сам.
+                adres = f' data-u="{u.id}" data-z="{p.id}"'
                 if znak == "1":
                     # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: сдано — это ГАЛОЧКА, не единица.
                     # Алфавит клетки от этого не меняется: `tools/export_xlsx.py`
                     # по-прежнему пишет `1`, а решётка на экране рисует тот же
                     # факт знаком, который читается быстрее. Снятое (`x`) и
                     # пустое — как были.
-                    kletki.append('<td class="vsyo">✓</td>')
+                    kletki.append(f'<td class="vsyo"{adres}>✓</td>')
                 elif znak:
-                    kletki.append(f'<td class="snyato">{znak}</td>')
+                    kletki.append(f'<td class="snyato"{adres}>{znak}</td>')
                 else:
-                    kletki.append('<td></td>')
+                    kletki.append(f'<td{adres}></td>')
             # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: СВОИ ШКОЛЬНИКИ ВЫДЕЛЯЮТСЯ ЦВЕТОМ.
             # Класс ставится на СВОИХ, а не выводится как «отсутствие чужого»:
             # у организатора и у общего пароля своих нет вовсе (`chuzhoj` пуст),
@@ -301,13 +312,24 @@ def stili(kt) -> str:
    общем списке. Ни одного нового цвета: `--accent` уже несёт «моё» по всему
    сайту, `--accent-soft` — фон выбранной вкладки. */
 #s-kond .kond tbody tr.moi td{{background:var(--accent-soft)}}
+/* 🔴 ПОЛОСА СТОИТ В ОТСТУПЕ, А НЕ ПОВЕРХ ФАМИЛИИ. Владелец 07.09: «мелочь, но
+   вот тут наезжает вертикальная линия на фамилии» — `box-shadow:inset` рисуется
+   ВНУТРИ ячейки, поэтому при прежнем отступе полоса ложилась на первую букву.
+   Лечится отступом слева у своих строк, а не снятием полосы: без неё своих детей
+   в общем списке не найти, о чём владелец просил отдельно. */
 #s-kond .kond tbody tr.moi td.kto{{color:var(--accent);
-  box-shadow:inset .22rem 0 0 0 var(--accent)}}
+  box-shadow:inset .22rem 0 0 0 var(--accent);padding-left:.85rem}}
 #s-kond .kond tbody tr.moi td.kto b{{color:var(--accent)}}
 /* Наведение обязано оставаться отличимым от «своей» строки, иначе выделение
    съедает подсветку: у своих строк фон уже накрашен, поэтому наведение
    различается рамкой на клетке и полосой столбца, а не цветом фона. */
 #s-kond .kond tbody tr.moi:hover td{{background:var(--chip)}}
+/* Клетка листка тапается: курсор и подсветка обещают действие, которое есть.
+   Клетки годового обзора и личной карточки адреса пары не несут и остаются
+   обычным текстом — там столбец это ЛИСТОК, а не задача, и отмечать нечего. */
+#s-kond .kond td[data-u]{{cursor:pointer}}
+#s-kond .kond td[data-u]:hover{{background:var(--accent-soft)}}
+#s-kond .kond td[data-u].zhdyot{{opacity:.5}}
 #s-kond .kond-verh{{display:flex;align-items:baseline;justify-content:space-between;
   gap:1.5rem;flex-wrap:wrap}}
 #s-kond .kond-moi{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1rem;

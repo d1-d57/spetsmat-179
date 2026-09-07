@@ -602,15 +602,76 @@ def verh_prava(kt) -> str:
     return verh_prava
 
 
+#: Тап по клетке кондуита. Владелец 07.09: «я хочу, чтобы можно было нажимать на
+#: пустую клеточку на кондуите и чтобы там появлялась галочка… вид остаётся тем же
+#: самым, просто клетки должны тапаться».
+#:
+#: 🔴 ЗАПИСЬ ИДЁТ В ЧУЖУЮ ДВЕРЬ, И ЭТО ГЛАВНОЕ СВОЙСТВО ЭТОГО СКРИПТА. `/api/priyom`
+#: — единственная дверь записи отметок (`veb/priyom.py`), а она пишет через
+#: `MarkingService`, который несёт идемпотентность и снятие событием `retract` со
+#: ссылкой `reverses_id`. Кондуит по-прежнему НЕ пишет в базу сам и остаётся тем,
+#: чем был, — проекцией журнала; второго журнала отметок в проекте не появилось.
+#:
+#: 🔴 КНОПКА НЕСЁТ ЦЕЛЕВОЕ СОСТОЯНИЕ, А НЕ «ПЕРЕКЛЮЧИ». Того требует устройство
+#: сервиса: два тапа, пришедшие в любом порядке, оставляют одну и ту же клетку и
+#: один ряд в журнале, а не два.
+KONDUIT_SKRIPT = """
+<script>
+(function () {
+  var DALEE = {"":"solved", "\u2713":"retracted", "x":"solved"};
+  var ZNAK = {"empty":"", "solved":"\u2713", "retracted":"x"};
+  var KLASS = {"empty":"", "solved":"vsyo", "retracted":"snyato"};
+  function narisovat(td, s) {
+    td.className = KLASS[s] || "";
+    td.textContent = ZNAK[s];
+  }
+  document.addEventListener("click", function (sob) {
+    var td = sob.target.closest("#s-kond .kond td[data-u]");
+    if (!td || td.classList.contains("zhdyot")) { return; }
+    var bylo = td.textContent.trim();
+    var target = DALEE[bylo] || "solved";
+    var vernut = td.className, znak_byl = td.textContent;
+    td.classList.add("zhdyot");
+    fetch("/api/priyom", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({student: +td.dataset.u, problem: +td.dataset.z,
+                            target: target})
+    }).then(function (r) { return r.json(); }).then(function (otvet) {
+      td.classList.remove("zhdyot");
+      if (otvet && otvet.sostoyanie) { narisovat(td, otvet.sostoyanie); }
+      else {
+        // Не записалось — клетка обязана вернуться к тому, что стоит в журнале,
+        // а не остаться с галочкой, которой в базе нет.
+        td.className = vernut; td.textContent = znak_byl;
+        td.title = (otvet && otvet.error) || "не записалось";
+      }
+    }).catch(function (oshibka) {
+      td.classList.remove("zhdyot");
+      td.className = vernut; td.textContent = znak_byl;
+      td.title = "не записалось: " + oshibka;
+    });
+  });
+})();
+</script>
+"""
+
+
 def skripty(kt, drakon_skript: str) -> str:
     """The scripts of the page. Not the frame — its behaviour.
 
     The dragon curve belongs to the front page and is handed in from there; the
     login window and the edit panel belong to the shell and live in this file.
+
+    🔴 Тап по кондуиту едет ровно тем, кто кондуит ВИДИТ, и нового права под него не
+    заведено: `videt-konduit` уже отделяет вошедших от гостя, а гостю раздел не
+    рисуется вовсе (`tools/sobrat_stranicu.sobrat()` пишет в `docs/index.html`
+    гостевую сборку). Поэтому скрипт не может попасть на публичную страницу вместе
+    с чужими фамилиями — его там просто нет.
     """
     # Окно входа лежит в странице ВСЕГДА, у обеих ролей: так каркас у них
     # совпадает буквально, и гейту нечего прощать.
-    return drakon_skript + VHOD_SKRIPT + (PRAVKA_SKRIPT if kt.ADMIN else "")
+    return (drakon_skript + VHOD_SKRIPT + (PRAVKA_SKRIPT if kt.ADMIN else "")
+            + (KONDUIT_SKRIPT if kt.mozhno("videt-konduit") else ""))
 
 
 def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> str:
