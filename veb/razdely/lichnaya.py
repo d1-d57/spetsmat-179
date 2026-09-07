@@ -93,6 +93,30 @@ def kabinet_na_datu(c, teacher_id: int, den: str) -> Optional[str]:
     `None` means the current distribution names no room, and the page says so
     instead of inventing one.
     """
+    # 🔴 ПОРЯДОК ИСТОЧНИКОВ ИСПРАВЛЕН 07.09 ПО ЖИВОМУ РАСХОЖДЕНИЮ, А НЕ ПО ВКУСУ.
+    # Замер в 12:37 на боевой базе, преподаватель id=8, группа «В», дата 07.09:
+    #   `kabinet_na_den`  → 203  ← владелец вписал это СЕГОДНЯ, руками
+    #   `enrollment.room` → 307
+    #   `teachers.kabinet`→ 303  (протухшая копия, её и раньше не читали)
+    # Карточка на заглавной уже показывала группе «В» кабинет 203, а личная
+    # строка того же дня говорила преподавателю 307 — то есть страница спорила
+    # сама с собой, и в 14:15 он пошёл бы не туда.
+    # ⇒ Первым спрашивается кабинет, НАЗНАЧЕННЫЙ НА ЭТУ ДАТУ его группе: это
+    # единственный источник, который человек заполняет осознанно и на день.
+    # Распределение остаётся запасным: оно право, когда на дату ничего не
+    # назначено.
+    ryad = c.execute(
+        """
+        select k.kabinet as room
+        from kabinet_na_den k
+        join teachers t on t.gruppa = k.gruppa
+        where t.id = ? and k.data = ?
+        limit 1
+        """,
+        (teacher_id, den),
+    ).fetchone()
+    if ryad and ryad["room"]:
+        return ryad["room"]
     ryad = c.execute(
         """
         select room, max(valid_from) as svezhest, count(*) as strok
