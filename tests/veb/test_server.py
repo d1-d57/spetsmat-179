@@ -7,6 +7,7 @@ random localhost port picked by the OS (``port=0`` to ``ThreadingHTTPServer``).
 
 from __future__ import annotations
 
+import re
 import json
 import os
 import threading
@@ -100,12 +101,44 @@ def _http_post(url: str, payload: dict) -> tuple[int, bytes]:
         return exc.code, exc.read()
 
 
-def test_get_root_returns_html(running_server):
+def test_raspredelenie_opens_on_a_dated_lesson_and_not_on_the_standing_one(running_server):
+    """The owner's guard: «чтобы ты случайно всё не начинал править постоянное».
+
+    This test used to assert that ``/raspredelenie`` serves the standing-arrangement
+    editor.  It now asserts the opposite, and that is the point of the change: after
+    2026-09-07, when a one-day move had to be written into the standing table because
+    there was nowhere else, opening on that table by default is the defect.
+    """
     base, _ = running_server
     status, body = _http_get(base + "/raspredelenie")
     assert status == 200
     assert b"<!doctype html>" in body.lower() or b"<html" in body.lower()
+    assert "Занятие".encode() in body
+    # A date is on the page: that is what tells the reader which lesson he is editing.
+    assert re.search(rb"\d{4}-\d{2}-\d{2}", body), "the lesson screen must carry its date"
+    # And the standing editor is reachable, but only through its own address.
+    assert b"/raspredelenie/postoyannoe" in body
+
+
+def test_the_standing_arrangement_keeps_its_own_page_untouched(running_server):
+    """The old screen is not redesigned, not moved into a tab: it is where it was, whole.
+
+    ``doc/DIZAJN-ZAKREPLENO.md §0``: new surfaces inherit from what stands; what stands
+    is not rebuilt to suit them.
+    """
+    base, _ = running_server
+    status, body = _http_get(base + "/raspredelenie/postoyannoe")
+    assert status == 200
     assert b"\xd0\xa8\xd0\xba\xd0\xbe\xd0\xbb\xd1\x8c\xd0\xbd\xd0\xb8\xd0\xba" in body  # «Школьники»
+
+
+def test_a_date_that_is_not_a_date_is_refused_rather_than_guessed(running_server):
+    base, _ = running_server
+    try:
+        status, _body = _http_get(base + "/raspredelenie?den=%D0%BD%D0%B5%D1%82")
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+    assert status == 400
 
 
 def test_get_view_returns_two_cuts(running_server):

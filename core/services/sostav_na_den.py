@@ -54,6 +54,19 @@ OTSUTSTVUET = config.ATTENDANCE_STATUSES[1]
 PRISUTSTVUET = config.ATTENDANCE_STATUSES[0]
 
 
+#: When the lesson ENDS, by ISO weekday.  The timetable since 2026-09-07 is Monday
+#: 14:15–15:55 and Thursday 13:10–15:00 — ``doc/PLAN-veb-2026-09.md``, the owner's own
+#: line, and the only written source that is current.
+#:
+#: 🔴 ``ops/raspisanie.py`` DISAGREES AND IS WRONG: it still carries ``LESSON_START=16:00``,
+#: ``LESSON_END=19:00`` and days ``(1, 4)`` from an earlier season.  The disagreement is
+#: not theoretical — on 2026-09-07 the «перед занятием» backup timer fired at 15:45 MSK,
+#: ten minutes before the lesson ENDED, and the snapshot named "before the lesson" was
+#: taken after it.  Repairing that module is a separate заход; what this one must not do
+#: is inherit its numbers.
+KONEC_ZANYATIA = {1: (15, 55), 4: (15, 0)}
+
+
 def slot_of(day: str) -> Optional[int]:
     """The lesson slot of a calendar day, or ``None`` when no lesson is taught on it."""
     return SLOTY_ZANYATIJ.get(date.fromisoformat(day).isoweekday())
@@ -84,6 +97,33 @@ def nearest_lesson(today: str, *, lesson_over: bool = False) -> str:
         if candidate.isoweekday() in SLOTY_ZANYATIJ:
             return candidate.isoformat()
     raise AssertionError("SLOTY_ZANYATIJ is empty: every week would have no lesson")
+
+
+def data_po_umolchaniyu(now=None) -> str:
+    """The date the lesson screen opens on.
+
+    🔴 NOT the same function as ``veb.sobrat_fajl.blizhajshee_zanyatie``, and the two are
+    deliberately not merged.  That one answers «какое занятие следующее» for the PUBLIC
+    landing card and never rolls over during the day; this one implements Р4 — on a lesson
+    day the nearest lesson stays TODAY until the lesson ENDS, because correcting the table
+    mid-lesson is a working scenario.  Merging them would drag the landing page's meaning
+    into an editing screen, or the other way round; ``doc/DIZAJN-ZAKREPLENO.md §0`` says
+    which direction is forbidden.  Their weekday conventions differ too (ISO here, Python
+    ``weekday()`` there), which is exactly the kind of quiet mismatch a shared helper hides.
+
+    The instant is read into the school's own timezone through ``ZoneInfo`` and never
+    through a fixed ``timedelta(hours=3)``: the offset is wrong twice a year, and an
+    afternoon lesson is exactly where a three-hour error moves the day.
+    """
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    moment = now if now is not None else datetime.now(timezone.utc)
+    local = moment.astimezone(ZoneInfo(config.TZ_DISPLAY))
+    today = local.date().isoformat()
+    konec = KONEC_ZANYATIA.get(local.isoweekday())
+    over = konec is not None and (local.hour, local.minute) >= konec
+    return nearest_lesson(today, lesson_over=over)
 
 
 # --------------------------------------------------------------------------- ports

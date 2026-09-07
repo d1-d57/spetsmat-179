@@ -657,7 +657,29 @@ class Handler(BaseHTTPRequestHandler):
             if self._listok(unquote(path.split("/", 2)[2])):
                 return
 
+        # 🔴 РАСПРЕДЕЛЕНИЕ ОТКРЫВАЕТСЯ НА ЗАНЯТИИ, А ПОСТОЯННОЕ — ЗА ОТДЕЛЬНОЙ КНОПКОЙ.
+        # Решение владельца, и причина у него прямая: «чтобы ты случайно всё не начинал
+        # править постоянное распределение». 2026-09-07 это уже стоило данных — разовый
+        # перевод пятерых пришлось записать в постоянное, и различить одно от другого
+        # потом мог только человек. Старая страница НЕ переделана и не тронута: она
+        # ровно та же, что была, и лежит на своём отдельном адресе.
         if path == "/raspredelenie":
+            from urllib.parse import parse_qs
+
+            from core.services.sostav_na_den import data_po_umolchaniyu
+            from veb.razdely import zanyatie
+
+            zapros = parse_qs(urlparse(self.path).query).get("den", [""])[0]
+            try:
+                den = date.fromisoformat(zapros).isoformat() if zapros \
+                    else data_po_umolchaniyu()
+            except ValueError:
+                self._send_json(400, {"error": "den must be YYYY-MM-DD"})
+                return
+            self._send_html(200,
+                            zanyatie.stranica(self._connection(), den).encode("utf-8"))
+            return
+        if path == "/raspredelenie/postoyannoe":
             index = (TEMPLATES_DIR / "index.html").read_bytes()
             self._send_html(200, index)
             return

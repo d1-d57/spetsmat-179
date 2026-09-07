@@ -1,0 +1,76 @@
+/* Распределение на занятие — the lesson layer, read at a desk before the lesson.
+ *
+ * 🔴 THE PALETTE IS THE SITE'S AND NOT A NEW ONE (`doc/DIZAJN-ZAKREPLENO.md` §2).  The
+ * names and values below are exactly those `veb/static/priyom.css` and the distribution
+ * page already declare, because this page is served standalone rather than inside the
+ * shared скелет and therefore has to carry the declaration itself.  🔴 NO COLOUR IS
+ * WRITTEN IN HEX ANYWHERE BUT `:root`, and NOT ONE NEW COLOUR IS INTRODUCED: the owner
+ * counted the colours on a card once already and the answer was «здесь слишком много».
+ *
+ * 🔴 ONE WEIGHT AND AT MOST TWO COLOURS PER BLOCK (§3.1, §3.2).  Inside a teacher's card
+ * that is: the names in one weight and one colour, and the служебная подпись — the count,
+ * the «обычно у» hint — in the muted one.  Grey is not decoration here: it is the state
+ * «отмечен отсутствующим», and it is the only thing grey means on this page.
+ */
+
+:root{--bg:#fbfaf6;--panel:#fffdf8;--text:#211f1b;--muted:#6d675c;--rule:#e4dfd2;
+  --accent:#2f6e8e;--accent-soft:#e8f0f4;--faint:#a8a08d;
+  --krasn:#b3402a;--krasn-fon:rgba(179,64,42,.08);
+  --sans:"Source Sans 3",system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1b1e22;--panel:#23272c;
+  --text:#dcd8d0;--muted:#9a948a;--rule:#343a41;--accent:#7fb6d2;--accent-soft:#22333d;
+  --faint:#6b6f75;--krasn:#e8836a;--krasn-fon:rgba(232,131,106,.12)}}
+:root[data-theme=dark]{--bg:#1b1e22;--panel:#23272c;--text:#dcd8d0;--muted:#9a948a;
+  --rule:#343a41;--accent:#7fb6d2;--accent-soft:#22333d;--faint:#6b6f75;
+  --krasn:#e8836a;--krasn-fon:rgba(232,131,106,.12)}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:19px;line-height:1.4;padding:1.4rem 2rem 3rem}
+
+.verh{display:flex;align-items:baseline;gap:1.1rem;flex-wrap:wrap;margin:0 0 1.5rem;
+  padding-bottom:.9rem;border-bottom:2px solid var(--rule)}
+h1{font-size:1.85rem;font-weight:600;margin:0;letter-spacing:-.015em}
+.data{font-size:1.2rem;color:var(--accent)}
+.pod{color:var(--muted);font-size:1rem}
+
+.navig{display:flex;align-items:baseline;gap:.4rem;margin-left:auto}
+.navig input{font:inherit;font-size:.95rem;padding:.3em .5em;border-radius:8px;
+  border:1px solid var(--rule);background:var(--panel);color:var(--text)}
+.strelka{text-decoration:none;color:var(--muted);font-size:1.2rem;padding:0 .3em}
+.strelka:hover{color:var(--accent)}
+
+/* Кнопка постоянного — «более серьёзная, на которую нельзя попасть случайно» (владелец).
+   Серьёзность здесь делает не цвет и не плашка, а обводка и то, что она стоит отдельно,
+   в стороне от навигации по датам: новый цвет вводить запрещено, а плашка на этой
+   странице была бы третьим сортом объекта. */
+.postoyannoe{font-size:.92rem;text-decoration:none;color:var(--muted);
+  border:1px solid var(--rule);border-radius:9px;padding:.4em .9em}
+.postoyannoe:hover{color:var(--accent);border-color:var(--accent)}
+
+.trevoga{border:1px solid var(--krasn);background:var(--krasn-fon);color:var(--krasn);
+  border-radius:10px;padding:.7rem 1.1rem;margin:0 0 1.3rem}
+
+.setka{display:grid;gap:1.1rem;grid-template-columns:repeat(auto-fill,minmax(19rem,1fr))}
+.kart{border:1px solid var(--rule);border-radius:10px;background:var(--panel);
+  padding:.85rem 1.1rem}
+/* Перегрузка и недогрузка: норма 3–4, красным 0,1,2 и 5+ (ТЗ §4).  Обводкой, не заливкой:
+   заливка спорила бы с единственным красным на этой странице — «некуда деть». */
+.kart-vne{border-color:var(--krasn)}
+.kart h3{margin:0 0 .5rem;font-size:1.05rem;font-weight:600;
+  display:flex;align-items:baseline;gap:.5rem}
+.schet{margin-left:auto;color:var(--muted);font-weight:400;font-size:.9rem}
+.kart ul{margin:0;padding:0;list-style:none}
+.chel{display:flex;align-items:baseline;gap:.5rem;padding:.16em 0;font-size:1rem}
+.chel+.chel{border-top:1px solid var(--rule)}
+.obychno{margin-left:auto;color:var(--muted);font-size:.82rem;white-space:nowrap;
+  border-bottom:1px dotted var(--rule);cursor:help}
+/* Отмечен отсутствующим: серым и на месте.  Он не потерян и НЕ краснеет (ТЗ §4).
+   🔴 СЕРЫМ И ТОЛЬКО СЕРЫМ — без зачёркивания. Владелец сказал ровно «таким вот серым»;
+   зачёркнутое имя читается как «удалён», а он не удалён, он сегодня болеет и завтра
+   вернётся сам, потому что в слое занятия нет ни одной строки про завтра. */
+.net .imya{color:var(--faint)}
+.krasn .imya{color:var(--krasn)}
+
+.pusto{color:var(--muted)}
+.snoska{margin-top:2rem;color:var(--muted);font-size:.9rem;max-width:46rem}
