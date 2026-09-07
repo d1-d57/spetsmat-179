@@ -178,6 +178,38 @@ def razdel(kt) -> str:
                          f'<span class="listok-ver">{versii_html}</span>')
 
     kabinety_skoro = kab_skoro(kt, kt.blizh)
+
+    # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: ВОШЕДШИЙ ПРЕПОДАВАТЕЛЬ ВИДИТ В ЭТОЙ ЖЕ КАРТОЧКЕ
+    # СВОЙ ОДИН КАБИНЕТ И ФАМИЛИИ СВОИХ ШКОЛЬНИКОВ.
+    #
+    # 🔒 ПОЧЕМУ ОБЩАЯ СТРОКА КАБИНЕТОВ ОСТАЁТСЯ В РАЗМЕТКЕ, А НЕ УБИРАЕТСЯ.
+    # `proverit_karkas()` сверяет ПОБАЙТОВО две пары страниц: гость против
+    # организатора и (проверкой, которую завела личная страница в
+    # `veb/server.py`) гость против преподавателя. Пометка `data-tolko-gost`
+    # снимается ТОЛЬКО с гостевой, `data-org` — только со страницы, у которой
+    # возможность есть. Убери общую строку у преподавателя — и она осталась бы
+    # у организатора, то есть первая пара разошлась бы; пометь её
+    # `data-tolko-gost` — разошлась бы вторая. Поэтому в разметке стоят ОБЕ
+    # строки, личная помечена `data-org="videt-svoyo"` и снимается при сверке,
+    # а прячет общую строку у преподавателя CSS — на сравнение он не влияет.
+    #
+    # 🔒 И ГЛАВНОЕ: фамилии школьников сюда попадают ТОЛЬКО при `prepod_id`,
+    # то есть после входа личным паролем. Гостевая сборка (`rezhim="gost"`,
+    # `prepod_id is None`) их не содержит вовсе, а именно она уезжает в
+    # `docs/index.html` публичного репозитория.
+    moyo_html = ""
+    if kt.prepod_id is not None:
+        from veb.razdely.lichnaya import (kabinet_na_datu, deti_na_datu,
+                                          segodnya as _segodnya)
+        _den = _segodnya()
+        _kab = kabinet_na_datu(kt.c, kt.prepod_id, _den)
+        _deti = deti_na_datu(kt.c, kt.prepod_id, _den)
+        _familii = ", ".join(e(r["surname"]) for r in _deti)
+        _kab_txt = e(_kab) if _kab else "кабинет не назначен"
+        _hvost = (f' · {_familii}' if _familii
+                  else ' · на сегодня никого не записано')
+        moyo_html = (f'\n          <p class="listok-kab listok-moyo" '
+                     f'data-org="videt-svoyo">{_kab_txt}{_hvost}</p>')
     tekushchij_listok = tekushchij()
 
     # ── ДАННЫЕ ДЛЯ СТРАНИЦЫ КЛАССА ──────────────────────────────────────────
@@ -250,7 +282,7 @@ def razdel(kt) -> str:
           <p class="listok-kogda">{e(kt.DNI[kt.blizh][3])} {e(kt.po_russki_kratko(kt.DNI[kt.blizh][2]))}
             · {VREMYA[kt.blizh]}</p>
           <p class="listok-stroka">{listok_stroka}</p>
-          <p class="listok-kab">{kabinety_skoro}</p>
+          <p class="listok-kab listok-obshchij">{kabinety_skoro}</p>{moyo_html}
         </div>
 
         <div class="blok-vedut">

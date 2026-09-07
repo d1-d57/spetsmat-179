@@ -180,7 +180,12 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj) -> str:
                     kletki.append(f'<td class="snyato">{znak}</td>')
                 else:
                     kletki.append('<td></td>')
-            klass = ' class="chuzh"' if u.id in chuzhoj else ""
+            # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: СВОИ ШКОЛЬНИКИ ВЫДЕЛЯЮТСЯ ЦВЕТОМ.
+            # Класс ставится на СВОИХ, а не выводится как «отсутствие чужого»:
+            # у организатора и у общего пароля своих нет вовсе (`chuzhoj` пуст),
+            # и правило `tr:not(.chuzh)` покрасило бы им всех до одного.
+            klass = (' class="chuzh"' if u.id in chuzhoj
+                     else (' class="moi"' if chuzhoj else ""))
             stroki.append(f'<tr{klass}><td class="kto">'
                           f'<b>{e(u.surname)}</b> {e(u.name)}</td>{"".join(kletki)}</tr>')
         potolok = 16 + len(zad) * 5.5
@@ -287,6 +292,13 @@ def stili(kt) -> str:
 /* «Только мои» — фильтр строк, и ничего кроме. Ни одна строка не удерживается
    сервером: снял галочку — снова видно всех. */
 #k-moi:checked~.vid tr.chuzh{{display:none}}
+/* 🔴 Свои школьники видны цветом и слева полосой — без этого «только мои»
+   остаётся единственным способом их найти, а владелец просил видеть их и в
+   общем списке. Ни одного нового цвета: `--accent` уже несёт «моё» по всему
+   сайту, `--accent-soft` — фон выбранной вкладки. */
+#s-kond .kond tbody tr.moi td.kto{{color:var(--accent);
+  box-shadow:inset .18rem 0 0 0 var(--accent)}}
+#s-kond .kond tbody tr.moi td.kto b{{color:var(--accent)}}
 #s-kond .kond-verh{{display:flex;align-items:baseline;justify-content:space-between;
   gap:1.5rem;flex-wrap:wrap}}
 #s-kond .kond-moi{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1rem;

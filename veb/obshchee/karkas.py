@@ -1026,6 +1026,13 @@ tr:hover td{{background:var(--accent-soft)}}
 .listok-nom{{font-size:1em;margin-right:.4em;cursor:pointer;
   vertical-align:.9em;opacity:.75}}
 .listok-nom:hover{{text-decoration:underline}}
+/* 🔴 Преподаватель видит В КАРТОЧКЕ свой ОДИН кабинет и своих школьников,
+   а общая строка трёх кабинетов у него прячется. Прячется именно CSS-ом, а не
+   отсутствием в разметке: обе строки обязаны стоять в HTML, иначе побайтовая
+   сверка каркаса гостя с админом и с преподавателем разойдётся (разбор — в
+   `veb/razdely/glavnaya.py`, рядом с `moyo_html`). */
+.blok-listok:has(.listok-moyo) .listok-obshchij{{display:none}}
+.listok-moyo{{white-space:normal;line-height:1.35}}
 .listok-stroka{{margin-top:.35rem !important;margin-bottom:.15rem !important;
   white-space:nowrap}}
 .listok-ver{{font-size:1em}}
