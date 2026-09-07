@@ -120,11 +120,56 @@ def _sborka_vozmozhna() -> None:
             "нет права записи в %s — публичную страницу некуда пересобрать" % cel)
 
 
+def _karkas_prepoda_sovpadaet() -> list:
+    """Сверить каркас преподавателя с ГОСТЕВЫМ. Пустой список — совпадает.
+
+    🔴 ЗАЧЕМ ЗДЕСЬ ВТОРОЙ ЗАМОК, КОГДА В `sobrat()` УЖЕ ЕСТЬ `proverit_karkas()`.
+    Тот замок сравнивает две страницы из трёх: он зовётся с умолчанием
+    `roli=("organizator",)`, а его файл `tools/sobrat_stranicu.py` лежит вне зоны
+    захода, добавившего роль `prepod`. Зелёный замок, не знающий про третий режим,
+    хуже красного — он выглядит как проверка и ею не является.
+
+    🔴 И СРАВНЕНИЕ ЗДЕСЬ ДРУГОЕ, А НЕ ТО ЖЕ САМОЕ ЧУТЬ СБОКУ. `proverit_karkas`
+    снимает с гостевой стороны элементы `data-tolko-gost` — то, что роль намеренно
+    НЕ показывает. Для организатора это верно (кабинет в списках ему не нужен), а
+    для преподавателя ЛОЖНО: он видит страницу глазами гостя, вместе с чипами
+    кабинетов, плюс свою вкладку. Прогнав его через тот замок, мы получили бы
+    красное на разнице, которая и есть замысел. Поэтому здесь: снять с личной
+    страницы органы возможности (`data-org`) и потребовать ПОБАЙТОВОГО совпадения
+    остатка с гостевым разделом КАК ОН ЕСТЬ.
+
+    Обе снимающие функции берутся у `tools/sobrat_stranicu.py` вызовом, а не
+    копией: вторая реализация того же разбора разъедется с первой ровно так же,
+    как расходились две вёрстки одного сайта.
+    """
+    from tools.sobrat_stranicu import (
+        _razdel_raspredeleniya, _snyat_organy, sobrat_html,
+    )
+    gost = _razdel_raspredeleniya(sobrat_html("gost"))
+    prepod = _snyat_organy(_razdel_raspredeleniya(sobrat_html("prepod")))
+    if prepod == gost:
+        return []
+    i = next((i for i in range(min(len(gost), len(prepod)))
+              if gost[i] != prepod[i]), min(len(gost), len(prepod)))
+    return ["каркас роли «prepod» разошёлся с гостевым на позиции %d:\n"
+            "    гость: …%r\n    prepod: …%r"
+            % (i, gost[max(0, i - 60):i + 60], prepod[max(0, i - 60):i + 60])]
+
+
 def _peresobrat() -> list:
     """Пересобрать публичную страницу из базы. Падает громко и наружу."""
     from tools.sobrat_stranicu import sobrat
+    # Третий режим проверяется ДО записи файла: сломанный каркас преподавателя
+    # обязан отказывать так же, как сломанный каркас организатора, — то есть до
+    # того, как публичная страница будет переписана.
+    bedy = _karkas_prepoda_sovpadaet()
+    if bedy:
+        raise AssertionError(
+            "каркас гостя и преподавателя разошёлся — страница не собрана:\n"
+            + "\n".join(bedy))
     svodka: list = []
     sobrat(svodka)
+    svodka.append("  каркас: гость и преподаватель совпадают побайтово ✅")
     return svodka
 
 
@@ -559,9 +604,25 @@ class Handler(BaseHTTPRequestHandler):
         он единственный, кому нужно видеть базу секунда-в-секунду, и он же тот,
         кто узнает о поломке сборки первым — его правка просто не пройдёт.
         """
-        if vhod.rol(self.headers) == "organizator":
+        rol = vhod.rol(self.headers)
+        if rol == "organizator":
             from tools.sobrat_stranicu import sobrat_html
             return sobrat_html("admin").encode("utf-8")
+        # 🔴 ПРЕПОДАВАТЕЛЬ РЕНДЕРИТСЯ ЖИВЬЁМ, КАК И ОРГАНИЗАТОР, И ПО ТОЙ ЖЕ
+        # ПРИЧИНЕ: файл `docs/index.html` один на всех и ничьего кабинета назвать
+        # не может. Он видит ровно гостевую страницу плюс СВОЮ вкладку — ни одной
+        # возможности правки у роли `prepod` нет (`veb/obshchee/karkas.VOZMOZHNOSTI`).
+        #
+        # Человек едет в режиме отдельным полем, а не через состояние модуля:
+        # запросы разных преподавателей обслуживаются РАЗНЫМИ ПОТОКАМИ одного
+        # процесса (`ThreadingHTTPServer`), и общая переменная «текущий человек»
+        # показала бы одному чужих детей. Разбор строки — `karkas._razobrat_rezhim`,
+        # и там же названо, почему человек едет именно строкой.
+        if rol == "prepod":
+            from tools.sobrat_stranicu import sobrat_html
+            kto = vhod.kto(self.headers)
+            rezhim = "prepod" if kto is None else "prepod:%d" % kto
+            return sobrat_html(rezhim).encode("utf-8")
         if not PUBLICHNAYA.is_file():
             # Файла нет вовсе — собрать его прямо сейчас. Падение здесь честнее
             # заглушки: отдавать «страница в разработке» на боевом адресе значит
@@ -726,7 +787,20 @@ class Handler(BaseHTTPRequestHandler):
         from urllib.parse import parse_qs
         form = parse_qs(raw.decode("utf-8"), keep_blank_values=True)
         submitted = (form.get("parol", [""])[0] or "")
-        role = vhod._check_password(submitted)
+        # 🔴 THE COOKIE MUST CARRY THE PERSON, NOT ONLY THE ROLE, AND THIS LINE IS
+        # WHERE A PERSONAL PAGE BECOMES POSSIBLE AT ALL. `vhod._check_password` is
+        # the same answer with the person DROPPED (`veb/vhod.py:388`), so a server
+        # calling it can never learn WHO came in: `vhod.kto(headers)` would answer
+        # `None` for every teacher forever, and the personal page would show
+        # nobody's room and nobody's children. `proverit_parol` is the door
+        # `veb/vhod.py:360` opened for exactly this caller and says so in its own
+        # docstring. Nothing in `veb/vhod.py` is changed: this is its consumer.
+        #
+        # `uid is None` stays LEGAL and must: the two common passwords belong to
+        # nobody in particular, and `_make_cookie` keeps its second argument
+        # optional so cookies already in people's browsers go on verifying.
+        otvet = vhod.proverit_parol(submitted)
+        role, uid = otvet if otvet is not None else (None, None)
         if role is None:
             # 🔴 ВОЗВРАЩАЕМ НА САЙТ, А НЕ НА ОТДЕЛЬНУЮ СТРАНИЦУ ОШИБКИ. Прежде здесь
             # отдавалась самостоятельная страничка «Неверный пароль» — та самая
@@ -745,7 +819,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_response(302)
         self.send_header("Location", "/")
-        cookie_value = vhod._make_cookie(role)
+        cookie_value = vhod._make_cookie(role, uid)
         # 🔴 `Secure` СТАВИТСЯ, ТОЛЬКО ЕСЛИ ЗАПРОС ПРИШЁЛ ПО HTTPS — и ставится
         # обязательно, иначе шифрование наполовину бессмысленно. Домен с 06.09 живёт
         # по https и перенаправляет туда с http, но перенаправление приходит ПОСЛЕ
@@ -1045,11 +1119,23 @@ class Handler(BaseHTTPRequestHandler):
             if standing.teacher_id == teacher_id:
                 self._send_json(200, {"bez_izmenenij": True})
                 return
-            kab = conn.execute(
-                "select kabinet from teachers where id = ?", (teacher_id,)
-            ).fetchone()
-            novyj_kabinet = (kab["kabinet"] if kab and "kabinet" in kab.keys() and kab["kabinet"]
-                             else standing.room)
+            # 🔴 КАБИНЕТ БЕРЁТСЯ ИЗ ТЕКУЩЕГО РАСПРЕДЕЛЕНИЯ, А НЕ ИЗ `teachers.kabinet`.
+            # Здесь стояло `select kabinet from teachers where id = ?` — чтение
+            # ПРОТУХШЕГО КЭША, решавшее, что запишется в `enrollment.room`, то есть
+            # в сам источник правды. Замер на живой базе 07.09: у группы `В`
+            # `teachers.kabinet` = 303, а `enrollment.room` = 307 у всех шести её
+            # преподавателей; импорт рабочего файла владельца
+            # (`tools/import_fajla_raspredeleniya.py`) пишет `enrollment.room` и
+            # `kabinet_na_den`, а `teachers.kabinet` не трогает вовсе — грепом по
+            # `tools/` нет ни одной записи в него. Значит каждая правка ребёнка на
+            # месте молча возвращала бы отставший 303 в строку, которая уже 307.
+            #
+            # Спрашиваем ту же ОДНУ функцию, которой личная страница отвечает на
+            # вопрос «кабинет этого преподавателя на эту дату», — второй ответ на
+            # тот же вопрос и был бы пятым источником кабинета.
+            from veb.razdely.lichnaya import kabinet_na_datu
+            novyj_kabinet = (kabinet_na_datu(conn, teacher_id, effective_from)
+                             or standing.room)
             conn.execute(
                 "update enrollment set teacher_id = ?, room = ? where id = ?",
                 (teacher_id, novyj_kabinet, standing.id),
