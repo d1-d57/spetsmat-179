@@ -22,10 +22,10 @@ from __future__ import annotations
 
 from veb.obshchee.karkas import e
 from veb.razdely.prepodavateli import para_prep
-from veb.razdely.shkolniki import gr_shk, para_shk
+from veb.razdely.shkolniki import gr_shk, para_shk, po_dnyam, shapka_dnej
 
 
-def vkladka_gruppy(kt, kod, kl):
+def vkladka_gruppy(kt, kod):
     """Группа: слева школьники, справа преподаватели, служебное — ВНИЗУ.
 
     🔴 ШАПКИ НАВЕРХУ БОЛЬШЕ НЕТ, И ЭТО РЕШЕНИЕ ВЛАДЕЛЬЦА 06.09. Там стояли
@@ -36,13 +36,18 @@ def vkladka_gruppy(kt, kod, kl):
 
     Служебное переехало ПОД список преподавателей, в свою рамку: числа, а у
     организатора ещё и поля кабинета на оба дня. Оно нужно, но не первым.
+
+    🔴 ШКОЛЬНИК ПОПАДАЕТ СЮДА, ЕСЛИ ОН В ЭТОЙ ГРУППЕ ХОТЯ БЫ В ОДИН ИЗ ДНЕЙ.
+    Дни разведены (`enrollment.slot`), и ребёнок, у которого понедельник в В, а
+    четверг в Д, — это не ошибка данных, а то, ради чего два поля и заведены.
+    Спрятать его на одной из двух вкладок значило бы показать «он не наш» тому,
+    у кого он ровно наш по понедельникам.
     """
     star = kt.gruppy[kod]
-    kab = kt.kabinety_dnya[kl].get(kod)
-    deti = [r for r in kt.shk_dnya[kl] if gr_shk(kt, r) == kod]
+    deti = po_dnyam(kt, lambda ryady: any(
+        gr_shk(kt, ryady[kl]) == kod for kl in kt.DNI))
     svoi = sorted((x for x in kt.prep.values() if x["gruppa"] == kod),
                   key=lambda x: x["name"])
-    sl = kt.DNI[kl][1]
 
     if kt.mozhno("pravit-kabinety"):
         # 🔴 КАБИНЕТЫ — ДВУМЯ ПОЛЯМИ, ПОНЕДЕЛЬНИК И ЧЕТВЕРГ, НА ОДНОМ ЭКРАНЕ.
@@ -72,8 +77,11 @@ def vkladka_gruppy(kt, kod, kl):
         nizhnyaya = ""
 
     return ('<div class="dva">'
-            + f'<div class="kol">{"".join(para_shk(kt, r, kl, pokazat_kab=False) for r in deti)}</div>'
+            + f'<div class="kol">{shapka_dnej(kt)}'
+            + "".join(para_shk(kt, r, pokazat_kab=False) for r in deti)
+            + "</div>"
             + '<div class="kol kol-pr"><div class="prep-ramka">'
-            + "".join(para_prep(kt, x, kl, pokazat_gruppu=False) for x in svoi)
+            + shapka_dnej(kt)
+            + "".join(para_prep(kt, x, pokazat_gruppu=False) for x in svoi)
             + "</div>" + nizhnyaya + "</div>"
             + "</div>")

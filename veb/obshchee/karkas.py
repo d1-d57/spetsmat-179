@@ -430,6 +430,13 @@ PRAVKA_SKRIPT = r"""
 
   const pravki = new Map();          // ключ → операция; последняя правка побеждает
   const KLYUCH_VYBORA = 'spetsmat-vybor';
+  /* Слоты дней снимаются С САМОЙ СТРАНИЦЫ, а не вписываются числами: какие номера
+     несут понедельник и четверг, знает `migrations/003` и повторяет `kt.DNI`;
+     вписанная сюда пара «1, 2» разошлась бы с ними молча и в другую сторону. */
+  const SLOTY = Array.from(new Set(
+    Array.from(document.querySelectorAll('.pr-sel')).map(function(el){
+      return +el.dataset.slot;
+    }))).sort();
 
   function slovo(n){
     const sto = n % 100, des = n % 10;
@@ -495,16 +502,36 @@ PRAVKA_SKRIPT = r"""
                                         gruppa: gr ? gr.value : ''}});
       }
     }else if(el.classList.contains('gr-sel')){
+      /* 🔴 ГРУППА У ШКОЛЬНИКА ОДНА, А ДНЕЙ ДВА — ЗНАЧИТ ПРАВОК ТОЖЕ ДВЕ.
+         `students.gruppa` не разделена по дням, и «перевести в группу» означает
+         снять его с преподавателя В ОБА ДНЯ: оставить один день у прежнего
+         человека значило бы, что ребёнок числится и там, и в новой группе, а
+         экран показывал бы одно из двух — смотря на какой день смотришь. */
       const sid = +el.dataset.sid;
-      const pr = el.parentElement.querySelector('.pr-sel');
-      if(pr) pr.value = '';       /* группа сменилась — преподаватель снимается */
-      pomenyalos(el, 'shk:' + sid + ':' + sl,
-        {put:'/api/enrollment', telo:{student_id:sid, slot:sl, teacher_id:null,
-                                      gruppa: el.value}});
+      const stroka = el.closest('.para');
+      const pr = stroka ? stroka.querySelectorAll('.pr-sel') : [];
+      pr.forEach(function(p){ p.value = ''; });   /* группа сменилась — преподаватель снимается */
+      SLOTY.forEach(function(slot){
+        pomenyalos(el, 'shk:' + sid + ':' + slot,
+          {put:'/api/enrollment', telo:{student_id:sid, slot:slot, teacher_id:null,
+                                        gruppa: el.value}});
+      });
     }else if(el.classList.contains('tgr-sel')){
+      /* 🔴 ПРОЧЕРК И ГРУППА — РАЗНЫЕ ДЕЙСТВИЯ, ПОТОМУ ЧТО ЛОЖАТСЯ В РАЗНЫЕ МЕСТА.
+         Группа принимающего лежит одной колонкой на оба дня, поэтому её выбор —
+         прежнее `gruppa`. Прочерк — это «в этот день не приходит», и он ложится
+         туда, где дни и разделены: `enrollment` ЭТОГО слота. Владелец 07.09:
+         «прочерк значит „в этот день не приходит“ … способ сказать, что человека
+         в один из дней не будет». */
       const tid = +el.dataset.tid;
-      pomenyalos(el, 'prep:' + tid,
-        {put:'/api/prepodavateli', telo:{deystvie:'gruppa', teacher_id:tid, gruppa:el.value}});
+      if(el.value){
+        pomenyalos(el, 'prep:' + tid,
+          {put:'/api/prepodavateli', telo:{deystvie:'gruppa', teacher_id:tid, gruppa:el.value}});
+      }else{
+        pomenyalos(el, 'prep-den:' + tid + ':' + sl,
+          {put:'/api/prepodavateli',
+           telo:{deystvie:'ne-prihodit', teacher_id:tid, slot:sl}});
+      }
     }else if(el.classList.contains('kab-inp')){
       const k = el.value.trim();
       if(!k){ el.value = el.defaultValue; return; }
@@ -794,19 +821,25 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
     # и время сразу». Человек, зашедший посмотреть, куда идти, спрашивает «куда мне
     # СЕГОДНЯ», а не «покажи мне четверг».
     #
-    # 🔴 ОРГАНИЗАТОРУ ПЕРЕКЛЮЧАТЕЛЬ ОСТАЁТСЯ: он правит оба дня и обязан видеть оба.
-    # Это ровно то, что уровни доступа и означают: не другая страница, а другой
-    # набор возможностей на том же месте.
-    if kt.mozhno("pereklyuchat-dni"):
-        zanyatie_verh = (
-            '<span class="dni" data-org="pereklyuchat-dni">'
-            + "".join(f'<label for="d-{k}" title="{e(kt.DNI[k][0])}">{e(kt.DNI[k][3])}</label>'
-                      for k in kt.DNI)
-            + "</span>")
-    else:
-        zanyatie_verh = (
-            f'<span class="skoro" data-tolko-gost>{e(kt.po_russki(kt.DNI[kt.blizh][2]))}'
-            f' · {e(kt.DNI[kt.blizh][0])} · {VREMYA[kt.blizh]}</span>')
+    # 🔴 И ОРГАНИЗАТОРУ ПЕРЕКЛЮЧАТЕЛЯ БОЛЬШЕ НЕТ — РЕШЕНИЕ ВЛАДЕЛЬЦА 5 ОТ 07.09,
+    # дословно: «я бы делал одну табличку на оба дня… по умолчанию оба значения
+    # одинаковые». Переключатель отвечал на вопрос «покажи мне четверг», а
+    # спрашивают здесь другое — «разошлись ли у этого ребёнка понедельник с
+    # четвергом», и на него переключатель ответить не может по построению: два
+    # состояния экрана нельзя увидеть одновременно. Оба дня теперь стоят в одной
+    # строке таблицы, каждый своим полем; какой день где — говорит шапка столбцов.
+    # Возможность `pereklyuchat-dni` из словаря НЕ убрана: словарь ролей — чужая
+    # территория этого захода, и мёртвая возможность безвреднее, чем правка прав
+    # заодно.
+    #
+    # 🔴 СТРОКА «БЛИЖАЙШЕЕ ЗАНЯТИЕ» ОСТАЁТСЯ ГОСТЕВОЙ, И `if not kt.ADMIN` ЗДЕСЬ —
+    # НЕ УКРАШЕНИЕ, А ТРЕБОВАНИЕ ГЕЙТА. `data-tolko-gost` снимается ТОЛЬКО с
+    # гостевой стороны (`_snyat_gostevoe`), поэтому тот же элемент, оставленный
+    # организатору, разводит каркасы: гость — пусто, организатор — строка. Ровно
+    # так же и по той же причине собирается `kabinety_verh` ниже.
+    zanyatie_verh = (
+        f'<span class="skoro" data-tolko-gost>{e(kt.po_russki(kt.DNI[kt.blizh][2]))}'
+        f' · {e(kt.DNI[kt.blizh][0])} · {VREMYA[kt.blizh]}</span>') if not kt.ADMIN else ""
 
     # 🔴 КАБИНЕТ ГРУППЫ ПЕРЕЕХАЛ НАВЕРХ, В ТУ ЖЕ СТРОКУ. Он занимал отдельную
     # строку под вкладками — ради одного числа. Показывается только на вкладке
@@ -818,7 +851,7 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
     return f"""<section class="str holst" id="s-rasp">
   <!-- Ни заголовка «Распределение», ни отдельной строки под поиск: название
        раздела уже стоит во вкладке наверху, повторять его нечем и незачем.
-       Вкладки и переключатель дня — одной строкой. -->
+       Вкладки — одной строкой; дней в ней больше нет, они внутри таблицы. -->
   <input class="rd" type="radio" name="vk" id="t-shk" checked>
   <input class="rd" type="radio" name="vk" id="t-prep">
   <input class="rd" type="radio" name="vk" id="t-В">
@@ -830,17 +863,9 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
     <span class="zanyatie">{zanyatie_verh}</span>
     {kabinety_verh}
   </div>
-  <section class="vid" id="v-shk">
-    <div class="den den-pn">{vid_vse("pn")}</div>
-    <div class="den den-cht">{vid_vse("cht")}</div>
-  </section>
-  <section class="vid" id="v-prep">
-    <div class="den den-pn">{vid_prepodavateli("pn")}</div>
-    <div class="den den-cht">{vid_prepodavateli("cht")}</div>
-  </section>
-  {"".join(f'<section class="vid" id="v-{k}">'
-           f'<div class="den den-pn">{vkladka_gruppy(k, "pn")}</div>'
-           f'<div class="den den-cht">{vkladka_gruppy(k, "cht")}</div></section>'
+  <section class="vid" id="v-shk">{vid_vse()}</section>
+  <section class="vid" id="v-prep">{vid_prepodavateli()}</section>
+  {"".join(f'<section class="vid" id="v-{k}">{vkladka_gruppy(k)}</section>'
            for k in ("В", "Д", "Н"))}
 </section>"""
 
@@ -1061,13 +1086,6 @@ tr:hover td{{background:var(--accent-soft)}}
    преподавателя и не переносились, оставляя дыру. Крестик занимает НОЛЬ ширины,
    пока на таблетку не навели мышь, — поэтому у гостя и у организатора список
    ровно одинаковой ширины. Элемент один и тот же; правку добавляет data-org. */
-/* Отметки дней у преподавателя: закрашена — в этот день у него есть школьники. */
-.tdni{{white-space:nowrap;width:1%;padding-right:1.2rem}}
-.den-metka{{display:inline-block;font-family:var(--sans);font-size:.66rem;font-weight:700;
-  letter-spacing:.04em;text-transform:uppercase;padding:.1em .34em;border-radius:4px;
-  margin-right:.22rem;background:var(--accent-soft);color:var(--accent);
-  border:1px solid transparent}}
-.den-metka.pusto{{background:none;color:var(--faint);border-color:var(--rule)}}
 /* ── БЛИЖАЙШЕЕ ЗАНЯТИЕ И КАБИНЕТ — В СТРОКЕ ВКЛАДОК, а не отдельной полосой. ── */
 .tabbar-rasp .zanyatie{{margin-left:auto;align-self:center;display:flex;align-items:center;gap:.3rem}}
 .skoro{{font-family:var(--sans);font-size:1rem;color:var(--muted);white-space:nowrap}}
@@ -1247,8 +1265,6 @@ tr:hover td{{background:var(--accent-soft)}}
 .dva-listka{{display:grid;grid-template-columns:1fr 1fr;gap:0 3rem;align-items:start}}
 @media(max-width:900px){{.dva-listka{{grid-template-columns:1fr}}}}
 /* Переключатель дня стоит в той же строке, что и вкладки, а не отдельной полосой. */
-.tabbar-rasp .dni{{margin-left:auto;display:flex;gap:.25rem;align-self:center}}
-.tabbar-rasp .dni label{{font-size:.98rem;padding:.3em .9rem}}
 /* ── СТРОКА НЕ ПЕРЕНОСИТСЯ. Перенос был не косметикой, а поломкой: список
    переставал читаться колонкой, и на месте переноса зияла дыра. Причина —
    раздутые выпадающие списки, съедавшие место у фамилии. Лечится тем же, чем
@@ -1351,17 +1367,28 @@ body{{padding-bottom:2rem}}
 .para.skryt{{display:none}}
 /* Переключатель дня — сверху справа, рядом с заголовком. */
 .shapka-str{{display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap;margin:0 0 .7rem}}
-.dni{{display:flex;gap:.25rem;margin-left:auto}}
-.dni label{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1.05rem;
-  color:var(--muted);padding:.35em 1.1rem;border:1px solid var(--rule);border-radius:9px}}
-.dni label:hover{{color:var(--text)}}
-#d-pn:checked~.holst .dni label[for=d-pn],
-#d-cht:checked~.holst .dni label[for=d-cht],
-#d-pn:checked~#s-rasp .dni label[for=d-pn],
-#d-cht:checked~#s-rasp .dni label[for=d-cht]{{color:var(--accent);border-color:var(--accent);
-  background:var(--accent-soft)}}
-.den{{display:none}}
-#d-pn:checked~#s-rasp .den-pn,#d-cht:checked~#s-rasp .den-cht{{display:block}}
+/* ── ДВА ДНЯ В ОДНОЙ СТРОКЕ ───────────────────────────────────────────────────
+   Понедельник и четверг стоят рядом, столбцами равной ширины, и подписаны шапкой.
+   Ширина фиксирована и одинакова у обоих: столбец, который меряется по самому
+   длинному имени внутри себя, разъезжается от строки к строке, и глаз перестаёт
+   читать таблицу сверху вниз — а читают её именно так (`doc/TZ-raspredelenie-
+   dizajn-i-dva-sloya.md`: публичный вид читается ПО СТОЛБЦАМ). */
+#v-shk .para .komu,#v-prep .para .komu,#v-В .para .komu,#v-Д .para .komu,
+#v-Н .para .komu{{display:flex;align-items:baseline;justify-content:flex-end;
+  gap:.4rem;min-width:0}}
+.para .komu .dv{{flex:0 1 10.5rem;min-width:0;text-align:right}}
+.para .komu .dv .org{{max-width:100%;width:100%}}
+.shapka-dnej{{border-bottom:2px solid var(--rule);color:var(--faint);
+  font-family:var(--sans);font-size:.85rem;letter-spacing:.06em;text-transform:uppercase}}
+#v-shk .shapka-dnej,#v-В .shapka-dnej,#v-Д .shapka-dnej,#v-Н .shapka-dnej{{font-size:.85rem}}
+.shapka-dnej .komu .dv{{color:var(--faint)}}
+/* Шапка столбцов в таблице принимающих — та же роль, другой элемент. */
+.prep-shapka td{{color:var(--faint);font-family:var(--sans);font-size:.85rem;
+  letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid var(--rule)}}
+/* Ячейка дня в таблице принимающих: два столбца детей и два поля группы, и
+   у каждого столбца своя граница слева — иначе четверг читается как продолжение
+   понедельника. */
+.prep-tab td.dv-cht{{border-left:1px solid var(--rule)}}
 .poisk-str{{margin:0;max-width:32rem;flex:1 1 18rem}}
 @media(max-width:900px){{.dva{{grid-template-columns:1fr}}
   .kol{{border-right:none;padding-right:0}}}}
@@ -1471,8 +1498,6 @@ body{{padding-bottom:2rem}}
 }}{lich_stili}{kond_stili}
 </style>
 
-<input class="rd" type="radio" name="den" id="d-pn" checked>
-<input class="rd" type="radio" name="den" id="d-cht">
 <input class="rd" type="radio" name="str" id="p-start"{start_vybran}>
 <input class="rd" type="radio" name="str" id="p-list">
 <input class="rd" type="radio" name="str" id="p-rasp">{lich_vhod}{kond_vhod}

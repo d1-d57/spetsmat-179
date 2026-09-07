@@ -120,16 +120,56 @@ def test_raspredelenie_opens_on_a_dated_lesson_and_not_on_the_standing_one(runni
     assert b"/raspredelenie/postoyannoe" in body
 
 
-def test_the_standing_arrangement_keeps_its_own_page_untouched(running_server):
-    """The old screen is not redesigned, not moved into a tab: it is where it was, whole.
+def test_the_standing_arrangement_keeps_its_own_address_and_is_the_site_s_own_section(
+        running_server):
+    """The permanent layer stays behind its own address — and it is the SITE's section.
 
-    ``doc/DIZAJN-ZAKREPLENO.md §0``: new surfaces inherit from what stands; what stands
-    is not rebuilt to suit them.
+    🔴 THIS ASSERTION IS THE OPPOSITE OF THE ONE IT REPLACES, AND THAT IS THE CHANGE.
+    It used to demand ``veb/templates/index.html`` at this address, on the reading that
+    the standing editor is that separate page. Measured on 2026-09-07, it is not: that
+    file is drawn entirely by the browser and carries ``const SLOT = 1``, i.e. it never
+    showed Thursday at all. What the owner calls «постоянное распределение» — and
+    describes tab by tab as «школьникам · принимающим · В · Д · Н» — is the ``s-rasp``
+    section of the site itself, which is server-rendered from the база and is the only
+    surface that ever had a day switch to remove (решение 5 of 2026-09-07).
+
+    ``doc/DIZAJN-ZAKREPLENO.md §0`` still holds and is why ``index.html`` is not
+    touched by that change: it keeps standing, as the source of the file mode built by
+    ``veb/sobrat_fajl.py``.
     """
     base, _ = running_server
     status, body = _http_get(base + "/raspredelenie/postoyannoe")
     assert status == 200
-    assert b"\xd0\xa8\xd0\xba\xd0\xbe\xd0\xbb\xd1\x8c\xd0\xbd\xd0\xb8\xd0\xba" in body  # «Школьники»
+    telo = body.decode("utf-8")
+    assert 'id="s-rasp"' in telo, "постоянное — раздел распределения самого сайта"
+    for vkladka in ("школьникам", "принимающим"):
+        assert f">{vkladka}</label>" in telo, f"вкладка «{vkladka}» на месте"
+    # The tab is opened BY THE ADDRESS: the radio is a CSS tab and cannot be reached
+    # by a URL, so the shell carries the three lines that check it.
+    assert "/raspredelenie/postoyannoe" in telo, "адрес открывает вкладку сам"
+
+
+def test_the_standing_arrangement_carries_both_days_of_every_pupil(running_server):
+    """Решение 5 владельца 07.09: одна таблица на оба дня, у школьника два поля.
+
+    Counted where the pupils are listed — the «школьникам» view. The page carries
+    every tab at once, so a pupil is drawn again on his group's tab; a page-wide count
+    would therefore be a multiple of the pupils and prove nothing.
+    """
+    base, _ = running_server
+    status, body = _http_get(base + "/raspredelenie/postoyannoe")
+    assert status == 200
+    telo = body.decode("utf-8")
+    vid = re.search(r'<section class="vid" id="v-shk">.*?</section>', telo, re.S)
+    assert vid, "вкладка школьников на месте"
+    shkolniki = re.findall(r'<div class="para" data-i="[^"]*">', vid.group(0))
+    polya = re.findall(r'data-slot="\d+"', vid.group(0))
+    assert shkolniki, "школьники на вкладке есть"
+    assert len(polya) == 2 * len(shkolniki), (
+        "у каждого школьника ровно два поля — понедельник и четверг: "
+        f"{len(polya)} полей на {len(shkolniki)} школьников")
+    # And the day is no longer a switch: решение 5, «день недели НЕ переключателем».
+    assert 'id="d-pn"' not in telo and 'id="d-cht"' not in telo, "переключателя дней нет"
 
 
 def test_a_date_that_is_not_a_date_is_refused_rather_than_guessed(running_server):

@@ -1149,9 +1149,62 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "otkrepleny": otkrepleny,
                                   "iz_gruppy": staraya, "v_gruppu": gruppa})
             return
+        elif deystvie == "ne-prihodit":
+            # 🔴 «В ЭТОТ ДЕНЬ НЕ ПРИХОДИТ» — РЕШЕНИЕ ВЛАДЕЛЬЦА 6 ОТ 07.09, дословно:
+            # «значения В · Д · Н · —, где прочерк значит „в этот день не приходит“…
+            # это и есть способ сказать, что человека в один из дней не будет».
+            #
+            # 🔴 ГДЕ ЭТОТ ФАКТ ХРАНИТСЯ И ПОЧЕМУ ИМЕННО ТАМ. Признака «работает по
+            # понедельникам» в схеме нет, и завести его здесь нечем: `teachers`
+            # правится миграциями, а `migrations/` лежит вне зоны этого захода. По
+            # дням разделён ровно `enrollment.slot` — и «не приходит в этот день»
+            # записывается тем же способом, каким день вообще существует: его
+            # строки закрепления ЭТОГО слота закрываются. Дети при этом не
+            # исчезают и не переезжают: они остаются в своей группе и становятся
+            # нераспределёнными НА ЭТОТ ДЕНЬ, то есть попадают в «некуда деть» на
+            # странице занятия — именно та работа, которую отсутствие человека и
+            # создаёт. Второй день не затрагивается ни строкой.
+            slot = payload.get("slot")
+            try:
+                slot = int(slot)
+            except (TypeError, ValueError):
+                self._send_json(400, {"error": "нужен slot"})
+                return
+            if not 1 <= slot <= 7:
+                self._send_json(400, {"error": "slot must be 1..7"})
+                return
+            _obespechit_gruppu_shkolnika(connection)
+            gruppa = connection.execute(
+                "select gruppa from teachers where id = ?", (tid,)).fetchone()
+            gruppa = gruppa["gruppa"] if gruppa else None
+            segodnya = datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat()
+            snyaty = []
+            for stroka in connection.execute(
+                    "select id, student_id, valid_from from enrollment "
+                    "where teacher_id = ? and slot = ? and valid_to = ?",
+                    (tid, slot, "9999-12-31")).fetchall():
+                if gruppa:
+                    # Где ребёнок числился — единственное, что скажет об этом
+                    # завтра: после закрытия строки группа вычисляться неоткуда.
+                    connection.execute("update students set gruppa = ? where id = ?",
+                                       (gruppa, stroka["student_id"]))
+                if stroka["valid_from"] >= segodnya:
+                    # Не начавшийся интервал удаляется, а не закрывается: схема
+                    # требует `valid_from < valid_to`. Тот же приём, что в
+                    # `_snyat_shkolnika` и в действии `gruppa` выше.
+                    connection.execute("delete from enrollment where id = ?",
+                                       (stroka["id"],))
+                else:
+                    connection.execute("update enrollment set valid_to = ? where id = ?",
+                                       (segodnya, stroka["id"]))
+                snyaty.append(stroka["student_id"])
+            connection.commit()
+            self._send_json(200, {"ok": True, "slot": slot, "snyaty": snyaty})
+            return
         else:
             self._send_json(400, {
-                "error": "деиствие: dobavit | ubrat | vernut | kabinet | gruppa"})
+                "error": "деиствие: dobavit | ubrat | vernut | kabinet | gruppa"
+                         " | ne-prihodit"})
             return
         connection.commit()
         self._send_json(200, {"ok": True})

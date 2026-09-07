@@ -84,50 +84,122 @@ def vybor_prepoda(kt, r, sl, gostevoj_tekst):
             + "".join(opts) + '</select>')
 
 
-def vybor_gruppy(r, sl, tek):
-    """Выпадающий список группы. «нигде» — это ВЫБОР, а не пустота."""
+def vybor_gruppy(r, tek):
+    """Выпадающий список группы. «нигде» — это ВЫБОР, а не пустота.
+
+    🔴 ОДИН НА ШКОЛЬНИКА, А НЕ ПО ОДНОМУ НА ДЕНЬ, И ЭТО СВОЙСТВО СХЕМЫ, А НЕ ВКУСА.
+    Группа снятого школьника лежит в `students.gruppa` — ОДНОЙ колонке, у которой
+    дня нет. Два поля показывали бы одно и то же значение, а запись во второе
+    молча затирала бы первое; по дням разделён `enrollment`, то есть
+    ПРЕПОДАВАТЕЛЬ, и ровно он и стоит на строке дважды.
+    """
     opts = ['<option value=""%s>нигде</option>' % (" selected" if not tek else "")]
     for kod in ("В", "Д", "Н"):
         opts.append('<option value="%s"%s>%s</option>'
                     % (kod, " selected" if tek == kod else "", kod))
     return (f'<select class="org gr-sel" data-org="pravit-raspredelenie"'
-            f' data-sid="{r["id"]}" data-slot="{sl}">'
+            f' data-sid="{r["id"]}">'
             + "".join(opts) + '</select>')
 
 
-def para_shk(kt, r, kl, pokazat_kab=True):
-    """Строка «школьник → его преподаватель».
+def po_dnyam(kt, otbor=None):
+    """Школьники ОДНИМ списком, у каждого — его строка в каждый из дней.
 
-    Гостю — имя преподавателя и кабинет текстом. Организатору — В ТОМ ЖЕ
-    МЕСТЕ два выпадающих списка: преподаватель и группа. Буква класса
-    (К · И · Л) стоит только у организатора: ребёнку она не нужна, а тому,
-    кто раскладывает людей по группам, нужна. Буквы группы у гостя нет —
-    решение владельца 06.09: она дублирует кабинет и добавляет шум.
+    🔴 ОДНА ТАБЛИЦА НА ОБА ДНЯ — РЕШЕНИЕ ВЛАДЕЛЬЦА 5 ОТ 07.09, дословно: «я бы делал
+    одну табличку на оба дня… по умолчанию оба значения одинаковые». До этого дни
+    были ДВУМЯ разметками одного и того же, между которыми переключала радиокнопка:
+    чтобы увидеть, что у ребёнка понедельник и четверг разошлись, надо было помнить
+    первый экран, стоя на втором. Теперь оба дня стоят рядом в одной строке, и
+    расхождение видно, а не вспоминается.
+
+    Ключ склейки — `students.id`: `shkolniki()` спрашивает один и тот же список
+    школьников на каждый слот и отличается только присоединённым `teacher_id`,
+    поэтому склейка по id полная и порядок сохраняется.
+
+    `otbor` — предикат по (kt, ryady): им групповая вкладка оставляет своих.
     """
-    kab = kt.kabinety_dnya[kl]
-    sl = kt.DNI[kl][1]
-    t_ = kt.prep.get(r["teacher_id"])
-    g = gr_shk(kt, r)
-    klass = (f'<span class="kl" data-org="videt-klass"> {e(r["class"])}</span>'
-             if kt.mozhno("videt-klass") and r["class"] else "")
+    poryadok = kt.shk_dnya[next(iter(kt.DNI))]
+    po_id = {kl: {r["id"]: r for r in kt.shk_dnya[kl]} for kl in kt.DNI}
+    vse = []
+    for osnova in poryadok:
+        ryady = {kl: po_id[kl].get(osnova["id"], osnova) for kl in kt.DNI}
+        if otbor is None or otbor(ryady):
+            vse.append(ryady)
+    return vse
+
+
+def gruppa_lyuboj_den(kt, ryady):
+    """Группа школьника: по тому дню, где он у кого-то есть.
+
+    Дни могут разойтись — тогда группой считается понедельничная, а четверговая
+    показана на своей половине строки. Пустая у обоих — школьник «нигде».
+    """
+    for kl in kt.DNI:
+        g = gr_shk(kt, ryady[kl])
+        if g:
+            return g
+    return None
+
+
+def para_shk(kt, ryady, pokazat_kab=True):
+    """Строка «школьник → его преподаватель В КАЖДЫЙ ИЗ ДВУХ ДНЕЙ».
+
+    Гостю — имена преподавателей и кабинет текстом. Организатору — В ТЕХ ЖЕ
+    МЕСТАХ выпадающие списки: по одному на день, плюс группа, которая у школьника
+    одна. Буква класса (К · И · Л) стоит только у организатора: ребёнку она не
+    нужна, а тому, кто раскладывает людей по группам, нужна. Буквы группы у гостя
+    нет — решение владельца 06.09: она дублирует кабинет и добавляет шум.
+
+    🔴 ДВА ПОЛЯ СТОЯТ ВСЕГДА, ДАЖЕ КОГДА ОНИ РАВНЫ, и это не многословие. «По
+    умолчанию оба значения одинаковые» — слова владельца о ДАННЫХ, а не о
+    разметке: на живой базе 53 школьника из 53 сегодня имеют один и тот же
+    ответ на оба дня. Схлопнуть равные значения в одно поле значило бы прятать
+    ровно тот орган, которым день и разводят.
+    """
+    osnova = ryady[next(iter(kt.DNI))]
+    klass = (f'<span class="kl" data-org="videt-klass"> {e(osnova["class"])}</span>'
+             if kt.mozhno("videt-klass") and osnova["class"] else "")
     # 🔴 КАБИНЕТ — ГОСТЮ, НЕ АДМИНУ. Решение владельца 06.09: «на странице,
     # которую видят все, кабинет должен быть виден; на странице только для
     # администраторов номер кабинета не нужен». Тот, кто раскладывает людей,
     # смотрит на людей; кабинет он правит в шапке группы, и только там.
-    imya_prepoda = e(t_["name"]) if t_ else "—"
+    yacheyki = []
+    for kl in kt.DNI:
+        r = ryady[kl]
+        sl = kt.DNI[kl][1]
+        t_ = kt.prep.get(r["teacher_id"])
+        g = gr_shk(kt, r)
+        imya_prepoda = e(t_["name"]) if t_ else "—"
+        if kt.ADMIN:
+            telo = vybor_prepoda(kt, r, sl, imya_prepoda)
+        else:
+            telo = imya_prepoda
+            if pokazat_kab and g and kt.kabinety_dnya[kl].get(g):
+                telo += '<span data-tolko-gost> ' + kt.kab_html(kl, g) + "</span>"
+        yacheyki.append(f'<span class="dv dv-{kl}">{telo}</span>')
+    hvost = "".join(yacheyki)
     if kt.ADMIN:
-        hvost = (vybor_prepoda(kt, r, sl, imya_prepoda) + vybor_gruppy(r, sl, g))
-    else:
-        hvost = imya_prepoda
-        if pokazat_kab and g and kab.get(g):
-            hvost += '<span data-tolko-gost> ' + kt.kab_html(kl, g) + "</span>"
-    return (f'<div class="para" data-i="{e((r["surname"] + " " + r["name"]).lower())}">'
-            f'<span class="kto"><b>{e(r["surname"])}</b> {e(r["name"])}{klass}</span>'
+        hvost += vybor_gruppy(osnova, gruppa_lyuboj_den(kt, ryady))
+    return (f'<div class="para" data-i="{e((osnova["surname"] + " " + osnova["name"]).lower())}">'
+            f'<span class="kto"><b>{e(osnova["surname"])}</b> {e(osnova["name"])}{klass}</span>'
             f'<span class="komu">{hvost}</span></div>')
 
 
-def vid_vse(kt, kl):
-    """Вкладка «школьникам»: ДВА столбца, каждому — его преподаватель.
+def shapka_dnej(kt):
+    """Подписи столбцов: какой день где. Не переключатель — заголовок.
+
+    Решение владельца 4 и 5 от 07.09: день недели перестал быть переключателем.
+    Два столбца без подписи — две одинаковые фамилии подряд и никакого способа
+    узнать, который из них четверг.
+    """
+    metki = "".join(f'<span class="dv dv-{kl}">{e(kt.DNI[kl][3])}</span>'
+                    for kl in kt.DNI)
+    return ('<div class="para shapka-dnej"><span class="kto"></span>'
+            f'<span class="komu">{metki}</span></div>')
+
+
+def vid_vse(kt):
+    """Вкладка «школьникам»: ДВА столбца, каждому — его преподаватели на оба дня.
 
     🔴 ДВА, А НЕ ТРИ, И ЭТО НЕ ВКУСОВЩИНА. Столько же, сколько в публичной
     версии, — потому что базовая вёрстка у гостя и у организатора обязана
@@ -139,8 +211,9 @@ def vid_vse(kt, kl):
     Читается ПО СТОЛБЦАМ: фамилии идут сверху вниз внутри столбца, поэтому
     человека находишь по букве, а не просматривая каждую строку.
     """
-    deti = kt.shk_dnya[kl]
+    deti = po_dnyam(kt)
     pol = (len(deti) + 1) // 2
+    shapka = shapka_dnej(kt)
     return ('<div class="dva">'
-            f'<div class="kol">{"".join(para_shk(kt, r, kl) for r in deti[:pol])}</div>'
-            f'<div class="kol">{"".join(para_shk(kt, r, kl) for r in deti[pol:])}</div></div>')
+            f'<div class="kol">{shapka}{"".join(para_shk(kt, r) for r in deti[:pol])}</div>'
+            f'<div class="kol">{shapka}{"".join(para_shk(kt, r) for r in deti[pol:])}</div></div>')
