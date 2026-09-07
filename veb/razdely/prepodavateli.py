@@ -26,58 +26,67 @@ from veb.obshchee.karkas import e
 
 
 def prihodit(kt, x, kl) -> bool:
-    """Приходит ли принимающий в этот день — по строкам закрепления, а не по флагу.
+    """Приходит ли принимающий в этот день — СПРОШЕНО У ПАМЯТИ, а не выведено.
 
-    🔴 ПРИЗНАКА «РАБОТАЕТ ПО ПОНЕДЕЛЬНИКАМ» В СХЕМЕ НЕТ, И ЗАВОДИТЬ ЕГО ЗДЕСЬ НЕЛЬЗЯ.
-    По дням разделён ровно `enrollment.slot`; `teachers.gruppa` — одна колонка на
-    оба дня (её и не создаёт ни одна миграция — схема сервера ушла вперёд руками).
-    Поэтому «он в этот день принимает» здесь значит ровно то, что можно измерить:
-    в этот слот у него есть хотя бы один школьник. Прочерк в поле — та же мера с
-    другой стороны, и потому она не врёт: пустой день и есть день без детей.
+    Раньше здесь стояло «есть ли у него в этот день хоть один школьник», и это
+    отвечало на другой вопрос: человек, которому детей ещё не дали, выглядел
+    отсутствующим, а отметить его присутствие было нечем. Память дня —
+    `prepodavatel_den` (`infra/prepodavatel_den_repo`), она и отвечает.
     """
-    return any(r["teacher_id"] == x["id"] for r in kt.shk_dnya[kl])
+    return kt.DNI[kl][1] in kt.dni_prepodavatelej.get(x["id"], frozenset())
 
 
-def vybor_gruppy_prepoda(kt, x, kl, gostevoj_tekst):
-    """Группа принимающего В ЭТОТ ДЕНЬ: В · Д · Н · —. Смена — правило, а не
+def galochka_dnya(kt, x, kl):
+    """Галочка «в этот день прихожу». Владелец 07.09 назвал её именно так.
+
+    🔴 ГАЛОЧКА — ПРО ПРИСУТСТВИЕ, А ГРУППА — ОТДЕЛЬНОЕ ПОЛЕ, И РАЗДЕЛЕНИЕ ЭТО НЕ
+    ОФОРМИТЕЛЬСКОЕ. Прошлая редакция ставила в каждый день выбор `В · Д · Н · —`,
+    то есть разрешала записать разные группы в разные дни; владелец сказал, что
+    такого не бывает: *«он ходит только в одну группу, за которой он фиксирован,
+    но либо один, либо два дня»*. Орган, которым можно записать невозможное,
+    однажды его и запишет.
+
+    🔴 У ГОСТЯ ЗДЕСЬ СВОЙ ЭЛЕМЕНТ, А НЕ ЭТОТ ЖЕ БЕЗ ПРАВКИ. Гейт `proverit_karkas`
+    снимает `data-org` с админской стороны и `data-tolko-gost` — с гостевой, и
+    сверяет ОСТАТКИ. Поэтому пара органов «чекбокс организатору / метка гостю»
+    законна и проверяема, а один общий элемент с атрибутом-надстройкой — нет.
+    """
+    sl = kt.DNI[kl][1]
+    est = prihodit(kt, x, kl)
+    return ('<label class="den-gal%s" data-org="pravit-raspredelenie"'
+            ' title="%s — %s">'
+            '<input class="org den-chk" type="checkbox" data-tid="%s" data-slot="%d"%s>'
+            "%s</label>"
+            % ("" if est else " pusto", e(kt.DNI[kl][0]),
+               "приходит" if est else "не приходит",
+               x["id"], sl, " checked" if est else "",
+               e(kt.DNI[kl][3])))
+
+
+def metka_dnya(kt, x, kl):
+    """То же самое гостю: закрашена — приходит, бледная — нет. Читать, не править."""
+    est = prihodit(kt, x, kl)
+    return ('<span class="den-metka%s" data-tolko-gost title="%s">%s</span>'
+            % ("" if est else " pusto", e(kt.DNI[kl][0]), e(kt.DNI[kl][3])))
+
+
+def vybor_gruppy_prepoda(x, gostevoj_tekst):
+    """Группа принимающего — ОДНА на человека, без дня. Смена — правило, а не
     побочный эффект.
 
     Владелец 06.09: преподаватель уходит в другую группу — все его дети
     ОТКРЕПЛЯЮТСЯ и остаются в своих группах, преподаватель приходит в новую
     группу без детей. Само правило исполняет `/api/prepodavateli`, здесь
     только орган.
-
-    🔴 ДВА ПОЛЯ, ПО ОДНОМУ НА ДЕНЬ, И ОНИ НЕ РАВНОПРАВНЫ — РЕШЕНИЕ ВЛАДЕЛЬЦА 6 ОТ
-    07.09: «понедельник и четверг, значения В · Д · Н · —, где прочерк значит „в
-    этот день не приходит“… это и есть способ сказать, что человека в один из
-    дней не будет». Что из этих двух значений куда ложится, решает схема, а не
-    экран: ГРУППА хранится одной колонкой на человека, поэтому её выбор меняет
-    обоих дней сразу; ПРОЧЕРК ложится в `enrollment` того слота, где дни и
-    разделены, — его строки этого дня закрываются, и дети становятся видны как
-    нераспределённые на странице занятия, то есть работа «его в четверг не
-    будет» превращается в работу «этих раздать», а не теряется.
-
-    Чего этот орган НЕ умеет и не притворяется: развести ГРУППЫ по дням (В в
-    понедельник, Д в четверг). Для этого нужна колонка, которой нет, а
-    `migrations/` лежит вне зоны этого захода — названо в `## ПЛАН`, а не
-    подделано.
     """
-    sl = kt.DNI[kl][1]
-    est = prihodit(kt, x, kl)
-    tek = x["gruppa"] if est else ""
-    opts = ['<option value=""%s>—</option>' % (" selected" if not tek else "")]
+    pusto = " selected disabled" if not x["gruppa"] else " disabled"
+    opts = ['<option value=""%s>—</option>' % pusto]
     for kod in ("В", "Д", "Н"):
         opts.append('<option value="%s"%s>%s</option>'
-                    % (kod, " selected" if tek == kod else "", kod))
+                    % (kod, " selected" if x["gruppa"] == kod else "", kod))
     return (f'<select class="org tgr-sel" data-org="pravit-raspredelenie"'
-            f' data-gost="{e(gostevoj_tekst)}"'
-            f' data-tid="{x["id"]}" data-slot="{sl}">'
+            f' data-gost="{e(gostevoj_tekst)}" data-tid="{x["id"]}">'
             + "".join(opts) + '</select>')
-
-
-def gruppa_dnya(kt, x, kl) -> str:
-    """Что стоит в поле дня у гостя: буква группы или прочерк."""
-    return (x["gruppa"] or "—") if prihodit(kt, x, kl) else "—"
 
 
 def deti_prepoda(kt, x, ego, sl):
@@ -151,17 +160,16 @@ def para_prep(kt, x, pokazat_gruppu=True):
 def vid_prepodavateli(kt):
     """Вкладка преподавателей ТАБЛИЦЕЙ: колонки обязаны стоять ровно.
 
-    Порядок владельца: преподаватель · школьники · группа · кабинет —
-    кабинет самое неважное и уходит вправо. Дней теперь два, и каждый несёт
-    СВОИХ школьников и СВОЁ поле группы: одна таблица на оба дня, решение
-    владельца 5 от 07.09.
+    Порядок владельца: преподаватель · школьники · дни · группа · кабинет —
+    кабинет самое неважное и уходит вправо. Школьники показаны по каждому дню
+    отдельно, дни отмечены галочками, а группа одна: решение владельца 07.09.
     """
     ryady = ['<tr class="prep-shapka"><td class="tp"></td>'
              + "".join(f'<td class="td-deti">{e(kt.DNI[k][3])}</td>' for k in kt.DNI)
-             + "".join(f'<td class="tg">{e(kt.DNI[k][3])}</td>' for k in kt.DNI)
+             + '<td class="tdni">приходит</td><td class="tg">группа</td>'
              + '<td class="tk"></td></tr>']
     for x in sorted(kt.prep.values(), key=lambda z: z["name"]):
-        deti_yach, gruppy_yach = [], []
+        deti_yach = []
         for kl in kt.DNI:
             ego = ego_deti(kt, x, kl)
             sl = kt.DNI[kl][1]
@@ -173,18 +181,19 @@ def vid_prepodavateli(kt):
                      if kt.mozhno("videt-schyot") else ""
             deti_yach.append(f'<td class="td-deti dv-{kl}">'
                              + deti_prepoda(kt, x, ego, sl) + schyot + "</td>")
-            gostevoe = gruppa_dnya(kt, x, kl)
-            gruppy_yach.append(
-                f'<td class="tg dv-{kl}">'
-                + (vybor_gruppy_prepoda(kt, x, kl, gostevoe) if kt.ADMIN
-                   else e(gostevoe))
-                + "</td>")
+        dni_yach = "".join(
+            (galochka_dnya(kt, x, kl) if kt.ADMIN else metka_dnya(kt, x, kl))
+            for kl in kt.DNI)
+        gostevoe = x["gruppa"] or "—"
+        gruppa_yach = (vybor_gruppy_prepoda(x, gostevoe) if kt.ADMIN
+                       else e(gostevoe))
         k = kt.kabinety_dnya[next(iter(kt.DNI))].get(x["gruppa"])
         ryady.append(
             f'<tr data-i="{e(x["name"].lower())}" data-tid="{x["id"]}">'
             f'<td class="tp"><b>{e(x["name"])}</b></td>'
             + "".join(deti_yach)
-            + "".join(gruppy_yach)
+            + f'<td class="tdni">{dni_yach}</td>'
+            + f'<td class="tg">{gruppa_yach}</td>'
             + (f'<td class="tk"><span data-tolko-gost>'
                f'{kt.kab_html(next(iter(kt.DNI)), x["gruppa"])}'
                f'</span></td>' if k and not kt.ADMIN else '<td class="tk"></td>')

@@ -145,6 +145,20 @@ class SessionsOfDay(Protocol):
     def for_day(self, held_on: str) -> Optional[Session]: ...
 
 
+class Roster(Protocol):
+    """Кто вообще учится — список id, и больше отсюда ничего не нужно.
+
+    🔴 БЕЗ ЭТОГО ПОРТА ШКОЛЬНИК, ОСТАВШИЙСЯ БЕЗ СТРОКИ НА ЭТОТ ДЕНЬ, ПРОСТО ИСЧЕЗАЛ
+    С ЭКРАНА. Состав собирался из `enrollment` и отклонений, то есть отвечал на
+    вопрос «кого куда распределили», а спрашивают у него другое — «все ли на
+    месте». Замер 07.09: у принимающего сняли четверг, три его строки закрылись,
+    и трое детей пропали из четверга молча — ни в чьём списке, ни в «некуда деть».
+    Ребёнок, которого не видно, — это ребёнок, которого никто не ищет.
+    """
+
+    def aktivnye(self) -> Sequence[int]: ...
+
+
 class DeviationRows(Protocol):
     def rows_for_session(self, session_id: int) -> list: ...
 
@@ -233,10 +247,15 @@ class SostavService:
     """
 
     def __init__(self, enrollment: EnrollmentRows, sessions: SessionsOfDay,
-                 attendance: DeviationRows) -> None:
+                 attendance: DeviationRows, roster: Optional[Roster] = None) -> None:
         self._enrollment = enrollment
         self._sessions = sessions
         self._attendance = attendance
+        # Необязателен НАМЕРЕННО: без него служба отвечает ровно как отвечала, и
+        # дюжина зелёных тестов вокруг неё продолжает спрашивать то же самое.
+        # С ним она отвечает полнее — «вот вся школа на этот день», включая тех,
+        # кого в этот день никому не отдали.
+        self._roster = roster
 
     def sostav(self, den: str) -> SostavDnya:
         slot = slot_of(den)
@@ -254,8 +273,12 @@ class SostavService:
             for row in self._attendance.rows_for_session(session.id):
                 deviations[row.student_id] = row
 
+        vse = set(standing) | set(deviations)
+        if self._roster is not None:
+            vse |= set(self._roster.aktivnye())
+
         mesta = []
-        for student_id in sorted(set(standing) | set(deviations)):
+        for student_id in sorted(vse):
             row = standing.get(student_id)
             obychno = row.teacher_id if row is not None else None
             room = row.room if row is not None else None

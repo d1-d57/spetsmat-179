@@ -74,6 +74,23 @@ def _spravochniki(c) -> tuple:
     return students, teachers
 
 
+class _Uchashchiesya:
+    """Порт `Roster` для страницы: кто числится школьником сегодня.
+
+    Тот же критерий «кто вообще школьник», что и у раздела школьников
+    (`veb/razdely/shkolniki.shkolniki`): ушедший из школы (`status = 'left'`) не
+    школьник и на экране занятия не нужен. Без этого списка ребёнок, оставшийся
+    в этот день без преподавателя, не попадал в состав вовсе — см. порт `Roster`.
+    """
+
+    def __init__(self, c) -> None:
+        self._c = c
+
+    def aktivnye(self):
+        return [r[0] for r in self._c.execute(
+            "select id from students where status is null or status <> 'left'")]
+
+
 def _fio(students, student_id: int) -> str:
     row = students.get(student_id)
     if row is None:
@@ -126,6 +143,7 @@ def stranica(c, den: str) -> str:
         enrollment=SqliteEnrollmentRepo(c),
         sessions=SqliteSessions(c),
         attendance=SqliteAttendance(c),
+        roster=_Uchashchiesya(c),
     ).sostav(den)
     students, teachers = _spravochniki(c)
 

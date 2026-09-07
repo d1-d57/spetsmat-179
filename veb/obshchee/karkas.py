@@ -138,6 +138,10 @@ class Kontekst:
     kabinety: dict             # Monday's rooms; kept under its old name on purpose
     gruppy: dict               # group code → its senior
     prep: dict                 # active teachers, by id
+    # 🔴 В КАКИЕ ДНИ ПРИНИМАЮЩИЙ ПРИХОДИТ: `{teacher_id: {slot, …}}`. Это ПАМЯТЬ, а
+    # не вывод из `enrollment`: «придёт, детей ещё не дали» ниоткуда не вычисляется,
+    # а отметить это владельцу нужно (решение 07.09, две галочки).
+    dni_prepodavatelej: dict = field(default_factory=dict)
     shk_dnya: dict = field(default_factory=dict)   # day → rows of pupils
     shk: list = field(default_factory=list)        # Monday's pupils
     # Who the page belongs to, when it belongs to somebody: `teachers.id`.
@@ -314,11 +318,16 @@ def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
         "select kod, starshij from gruppy order by kod")}
     prep = {r["id"]: dict(r) for r in c.execute(
         "select id, name, gruppa from teachers where aktiven = 1")}
+    # Дни принимающих — из своей таблицы; репозиторий сам заводит её, если база
+    # старше миграции 007 (`infra/prepodavatel_den_repo.obespechit`). Хранится
+    # ОТСУТСТВИЕ, разворот в присутствие делает сам репозиторий.
+    from infra.prepodavatel_den_repo import dni as dni_prepodavatelej
+    dni_prep = dni_prepodavatelej(c)
 
     kt = Kontekst(rezhim=rezhim, rol=rol, mogu=mogu, c=c, DNI=DNI,
                   kabinety_dnya=kabinety_dnya, otkuda_kabinet=otkuda_kabinet,
                   kabinety=kabinety, gruppy=gruppy, prep=prep,
-                  prepod_id=prepod_id)
+                  dni_prepodavatelej=dni_prep, prepod_id=prepod_id)
 
     # 🔴 THE IMPORT SITS INSIDE THE FUNCTION, AND THAT IS NOT SLOPPINESS.
     # "Who counts as a pupil" is a question belonging to the pupils section, so
@@ -516,22 +525,21 @@ PRAVKA_SKRIPT = r"""
           {put:'/api/enrollment', telo:{student_id:sid, slot:slot, teacher_id:null,
                                         gruppa: el.value}});
       });
-    }else if(el.classList.contains('tgr-sel')){
-      /* 🔴 ПРОЧЕРК И ГРУППА — РАЗНЫЕ ДЕЙСТВИЯ, ПОТОМУ ЧТО ЛОЖАТСЯ В РАЗНЫЕ МЕСТА.
-         Группа принимающего лежит одной колонкой на оба дня, поэтому её выбор —
-         прежнее `gruppa`. Прочерк — это «в этот день не приходит», и он ложится
-         туда, где дни и разделены: `enrollment` ЭТОГО слота. Владелец 07.09:
-         «прочерк значит „в этот день не приходит“ … способ сказать, что человека
-         в один из дней не будет». */
+    }else if(el.classList.contains('den-chk')){
+      /* 🔴 ГАЛОЧКА ДНЯ И ВЫБОР ГРУППЫ — РАЗНЫЕ ОРГАНЫ, ПОТОМУ ЧТО ЭТО РАЗНЫЕ ВЕЩИ.
+         Владелец 07.09: «не бывает принимающего, который в разные дни в разных
+         группах… можно сделать проще: две кнопки-галочки — „в четверг прихожу“ и
+         „в понедельник прихожу“, и отдельно выбирается группа принимающего». День
+         отвечает за присутствие, группа — одна на человека. */
       const tid = +el.dataset.tid;
-      if(el.value){
-        pomenyalos(el, 'prep:' + tid,
-          {put:'/api/prepodavateli', telo:{deystvie:'gruppa', teacher_id:tid, gruppa:el.value}});
-      }else{
-        pomenyalos(el, 'prep-den:' + tid + ':' + sl,
-          {put:'/api/prepodavateli',
-           telo:{deystvie:'ne-prihodit', teacher_id:tid, slot:sl}});
-      }
+      el.closest('.den-gal').classList.toggle('pusto', !el.checked);
+      pomenyalos(el, 'prep-den:' + tid + ':' + sl,
+        {put:'/api/prepodavateli',
+         telo:{deystvie:'den', teacher_id:tid, slot:sl, prihodit:el.checked}});
+    }else if(el.classList.contains('tgr-sel')){
+      const tid = +el.dataset.tid;
+      pomenyalos(el, 'prep:' + tid,
+        {put:'/api/prepodavateli', telo:{deystvie:'gruppa', teacher_id:tid, gruppa:el.value}});
     }else if(el.classList.contains('kab-inp')){
       const k = el.value.trim();
       if(!k){ el.value = el.defaultValue; return; }
@@ -1403,10 +1411,24 @@ body{{padding-bottom:2rem}}
 /* Шапка столбцов в таблице принимающих — та же роль, другой элемент. */
 .prep-shapka td{{color:var(--faint);font-family:var(--sans);font-size:.85rem;
   letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid var(--rule)}}
-/* Ячейка дня в таблице принимающих: два столбца детей и два поля группы, и
-   у каждого столбца своя граница слева — иначе четверг читается как продолжение
-   понедельника. */
+/* Ячейка дня в таблице принимающих: два столбца детей, потом галочки и группа;
+   у четверга своя граница слева — иначе он читается как продолжение понедельника. */
 .prep-tab td.dv-cht{{border-left:1px solid var(--rule)}}
+.tdni{{white-space:nowrap;width:1%;padding-right:1.2rem}}
+/* 🔴 ГАЛОЧКА ДНЯ — ОДИН ЭЛЕМЕНТ, В КОТОРОМ ВИДНО И ДЕНЬ, И ОТВЕТ. Отдельный
+   квадратик с подписью сбоку занимал бы вдвое больше места в строке, где важнее
+   имена; здесь подпись САМА и есть кнопка, а бледная — значит «не приходит». */
+.den-gal{{display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;
+  font-family:var(--sans);font-size:.9rem;font-weight:700;color:var(--accent);
+  border:1px solid var(--accent);border-radius:8px;padding:.14em .5em;
+  margin-right:.35rem;background:var(--accent-soft)}}
+.den-gal.pusto{{color:var(--faint);border-color:var(--rule);background:none}}
+.den-gal input{{margin:0;accent-color:var(--accent)}}
+/* Гостю — та же метка без органа: закрашена, если человек в этот день приходит. */
+.den-metka{{display:inline-block;font-family:var(--sans);font-size:.9rem;font-weight:700;
+  color:var(--accent);border:1px solid var(--accent);border-radius:8px;
+  padding:.14em .5em;margin-right:.35rem;background:var(--accent-soft)}}
+.den-metka.pusto{{color:var(--faint);border-color:var(--rule);background:none}}
 .poisk-str{{margin:0;max-width:32rem;flex:1 1 18rem}}
 @media(max-width:900px){{.dva{{grid-template-columns:1fr}}
   .kol{{border-right:none;padding-right:0}}}}
