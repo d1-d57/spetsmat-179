@@ -1011,6 +1011,16 @@ tr:hover td{{background:var(--accent-soft)}}
 /* Версии — ссылки того же цвета и веса, что и текст вокруг. Голубой на них
    был четвёртым цветом на карточке из четырёх строк; подчёркивание под мышкой
    показывает, что по ним нажимают, и не вводит ни одного нового цвета. */
+/* 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: в карточке доминирует НАЗВАНИЕ листка.
+   Различает только КЕГЛЬ: вес и цвет на карточке по-прежнему одни на всё
+   содержание, и замок схемы это подтверждает. Номер не выброшен — он ушёл
+   на второй план, потому что по нему всё ещё узнают листок в разговоре. */
+.listok-tema{{font-size:1.55em;line-height:1.15;cursor:pointer}}
+.listok-tema:hover{{text-decoration:underline}}
+.listok-nom{{font-size:.62em;margin-right:.35em;cursor:pointer;
+  vertical-align:.42em}}
+.listok-nom:hover{{text-decoration:underline}}
+.listok-stroka{{margin-top:.55rem !important}}
 .listok-ver{{margin-left:.3rem;white-space:nowrap}}
 .listok-ver a{{color:inherit;text-decoration:none;padding:0 .28rem;
   font-weight:inherit}}

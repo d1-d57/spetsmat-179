@@ -31,7 +31,6 @@ from veb.razdely.listki import (
     L8_VTOROE,
     L9,
     est,
-    srok,
     tekushchij,
 )
 from veb.razdely.shkolniki import gr_shk, kab_shk
@@ -166,17 +165,17 @@ def razdel(kt) -> str:
             f'<a href="listki/{e(f)}">{e(z)}</a>' for z, f in listok_versii)
         # 🔒 Ни `<b>`, ни `class="tihoe"`: карточка набрана одним цветом и одним
         # весом целиком (см. закреплённую схему в разделе `.blok-listok`).
-        listok_stroka = (f'{e(listok_nom)} {e(listok_tema)}'
+        # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: в карточке доминирует НАЗВАНИЕ листка.
+        # Номер остаётся, но уходит по кеглю на второй план; название —
+        # `<label for="p-list">`, то есть переводит на вкладку «Листки» БЕЗ
+        # единой строки JS, той же техникой скрытых радиокнопок, что и меню.
+        # Уровни A/α/ℵ по-прежнему ведут на сами файлы листка.
+        # 🔒 Ни `<b>`, ни `class="tihoe"`: вес и цвет по-прежнему одни на всю
+        # карточку, различает только КЕГЛЬ — этого замок не запрещает, и
+        # владелец попросил именно выделения слова, а не веса или цвета.
+        listok_stroka = (f'<label for="p-list" class="listok-nom">{e(listok_nom)}</label>'
+                         f'<label for="p-list" class="listok-tema">{e(listok_tema)}</label>'
                          f'<span class="listok-ver">{versii_html}</span>')
-
-    # 🔴 СРОК: НЕТ ЛИСТКА — НЕТ СТРОКИ ВОВСЕ, а не строка о том, что его нет.
-    # Ровно этим карточка отличается от соседнего `kab_skoro()`, который на
-    # неизвестных данных отдаёт `class="net"` внутрь карточки: запрещённый
-    # образец, на котором сборка — а с ней и сохранение в админке — упадёт в
-    # первый же день без данных. Здесь пустая строка гасит саму разметку.
-    srok_stroka = srok()
-    srok_html = (f'\n          <p class="listok-srok">{e(srok_stroka)}</p>'
-                 if srok_stroka else "")
 
     kabinety_skoro = kab_skoro(kt, kt.blizh)
     tekushchij_listok = tekushchij()
@@ -250,7 +249,7 @@ def razdel(kt) -> str:
           <span class="zag2">следующий спецмат</span>
           <p class="listok-kogda">{e(kt.DNI[kt.blizh][3])} {e(kt.po_russki_kratko(kt.DNI[kt.blizh][2]))}
             · {VREMYA[kt.blizh]}</p>
-          <p class="listok-stroka">{listok_stroka}</p>{srok_html}
+          <p class="listok-stroka">{listok_stroka}</p>
           <p class="listok-kab">{kabinety_skoro}</p>
         </div>
 
