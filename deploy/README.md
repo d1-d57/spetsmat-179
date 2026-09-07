@@ -23,6 +23,12 @@ deploy by hand, live, on the production machine, and the second one wrote down w
 had already paid for. The cost of a runbook that lies is not that it is unhelpful — it is
 that it is believed.
 
+**`tunnel.sh`, `podnyat_sajt.sh` and `ADRES.txt` in this folder are the route from BEFORE the
+server** — a laptop holding an `lhr.life` tunnel open. They still work and are left alone,
+but they are not how the site is published now, and the URL committed in `ADRES.txt` is a
+dead tunnel (it answers 503). If you are looking for where the site lives, it is the table
+above.
+
 Everything below the deploy section is still provable on a laptop, and the way to prove each
 piece is written next to it.
 
