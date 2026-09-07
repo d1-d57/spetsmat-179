@@ -20,6 +20,9 @@ CELL A1 OF EVERY SHEET CARRIES TODAY'S DATE.  Without it a stopped export and a 
 render identically, and the whole point of the exercise -- "any worried person can look and
 see whether anything moved" -- silently stops meaning anything.
 
+ONLY THIS YEAR'S LISTKI GO TO THE TABLE, not the full catalogue -- see
+``academic_year_start`` below for exactly where the line is drawn and why.
+
 DRY-RUN BY DEFAULT.  Without ``--primenit`` this reads the live database, prints what it would
 write to every sheet, and does not touch the network. ``--primenit`` performs the real writes.
 
@@ -31,7 +34,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -63,6 +66,22 @@ class KeyMissing(Exception):
     """The service-account key is not where it was told to be.  Said in words."""
 
 
+def academic_year_start(today: Optional[date] = None) -> str:
+    """The ISO date the current school year began: this Sept 1 from September onward,
+    last Sept 1 the rest of the year.
+
+    ONLY THIS YEAR'S SHEETS GO TO THE TABLE -- named twice by the owner (07.09), both
+    times anchored to a concrete count (3 of 21 at assembly): a `sheets` table older than
+    a year is frozen (the school year is over, nothing about it will move again), and the
+    whole point of the export is "are there new pluses, new листки" -- a question about
+    what is still moving, not the full archive. ``tools.export_xlsx`` remains the place
+    that exports everything; this tool exports the slice that changes.
+    """
+    today = today or datetime.now(timezone.utc).date()
+    year = today.year if today.month >= 9 else today.year - 1
+    return date(year, 9, 1).isoformat()
+
+
 def _tab_title(number: str) -> str:
     """Sheets forbids ``[]:*?/\\`` too and truncates further than Excel does; keeping the
     tighter Excel limit from ``tools.export_xlsx._tab_title`` here means one naming rule
@@ -89,8 +108,11 @@ def build_sheet_rows(connection) -> dict[str, list[list[str]]]:
         UPDATED_LABEL, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     )
 
+    cutoff = academic_year_start()
     grids = {}
     for sheet in catalogue.sheets():
+        if sheet.issued_at < cutoff:
+            continue
         problems = catalogue.problems_of_sheet(sheet.id)
         header = [NAME_HEADER] + [problem.label for problem in problems]
         rows = [[stamp], header]
