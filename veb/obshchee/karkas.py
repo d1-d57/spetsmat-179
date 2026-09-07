@@ -1004,8 +1004,14 @@ tr:hover td{{background:var(--accent-soft)}}
 /* `margin-top` опускает ОДНУ карточку: колонка разложена `space-between`, и
    «кто ведёт» остаётся приколоченным к нижнему краю. Владелец: «сам блок
    опустить вниз, не меняя ничего другого». */
-.blok-listok{{margin:4.5rem 0 0;max-width:34rem;font-family:var(--sans);
-  font-size:clamp(1.35rem,1.65vw,1.85rem);line-height:1.45;font-weight:400}}
+/* 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09, вторая: в карточке важно ОДНО СЛОВО, всё
+   остальное — служебное. Дата, время, уровни и кабинеты уходят на один общий
+   мелкий кегль, а название листка остаётся крупным. Блок сжимается по ширине
+   САМОЙ ШИРОКОЙ своей строки (`width:max-content`) — тем самым «прямоугольник
+   повторяет строчку с названием» и перестаёт вылезать за колонку. */
+.blok-listok{{margin:4.5rem 0 0;width:max-content;max-width:min(34rem,100%);
+  font-family:var(--sans);font-size:clamp(1.02rem,1.15vw,1.24rem);
+  line-height:1.3;font-weight:400}}
 .blok-listok p{{margin:.15rem 0 0;color:var(--text);font-weight:400}}
 .listok-kogda{{margin-top:.4rem}}
 /* Версии — ссылки того же цвета и веса, что и текст вокруг. Голубой на них
@@ -1015,12 +1021,15 @@ tr:hover td{{background:var(--accent-soft)}}
    Различает только КЕГЛЬ: вес и цвет на карточке по-прежнему одни на всё
    содержание, и замок схемы это подтверждает. Номер не выброшен — он ушёл
    на второй план, потому что по нему всё ещё узнают листок в разговоре. */
-.listok-tema{{font-size:1.55em;line-height:1.15;cursor:pointer}}
+.listok-tema{{font-size:2.55em;line-height:1.12;cursor:pointer}}
 .listok-tema:hover{{text-decoration:underline}}
-.listok-nom{{font-size:.62em;margin-right:.35em;cursor:pointer;
-  vertical-align:.42em}}
+.listok-nom{{font-size:1em;margin-right:.4em;cursor:pointer;
+  vertical-align:.9em;opacity:.75}}
 .listok-nom:hover{{text-decoration:underline}}
-.listok-stroka{{margin-top:.55rem !important}}
+.listok-stroka{{margin-top:.35rem !important;margin-bottom:.15rem !important;
+  white-space:nowrap}}
+.listok-ver{{font-size:1em}}
+.blok-listok .zag2{{margin-bottom:.1rem}}
 .listok-ver{{margin-left:.3rem;white-space:nowrap}}
 .listok-ver a{{color:inherit;text-decoration:none;padding:0 .28rem;
   font-weight:inherit}}
