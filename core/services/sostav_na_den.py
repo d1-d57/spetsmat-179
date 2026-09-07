@@ -181,6 +181,10 @@ class Mesto:
     room: Optional[str]
     otmechen_otsutstvuyushchim: bool
     otklonenie: bool                # is there a row in the lesson layer at all
+    # 🔴 ТРЕТЬЯ СТУПЕНЬ: «в аудитории, но ни к кому не закреплён». Владелец 07.09:
+    # *«он пока не распределённый, но он уже в моей аудитории, я должен это видеть»*.
+    # Пусто — сегодня группу не меняли, и школьник там, куда его кладёт шаблон.
+    gruppa: Optional[str] = None
 
     @property
     def u_drugogo(self) -> bool:
@@ -284,6 +288,8 @@ class SostavService:
             room = row.room if row is not None else None
             otklonenie = deviations.get(student_id)
 
+            gruppa_dnya = getattr(otklonenie, "gruppa", None) if otklonenie else None
+
             if otklonenie is None:
                 # No row — «как обычно».  This is the majority branch and it is the whole
                 # economy of the deviations model: 45 students, and on a quiet lesson the
@@ -303,7 +309,8 @@ class SostavService:
                 segodnya = None
             mesta.append(Mesto(student_id=student_id, obychno=obychno,
                                segodnya=segodnya, room=room,
-                               otmechen_otsutstvuyushchim=absent, otklonenie=True))
+                               otmechen_otsutstvuyushchim=absent, otklonenie=True,
+                               gruppa=gruppa_dnya))
 
         return SostavDnya(den=den, slot=slot,
                           session_id=session.id if session is not None else None,

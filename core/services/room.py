@@ -171,6 +171,10 @@ class AttendanceRow:
     student_id: int
     status: str
     teacher_id: Optional[int] = None
+    # Группа ЭТОГО занятия: «он сегодня в аудитории Д, а к кому — ещё решаем».
+    # Третья ступень, которой нет в `teacher_id` по построению: преподавателя у
+    # неё как раз нет (`migrations/008_gruppa_na_zanyatii.sql`).
+    gruppa: Optional[str] = None
 
     @property
     def is_present(self) -> bool:

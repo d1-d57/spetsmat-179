@@ -37,6 +37,7 @@ from __future__ import annotations
 import html
 import pathlib
 import sqlite3
+from datetime import date
 from dataclasses import dataclass, field
 
 KOREN = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -142,6 +143,14 @@ class Kontekst:
     # не вывод из `enrollment`: «придёт, детей ещё не дали» ниоткуда не вычисляется,
     # а отметить это владельцу нужно (решение 07.09, две галочки).
     dni_prepodavatelej: dict = field(default_factory=dict)
+    # 🔴 ДАТА ЗАНЯТИЯ ИЛИ `None`. Ровно этим разделы отличают экран «на сегодня» от
+    # экрана «как обычно»: где ставить галочку «болеет», куда слать правку и надо
+    # ли ждать кнопки «Сохранить». Одно поле вместо флага «режим» — потому что
+    # дата здесь ещё и нужна сама по себе, как адрес правки.
+    den: object = None
+    # Кто из принимающих отмечен отсутствующим НА ЭТУ ДАТУ (`teacher_attendance`).
+    # Пусто на постоянном экране: там нет «сегодня».
+    otsutstvuyut_prepoda: frozenset = frozenset()
     shk_dnya: dict = field(default_factory=dict)   # day → rows of pupils
     shk: list = field(default_factory=list)        # Monday's pupils
     # Who the page belongs to, when it belongs to somebody: `teachers.id`.
@@ -249,12 +258,29 @@ def _razobrat_rezhim(rezhim: str) -> tuple:
         return rol, None
 
 
-def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
+def sobrat_kontekst(rezhim: str = "gost", den=None) -> Kontekst:
     """Read the database once and hand back everything the sections will need.
 
     This is the only place that talks to the database on behalf of the shell.
     A section that needs a query of its own owns that query — see
     `veb/razdely/shkolniki.shkolniki` — but a section never opens a connection.
+
+    ГЛАВНОЕ ПРО `den`, И ЭТО РЕШЕНИЕ ВЛАДЕЛЬЦА 07.09
+    ----------------------------------------------------------------------------------
+    `den=None` — ПОСТОЯННОЕ распределение: в `DNI` два дня, и у каждого школьника
+    два поля. `den="2026-09-10"` — распределение НА ЗАНЯТИЕ: в `DNI` ровно один
+    день, и те же самые разделы рисуют одну колонку, ничего про это не зная.
+
+    Владелец, дословно: *«те же самые пять вкладок должны быть на сегодня… отличие
+    этих двух менюшек минимальное. В текущем распределении бессмысленно
+    устанавливать день недели — там устанавливается на конкретную дату, поэтому там
+    не нужно две вкладки»*. Второй набор разделов «для занятия» был бы второй
+    вёрсткой того же самого — ровно той болезнью, от которой лечится весь этот файл.
+
+    Состав на занятии берётся НЕ из `enrollment` напрямую, а из
+    `core.services.sostav_na_den`: постоянное ПЛЮС отклонения этого дня. Это и есть
+    «текущее поверх базового» словами владельца: *«распределение текущего расписания
+    всегда поверх базовой системы»*.
     """
     rol, prepod_id = _razobrat_rezhim(rezhim)
     if rol not in VOZMOZHNOSTI:
@@ -285,8 +311,23 @@ def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
     # того самого «одного дома», который этот файл и объявляет. Вписанная копия уже
     # однажды разошлась с домом и печатала на странице неверные дни.
     _dni_po_poryadku = sorted(DNI_ZANYATIJ)          # пн, затем чт
-    DNI = {("pn", "cht")[i]: (DNI_ZANYATIJ[w], i + 1, blizhajshij_den(w), SOKR_DNYA[w])
-           for i, w in enumerate(_dni_po_poryadku)}
+    if den is None:
+        DNI = {("pn", "cht")[i]: (DNI_ZANYATIJ[w], i + 1, blizhajshij_den(w), SOKR_DNYA[w])
+               for i, w in enumerate(_dni_po_poryadku)}
+    else:
+        # 🔴 ОДИН ДЕНЬ — И ЭТО НЕ «ПОЛОВИНА ДВУХ», А ДРУГОЙ ВОПРОС. Ключ здесь не
+        # «пн» и не «чт», а `den`: на этом экране спрашивают не «что бывает по
+        # четвергам», а «что будет 10 сентября». Номер слота всё равно нужен —
+        # им читается постоянный слой под отклонениями.
+        # 🔴 КЛЮЧ ЗДЕСЬ `weekday()`, А НЕ `isoweekday()`, И РАЗНИЦА НЕ КОСМЕТИЧЕСКАЯ:
+        # `DNI_ZANYATIJ` и `SOKR_DNYA` (`veb/sobrat_fajl`) считают понедельник НУЛЁМ,
+        # а `enrollment.slot` — единицей. Спутать их — значит назвать четверг
+        # пятницей и не заметить: строка «не день занятия · пт» на четверговой
+        # странице ровно так и родилась при первом прогоне.
+        from core.services.sostav_na_den import slot_of
+        _wd = date.fromisoformat(den).weekday()
+        DNI = {"den": (DNI_ZANYATIJ.get(_wd, "не день занятия"),
+                       slot_of(den) or 0, den, SOKR_DNYA.get(_wd, ""))}
     # 🔴 КАБИНЕТ НА ДЕНЬ, А ЕСЛИ НА ЭТОТ ДЕНЬ ЕЩЁ НЕ НАЗНАЧЕН — ПОСЛЕДНИЙ
     # ИЗВЕСТНЫЙ, И ЭТО ВИДНО. Владелец ставит привязку накануне вечером, поэтому
     # «на послезавтра строки нет» — обычное состояние, а не потеря данных. Голый
@@ -313,7 +354,9 @@ def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
         kabinety_dnya[kl] = svedeno
         otkuda_kabinet[kl] = istochnik
 
-    kabinety = kabinety_dnya["pn"]
+    # «Кабинеты по умолчанию» — понедельничные на постоянном экране и кабинеты
+    # самой даты на экране занятия: ключ в `DNI` там один, и он же первый.
+    kabinety = kabinety_dnya[next(iter(DNI))]
     gruppy = {r["kod"]: r["starshij"] for r in c.execute(
         "select kod, starshij from gruppy order by kod")}
     prep = {r["id"]: dict(r) for r in c.execute(
@@ -327,7 +370,7 @@ def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
     kt = Kontekst(rezhim=rezhim, rol=rol, mogu=mogu, c=c, DNI=DNI,
                   kabinety_dnya=kabinety_dnya, otkuda_kabinet=otkuda_kabinet,
                   kabinety=kabinety, gruppy=gruppy, prep=prep,
-                  dni_prepodavatelej=dni_prep, prepod_id=prepod_id)
+                  dni_prepodavatelej=dni_prep, den=den, prepod_id=prepod_id)
 
     # 🔴 THE IMPORT SITS INSIDE THE FUNCTION, AND THAT IS NOT SLOPPINESS.
     # "Who counts as a pupil" is a question belonging to the pupils section, so
@@ -340,8 +383,19 @@ def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
     # imports the builder from inside `_peresobrat` for the same reason.
     from veb.razdely.shkolniki import shkolniki
 
-    kt.shk_dnya = {kl: shkolniki(c, sl) for kl, (_, sl, _, _s) in DNI.items()}
-    kt.shk = kt.shk_dnya["pn"]
+    if den is None:
+        kt.shk_dnya = {kl: shkolniki(c, sl) for kl, (_, sl, _, _s) in DNI.items()}
+        kt.shk = kt.shk_dnya["pn"]
+    else:
+        # 🔴 НА ЗАНЯТИИ СПРАШИВАЮТ СОСТАВ, А НЕ ЗАКРЕПЛЕНИЕ. Постоянное — это то,
+        # как обычно; сегодня же кто-то болеет, а кого-то отдали в другую группу
+        # на один раз, и обе поправки лежат в слое занятия. Складывает их
+        # `core.services.sostav_na_den`, единственное место в проекте, которое
+        # умеет это делать, — второй такой расчёт здесь был бы второй правдой.
+        from veb.razdely.zanyatie import otsutstvuyushchie_prepodavateli, sostav_dnya_strokami
+        kt.shk_dnya = {"den": sostav_dnya_strokami(c, den, shkolniki(c, DNI["den"][1]))}
+        kt.shk = kt.shk_dnya["den"]
+        kt.otsutstvuyut_prepoda = otsutstvuyushchie_prepodavateli(c, den)
     return kt
 
 
@@ -435,7 +489,9 @@ PRAVKA_SKRIPT = r"""
   const panel = document.getElementById('panel-pravok');
   const schyot = document.getElementById('skolko-pravok');
   const soob = document.getElementById('soob');
-  if(!panel) return;
+  // 🔴 БЕЗ ПАНЕЛИ СКРИПТ НЕ ВЫКЛЮЧАЕТСЯ, А РАБОТАЕТ ДРУГИМ КОНЦОМ. На экране
+  // занятия кнопок «Сохранить/Сбросить» нет вовсе (правки уезжают сразу), и
+  // прежний ранний выход убил бы вместе с ними ВСЮ правку этого экрана.
 
   const pravki = new Map();          // ключ → операция; последняя правка побеждает
   const KLYUCH_VYBORA = 'spetsmat-vybor';
@@ -459,6 +515,7 @@ PRAVKA_SKRIPT = r"""
        появляющаяся из ниоткуда, не сообщает, что сохранение вообще существует, —
        владелец её искал. А подпись, объясняющая кнопку словами, не нужна вовсе:
        число несохранённых правок стоит на самой кнопке, и этого достаточно. */
+    if(!panel) return;               // экран занятия: копить нечего, кнопок нет
     const n = pravki.size;
     const est = n > 0;
     document.getElementById('sohranit').disabled = !est;
@@ -466,7 +523,49 @@ PRAVKA_SKRIPT = r"""
     panel.classList.toggle('est-pravki', est);
     schyot.textContent = est ? ' ' + n : '';
   }
+  /* 🔴 ДВА МОМЕНТА ЗАПИСИ, И ЭТО РЕШЕНИЕ ВЛАДЕЛЬЦА 07.09, А НЕ ДВА СТИЛЯ КОДА.
+     «Распределение на день не нужно писать кнопку „Сохранить“ — там могут быть
+     ошибки, это не… как с кондуитом, там просто нужно сразу сохраняться. А
+     постоянное распределение не нужно сохранять сразу, потому что там можно долго
+     его двигать и в итоге прийти к оптимальному варианту, нажать „Сохранить“, и
+     дальше оно влияет».
+
+     Различает их ровно `data-den` на самом органе: есть дата — правка на один раз,
+     она уезжает немедленно; нет — это шаблон, и она ждёт кнопки. Ни одного второго
+     обработчика: ниже по файлу все ветки зовут `pomenyalos`, и решение принимается
+     здесь, один раз. */
+  async function srazu(el, operacia){
+    const ryad = el.closest('.para, tr');
+    if(ryad) ryad.classList.add('idet');
+    let ok = false, dannye = {};
+    try{
+      const otvet = await fetch(operacia.put, {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(operacia.telo)});
+      ok = otvet.ok;
+      try{ dannye = await otvet.json(); }catch(err){}
+    }catch(err){ ok = false; }
+    if(ryad) ryad.classList.remove('idet');
+    if(!ok){
+      /* Показываем ПРАВДУ базы, а не то, что человек только что нажал: страница
+         перечитывается, и на экране снова то, что действительно сохранено. */
+      soob.className = 'soob ploho';
+      soob.textContent = 'НЕ СОХРАНИЛОСЬ: ' + (dannye.error || 'сервер отказал')
+        + ' — показываю, что в базе';
+      setTimeout(function(){ location.reload(); }, 1200);
+      return;
+    }
+    /* Счётчики, «некуда деть» и списки принимающих считает сервер, а не браузер:
+       вторая правда про одни и те же числа — болезнь, от которой лечится вся эта
+       страница. Поэтому после записи страница перечитывается. */
+    location.reload();
+  }
+
   function pomenyalos(el, klyuch, operacia){
+    if(el.dataset.den){
+      srazu(el, operacia);
+      return;
+    }
     pravki.set(klyuch, operacia);
     const ryad = el.closest('.para, tr, .shapka');
     if(ryad) ryad.classList.add('tronuto');
@@ -501,9 +600,29 @@ PRAVKA_SKRIPT = r"""
     const sl = +el.dataset.slot;
     if(el.classList.contains('pr-sel')){
       const sid = +el.dataset.sid;
-      if(el.value){
-        pomenyalos(el, 'shk:' + sid + ':' + sl,
-          {put:'/api/enrollment', telo:{student_id:sid, slot:sl, teacher_id:+el.value}});
+      if(el.dataset.den){
+        /* На занятии «нет» значит «сегодня ни у кого», а не «убрать из группы»:
+           группы у дня нет вовсе, она свойство постоянного. */
+        pomenyalos(el, 'zan:' + sid,
+          {put:'/api/zanyatie', telo:{den:el.dataset.den, student_id:sid,
+                                      teacher_id: el.value ? +el.value : null}});
+      }else if(el.value){
+        /* 🔴 СВЯЗАННЫЕ ДНИ ПРАВЯТСЯ ВМЕСТЕ, И ЭТО ПОВЕДЕНИЕ ПО УМОЛЧАНИЮ.
+           Владелец 07.09: «у каждого школьника два преподавателя, хотя по
+           умолчанию они должны быть одинаковыми… можно нажать галочку, и тогда
+           оно отвязывается». Пока галочка «×2» не нажата, поставленный в
+           понедельник человек становится и четверговым — иначе каждую правку
+           пришлось бы делать дважды, а забытая половина расходится молча. */
+        const stroka = el.closest('.para');
+        const raznye = stroka && stroka.querySelector('.svyaz-chk')
+                       && stroka.querySelector('.svyaz-chk').checked;
+        const polya = (!raznye && stroka) ? stroka.querySelectorAll('.pr-sel') : [el];
+        polya.forEach(function(p){
+          p.value = el.value;
+          pomenyalos(p, 'shk:' + sid + ':' + p.dataset.slot,
+            {put:'/api/enrollment',
+             telo:{student_id:sid, slot:+p.dataset.slot, teacher_id:+el.value}});
+        });
       }else{
         const gr = el.parentElement.querySelector('.gr-sel');
         pomenyalos(el, 'shk:' + sid + ':' + sl,
@@ -525,6 +644,25 @@ PRAVKA_SKRIPT = r"""
           {put:'/api/enrollment', telo:{student_id:sid, slot:slot, teacher_id:null,
                                         gruppa: el.value}});
       });
+    }else if(el.classList.contains('otsut-chk')){
+      /* «Отсутствует» — отметка ОДНОГО занятия, одно слово на школьника и на
+         принимающего (поправка владельца 07.09). Снятая отметка возвращает строку
+         к «как обычно», а не пишет «был» поверх: разбирается с этим сервер. */
+      const sid = +el.dataset.sid;
+      pomenyalos(el, 'otsut:' + sid,
+        {put:'/api/zanyatie', telo:{den:el.dataset.den, student_id:sid,
+                                    net: el.checked}});
+    }else if(el.classList.contains('totsut-chk')){
+      const tid = +el.dataset.tid;
+      pomenyalos(el, 'totsut:' + tid,
+        {put:'/api/zanyatie', telo:{den:el.dataset.den, rod:'prepodavatel',
+                                    teacher_id:tid, net: el.checked}});
+    }else if(el.classList.contains('grd-sel')){
+      /* Группа на это занятие: «он уже в аудитории, к кому — ещё решаем». */
+      const sid = +el.dataset.sid;
+      pomenyalos(el, 'grd:' + sid,
+        {put:'/api/zanyatie', telo:{den:el.dataset.den, student_id:sid,
+                                    gruppa: el.value}});
     }else if(el.classList.contains('den-chk')){
       /* 🔴 ГАЛОЧКА ДНЯ И ВЫБОР ГРУППЫ — РАЗНЫЕ ОРГАНЫ, ПОТОМУ ЧТО ЭТО РАЗНЫЕ ВЕЩИ.
          Владелец 07.09: «не бывает принимающего, который в разные дни в разных
@@ -561,6 +699,7 @@ PRAVKA_SKRIPT = r"""
     }
   });
 
+  if(panel){
   document.getElementById('sbrosit').addEventListener('click', function(){
     if(pravki.size === 0) return;
     if(!window.confirm('Отменить ' + pravki.size + ' ' + slovo(pravki.size)
@@ -607,6 +746,7 @@ PRAVKA_SKRIPT = r"""
     location.reload();
   });
 
+  }
   obnovit();
 })();
 </script>"""
@@ -627,13 +767,26 @@ def verh_prava(kt) -> str:
     # фразой, которой владелец не поверил ни секунды («правок нет — можно менять
     # распределение»). Кнопке не нужна подпись — ей нужно быть на виду и гаснуть,
     # когда нажимать нечего. Число несохранённых правок стоит на самой кнопке.
-    verh_prava = ('<span class="verh-prava" id="panel-pravok">'
-                  '<button type="button" id="sbrosit" class="vtoraya" disabled>Сбросить</button>'
-                  '<button type="button" id="sohranit" class="glavnaya" disabled>'
-                  'Сохранить<span class="schyot-pravok" id="skolko-pravok"></span></button>'
-                  '<a class="vhod" href="/vyhod">Выход</a></span>' if kt.ADMIN
-                  else '<span class="verh-prava">'
-                       '<a class="vhod" href="/vhod" data-otkryt-vhod>Вход</a></span>')
+    # 🔴 НА ЭКРАНЕ ЗАНЯТИЯ КНОПКИ «СОХРАНИТЬ» НЕТ, И ЕЁ ОТСУТСТВИЕ — ЧАСТЬ ОТВЕТА.
+    # Владелец 07.09: *«распределение на день не нужно писать кнопку „Сохранить“…
+    # там просто нужно сразу сохраняться. А постоянное распределение не нужно
+    # сохранять сразу, потому что там можно долго его двигать и в итоге прийти к
+    # оптимальному варианту, нажать „Сохранить“, и дальше оно влияет»*. Кнопка,
+    # стоящая там, где ничего не копится, обещает несуществующий шаг: человек
+    # уходит со страницы, не нажав её, и не знает, сохранилось ли.
+    if kt.ADMIN and not kt.den:
+        verh_prava = ('<span class="verh-prava" id="panel-pravok">'
+                      '<button type="button" id="sbrosit" class="vtoraya" disabled>Сбросить</button>'
+                      '<button type="button" id="sohranit" class="glavnaya" disabled>'
+                      'Сохранить<span class="schyot-pravok" id="skolko-pravok"></span></button>'
+                      '<a class="vhod" href="/vyhod">Выход</a></span>')
+    elif kt.ADMIN:
+        verh_prava = ('<span class="verh-prava">'
+                      '<span class="srazu">правки сохраняются сразу</span>'
+                      '<a class="vhod" href="/vyhod">Выход</a></span>')
+    else:
+        verh_prava = ('<span class="verh-prava">'
+                      '<a class="vhod" href="/vhod" data-otkryt-vhod>Вход</a></span>')
     return verh_prava
 
 
@@ -845,9 +998,37 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
     # гостевой стороны (`_snyat_gostevoe`), поэтому тот же элемент, оставленный
     # организатору, разводит каркасы: гость — пусто, организатор — строка. Ровно
     # так же и по той же причине собирается `kabinety_verh` ниже.
-    zanyatie_verh = (
-        f'<span class="skoro" data-tolko-gost>{e(kt.po_russki(kt.DNI[kt.blizh][2]))}'
-        f' · {e(kt.DNI[kt.blizh][0])} · {VREMYA[kt.blizh]}</span>') if not kt.ADMIN else ""
+    if kt.den:
+        # 🔴 НА ЗАНЯТИИ В ЭТОЙ СТРОКЕ СТОИТ ДАТА, И ОНА ЖЕ ОРГАН. Стрелки ведут на
+        # соседнее занятие, клик по дате открывает календарь: владелец правит не
+        # только сегодня — *«я могу пойти назад или вперёд, например, вперёд на
+        # текущем распределении, на 2-3 занятия поставить, что этот преподаватель
+        # болеет»*. Рядом — дверь в постоянное, и она названа словом, а не значком.
+        from veb.razdely.zanyatie import sosednee_zanyatie
+        den = kt.den
+        zanyatie_verh = (
+            '<span class="zan-navig">'
+            f'<a class="strelka" href="/raspredelenie?den={e(sosednee_zanyatie(den, -1))}"'
+            f' title="предыдущее занятие">←</a>'
+            f'<label class="data-zan" for="p-den" title="выбрать дату">'
+            f'{e(kt.DNI["den"][0])}, {e(kt.po_russki_kratko(den))}</label>'
+            f'<input class="vybor-daty" id="p-den" type="date" name="den" value="{e(den)}"'
+            f' aria-label="выбрать дату" onchange="location.href=\'/raspredelenie?den=\'+this.value">'
+            f'<a class="strelka" href="/raspredelenie?den={e(sosednee_zanyatie(den, +1))}"'
+            f' title="следующее занятие">→</a>'
+            f'<a class="k-drugomu" href="/raspredelenie/postoyannoe">Постоянное</a>'
+            "</span>")
+    elif kt.ADMIN:
+        # На постоянном — дверь в обратную сторону: к ближайшему занятию.
+        # `data-org` обязателен: этой двери у гостя нет, и гейт каркаса снимает
+        # её вместе с остальными органами, сверяя остаток с гостевым побайтово.
+        zanyatie_verh = ('<span class="zan-navig" data-org="pravit-raspredelenie">'
+                         '<a class="k-drugomu" href="/raspredelenie">'
+                         'Распределение на занятие</a></span>')
+    else:
+        zanyatie_verh = (
+            f'<span class="skoro" data-tolko-gost>{e(kt.po_russki(kt.DNI[kt.blizh][2]))}'
+            f' · {e(kt.DNI[kt.blizh][0])} · {VREMYA[kt.blizh]}</span>')
 
     # 🔴 КАБИНЕТ ГРУППЫ ПЕРЕЕХАЛ НАВЕРХ, В ТУ ЖЕ СТРОКУ. Он занимал отдельную
     # строку под вкладками — ради одного числа. Показывается только на вкладке
@@ -892,7 +1073,8 @@ LICH_STILI = """
 
 
 def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
-              poisk_skript: str, drakon_skript: str) -> str:
+              poisk_skript: str, drakon_skript: str,
+              tolko_raspredelenie: bool = False) -> str:
     """Assemble the whole page out of the sections already rendered for it.
 
     Everything constant lives here: the stylesheet, the radio inputs that drive
@@ -936,6 +1118,11 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
     else:
         lichnaya = lich_vhod = lich_metka = lich_stili = ""
         start_vybran = " checked"
+    if tolko_raspredelenie:
+        # Раздел на этой странице один; открывать нечего, кроме него.
+        start_vybran, rasp_vybran = "", " checked"
+    else:
+        rasp_vybran = ""
     # 🔴 THE THIRD FORCED IMPORT, FOR THE THIRD TIME THE SAME REASON, AND IT IS
     # WORTH SAYING PLAINLY: the composition root `tools/sobrat_stranicu.sobrat_html`
     # is the only place that ought to know both that a shell exists and that
@@ -949,6 +1136,19 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
     # 🔴 `data-org` СТОИТ НА МЕТКЕ И НА РАЗДЕЛЕ И НЕ ДОЛЖЕН СТОЯТЬ НА РАДИОКНОПКЕ —
     # то же правило и та же цена, что абзацем выше: `_ubrat_elementy` ищет
     # `</input>`, не находит и сносит остаток документа.
+    # 🔴 НА СТРАНИЦЕ ЗАНЯТИЯ РАЗДЕЛОВ «КЛАСС» И «ЛИСТКИ» НЕТ, А ПУНКТЫ МЕНЮ ЕСТЬ —
+    # ССЫЛКАМИ НА ГЛАВНУЮ. Причина не в экономии: контекст этой страницы собран на
+    # ОДИН день, и расписание, нарисованное из него, показало бы вместо двух
+    # занятий одно. Оглавление при этом обязано стоять на месте — владелец 07.09:
+    # *«оглавление куда-то исчезло»*, и это было первое, что он заметил.
+    if tolko_raspredelenie:
+        punkty = ('<a class="ssyl" href="/">Класс</a>\n'
+                  '  <a class="ssyl" href="/#s-list">Листки</a>')
+        rasp_adres, rasp_aktivna = "/raspredelenie", " ssyl-tut"
+    else:
+        punkty = ('<label for="p-start">Класс</label>\n'
+                  '  <label for="p-list">Листки</label>')
+        rasp_adres, rasp_aktivna = "/raspredelenie", ""
     if kt.mozhno("videt-konduit"):
         from veb.razdely.konduit import razdel as konduit_razdel, stili as konduit_stili
         konduit = konduit_razdel(kt)
@@ -1429,6 +1629,41 @@ body{{padding-bottom:2rem}}
   color:var(--accent);border:1px solid var(--accent);border-radius:8px;
   padding:.14em .5em;margin-right:.35rem;background:var(--accent-soft)}}
 .den-metka.pusto{{color:var(--faint);border-color:var(--rule);background:none}}
+/* Вместо кнопки «Сохранить» на экране занятия — строка о том, что её нет и почему. */
+.srazu{{font-family:var(--sans);font-size:.9rem;color:var(--muted);margin-right:.9rem}}
+/* «×2» — связаны ли дни. Отмечена — дни разные и правятся по отдельности. */
+.raznye{{display:inline-flex;align-items:center;gap:.2rem;cursor:pointer;
+  font-family:var(--sans);font-size:.8rem;font-weight:700;color:var(--warm);
+  margin-left:.35rem;white-space:nowrap}}
+.raznye.pusto{{color:var(--faint)}}
+.raznye input{{margin:0;accent-color:var(--warm)}}
+/* Отметка «отсутствует» на экране занятия — одна и та же у школьника и у
+   принимающего. Тот же орган, что галочка дня, и намеренно тот же вид: человек
+   не должен изучать два разных переключателя. */
+.otsut{{display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;
+  font-family:var(--sans);font-size:.85rem;font-weight:700;color:var(--warm);
+  border:1px solid var(--warm);border-radius:8px;padding:.1em .45em;margin-left:.45rem;
+  white-space:nowrap}}
+.otsut.pusto{{color:var(--faint);border-color:var(--rule)}}
+.otsut input{{margin:0;accent-color:var(--warm)}}
+/* Пока правка одного занятия едет в базу — строка приглушена. Она уезжает сразу,
+   без кнопки, и человеку нужен признак, что нажатие принято. */
+.para.idet,tr.idet{{opacity:.45}}
+/* Строка занятия: отмеченный отсутствующим — серым, а не вычеркнутым (он вернётся
+   сам); единственное красное — ребёнок, которого сегодня никто не ждёт. */
+#s-rasp .para.net .kto{{color:var(--faint)}}
+#s-rasp .para.krasn .kto b{{color:var(--krasn)}}
+/* Шапка страницы занятия: дата — орган, стрелки рядом, дверь в постоянное — справа. */
+.zan-navig{{display:flex;align-items:center;gap:.5rem;margin-left:auto;
+  font-family:var(--sans)}}
+.data-zan{{cursor:pointer;color:var(--accent);font-size:1.05rem;font-weight:600;
+  border-bottom:1px dashed var(--rule);white-space:nowrap}}
+.data-zan:hover{{border-bottom-color:var(--accent)}}
+.vybor-daty{{width:0;height:0;opacity:0;border:0;padding:0;margin:0}}
+.k-drugomu{{font-size:.92rem;text-decoration:none;color:var(--muted);
+  border:1px solid var(--rule);border-radius:9px;padding:.35em .8em;white-space:nowrap}}
+.k-drugomu:hover{{color:var(--accent);border-color:var(--accent)}}
+.menu a.ssyl.ssyl-tut{{color:var(--accent);background:var(--accent-soft)}}
 .poisk-str{{margin:0;max-width:32rem;flex:1 1 18rem}}
 @media(max-width:900px){{.dva{{grid-template-columns:1fr}}
   .kol{{border-right:none;padding-right:0}}}}
@@ -1540,7 +1775,7 @@ body{{padding-bottom:2rem}}
 
 <input class="rd" type="radio" name="str" id="p-start"{start_vybran}>
 <input class="rd" type="radio" name="str" id="p-list">
-<input class="rd" type="radio" name="str" id="p-rasp">{lich_vhod}{kond_vhod}
+<input class="rd" type="radio" name="str" id="p-rasp"{rasp_vybran}>{lich_vhod}{kond_vhod}
 
 <!-- ВЕРХНЯЯ ПАНЕЛЬ. Имя сайта стоит ОДИН раз и здесь; разделы больше не повторяют
      своё название заголовком внутри себя. Поиск живёт тут же и работает на всех
@@ -1560,9 +1795,8 @@ body{{padding-bottom:2rem}}
      take the section off the site altogether. -->
 <nav class="menu">
   <span class="im">Ключики</span>{lich_metka}
-  <label for="p-start">Класс</label>
-  <label for="p-list">Листки</label>
-  <a class="ssyl ssyl-rasp" href="/raspredelenie">Распределение</a>{kond_metka}
+  {punkty}
+  <a class="ssyl ssyl-rasp{rasp_aktivna}" href="{rasp_adres}">Распределение</a>{kond_metka}
   <div class="podskazki poisk-verh">
     <input class="poisk" id="poisk" placeholder="Поиск — школьник, принимающий, листок" autocomplete="off">
     <div class="spisok" id="spisok" hidden></div>

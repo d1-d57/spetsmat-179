@@ -112,12 +112,22 @@ def test_raspredelenie_opens_on_a_dated_lesson_and_not_on_the_standing_one(runni
     base, _ = running_server
     status, body = _http_get(base + "/raspredelenie")
     assert status == 200
-    assert b"<!doctype html>" in body.lower() or b"<html" in body.lower()
-    assert "Занятие".encode() in body
+    telo = body.decode("utf-8")
+    assert "<!doctype html>" in telo.lower()
     # A date is on the page: that is what tells the reader which lesson he is editing.
-    assert re.search(rb"\d{4}-\d{2}-\d{2}", body), "the lesson screen must carry its date"
+    assert re.search(r"\d{4}-\d{2}-\d{2}", telo), "the lesson screen must carry its date"
     # And the standing editor is reachable, but only through its own address.
-    assert b"/raspredelenie/postoyannoe" in body
+    assert "/raspredelenie/postoyannoe" in telo
+
+    # 🔴 THE LESSON SCREEN IS THE SAME SCREEN AS THE STANDING ONE, AND THAT IS THE
+    # OWNER'S DECISION OF 2026-09-07: «те же самые пять вкладок должны быть на
+    # сегодня… отличие этих двух менюшек минимальное». Before it, this address
+    # served a separate document of read-only cards — a shop window with nothing to
+    # press, and without the site's own menu; the owner's first question on seeing
+    # it was «а где его менять?».
+    for vkladka in ("школьникам", "принимающим"):
+        assert f">{vkladka}</label>" in telo, f"вкладка «{vkladka}» на месте"
+    assert 'class="menu"' in telo, "оглавление сайта на месте"
 
 
 def test_the_standing_arrangement_keeps_its_own_address_and_is_the_site_s_own_section(
@@ -234,3 +244,77 @@ def test_post_enrollment_validates_input(running_server):
         "student_id": 1, "slot": 99,
     })
     assert status == 400
+
+
+def test_the_lesson_screen_saves_at_once_and_the_standing_one_waits_for_the_button(
+        running_server):
+    """Два экрана — два момента записи, и это решение владельца 07.09.
+
+    Дословно: *«распределение на день не нужно писать кнопку „Сохранить“ — там могут
+    быть ошибки, это не… как с кондуитом, там просто нужно сразу сохраняться. А
+    постоянное распределение не нужно сохранять сразу, потому что там можно долго
+    его двигать и в итоге прийти к оптимальному варианту, нажать „Сохранить“, и
+    дальше оно влияет»*.
+
+    Кнопка, стоящая там, где ничего не копится, обещает несуществующий шаг: человек
+    уходит со страницы, не нажав её, и не знает, сохранилось ли.
+    """
+    base, _ = running_server
+    _status, zanyatie = _http_get(base + "/raspredelenie")
+    _status, postoyannoe = _http_get(base + "/raspredelenie/postoyannoe")
+    assert 'id="sohranit"' not in zanyatie.decode("utf-8"), "на занятии кнопки нет"
+    assert 'id="sohranit"' in postoyannoe.decode("utf-8"), "на постоянном она есть"
+
+
+def test_a_deviation_of_one_lesson_is_written_and_taken_back_by_deletion(running_server):
+    """«Отсутствует» пишется сразу, а снятие отметки УДАЛЯЕТ строку.
+
+    Слово именно это, и оно поправлено владельцем 07.09: *«болеет — неправильная
+    кнопка… должна быть возможность установить статус „отсутствует“. И всё»*.
+    «Болеет» называет причину, которой на занятии никто не знает.
+
+    🔴 ЗАНЯТИЕ ХРАНИТ ТОЛЬКО ОТКЛОНЕНИЯ (`doc/TZ-sloj-zanyatia.md §2`): чего оно не
+    упоминает, то читается из постоянного на лету. Поэтому «вернуть как обычно» —
+    это удаление строки, а не запись «был» поверх: иначе занятие потихоньку
+    зарастало бы копией постоянного, и правка шаблона перестала бы доезжать.
+    """
+    base, connection = running_server
+    den = "2026-09-10"          # четверг
+
+    status, _ = _http_post(base + "/api/zanyatie",
+                           {"den": den, "student_id": 1, "net": True})
+    assert status == 200
+    ryad = connection.execute(
+        "select status from attendance a join sessions s on s.id = a.session_id "
+        "where s.held_on = ? and a.student_id = 1", (den,)).fetchone()
+    assert ryad is not None and ryad["status"] == "не был"
+
+    status, _ = _http_post(base + "/api/zanyatie",
+                           {"den": den, "student_id": 1, "net": False})
+    assert status == 200
+    ostalos = connection.execute(
+        "select count(*) from attendance a join sessions s on s.id = a.session_id "
+        "where s.held_on = ?", (den,)).fetchone()[0]
+    assert ostalos == 0, "«как обычно» — это отсутствие строки, а не строка «был»"
+
+
+def test_the_standing_layer_is_untouched_by_a_move_for_one_lesson(running_server):
+    """Перевод на один раз не трогает постоянное. Ни одной строки.
+
+    Ровно этого владелец и хотел от слоя занятия: *«я должен править распределение
+    во время занятия… но должно быть ещё базовое распределение, чтобы на следующее
+    занятие я пришёл не с исправленным, а с базовым»*.
+    """
+    base, connection = running_server
+    do = connection.execute(
+        "select teacher_id from enrollment where student_id = 1 and slot = 2 "
+        "and valid_to = '9999-12-31'").fetchall()
+
+    status, _ = _http_post(base + "/api/zanyatie",
+                           {"den": "2026-09-10", "student_id": 1, "teacher_id": 2})
+    assert status == 200
+
+    posle = connection.execute(
+        "select teacher_id from enrollment where student_id = 1 and slot = 2 "
+        "and valid_to = '9999-12-31'").fetchall()
+    assert [r["teacher_id"] for r in do] == [r["teacher_id"] for r in posle]

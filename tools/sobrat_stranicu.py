@@ -69,7 +69,8 @@ from veb.razdely.prepodavateli import vid_prepodavateli  # noqa: E402
 from veb.razdely.shkolniki import vid_vse  # noqa: E402
 
 
-def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
+def sobrat_html(rezhim: str = "gost", svodka: list | None = None,
+                den: str | None = None) -> str:
     """Собирает страницу и ВОЗВРАЩАЕТ её. Один рендерер на все уровни доступа.
 
     🔴 ЗДЕСЬ ЖИВЁТ ГЛАВНОЕ РЕШЕНИЕ ЭТОГО ФАЙЛА: гость и организатор смотрят на
@@ -84,7 +85,10 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     `"admin"` — то же самое плюс выпадающие списки, счётчики и крестики.
     `svodka`: если передан список, в него дописываются строки отчёта сборки.
     """
-    kt = sobrat_kontekst(rezhim)
+    # `den` — страница ОДНОГО ЗАНЯТИЯ: те же вкладки, но на дату и одной колонкой.
+    # Разделы «Класс» и «Листки» на ней не собираются: их расписание читает
+    # `kt.DNI`, а он тут из одного дня (см. `karkas.sobrat_kontekst`).
+    kt = sobrat_kontekst(rezhim, den=den)
 
     l9 = [f for _, _, vs in L9 for _, f in vs if est("listki", f)]
     l8 = [f for _, _, f in L8_PERVOE + L8_VTOROE if est("listki-8kl", f)]
@@ -105,8 +109,9 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     # when the section was still a closure standing in this scope.
     return obolochka(
         kt,
-        glavnaya=glavnaya.razdel(kt),
-        listki=listki.razdel(kt),
+        glavnaya="" if den else glavnaya.razdel(kt),
+        listki="" if den else listki.razdel(kt),
+        tolko_raspredelenie=bool(den),
         raspredelenie=razdel_raspredeleniya(
             kt,
             vid_vse=partial(vid_vse, kt),

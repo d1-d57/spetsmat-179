@@ -117,9 +117,10 @@ class SqliteAttendance:
                 student_id=row["student_id"],
                 status=row["status"],
                 teacher_id=row["teacher_id"],
+                gruppa=row["gruppa"],
             )
             for row in self._connection.execute(
-                "select student_id, status, teacher_id from attendance "
+                "select student_id, status, teacher_id, gruppa from attendance "
                 "where session_id = ? order by student_id",
                 (session_id,),
             )

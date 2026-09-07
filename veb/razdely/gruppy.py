@@ -21,8 +21,9 @@ never a paraphrase.
 from __future__ import annotations
 
 from veb.obshchee.karkas import e
-from veb.razdely.prepodavateli import para_prep
-from veb.razdely.shkolniki import gr_shk, para_shk, po_dnyam, shapka_dnej
+from veb.razdely.prepodavateli import para_prep, vidimye_prepodavateli
+from veb.razdely.shkolniki import (gr_shk, para_shk, po_dnyam, pole, prishol,
+                                   shapka_dnej)
 
 
 def vkladka_gruppy(kt, kod):
@@ -44,10 +45,27 @@ def vkladka_gruppy(kt, kod):
     у кого он ровно наш по понедельникам.
     """
     star = kt.gruppy[kod]
-    deti = po_dnyam(kt, lambda ryady: any(
-        gr_shk(kt, ryady[kl]) == kod for kl in kt.DNI))
-    svoi = sorted((x for x in kt.prep.values() if x["gruppa"] == kod),
-                  key=lambda x: x["name"])
+    # 🔴 НА ЗАНЯТИИ ГРУППА СОБИРАЕТСЯ ИЗ ТРЁХ ИСТОЧНИКОВ, И ОТСУТСТВУЮЩИЕ В НЕЁ НЕ
+    # ВХОДЯТ. Владелец 07.09: отмеченный отсутствующим *«выпадает из моего списка,
+    # списка моей аудитории»*, а тот, кого сегодня привели без преподавателя,
+    # наоборот, обязан быть виден: *«он пока не распределённый, но он уже в моей
+    # аудитории, я должен это видеть»*. Поэтому: группа сегодняшнего преподавателя,
+    # либо группа, поставленная на этот день руками.
+    def nash(ryady):
+        for kl in kt.DNI:
+            r = ryady[kl]
+            if kt.den and not prishol(r):
+                return False
+            if gr_shk(kt, r) == kod or pole(r, "gruppa_dnya") == kod:
+                return True
+        return False
+
+    deti = po_dnyam(kt, nash)
+    # Принимающие группы; на занятии — без тех, кого сегодня нет и кто в этот
+    # день вообще не ходит (это разные вещи, и обе прячут человека отсюда).
+    svoi = [x for x in vidimye_prepodavateli(kt) if x["gruppa"] == kod]
+    if kt.den:
+        svoi = [x for x in svoi if x["id"] not in kt.otsutstvuyut_prepoda]
 
     if kt.mozhno("pravit-kabinety"):
         # 🔴 КАБИНЕТЫ — ДВУМЯ ПОЛЯМИ, ПОНЕДЕЛЬНИК И ЧЕТВЕРГ, НА ОДНОМ ЭКРАНЕ.
