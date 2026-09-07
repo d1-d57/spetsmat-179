@@ -204,7 +204,16 @@ class Kontekst:
 
 
 def _razobrat_rezhim(rezhim: str) -> tuple:
-    """`"admin"` → `("organizator", None)`; `"prepod:17"` → `("prepod", 17)`.
+    """`"admin"` → `("organizator", None)`; `"admin:2"` → `("organizator", 2)`;
+    `"prepod:17"` → `("prepod", 17)`.
+
+    🔴 У ОРГАНИЗАТОРА ТОЖЕ ЕСТЬ ЛИЦО, И 07.09 ЭТО СТОИЛО ВЛАДЕЛЬЦУ ВСЕГО ЛИЧНОГО.
+    Трое из четырнадцати принимающих — старшие по аудиториям, и вход личным
+    паролем даёт им роль `organizator` ВМЕСТЕ с `uid`. Но `veb/server.py` для
+    этой роли собирал страницу режимом `"admin"`, то есть выбрасывал `uid` —
+    и владелец, войдя своим паролем, не видел ни своего кабинета, ни своих
+    школьников, ни галочки «только мои». Роль и человек — разные вопросы;
+    режим теперь несёт оба.
 
     🔴 THE PERSON RIDES INSIDE THE MODE STRING, AND THAT IS A CONSTRAINT, NOT A
     DESIGN. The composition root `tools/sobrat_stranicu.sobrat_html` is the only
@@ -224,6 +233,9 @@ def _razobrat_rezhim(rezhim: str) -> tuple:
     """
     if rezhim == "admin":
         return "organizator", None
+    if rezhim.startswith("admin:"):
+        hvost = rezhim.split(":", 1)[1]
+        return "organizator", (int(hvost) if hvost.isdigit() else None)
     if ":" not in rezhim:
         return rezhim, None
     rol, _, hvost = rezhim.partition(":")

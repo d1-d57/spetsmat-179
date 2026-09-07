@@ -120,6 +120,16 @@ def _sborka_vozmozhna() -> None:
             "нет права записи в %s — публичную страницу некуда пересобрать" % cel)
 
 
+def _soedinenie():
+    """Соединение с базой только для сверки каркаса; None — базы нет."""
+    try:
+        import sqlite3
+        from tools.sobrat_stranicu import DATA
+        return sqlite3.connect("file:%s?mode=ro" % DATA, uri=True)
+    except Exception:
+        return None
+
+
 def _karkas_prepoda_sovpadaet() -> list:
     """Сверить каркас преподавателя с ГОСТЕВЫМ. Пустой список — совпадает.
 
@@ -148,7 +158,28 @@ def _karkas_prepoda_sovpadaet() -> list:
     gost = _razdel_raspredeleniya(sobrat_html("gost"))
     prepod = _snyat_organy(_razdel_raspredeleniya(sobrat_html("prepod")))
     if prepod == gost:
-        return []
+        # 🔴 РЕЖИМОВ СТАЛО ЧЕТЫРЕ, И ЧЕТВЁРТЫЙ ТОЖЕ ОБЯЗАН СВЕРЯТЬСЯ.
+        # 07.09 выяснилось, что старший по аудитории входит личным паролем и
+        # получает роль `organizator` ВМЕСТЕ с `uid`, то есть страницу
+        # `admin:<id>` — четвёртый режим, которого не знал ни один замок.
+        # Он собирается ТЕМ ЖЕ кодом, что и `admin`, плюс личные элементы,
+        # помеченные `data-org`; значит проверяется тем же способом. Сверяем на
+        # ПЕРВОМ старшем из базы, а не на выдуманном номере: выдуманный id
+        # даёт `prepod_id=None`, то есть проверяет `admin`, и замок снова
+        # выглядел бы зелёным, ничего не проверив.
+        _c = _soedinenie()
+        _ryad = _c.execute(
+            "select id from teachers where aktiven=1 order by id limit 1"
+        ).fetchone() if _c is not None else None
+        if _ryad is None:
+            return []
+        _admin_s_licom = _snyat_organy(
+            _razdel_raspredeleniya(sobrat_html("admin:%d" % _ryad[0])))
+        _admin = _snyat_organy(_razdel_raspredeleniya(sobrat_html("admin")))
+        if _admin_s_licom == _admin:
+            return []
+        return ["каркас режима `admin:<id>` разошёлся с `admin`: "
+                "личные элементы не помечены `data-org` и не снимаются"]
     i = next((i for i in range(min(len(gost), len(prepod)))
               if gost[i] != prepod[i]), min(len(gost), len(prepod)))
     return ["каркас роли «prepod» разошёлся с гостевым на позиции %d:\n"
@@ -606,8 +637,17 @@ class Handler(BaseHTTPRequestHandler):
         """
         rol = vhod.rol(self.headers)
         if rol == "organizator":
+            # 🔴 ЧЕЛОВЕК ЕДЕТ И ДЛЯ ОРГАНИЗАТОРА. Трое старших по аудиториям —
+            # сами принимающие, и вход личным паролем даёт им роль `organizator`
+            # ВМЕСТЕ с `uid`. Раньше здесь стоял голый `"admin"`, и `uid`
+            # терялся ровно на этой строке: владелец не видел ни своего
+            # кабинета, ни своих школьников, ни галочки «только мои», хотя
+            # всё это было написано и выкачено. Общий пароль по-прежнему
+            # `uid = None` — он не человек, и личного у него нет.
             from tools.sobrat_stranicu import sobrat_html
-            return sobrat_html("admin").encode("utf-8")
+            kto = vhod.kto(self.headers)
+            rezhim = "admin" if kto is None else "admin:%d" % kto
+            return sobrat_html(rezhim).encode("utf-8")
         # 🔴 ПРЕПОДАВАТЕЛЬ РЕНДЕРИТСЯ ЖИВЬЁМ, КАК И ОРГАНИЗАТОР, И ПО ТОЙ ЖЕ
         # ПРИЧИНЕ: файл `docs/index.html` один на всех и ничьего кабинета назвать
         # не может. Он видит ровно гостевую страницу плюс СВОЮ вкладку — ни одной
