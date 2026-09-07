@@ -238,11 +238,17 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_dozabivka-dolgov-sklejki.md`** (закрыть долги заходa склейки: права у кабинетов, опечатка except Value, красные тесты enrollment)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_https-i-domen.md`** (HTTPS на math-kluychiki.ru: сертификат, редиректы с http и с IP, сторож на новый адрес)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_listki-kak-baza-zadach.md`** (листок как база задач: страница листка вместо PDF, скачивание PDF и TeX, кондуит и состав из базы, отметки 05.09)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_skleit-adminku-s-sajtom.md`** (свести рабочий редактор распределения и страницу правки на сайте в один шаблон с двумя режимами)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_sklejka-vhoda-s-serverom.md`** (Склейка: вход veb/vhod.py приделывается к серверу veb/server.py — единственный файл, которого не было ни в одной зоне)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_sloj-zanyatia.md`** (слой занятия: сегодняшнее распределение сохранить как слой на 07.09, постоянное вернуть к утреннему, дальше разделить жёстко)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_veb-konduit-proshlogo-goda.md`** (Кондуит прошлого года на чтение: 18 листков на 56 учеников, 15847 событий, уже лежащих в базе)
 
