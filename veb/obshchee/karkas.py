@@ -625,6 +625,37 @@ KONDUIT_SKRIPT = """
     td.className = KLASS[s] || "";
     td.textContent = ZNAK[s];
   }
+  // 🔴 ОБНОВЛЕНИЕ СТРАНИЦЫ БОЛЬШЕ НЕ ВЫБРАСЫВАЕТ НА ГЛАВНУЮ. Владелец 07.09:
+  // «когда я обновляю страницу кондуита, меня выкидывает на главную, так не должно
+  // быть». Вкладки сделаны радиокнопками — устройство, на котором стоит весь сайт и
+  // которое трогать не надо, — но их состояние живёт только в DOM и умирает с
+  // перезагрузкой. Здесь оно просто ЗАПОМИНАЕТСЯ: какая вкладка была выбрана в
+  // каждой группе, та и восстанавливается. Разметка не меняется ни на байт, и при
+  // выключенном хранилище всё работает ровно как раньше.
+  var PAMYAT = "spetsmat-vkladki";
+  function zapomnit() {
+    try {
+      var bylo = {};
+      document.querySelectorAll("input.rd:checked").forEach(function (r) {
+        bylo[r.name] = r.id;
+      });
+      localStorage.setItem(PAMYAT, JSON.stringify(bylo));
+    } catch (e) { /* приватное окно или запрет хранилища — молча живём без памяти */ }
+  }
+  function vspomnit() {
+    try {
+      var bylo = JSON.parse(localStorage.getItem(PAMYAT) || "{}");
+      Object.keys(bylo).forEach(function (imya) {
+        var r = document.getElementById(bylo[imya]);
+        if (r && r.name === imya) { r.checked = true; }
+      });
+    } catch (e) { /* см. выше */ }
+  }
+  vspomnit();
+  document.addEventListener("change", function (sob) {
+    if (sob.target.classList && sob.target.classList.contains("rd")) { zapomnit(); }
+  });
+
   document.addEventListener("click", function (sob) {
     var td = sob.target.closest("#s-kond .kond td[data-u]");
     if (!td || td.classList.contains("zhdyot")) { return; }
