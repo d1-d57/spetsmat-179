@@ -1,4 +1,10 @@
-"""Tests for ops/storozh_sajta.py: three outcomes and state-change alarm."""
+"""Tests for ops/storozh_sajta.py: five outcomes, and the one distinction that matters.
+
+The distinction the whole module exists for is "сайт лёг" vs "443 отфильтрован".  Two of the
+tests below drive it end to end against real local sockets; the rest of the truth table is
+pinned on ``postavit_diagnoz`` directly, because standing up a trusted TLS server inside a
+unit test would prove the certificate machinery rather than the diagnosis.
+"""
 
 from __future__ import annotations
 
@@ -6,16 +12,34 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import pytest
-
 from ops import storozh_sajta
+from ops.storozh_sajta import OneCheck, postavit_diagnoz
 
 
-class OkHandler(BaseHTTPRequestHandler):
+NASH_OTVET = ("<!doctype html><title>Занятие четверг, 10 сентября — распределение</title>"
+              "<h1>Распределение</h1>").encode("utf-8")
+
+
+class NashSajtHandler(BaseHTTPRequestHandler):
+    """Serves our real marker, in the lower case the live page actually uses."""
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(NASH_OTVET)
+
+    def log_message(self, *a, **k):
+        pass
+
+
+class BannerHandler(BaseHTTPRequestHandler):
+    """200, but somebody else's page standing where the site should be."""
+
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"ok")
+        self.wfile.write(b"console.serveo.net")
 
     def log_message(self, *a, **k):
         pass
@@ -38,58 +62,158 @@ def _serve(port: int, handler):
     return srv
 
 
-def test_zhiv_on_live_port(tmp_path, monkeypatch):
-    srv = _serve(18765, OkHandler)
+def _nastroit(tmp_path, monkeypatch, host: str):
+    monkeypatch.setattr(storozh_sajta, "HOST_FILE", tmp_path / "adres-sajta.txt")
     monkeypatch.setattr(storozh_sajta, "ADRES_FILE", tmp_path / "adres.txt")
-    (tmp_path / "adres.txt").write_text("http://localhost:18765", encoding="utf-8")
-    # Clear state file
     monkeypatch.setattr(storozh_sajta, "STATE_FILE", tmp_path / "state.json")
+    (tmp_path / "adres-sajta.txt").write_text(host, encoding="utf-8")
+
+
+def _sostoyanie(tmp_path) -> str:
+    return json.loads((tmp_path / "state.json").read_text(encoding="utf-8")).get("last_verdict", "")
+
+
+# ── Та самая пара, ради которой сторож переписан ──────────────────────────────
+
+def test_443_otfiltrovan_kogda_http_zhiv_a_https_molchit(tmp_path, monkeypatch, capsys):
+    """HTTP отдаёт наше содержимое, HTTPS не отвечает вовсе — это НЕ «сайт лёг».
+
+    Недоступность 443 подделана честнейшим доступным способом: на порту стоит обычный
+    HTTP-сервер, и попытка говорить с ним по TLS обрывается на уровне сети, ровно как
+    при фильтрации на пути. Именно этот признак — http жив, https молчит — сторож и обязан
+    отличать от смерти сайта, потому что действия у них противоположные.
+    """
+    srv = _serve(18771, NashSajtHandler)
+    try:
+        _nastroit(tmp_path, monkeypatch, "localhost:18771")
+        code = storozh_sajta.main([])
+        vyvod = capsys.readouterr().out
+        assert code == 1
+        assert _sostoyanie(tmp_path) == storozh_sajta.OTFILTROVAN
+        assert "443 ОТФИЛЬТРОВАН" in vyvod
+        # Действие обязано быть напечатано, и обязано быть «сервер не трогать»:
+        # без него сторож посылает читателя чинить единственное, что не сломано.
+        assert "СЕРВЕР НЕ ТРОГАТЬ" in vyvod
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_mertv_kogda_molchat_oba(tmp_path, monkeypatch, capsys):
+    """Ни один порт не отвечает — сайт лёг, и вот это уже «поднимать сервер»."""
+    _nastroit(tmp_path, monkeypatch, "localhost:18999")
     code = storozh_sajta.main([])
-    assert code == 0
-    state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
-    assert state.get("last_verdict") == "жив"
-    srv.shutdown()
-    srv.server_close()
+    vyvod = capsys.readouterr().out
+    assert code == 1
+    assert _sostoyanie(tmp_path) == storozh_sajta.MERTV
+    assert "поднимать сайт" in vyvod
 
 
-def test_mertv_on_500(tmp_path, monkeypatch):
-    srv = _serve(18766, ErrorHandler)
-    monkeypatch.setattr(storozh_sajta, "ADRES_FILE", tmp_path / "adres.txt")
-    (tmp_path / "adres.txt").write_text("http://localhost:18766", encoding="utf-8")
+# ── Полная таблица диагноза ───────────────────────────────────────────────────
+
+def _zhiv(name):
+    return OneCheck(name, True, True, "жив")
+
+
+def _molchit(name):
+    return OneCheck(name, False, False, "молчит на уровне сети")
+
+
+def _otvetil_ploho(name):
+    return OneCheck(name, False, True, "мёртв: status=502")
+
+
+def test_tablica_diagnoza():
+    assert postavit_diagnoz(_zhiv("http"), _zhiv("https")) == storozh_sajta.ZHIV
+    assert postavit_diagnoz(_zhiv("http"), _molchit("https")) == storozh_sajta.OTFILTROVAN
+    assert postavit_diagnoz(_molchit("http"), _zhiv("https")) == storozh_sajta.HTTP_LEG
+    assert postavit_diagnoz(_molchit("http"), _molchit("https")) == storozh_sajta.MERTV
+
+
+def test_502_po_https_eto_ne_filtracia():
+    """Сервер ОТВЕТИЛ пятисоткой — значит 443 доходит, и фильтрацией это назвать нельзя.
+
+    Граница узкая нарочно: стоит записать сюда любую неудачу https, и слово
+    «отфильтрован» перестанет что-либо значить.
+    """
+    assert postavit_diagnoz(_zhiv("http"), _otvetil_ploho("https")) == storozh_sajta.MERTV
+
+
+# ── Остальные исходы ──────────────────────────────────────────────────────────
+
+def test_zhiv_na_zhivom_portu(tmp_path, monkeypatch):
+    """Наш маркер в СТРОЧНОМ виде — как на живой странице — обязан читаться как «жив».
+
+    До 07.09 сверка была регистрозависимой и по первым 512 байтам; живой сайт, отдающий
+    200 и заголовок «… — распределение», сторож объявлял мёртвым.
+    """
+    srv = _serve(18765, NashSajtHandler)
+    try:
+        _nastroit(tmp_path, monkeypatch, "localhost:18765")
+        proverka = storozh_sajta.probe("http://localhost:18765")
+        assert proverka.passed
+        assert proverka.otvetil_seteviy
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_banner_ne_schitaetsya_zhivym(tmp_path, monkeypatch):
+    """200 без нашего содержимого — чужая страница на нашем месте, а не живой сайт."""
+    srv = _serve(18766, BannerHandler)
+    try:
+        proverka = storozh_sajta.probe("http://localhost:18766")
+        assert not proverka.passed
+        assert proverka.otvetil_seteviy  # сеть-то дошла
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_500_eto_otvet_a_ne_tishina(tmp_path, monkeypatch):
+    srv = _serve(18767, ErrorHandler)
+    try:
+        proverka = storozh_sajta.probe("http://localhost:18767")
+        assert not proverka.passed
+        assert proverka.otvetil_seteviy
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_ne_smog_proverit_kogda_adresa_net(tmp_path, monkeypatch):
+    monkeypatch.setattr(storozh_sajta, "HOST_FILE", tmp_path / "net.txt")
+    monkeypatch.setattr(storozh_sajta, "ADRES_FILE", tmp_path / "tozhe-net.txt")
     monkeypatch.setattr(storozh_sajta, "STATE_FILE", tmp_path / "state.json")
     code = storozh_sajta.main([])
     assert code == 1
-    srv.shutdown()
-    srv.server_close()
+    assert _sostoyanie(tmp_path) == storozh_sajta.NE_SMOG
 
 
-def test_ne_smog_proverit_on_missing_file(tmp_path, monkeypatch):
+def test_staryj_adres_ostayotsya_zapasnym(tmp_path, monkeypatch):
+    """ADRES.txt эпохи туннеля несёт ПОЛНЫЙ url — он обязан сводиться к тому же хосту."""
+    monkeypatch.setattr(storozh_sajta, "HOST_FILE", tmp_path / "net.txt")
     monkeypatch.setattr(storozh_sajta, "ADRES_FILE", tmp_path / "adres.txt")
-    monkeypatch.setattr(storozh_sajta, "STATE_FILE", tmp_path / "state.json")
-    code = storozh_sajta.main([])
-    assert code == 1
-    state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
-    assert state.get("last_verdict") == "не смог проверить"
+    (tmp_path / "adres.txt").write_text("https://288c65b4b43b89.lhr.life/", encoding="utf-8")
+    assert storozh_sajta.read_host() == "288c65b4b43b89.lhr.life"
 
 
-def test_alarm_on_state_change(tmp_path, monkeypatch):
-    monkeypatch.setattr(storozh_sajta, "ADRES_FILE", tmp_path / "adres.txt")
-    (tmp_path / "adres.txt").write_text("http://localhost:9999", encoding="utf-8")
-    monkeypatch.setattr(storozh_sajta, "STATE_FILE", tmp_path / "state.json")
+# ── Тревога только на смене состояния ─────────────────────────────────────────
+
+def test_trevoga_na_smene_sostoyania(tmp_path, monkeypatch, capsys):
+    _nastroit(tmp_path, monkeypatch, "localhost:18998")
     (tmp_path / "state.json").write_text(json.dumps({"last_verdict": "жив"}), encoding="utf-8")
-    # 9999 is unreachable -> не смог проверить, different from prev -> alarm
     code = storozh_sajta.main([])
+    vyvod = capsys.readouterr().out
     assert code == 1
-    state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
-    assert state.get("last_verdict") == "не смог проверить"
+    assert "ALARM: жив -> мёртв" in vyvod
+    assert _sostoyanie(tmp_path) == storozh_sajta.MERTV
 
 
-def test_tiho_silences_first_run_alarm(tmp_path, monkeypatch):
-    monkeypatch.setattr(storozh_sajta, "ADRES_FILE", tmp_path / "adres.txt")
-    (tmp_path / "adres.txt").write_text("http://localhost:9998", encoding="utf-8")
-    monkeypatch.setattr(storozh_sajta, "STATE_FILE", tmp_path / "state.json")
-    # Existing state file with same value; --tiho suppresses any alarm.
-    (tmp_path / "state.json").write_text(json.dumps({"last_verdict": "не смог проверить"}), encoding="utf-8")
+def test_tiho_gasit_trevogu(tmp_path, monkeypatch, capsys):
+    _nastroit(tmp_path, monkeypatch, "localhost:18997")
+    (tmp_path / "state.json").write_text(json.dumps({"last_verdict": "жив"}), encoding="utf-8")
     code = storozh_sajta.main(["--tiho"])
-    # Should not alarm; result is still failure.
+    vyvod = capsys.readouterr().out
     assert code == 1
+    assert "ALARM:" not in vyvod
