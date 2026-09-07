@@ -31,7 +31,7 @@ def prihodit(kt, x, kl) -> bool:
     Раньше здесь стояло «есть ли у него в этот день хоть один школьник», и это
     отвечало на другой вопрос: человек, которому детей ещё не дали, выглядел
     отсутствующим, а отметить его присутствие было нечем. Память дня —
-    `prepodavatel_den` (`infra/prepodavatel_den_repo`), она и отвечает.
+    `prepodavatel_ne_prihodit` (`infra/prepodavatel_den_repo`), она и отвечает.
     """
     return kt.DNI[kl][1] in kt.dni_prepodavatelej.get(x["id"], frozenset())
 
