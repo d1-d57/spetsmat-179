@@ -205,43 +205,35 @@ tr:hover td{background:var(--accent-soft)}
    всю высоту и распределяет содержание по ней: листок сразу под заголовком,
    «кто ведёт» — у нижнего края. Владелец: «вынести Деревья вверх на пустое
    место и постараться заполнить большую часть пространства». */
-/* Левая колонка шире: имена преподавателей не должны ломаться посреди
-   пары «имя фамилия» — переносы делали список рваным. */
-.glav-setka{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);
+.glav-setka{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
   gap:2.5rem 4rem;margin-top:2.5vh;padding:0;align-items:stretch;flex:1 1 auto}
-/* Содержание идёт СВЕРХУ, а не растягивается по всей высоте: владелец
-   заметил, что «Ольга Рыжая» и «Наталия Стрелкова» сидят слишком низко — от
-   растягивания предметы уезжали к самому низу и читались как продолжение
-   строки классных руководителей. Низ колонки добирает кривая. */
-.glav-glavnoe{display:flex;flex-direction:column;justify-content:flex-start;
-  gap:4vh;padding-bottom:.5rem}
+.glav-glavnoe{display:flex;flex-direction:column;justify-content:space-between;
+  gap:2rem;padding-bottom:.5rem}
 @media(max-width:940px){.glav-setka{grid-template-columns:1fr;align-items:start}}
 /* Главное — листок. Он и набран крупнее всего, что рядом. */
-/* ── КАРТОЧКА БЛИЖАЙШЕГО ЛИСТКА. Три уровня и один ритм.
-   Тема набрана вровень с датой, а не крупнее заголовка страницы: раньше она
-   спорила с «Математическим классом» и выбивалась из системы. Версии стоят в
-   строке темы, а не отдельной полосой, — от этого блок собран, а не разлапист. */
-.blok-listok{margin:0;max-width:34rem}
-.listok-kogda{margin:.35rem 0 0;font-family:var(--sans);
-  font-size:clamp(1.5rem,1.9vw,2.1rem);color:var(--muted);
-  display:flex;align-items:baseline;gap:.55rem;flex-wrap:wrap}
-.listok-kogda b{color:var(--text);font-weight:700}
-.listok-chas{color:var(--accent);font-weight:600;white-space:nowrap}
-.listok-data{font-size:.8em;color:var(--faint)}
-.listok-stroka{margin:.5rem 0 0;display:flex;align-items:baseline;gap:.7rem;
-  flex-wrap:wrap;font-size:clamp(1.5rem,1.9vw,2.1rem);line-height:1.15}
-.listok-nom{color:var(--faint);font-family:var(--sans);font-weight:600}
-.listok-tema{font-weight:600}
-.listok-ver{display:inline-flex;gap:.35rem;margin-left:.2rem}
-/* Версии — того же роста, что строка вокруг: раньше они были кнопками другого
-   кегля и другого цвета, и именно они делали блок разнородным. */
-.listok-ver .ver{font-size:.72em;padding:.24em .7em;margin:0;font-weight:600}
-.listok-kab{margin:.45rem 0 0;font-family:var(--sans);
-  font-size:clamp(1.05rem,1.25vw,1.35rem);color:var(--muted)}
-.listok-kab b{color:var(--text);font-weight:600}
-.vedut{border-collapse:collapse;font-size:clamp(1.5rem,2.1vw,2.15rem)}
+/* ── КАРТОЧКА БЛИЖАЙШЕГО ЛИСТКА. ОДИН ШРИФТ, ОДИН КЕГЛЬ, ДВА ЦВЕТА.
+   🔴 РАЗНОРОДНОСТЬ БЫЛА НЕ В РАЗМЕРЕ, А В ЧИСЛЕ РАЗНЫХ ВЕЩЕЙ НА ОДНОМ КЛОЧКЕ.
+   Владелец сосчитал: «на одной карточке 10 разных визуальных элементов… и эти
+   кнопки, и четыре цвета, и куча разных размеров шрифтов». Так и было: две
+   гарнитуры, четыре кегля, четыре цвета и три плашки с фоном.
+   Осталось: одна гарнитура, ОДИН кегль на все три строки, основной цвет для
+   содержания и приглушённый для служебного. Акцентным — только ссылки на
+   версии, потому что по ним нажимают. Ни одной плашки. */
+.blok-listok{margin:0;max-width:34rem;font-family:var(--sans);
+  font-size:clamp(1.35rem,1.65vw,1.85rem);line-height:1.45}
+.blok-listok p{margin:.15rem 0 0;color:var(--text)}
+.blok-listok .tihoe{color:var(--muted)}
+.blok-listok b{font-weight:600}
+.listok-kogda{margin-top:.4rem}
+/* Версии — просто ссылки в ряд, а не кнопки: плашка с фоном была третьим
+   сортом объекта на карточке, где и так тесно. */
+.listok-ver{margin-left:.3rem;white-space:nowrap}
+.listok-ver a{color:var(--accent);text-decoration:none;padding:0 .28rem;
+  font-weight:600}
+.listok-ver a:hover{text-decoration:underline}
+.vedut{border-collapse:collapse;font-size:clamp(1.6rem,2.5vw,2.5rem)}
 .vedut td{border:none;padding:.5rem 0;vertical-align:baseline}
-.vedut .predmet{color:var(--muted);padding-right:2.2rem;white-space:nowrap;
+.vedut .predmet{color:var(--muted);padding-right:2.6rem;white-space:nowrap;
   font-family:var(--sans);font-size:clamp(1.2rem,1.45vw,1.65rem)}
 .imya-celikom{white-space:nowrap}
 /* Боковое — поверх кривой, мельче, с воздухом между блоками. */
@@ -469,11 +461,10 @@ body{padding-bottom:2rem}
              карточка, а не как четыре разных куска. -->
         <div class="blok-listok">
           <span class="zag2">следующий спецмат</span>
-          <p class="listok-kogda"><b>пн</b>
-            <span class="listok-chas">14:15 — 15:55</span>
-            <span class="listok-data">7 сент</span></p>
-          <p class="listok-stroka"><span class="listok-nom">16</span><span class="listok-tema">Деревья</span><span class="listok-ver"><a class="ver" href="listki/16A-derevya.pdf">A</a><a class="ver" href="listki/16α-derevya.pdf">α</a><a class="ver" href="listki/16ℵ-derevya.pdf">ℵ</a></span></p>
-          <p class="listok-kab">В&nbsp;<b>303</b> · Д&nbsp;<b>302</b> · Н&nbsp;<b>203</b></p>
+          <p class="listok-kogda"><b>пн 7 сент</b>
+            <span class="tihoe">·</span> 14:15 — 15:55</p>
+          <p class="listok-stroka"><span class="tihoe">16</span> <b>Деревья</b><span class="listok-ver"><a href="listki/16A-derevya.pdf">A</a><a href="listki/16α-derevya.pdf">α</a><a href="listki/16ℵ-derevya.pdf">ℵ</a></span></p>
+          <p class="tihoe">В&nbsp;303 · Д&nbsp;302 · Н&nbsp;203</p>
         </div>
 
         <div class="blok-vedut">

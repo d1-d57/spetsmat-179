@@ -915,7 +915,7 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     def _kab_skoro(k):
         est = [(kod, kabinety_dnya[k].get(kod)) for kod in ("В", "Д", "Н")]
         est = [(kod, v) for kod, v in est if v]
-        return " · ".join(f'{kod}&nbsp;<b>{e(v)}</b>' for kod, v in est) if est \
+        return " · ".join(f'{kod}&nbsp;{e(v)}' for kod, v in est) if est \
             else '<span class="net">кабинеты уточняются</span>'
 
     # 🔴 ТЕКУЩИЙ ЛИСТОК — САМОЕ ПОЛЕЗНОЕ, ЧТО ЗДЕСЬ МОЖЕТ СТОЯТЬ. Школьник заходит
@@ -940,9 +940,9 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     listok_stroka = ""
     if listok_tema:
         versii_html = "".join(
-            f'<a class="ver" href="listki/{e(f)}">{e(z)}</a>' for z, f in listok_versii)
-        listok_stroka = (f'<span class="listok-nom">{e(listok_nom)}</span>'
-                         f'<span class="listok-tema">{e(listok_tema)}</span>'
+            f'<a href="listki/{e(f)}">{e(z)}</a>' for z, f in listok_versii)
+        listok_stroka = (f'<span class="tihoe">{e(listok_nom)}</span> '
+                         f'<b>{e(listok_tema)}</b>'
                          f'<span class="listok-ver">{versii_html}</span>')
 
     kabinety_skoro = _kab_skoro(min(DNI, key=lambda k: DNI[k][2]))
@@ -1252,43 +1252,35 @@ tr:hover td{{background:var(--accent-soft)}}
    всю высоту и распределяет содержание по ней: листок сразу под заголовком,
    «кто ведёт» — у нижнего края. Владелец: «вынести Деревья вверх на пустое
    место и постараться заполнить большую часть пространства». */
-/* Левая колонка шире: имена преподавателей не должны ломаться посреди
-   пары «имя фамилия» — переносы делали список рваным. */
-.glav-setka{{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);
+.glav-setka{{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
   gap:2.5rem 4rem;margin-top:2.5vh;padding:0;align-items:stretch;flex:1 1 auto}}
-/* Содержание идёт СВЕРХУ, а не растягивается по всей высоте: владелец
-   заметил, что «Ольга Рыжая» и «Наталия Стрелкова» сидят слишком низко — от
-   растягивания предметы уезжали к самому низу и читались как продолжение
-   строки классных руководителей. Низ колонки добирает кривая. */
-.glav-glavnoe{{display:flex;flex-direction:column;justify-content:flex-start;
-  gap:4vh;padding-bottom:.5rem}}
+.glav-glavnoe{{display:flex;flex-direction:column;justify-content:space-between;
+  gap:2rem;padding-bottom:.5rem}}
 @media(max-width:940px){{.glav-setka{{grid-template-columns:1fr;align-items:start}}}}
 /* Главное — листок. Он и набран крупнее всего, что рядом. */
-/* ── КАРТОЧКА БЛИЖАЙШЕГО ЛИСТКА. Три уровня и один ритм.
-   Тема набрана вровень с датой, а не крупнее заголовка страницы: раньше она
-   спорила с «Математическим классом» и выбивалась из системы. Версии стоят в
-   строке темы, а не отдельной полосой, — от этого блок собран, а не разлапист. */
-.blok-listok{{margin:0;max-width:34rem}}
-.listok-kogda{{margin:.35rem 0 0;font-family:var(--sans);
-  font-size:clamp(1.5rem,1.9vw,2.1rem);color:var(--muted);
-  display:flex;align-items:baseline;gap:.55rem;flex-wrap:wrap}}
-.listok-kogda b{{color:var(--text);font-weight:700}}
-.listok-chas{{color:var(--accent);font-weight:600;white-space:nowrap}}
-.listok-data{{font-size:.8em;color:var(--faint)}}
-.listok-stroka{{margin:.5rem 0 0;display:flex;align-items:baseline;gap:.7rem;
-  flex-wrap:wrap;font-size:clamp(1.5rem,1.9vw,2.1rem);line-height:1.15}}
-.listok-nom{{color:var(--faint);font-family:var(--sans);font-weight:600}}
-.listok-tema{{font-weight:600}}
-.listok-ver{{display:inline-flex;gap:.35rem;margin-left:.2rem}}
-/* Версии — того же роста, что строка вокруг: раньше они были кнопками другого
-   кегля и другого цвета, и именно они делали блок разнородным. */
-.listok-ver .ver{{font-size:.72em;padding:.24em .7em;margin:0;font-weight:600}}
-.listok-kab{{margin:.45rem 0 0;font-family:var(--sans);
-  font-size:clamp(1.05rem,1.25vw,1.35rem);color:var(--muted)}}
-.listok-kab b{{color:var(--text);font-weight:600}}
-.vedut{{border-collapse:collapse;font-size:clamp(1.5rem,2.1vw,2.15rem)}}
+/* ── КАРТОЧКА БЛИЖАЙШЕГО ЛИСТКА. ОДИН ШРИФТ, ОДИН КЕГЛЬ, ДВА ЦВЕТА.
+   🔴 РАЗНОРОДНОСТЬ БЫЛА НЕ В РАЗМЕРЕ, А В ЧИСЛЕ РАЗНЫХ ВЕЩЕЙ НА ОДНОМ КЛОЧКЕ.
+   Владелец сосчитал: «на одной карточке 10 разных визуальных элементов… и эти
+   кнопки, и четыре цвета, и куча разных размеров шрифтов». Так и было: две
+   гарнитуры, четыре кегля, четыре цвета и три плашки с фоном.
+   Осталось: одна гарнитура, ОДИН кегль на все три строки, основной цвет для
+   содержания и приглушённый для служебного. Акцентным — только ссылки на
+   версии, потому что по ним нажимают. Ни одной плашки. */
+.blok-listok{{margin:0;max-width:34rem;font-family:var(--sans);
+  font-size:clamp(1.35rem,1.65vw,1.85rem);line-height:1.45}}
+.blok-listok p{{margin:.15rem 0 0;color:var(--text)}}
+.blok-listok .tihoe{{color:var(--muted)}}
+.blok-listok b{{font-weight:600}}
+.listok-kogda{{margin-top:.4rem}}
+/* Версии — просто ссылки в ряд, а не кнопки: плашка с фоном была третьим
+   сортом объекта на карточке, где и так тесно. */
+.listok-ver{{margin-left:.3rem;white-space:nowrap}}
+.listok-ver a{{color:var(--accent);text-decoration:none;padding:0 .28rem;
+  font-weight:600}}
+.listok-ver a:hover{{text-decoration:underline}}
+.vedut{{border-collapse:collapse;font-size:clamp(1.6rem,2.5vw,2.5rem)}}
 .vedut td{{border:none;padding:.5rem 0;vertical-align:baseline}}
-.vedut .predmet{{color:var(--muted);padding-right:2.2rem;white-space:nowrap;
+.vedut .predmet{{color:var(--muted);padding-right:2.6rem;white-space:nowrap;
   font-family:var(--sans);font-size:clamp(1.2rem,1.45vw,1.65rem)}}
 .imya-celikom{{white-space:nowrap}}
 /* Боковое — поверх кривой, мельче, с воздухом между блоками. */
@@ -1516,11 +1508,10 @@ body{{padding-bottom:2rem}}
              карточка, а не как четыре разных куска. -->
         <div class="blok-listok">
           <span class="zag2">следующий спецмат</span>
-          <p class="listok-kogda"><b>{e(DNI[blizh][3])}</b>
-            <span class="listok-chas">{VREMYA[blizh]}</span>
-            <span class="listok-data">{e(po_russki_kratko(DNI[blizh][2]))}</span></p>
+          <p class="listok-kogda"><b>{e(DNI[blizh][3])} {e(po_russki_kratko(DNI[blizh][2]))}</b>
+            <span class="tihoe">·</span> {VREMYA[blizh]}</p>
           <p class="listok-stroka">{listok_stroka}</p>
-          <p class="listok-kab">{kabinety_skoro}</p>
+          <p class="tihoe">{kabinety_skoro}</p>
         </div>
 
         <div class="blok-vedut">
