@@ -1,0 +1,1726 @@
+{
+ "snyato_s": "/opt/spetsmat-bot/data/spetsmat.db",
+ "strok_enrollment": 191,
+ "strok_marks": 16121,
+ "enrollment": [
+  {
+   "id": 1,
+   "student_id": 2,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 2,
+   "student_id": 1,
+   "teacher_id": 14,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 3,
+   "student_id": 4,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 4,
+   "student_id": 5,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 5,
+   "student_id": 6,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 6,
+   "student_id": 9,
+   "teacher_id": 2,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 7,
+   "student_id": 7,
+   "teacher_id": 9,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 8,
+   "student_id": 10,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 9,
+   "student_id": 8,
+   "teacher_id": 3,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 10,
+   "student_id": 13,
+   "teacher_id": 11,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 11,
+   "student_id": 11,
+   "teacher_id": 2,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 12,
+   "student_id": 16,
+   "teacher_id": 11,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 13,
+   "student_id": 12,
+   "teacher_id": 7,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 14,
+   "student_id": 17,
+   "teacher_id": 11,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 15,
+   "student_id": 15,
+   "teacher_id": 6,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 16,
+   "student_id": 20,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 17,
+   "student_id": 18,
+   "teacher_id": 2,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 18,
+   "student_id": 22,
+   "teacher_id": 14,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 19,
+   "student_id": 19,
+   "teacher_id": 6,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 20,
+   "student_id": 24,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 21,
+   "student_id": 21,
+   "teacher_id": 5,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 22,
+   "student_id": 26,
+   "teacher_id": 1,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 23,
+   "student_id": 23,
+   "teacher_id": 2,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 24,
+   "student_id": 25,
+   "teacher_id": 17,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 25,
+   "student_id": 28,
+   "teacher_id": 12,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 26,
+   "student_id": 29,
+   "teacher_id": 16,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 27,
+   "student_id": 30,
+   "teacher_id": 5,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 28,
+   "student_id": 31,
+   "teacher_id": 5,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 29,
+   "student_id": 33,
+   "teacher_id": 1,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 30,
+   "student_id": 32,
+   "teacher_id": 5,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 31,
+   "student_id": 35,
+   "teacher_id": 14,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 32,
+   "student_id": 34,
+   "teacher_id": 16,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 33,
+   "student_id": 38,
+   "teacher_id": 1,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 34,
+   "student_id": 36,
+   "teacher_id": 9,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 35,
+   "student_id": 40,
+   "teacher_id": 12,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 36,
+   "student_id": 37,
+   "teacher_id": 7,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 37,
+   "student_id": 39,
+   "teacher_id": 6,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 38,
+   "student_id": 43,
+   "teacher_id": 17,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 39,
+   "student_id": 42,
+   "teacher_id": 15,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 40,
+   "student_id": 48,
+   "teacher_id": 3,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 41,
+   "student_id": 46,
+   "teacher_id": 3,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 42,
+   "student_id": 51,
+   "teacher_id": 9,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 43,
+   "student_id": 54,
+   "teacher_id": 15,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 44,
+   "student_id": 49,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 45,
+   "student_id": 55,
+   "teacher_id": 6,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 46,
+   "student_id": 53,
+   "teacher_id": 16,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 47,
+   "student_id": 56,
+   "teacher_id": 7,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 49,
+   "student_id": 27,
+   "teacher_id": 15,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 50,
+   "student_id": 27,
+   "teacher_id": 13,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 51,
+   "student_id": 41,
+   "teacher_id": 8,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 52,
+   "student_id": 44,
+   "teacher_id": 12,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 53,
+   "student_id": 44,
+   "teacher_id": 13,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 54,
+   "student_id": 47,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 55,
+   "student_id": 47,
+   "teacher_id": 13,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 56,
+   "student_id": 52,
+   "teacher_id": 8,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 57,
+   "student_id": 50,
+   "teacher_id": 8,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-01",
+   "valid_to": "2026-09-04"
+  },
+  {
+   "id": 58,
+   "student_id": 2,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-04",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 59,
+   "student_id": 1,
+   "teacher_id": 14,
+   "room": "203",
+   "slot": 1,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 60,
+   "student_id": 2,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 61,
+   "student_id": 4,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 62,
+   "student_id": 5,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 63,
+   "student_id": 6,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 64,
+   "student_id": 7,
+   "teacher_id": 9,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 65,
+   "student_id": 9,
+   "teacher_id": 2,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 66,
+   "student_id": 10,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 68,
+   "student_id": 12,
+   "teacher_id": 7,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 69,
+   "student_id": 13,
+   "teacher_id": 11,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 70,
+   "student_id": 15,
+   "teacher_id": 6,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 71,
+   "student_id": 16,
+   "teacher_id": 11,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 72,
+   "student_id": 17,
+   "teacher_id": 11,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 73,
+   "student_id": 18,
+   "teacher_id": 2,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 75,
+   "student_id": 20,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 77,
+   "student_id": 23,
+   "teacher_id": 2,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 78,
+   "student_id": 24,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 79,
+   "student_id": 26,
+   "teacher_id": 1,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 80,
+   "student_id": 28,
+   "teacher_id": 12,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 81,
+   "student_id": 29,
+   "teacher_id": 16,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 82,
+   "student_id": 30,
+   "teacher_id": 5,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 83,
+   "student_id": 31,
+   "teacher_id": 5,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 84,
+   "student_id": 32,
+   "teacher_id": 5,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 86,
+   "student_id": 34,
+   "teacher_id": 16,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 87,
+   "student_id": 36,
+   "teacher_id": 9,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 88,
+   "student_id": 37,
+   "teacher_id": 7,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 89,
+   "student_id": 38,
+   "teacher_id": 1,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 90,
+   "student_id": 39,
+   "teacher_id": 6,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 91,
+   "student_id": 40,
+   "teacher_id": 12,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 92,
+   "student_id": 41,
+   "teacher_id": 8,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 93,
+   "student_id": 42,
+   "teacher_id": 15,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 94,
+   "student_id": 49,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 96,
+   "student_id": 51,
+   "teacher_id": 9,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 97,
+   "student_id": 52,
+   "teacher_id": 8,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 98,
+   "student_id": 53,
+   "teacher_id": 16,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 99,
+   "student_id": 54,
+   "teacher_id": 15,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 100,
+   "student_id": 55,
+   "teacher_id": 6,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 101,
+   "student_id": 56,
+   "teacher_id": 7,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-06",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 102,
+   "student_id": 11,
+   "teacher_id": 13,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 103,
+   "student_id": 19,
+   "teacher_id": 8,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 104,
+   "student_id": 25,
+   "teacher_id": 15,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 105,
+   "student_id": 27,
+   "teacher_id": 13,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 106,
+   "student_id": 45,
+   "teacher_id": 7,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 107,
+   "student_id": 50,
+   "teacher_id": 13,
+   "room": "303",
+   "slot": 1,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 108,
+   "student_id": 11,
+   "teacher_id": 13,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 109,
+   "student_id": 19,
+   "teacher_id": 8,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 110,
+   "student_id": 25,
+   "teacher_id": 15,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 111,
+   "student_id": 44,
+   "teacher_id": 12,
+   "room": "203",
+   "slot": 2,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 112,
+   "student_id": 45,
+   "teacher_id": 7,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 113,
+   "student_id": 47,
+   "teacher_id": 4,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-04",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 114,
+   "student_id": 50,
+   "teacher_id": 13,
+   "room": "303",
+   "slot": 2,
+   "valid_from": "2026-09-04",
+   "valid_to": "2026-09-05"
+  },
+  {
+   "id": 115,
+   "student_id": 1,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-10",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 116,
+   "student_id": 1,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 117,
+   "student_id": 7,
+   "teacher_id": 9,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 118,
+   "student_id": 7,
+   "teacher_id": 9,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 119,
+   "student_id": 8,
+   "teacher_id": 1,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-10",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 120,
+   "student_id": 8,
+   "teacher_id": 1,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 121,
+   "student_id": 9,
+   "teacher_id": 2,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 122,
+   "student_id": 9,
+   "teacher_id": 2,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 123,
+   "student_id": 11,
+   "teacher_id": 13,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 124,
+   "student_id": 11,
+   "teacher_id": 13,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 125,
+   "student_id": 12,
+   "teacher_id": 7,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 126,
+   "student_id": 12,
+   "teacher_id": 7,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 127,
+   "student_id": 15,
+   "teacher_id": 6,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 128,
+   "student_id": 15,
+   "teacher_id": 6,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 129,
+   "student_id": 18,
+   "teacher_id": 2,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 130,
+   "student_id": 18,
+   "teacher_id": 2,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 131,
+   "student_id": 19,
+   "teacher_id": 8,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 132,
+   "student_id": 19,
+   "teacher_id": 8,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 133,
+   "student_id": 22,
+   "teacher_id": 5,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-10",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 134,
+   "student_id": 22,
+   "teacher_id": 5,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 135,
+   "student_id": 23,
+   "teacher_id": 2,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 136,
+   "student_id": 23,
+   "teacher_id": 2,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 137,
+   "student_id": 57,
+   "teacher_id": 13,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-10",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 138,
+   "student_id": 57,
+   "teacher_id": 13,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 139,
+   "student_id": 25,
+   "teacher_id": 15,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 140,
+   "student_id": 25,
+   "teacher_id": 15,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 141,
+   "student_id": 27,
+   "teacher_id": 13,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 142,
+   "student_id": 27,
+   "teacher_id": 13,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 143,
+   "student_id": 28,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 144,
+   "student_id": 28,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 145,
+   "student_id": 29,
+   "teacher_id": 16,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 146,
+   "student_id": 29,
+   "teacher_id": 16,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 147,
+   "student_id": 30,
+   "teacher_id": 5,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 148,
+   "student_id": 30,
+   "teacher_id": 5,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 149,
+   "student_id": 31,
+   "teacher_id": 5,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 150,
+   "student_id": 31,
+   "teacher_id": 5,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 151,
+   "student_id": 32,
+   "teacher_id": 5,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 152,
+   "student_id": 32,
+   "teacher_id": 5,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 153,
+   "student_id": 34,
+   "teacher_id": 16,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 154,
+   "student_id": 34,
+   "teacher_id": 16,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 155,
+   "student_id": 35,
+   "teacher_id": 9,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-10",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 156,
+   "student_id": 35,
+   "teacher_id": 9,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 157,
+   "student_id": 36,
+   "teacher_id": 9,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 158,
+   "student_id": 36,
+   "teacher_id": 9,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 159,
+   "student_id": 37,
+   "teacher_id": 7,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 160,
+   "student_id": 37,
+   "teacher_id": 7,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 161,
+   "student_id": 39,
+   "teacher_id": 6,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 162,
+   "student_id": 39,
+   "teacher_id": 6,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 163,
+   "student_id": 40,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 164,
+   "student_id": 40,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 165,
+   "student_id": 41,
+   "teacher_id": 8,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 166,
+   "student_id": 41,
+   "teacher_id": 8,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 167,
+   "student_id": 42,
+   "teacher_id": 15,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 168,
+   "student_id": 42,
+   "teacher_id": 15,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 169,
+   "student_id": 43,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-10",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 170,
+   "student_id": 43,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 171,
+   "student_id": 44,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 172,
+   "student_id": 44,
+   "teacher_id": 12,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 173,
+   "student_id": 45,
+   "teacher_id": 7,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 174,
+   "student_id": 45,
+   "teacher_id": 7,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 175,
+   "student_id": 46,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-10",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 176,
+   "student_id": 46,
+   "teacher_id": 10,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 177,
+   "student_id": 48,
+   "teacher_id": 11,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-10",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 178,
+   "student_id": 48,
+   "teacher_id": 11,
+   "room": "302",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 179,
+   "student_id": 50,
+   "teacher_id": 13,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 180,
+   "student_id": 50,
+   "teacher_id": 13,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 181,
+   "student_id": 51,
+   "teacher_id": 9,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 182,
+   "student_id": 51,
+   "teacher_id": 9,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 183,
+   "student_id": 52,
+   "teacher_id": 8,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 184,
+   "student_id": 52,
+   "teacher_id": 8,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 185,
+   "student_id": 53,
+   "teacher_id": 16,
+   "room": "201",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 186,
+   "student_id": 53,
+   "teacher_id": 16,
+   "room": "201",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 187,
+   "student_id": 54,
+   "teacher_id": 15,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 188,
+   "student_id": 54,
+   "teacher_id": 15,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 189,
+   "student_id": 55,
+   "teacher_id": 6,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 190,
+   "student_id": 55,
+   "teacher_id": 6,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 191,
+   "student_id": 56,
+   "teacher_id": 7,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-05",
+   "valid_to": "2026-09-07"
+  },
+  {
+   "id": 192,
+   "student_id": 56,
+   "teacher_id": 7,
+   "room": "307",
+   "slot": 2,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 193,
+   "student_id": 47,
+   "teacher_id": 13,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 194,
+   "student_id": 56,
+   "teacher_id": 6,
+   "room": "307",
+   "slot": 1,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 195,
+   "student_id": 17,
+   "teacher_id": 6,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 196,
+   "student_id": 49,
+   "teacher_id": 15,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  },
+  {
+   "id": 197,
+   "student_id": 13,
+   "teacher_id": 7,
+   "room": "302",
+   "slot": 1,
+   "valid_from": "2026-09-07",
+   "valid_to": "9999-12-31"
+  }
+ ]
+}
