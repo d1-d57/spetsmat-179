@@ -237,6 +237,9 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_dozabivka-dolgov-sklejki.md`** (закрыть долги заходa склейки: права у кабинетов, опечатка except Value, красные тесты enrollment)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_listki-kak-baza-zadach.md`** (листок как база задач: страница листка вместо PDF, скачивание PDF и TeX, кондуит и состав из базы, отметки 05.09)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_skleit-adminku-s-sajtom.md`** (свести рабочий редактор распределения и страницу правки на сайте в один шаблон с двумя режимами)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_sklejka-vhoda-s-serverom.md`** (Склейка: вход veb/vhod.py приделывается к серверу veb/server.py — единственный файл, которого не было ни в одной зоне)
