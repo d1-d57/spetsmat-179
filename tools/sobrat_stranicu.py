@@ -923,16 +923,27 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None) -> str:
     # листок девятого класса, у которого есть хоть один файл на диске, — то есть
     # тот, что выдан. Ни одного файла нет — блока нет вовсе, а не пустая рамка.
     def _tekushchij():
+        """Номер, тема и живые версии текущего листка — тремя кусками.
+
+        🔴 ОТДАЁТ КУСКИ, А НЕ ГОТОВЫЙ БЛОК. Раньше функция возвращала целую
+        вёрстку, и собрать из неё другую композицию было нельзя, не переписав
+        функцию. Теперь она отвечает за ДАННЫЕ (какой листок сейчас выдан и
+        какие его версии лежат на диске), а как их разложить — дело шаблона.
+        """
         for nom, tema, versii in reversed(L9):
             zhivye = [(z, f) for z, f in versii if est("listki", f)]
             if zhivye:
-                ssylki = " ".join(
-                    f'<a class="ver bolshoj" href="listki/{e(f)}">{e(z)}</a>'
-                    for z, f in zhivye)
-                return ('<div class="listok-blok">'
-                        f'<p class="listok-imya"><span class="listok-nom">{e(nom)}</span>'
-                        f' {e(tema)}</p><p class="listok-ver">{ssylki}</p></div>')
-        return ""
+                return nom, tema, zhivye
+        return None, None, []
+
+    listok_nom, listok_tema, listok_versii = _tekushchij()
+    listok_stroka = ""
+    if listok_tema:
+        versii_html = "".join(
+            f'<a class="ver" href="listki/{e(f)}">{e(z)}</a>' for z, f in listok_versii)
+        listok_stroka = (f'<span class="listok-nom">{e(listok_nom)}</span>'
+                         f'<span class="listok-tema">{e(listok_tema)}</span>'
+                         f'<span class="listok-ver">{versii_html}</span>')
 
     kabinety_skoro = _kab_skoro(min(DNI, key=lambda k: DNI[k][2]))
     tekushchij_listok = _tekushchij()
@@ -1241,36 +1252,43 @@ tr:hover td{{background:var(--accent-soft)}}
    всю высоту и распределяет содержание по ней: листок сразу под заголовком,
    «кто ведёт» — у нижнего края. Владелец: «вынести Деревья вверх на пустое
    место и постараться заполнить большую часть пространства». */
-.glav-setka{{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
+/* Левая колонка шире: имена преподавателей не должны ломаться посреди
+   пары «имя фамилия» — переносы делали список рваным. */
+.glav-setka{{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);
   gap:2.5rem 4rem;margin-top:2.5vh;padding:0;align-items:stretch;flex:1 1 auto}}
-.glav-glavnoe{{display:flex;flex-direction:column;justify-content:space-between;
-  gap:2rem;padding-bottom:.5rem}}
+/* Содержание идёт СВЕРХУ, а не растягивается по всей высоте: владелец
+   заметил, что «Ольга Рыжая» и «Наталия Стрелкова» сидят слишком низко — от
+   растягивания предметы уезжали к самому низу и читались как продолжение
+   строки классных руководителей. Низ колонки добирает кривая. */
+.glav-glavnoe{{display:flex;flex-direction:column;justify-content:flex-start;
+  gap:4vh;padding-bottom:.5rem}}
 @media(max-width:940px){{.glav-setka{{grid-template-columns:1fr;align-items:start}}}}
 /* Главное — листок. Он и набран крупнее всего, что рядом. */
-.blok-listok{{margin:0}}
-.listok-imya{{font-size:clamp(2.8rem,5.4vw,5.2rem);font-weight:600;margin:.25rem 0 0;
-  line-height:1.08}}
-.listok-nom{{color:var(--faint);margin-right:.5rem}}
-.listok-ver{{margin:.8rem 0 0}}
-.ver.bolshoj{{font-size:clamp(1.4rem,1.8vw,2rem);padding:.32em 1.25em;margin:0 .6rem 0 0}}
-/* Ближайшее занятие — строкой под листком, мелко. День и время важнее даты. */
-.skoro-stroka{{font-family:var(--sans);margin:1.1rem 0 0;display:flex;
-  align-items:baseline;gap:.7rem;flex-wrap:wrap;font-size:1.15rem;color:var(--muted)}}
-.skoro-stroka b{{font-size:clamp(1.6rem,2vw,2.2rem);color:var(--text);font-weight:700}}
-.skoro-chas{{font-size:clamp(1.6rem,2vw,2.2rem);color:var(--accent);font-weight:600;white-space:nowrap}}
-.skoro-data{{color:var(--faint)}}
-.skoro-kab b{{color:var(--text);font-weight:600}}
-/* «Кто ведёт» — второй по величине блок после листка: владелец просил
-   «кто ведёт побольше, центр там». */
-/* 🔴 СТРОКИ ЗАГЛАВНОЙ НЕ ПОДСВЕЧИВАЮТСЯ ПОД МЫШКОЙ. Общее правило таблиц
-   зажигало строку «алгебра» бирюзовой подложкой, и владелец справедливо
-   усомнился, нарочно ли это: подсветка обещает, что по строке можно нажать,
-   а нажимать здесь нечего. Она уместна в распределении, где строку правят.
-#s-start tr:hover td{{background:none}} */
-#s-start tr:hover td{{background:none}}
-.vedut{{border-collapse:collapse;font-size:clamp(1.6rem,2.5vw,2.5rem)}}
+/* ── КАРТОЧКА БЛИЖАЙШЕГО ЛИСТКА. Три уровня и один ритм.
+   Тема набрана вровень с датой, а не крупнее заголовка страницы: раньше она
+   спорила с «Математическим классом» и выбивалась из системы. Версии стоят в
+   строке темы, а не отдельной полосой, — от этого блок собран, а не разлапист. */
+.blok-listok{{margin:0;max-width:34rem}}
+.listok-kogda{{margin:.35rem 0 0;font-family:var(--sans);
+  font-size:clamp(1.5rem,1.9vw,2.1rem);color:var(--muted);
+  display:flex;align-items:baseline;gap:.55rem;flex-wrap:wrap}}
+.listok-kogda b{{color:var(--text);font-weight:700}}
+.listok-chas{{color:var(--accent);font-weight:600;white-space:nowrap}}
+.listok-data{{font-size:.8em;color:var(--faint)}}
+.listok-stroka{{margin:.5rem 0 0;display:flex;align-items:baseline;gap:.7rem;
+  flex-wrap:wrap;font-size:clamp(1.5rem,1.9vw,2.1rem);line-height:1.15}}
+.listok-nom{{color:var(--faint);font-family:var(--sans);font-weight:600}}
+.listok-tema{{font-weight:600}}
+.listok-ver{{display:inline-flex;gap:.35rem;margin-left:.2rem}}
+/* Версии — того же роста, что строка вокруг: раньше они были кнопками другого
+   кегля и другого цвета, и именно они делали блок разнородным. */
+.listok-ver .ver{{font-size:.72em;padding:.24em .7em;margin:0;font-weight:600}}
+.listok-kab{{margin:.45rem 0 0;font-family:var(--sans);
+  font-size:clamp(1.05rem,1.25vw,1.35rem);color:var(--muted)}}
+.listok-kab b{{color:var(--text);font-weight:600}}
+.vedut{{border-collapse:collapse;font-size:clamp(1.5rem,2.1vw,2.15rem)}}
 .vedut td{{border:none;padding:.5rem 0;vertical-align:baseline}}
-.vedut .predmet{{color:var(--muted);padding-right:2.6rem;white-space:nowrap;
+.vedut .predmet{{color:var(--muted);padding-right:2.2rem;white-space:nowrap;
   font-family:var(--sans);font-size:clamp(1.2rem,1.45vw,1.65rem)}}
 .imya-celikom{{white-space:nowrap}}
 /* Боковое — поверх кривой, мельче, с воздухом между блоками. */
@@ -1490,13 +1508,19 @@ body{{padding-bottom:2rem}}
              на ближайшее занятие, а нужно на то, что мы сейчас решаем». Дата ушла
              в строку под листком и набрана мелко: «7 сент» вместо «7 сентября»,
              потому что длинная дата давила на то, ради чего блок существует. -->
+        <!-- 🔴 ТРИ УРОВНЯ, СВЕРХУ ВНИЗ: когда · что решаем · где. Прежний блок
+             владелец назвал разлапистым, и он им был: тема шла кеглем крупнее
+             заголовка страницы и спорила с ним, а версии висели отдельной
+             строкой сами по себе. Теперь тема набрана вровень с датой, версии
+             стоят в той же строке, что и она, и весь блок читается как одна
+             карточка, а не как четыре разных куска. -->
         <div class="blok-listok">
-          {tekushchij_listok}
-          <p class="skoro-stroka">
-            <b>{e(DNI[blizh][3])}</b> <span class="skoro-chas">{VREMYA[blizh]}</span>
-            <span class="skoro-data">{e(po_russki_kratko(DNI[blizh][2]))}</span>
-            <span class="skoro-kab">{kabinety_skoro}</span>
-          </p>
+          <span class="zag2">следующий спецмат</span>
+          <p class="listok-kogda"><b>{e(DNI[blizh][3])}</b>
+            <span class="listok-chas">{VREMYA[blizh]}</span>
+            <span class="listok-data">{e(po_russki_kratko(DNI[blizh][2]))}</span></p>
+          <p class="listok-stroka">{listok_stroka}</p>
+          <p class="listok-kab">{kabinety_skoro}</p>
         </div>
 
         <div class="blok-vedut">
