@@ -97,6 +97,37 @@ MATERIALS_DIR = Path("/Users/ivanyakovlev/Documents/GitHub/materials/spetsmat-20
 # first kind to arrive here instead of turning into a 404 among the PDFs.
 LISTKI_DIR = KOREN_PROEKTA / "docs" / "listki"
 
+
+# 🔴 A SECTION DECLARES ITS OWN ROUTES, AND THIS FILE STOPS BEING THE PLACE THREE POSITIONS
+# EDIT AT ONCE.  The contract already existed for `veb/vhod.py` — a module exposes
+# `marshruty()` returning `{путь: обработчик}` and the server asks it — and it is here
+# extended to `veb/razdely/*`: a new section (`veb/priyom.py` is starting in the worktree
+# next door) becomes reachable by writing its own module, with no second edit of this file.
+# 🔴 A SECTION THAT IS NOT ON DISK YET MUST NOT TAKE THE SERVER DOWN WITH IT: an absent
+# neighbour is the normal state while its заход is still running, so the import failure of
+# one module is skipped, not raised.  A handler takes the request handler and returns True
+# if it answered.
+RAZDELY_S_MARSHRUTAMI = ("veb.priyom", "veb.razdely.priyom")
+
+
+def _marshruty_razdelov() -> dict:
+    """`{путь: обработчик}` of every section module that declares any and is on disk."""
+    import importlib
+
+    sobrano: dict = {}
+    for imya in RAZDELY_S_MARSHRUTAMI:
+        try:
+            modul = importlib.import_module(imya)
+        except Exception:
+            continue                      # not written yet, or broken: not our failure
+        obyavleny = getattr(modul, "marshruty", None)
+        if callable(obyavleny):
+            try:
+                sobrano.update(obyavleny())
+            except Exception:
+                continue
+    return sobrano
+
 # 🔴 ЗАГЛУШЕК `GLAVNAYA_STUB` · `LISTKI_STUB` · `UROVNI_STUB` ЗДЕСЬ БОЛЬШЕ НЕТ.
 # Они печатали «Страница в разработке» на случай, если шаблон не найдётся, — и
 # после переезда сайта именно они были бы единственным способом снова увидеть
@@ -640,6 +671,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send_json(200, _build_views(self._connection(), slot))
             return
+        chuzhie = _marshruty_razdelov()
+        if path in chuzhie:
+            if chuzhie[path](self) is not False:
+                return
+
         self._send_json(404, {"error": "not found"})
 
     def _listok(self, hvost: str) -> bool:
