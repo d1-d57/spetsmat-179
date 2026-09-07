@@ -58,6 +58,13 @@ body{margin:0;background:var(--bg);color:var(--text);
   text-align:left;padding:.4em .7em;white-space:nowrap}
 .setka .kto b{font-weight:600}
 .setka .prep,.setka .dolg{padding:.4em .7em;color:var(--muted);white-space:nowrap}
+/* 🔴 СТОЛБЕЦ ДОЛГА СКРЫТ ПО СЛОВУ ВЛАДЕЛЬЦА 07.09: «давай сейчас пока скроем это».
+ * Скрыт ОТОБРАЖЕНИЕМ, а не снят из разметки: долг по-прежнему считается и стоит в той
+ * же строке, что ученик и принимающий его преподаватель — это условие мандата, и
+ * ломать его ради временного «пока» нельзя.  Вернуть — снять одну строку ниже.
+ * Число, которое владелец увидел (64), было долгом за ВЕСЬ ПРОШЛЫЙ ГОД; теперь долг
+ * считается только по листкам этого года, так что возвращать его будет уже не страшно. */
+.setka .dolg,.setka thead th:nth-child(3){display:none}
 .setka .dolg .est{color:var(--krasn);font-weight:600}
 .setka .dolg .net0{color:var(--faint)}
 .setka .zn{font-size:.95rem}

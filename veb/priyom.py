@@ -82,6 +82,30 @@ SLEDUYUSHCHEE = {
 SOSTOYANIE_PO_IMENI = {s.value: s for s in CellState}
 
 
+def _nachalo_uchebnogo_goda() -> str:
+    """First of September of the CURRENT academic year, as an ISO date.
+
+    🔴 ВОСЬМОЙ КЛАСС НЕ УЧАСТВУЕТ НИ В ВЫБОРЕ ЛИСТКА, НИ В ДОЛГЕ.  Требование
+    владельца 07.09: «видны только задачи этого года… учитывать 8 класс в статистике
+    точно не нужно».  Прошлогодние листки в базе помечены `issued_at='2025-09-01'`, а
+    этого года — сентябрём 2026, так что граница берётся из даты выпуска и никакого
+    второго признака «год» заводить не нужно.  Год считается от сентября, а не от
+    января: до сентября текущий учебный год — прошлый календарный.
+    """
+    seychas = datetime.now(ZoneInfo(config.TZ_DISPLAY)).date()
+    god = seychas.year if seychas.month >= 9 else seychas.year - 1
+    return f"{god}-09-01"
+
+
+def _listki_goda(listki) -> list:
+    """Только листки текущего учебного года, в порядке выдачи."""
+    granica = _nachalo_uchebnogo_goda()
+    svoi = [sh for sh in listki if (sh.issued_at or "") >= granica]
+    # Пустой результат означал бы пустую страницу в первый день учебного года, до
+    # выдачи первого листка: тогда честнее показать всё, что есть, чем ничего.
+    return sorted(svoi or list(listki), key=lambda sh: sh.ord)
+
+
 # ----------------------------------------------------------------- объявление маршрутов
 
 def marshruty():
@@ -177,9 +201,11 @@ def _sobrat_stranicu(c, teacher_id, zapros) -> bytes:
     catalogue = SqliteCatalogue(c)
     progress = ProgressService(SqliteMarkJournal(c), catalogue)
 
-    listki = catalogue.sheets()
-    if not listki:
+    vse_listki = catalogue.sheets()
+    if not vse_listki:
         return _obolochka("<p class=\"net\">в базе ещё нет листков</p>").encode("utf-8")
+    listki = _listki_goda(vse_listki)
+    svoi_listki = {sh.id for sh in listki}
     listok = _vybrannyj_listok(listki, zapros)
 
     zadachi = catalogue.problems_of_sheet(listok.id)
@@ -189,7 +215,12 @@ def _sobrat_stranicu(c, teacher_id, zapros) -> bytes:
     sostoyaniya = progress.states_for_many(
         [u.id for u in deti], [z.id for z in zadachi]
     )
-    dolgi = {u.id: len(progress.debts(u.id, listok.ord)) for u in deti}
+    # Долг — только по листкам ЭТОГО года: `debts` честно считает от первого листка
+    # ученика, то есть с прошлогодних тоже, и давал числа под шестьдесят — весь 8 класс
+    # разом.  Владелец 07.09: «учитывать 8 класс в статистике точно не нужно».
+    dolgi = {u.id: len([z for z in progress.debts(u.id, listok.ord)
+                        if z.sheet_id in svoi_listki])
+             for u in deti}
 
     telo = (_vybor(listki, listok)
             + _reshyotka(listok, zadachi, deti, svoi, prepody, dolgi, sostoyaniya))
