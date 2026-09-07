@@ -85,6 +85,17 @@ def stroki_8(spisok, papka):
     return "".join(out)
 
 
+# 🔴 A VERSION LINK NOW OPENS THE SHEET'S PAGE, NOT ITS PDF.  The sheet lives in the
+# database as problems with text (`migrations/006_listok_kak_baza.sql`), and the page built
+# from it can say what is on the sheet — which the PDF, being a picture, cannot.  The PDF
+# is not lost: it is one of the two downloads offered on that page, and every published
+# link of the form `/listki/16A-derevya.pdf` keeps working exactly as before, because nginx
+# still serves the file and nothing here renames it.
+def nomer_versii(nom: str, znak: str) -> str:
+    """`16` + `A` → `16A`: the sheet number as it stands in the база, hence in the URL."""
+    return "%s%s" % (nom, znak)
+
+
 def stroki_9():
     out = []
     for nom, tema, versii in L9:
@@ -92,7 +103,8 @@ def stroki_9():
         if not live:
             continue
         ssylki = " ".join(
-            f'<a class="ver" href="listki/{e(f)}">{e(z)}</a>' for z, f in live)
+            f'<a class="ver" href="listki/{e(nomer_versii(nom, z))}">{e(z)}</a>'
+            for z, f in live)
         out.append(f'<tr><td class="nom">{e(nom)}</td>'
                    f'<td>{e(tema)}</td><td class="verstroka">{ssylki}</td></tr>')
     return "".join(out)

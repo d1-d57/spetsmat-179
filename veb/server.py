@@ -48,7 +48,7 @@ from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, unquote, urlparse
 from zoneinfo import ZoneInfo
 
 import config
@@ -88,6 +88,14 @@ INSTRUMENT_SBORKI = KOREN_PROEKTA / "tools" / "sobrat_stranicu.py"
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 MATERIALS_DIR = Path("/Users/ivanyakovlev/Documents/GitHub/materials/spetsmat-2026")
+
+# 🔴 THE SHEETS THE SITE HANDS OUT, AND THE ONLY PLACE THEY LIVE.  nginx aliases
+# `/listki/` straight onto this directory, so a request for a FILE never reaches this
+# server at all; what reaches it is a request for a sheet by NUMBER (`/listki/16A`) or for
+# a download that is generated rather than stored (`/listki/16α.tex`).  Both are handled
+# in `_listok`, and the nginx snippet needs one line — `try_files $uri @veb;` — for the
+# first kind to arrive here instead of turning into a 404 among the PDFs.
+LISTKI_DIR = KOREN_PROEKTA / "docs" / "listki"
 
 # 🔴 ЗАГЛУШЕК `GLAVNAYA_STUB` · `LISTKI_STUB` · `UROVNI_STUB` ЗДЕСЬ БОЛЬШЕ НЕТ.
 # Они печатали «Страница в разработке» на случай, если шаблон не найдётся, — и
@@ -609,6 +617,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        # 🔴 ONE SHEET, BY ITS NUMBER.  Three shapes, and the order matters: the two
+        # downloads are recognised by their suffix, everything else is the page itself.
+        # `/listok/…` is the same thing under a name nginx does not intercept — it works
+        # today, with no change to the server's configuration, and is what keeps this
+        # feature reachable if the nginx line is ever lost.
+        if path.startswith("/listki/") or path.startswith("/listok/"):
+            if self._listok(unquote(path.split("/", 2)[2])):
+                return
+
         if path == "/raspredelenie":
             index = (TEMPLATES_DIR / "index.html").read_bytes()
             self._send_html(200, index)
@@ -624,6 +641,75 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, _build_views(self._connection(), slot))
             return
         self._send_json(404, {"error": "not found"})
+
+    def _listok(self, hvost: str) -> bool:
+        """One sheet: its page, its PDF or its TeX.  False = not ours, fall through.
+
+        🔴 THE PDF IS SERVED BY ITS SHORT NAME AND THE FILE KEEPS ITS OLD ONE.  Every
+        link ever published points at `/listki/16A-derevya.pdf`, and those links are in
+        chats, in pupils' bookmarks and in last year's messages: the file stays exactly
+        where it is and nginx keeps answering for it.  `/listki/16A.pdf` is a SECOND name
+        for the same bytes, the one the sheet's own page uses, and it is generated here.
+        """
+        if hvost.endswith(".pdf"):
+            nomer, vid = hvost[:-4], "pdf"
+        elif hvost.endswith(".tex"):
+            nomer, vid = hvost[:-4], "tex"
+        else:
+            nomer, vid = hvost, "stranica"
+        nomer = nomer.strip("/")
+        if not nomer or "/" in nomer or ".." in nomer:
+            return False
+
+        if vid == "pdf":
+            # Both names of the same file: the short one this page publishes, and the
+            # long one every already-published link uses.  nginx answers the long one
+            # first — this branch is what keeps it answered if it ever does not.
+            fajl = LISTKI_DIR / ("%s-derevya.pdf" % nomer)
+            if not fajl.is_file():
+                fajl = LISTKI_DIR / hvost
+            if not fajl.is_file() or fajl.parent != LISTKI_DIR:
+                return False
+            telo = fajl.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/pdf")
+            self.send_header("Content-Length", str(len(telo)))
+            self.end_headers()
+            self.wfile.write(telo)
+            return True
+
+        from veb.razdely import list_odin
+
+        listok, bloki = list_odin.bloki(self._connection(), nomer)
+        if listok is None:
+            return False
+
+        if vid == "tex":
+            # Generated from the blocks, not stored: the `.tex` of a sheet is a VIEW of
+            # what is in the database, and a stored copy would be the second source of
+            # truth this whole заход exists to remove.
+            sys.path.insert(0, str(KOREN_PROEKTA))
+            from tools.import_listka import v_tex
+
+            telo = v_tex(nomer, bloki).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/x-tex; charset=utf-8")
+            # 🔴 THE FILENAME IS NOT LATIN-1, AND A HEADER IS.  `16α.tex` in a plain
+            # `filename=` raises UnicodeEncodeError inside `send_header` and kills the
+            # connection with no response at all — caught by a live run, not by reading.
+            # RFC 5987's `filename*` carries the real name; the plain `filename` keeps an
+            # ASCII fallback for whoever does not read the starred form.
+            self.send_header(
+                "Content-Disposition",
+                "attachment; filename=\"listok.tex\"; filename*=UTF-8''%s.tex"
+                % quote(nomer, safe=""))
+            self.send_header("Content-Length", str(len(telo)))
+            self.end_headers()
+            self.wfile.write(telo)
+            return True
+
+        self._send_html(200, list_odin.stranica(listok, bloki).encode("utf-8"))
+        return True
 
     def _koren(self) -> bytes:
         """Байты корневой страницы: гостю — файл, организатору — живой рендер.
