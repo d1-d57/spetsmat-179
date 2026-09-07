@@ -1,0 +1,18 @@
+# The nightly conduit export to the owner's Google Sheet.  See ops/vygruzka_v_tablicu.py
+# for why: every copy of the database lives on this one machine today, and this is the
+# door that leaves.
+
+[Unit]
+Description=nightly conduit export to the owner's Google Sheet
+OnFailure=spetsmat-alert@%n.service
+
+[Service]
+Type=oneshot
+Environment=TZ=UTC
+User=@USER@
+WorkingDirectory=@CHECKOUT@
+ExecStart=/usr/bin/python3 @CHECKOUT@/ops/vygruzka_v_tablicu.py --primenit
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes

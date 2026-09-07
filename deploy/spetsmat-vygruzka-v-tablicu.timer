@@ -1,0 +1,14 @@
+# Nightly, after the 01:00 database snapshot so the export never races a lesson's marks,
+# and after the 01:00 sutochnyj backup so a torn read is never possible. Persistent=true
+# so a machine off at 02:00 catches up on the next boot instead of skipping the night.
+
+[Unit]
+Description=nightly conduit export to the owner's Google Sheet
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+Persistent=true
+Unit=spetsmat-vygruzka-v-tablicu.service
+
+[Install]
+WantedBy=timers.target
