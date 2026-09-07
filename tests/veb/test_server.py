@@ -318,3 +318,41 @@ def test_the_standing_layer_is_untouched_by_a_move_for_one_lesson(running_server
         "select teacher_id from enrollment where student_id = 1 and slot = 2 "
         "and valid_to = '9999-12-31'").fetchall()
     assert [r["teacher_id"] for r in do] == [r["teacher_id"] for r in posle]
+
+
+def test_the_address_of_the_distribution_beats_the_remembered_tab(running_server):
+    """Страница распределения открыта на распределении — что бы ни помнил браузер.
+
+    🔴 ЦЕНА, ЗАМЕРЕННАЯ ВЛАДЕЛЬЦЕМ НА БОЕВОМ САЙТЕ: ПУСТОЙ ЭКРАН. `PRAVKA_SKRIPT`
+    восстанавливает последнюю открытую вкладку из `sessionStorage`, а на странице
+    занятия разделов «Класс» и «Листки» нет вовсе — их расписание читает `kt.DNI`,
+    а он там из одного дня. Отмеченная радиокнопка без своей секции показывает
+    меню и НИЧЕГО под ним; владелец: «нажимаю распределение, у меня моргает
+    распределение, но я остаюсь на вкладке кондуит… я ничего не вижу».
+
+    Проверяется то, что можно проверить без браузера: страница сама несёт оба
+    замка — разметочный (`checked` на `p-rasp`) и скриптовый, который ставит его
+    по АДРЕСУ и стоит после восстановления.
+    """
+    base, _ = running_server
+    for adres in ("/raspredelenie", "/raspredelenie/postoyannoe"):
+        _status, body = _http_get(base + adres)
+        telo = body.decode("utf-8")
+        # Скриптовый замок — на обеих страницах: он ставит вкладку по АДРЕСУ и
+        # стоит ПОСЛЕ восстановления, поэтому память браузера его не перебивает.
+        assert "location.pathname" in telo and "p-rasp" in telo, (
+            f"{adres}: скрипт, ставящий вкладку по адресу, на месте")
+
+    # 🔴 РАЗМЕТОЧНЫЙ ЗАМОК НУЖЕН ТОЛЬКО НА ЗАНЯТИИ, И ИМЕННО ТАМ ОН И СТОИТ. На
+    # постоянном собраны ВСЕ разделы, и восстановленная вкладка показала бы хоть
+    # что-то; на занятии разделов «Класс» и «Листки» нет, и без `checked` в самой
+    # разметке страница без JavaScript оказалась бы пустой.
+    _status, body = _http_get(base + "/raspredelenie")
+    telo = body.decode("utf-8")
+    assert re.search(r'id="p-rasp"[^>]*\schecked', telo), (
+        "вкладка распределения отмечена в самой разметке страницы занятия")
+
+    # И раздел, который эта вкладка показывает, на странице ЕСТЬ — иначе отметка
+    # ведёт в пустоту, что и было дефектом.
+    _status, body = _http_get(base + "/raspredelenie")
+    assert 'id="s-rasp"' in body.decode("utf-8")

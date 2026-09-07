@@ -590,7 +590,15 @@ PRAVKA_SKRIPT = r"""
     try{ s = JSON.parse(sessionStorage.getItem(KLYUCH_VYBORA) || '{}'); }catch(err){ return; }
     Object.keys(s).forEach(function(k){
       const el = document.getElementById(s[k]);
-      if(el) el.checked = true;
+      if(!el) return;
+      /* 🔴 НЕ ВОССТАНАВЛИВАЕМ ВКЛАДКУ, РАЗДЕЛА КОТОРОЙ НА ЭТОЙ СТРАНИЦЕ НЕТ.
+         Радиокнопка живёт в общем каркасе и есть всегда, а секция — не всегда:
+         на странице занятия нет ни «Класса», ни «Листков». Отмеченная кнопка без
+         своей секции даёт пустой экран под меню — ровно это владелец и увидел на
+         боевом сайте. */
+      const razdel = document.getElementById('s-' + el.id.replace(/^p-/, ''));
+      if(el.name === 'str' && !razdel) return;
+      el.checked = true;
     });
   })();
 
@@ -934,7 +942,19 @@ KONDUIT_SKRIPT = """
 # on any other address — `/` opens exactly as it did.
 VKLADKA_SKRIPT = r"""
 <script>
-if(location.pathname.replace(/\/+$/, '') === '/raspredelenie/postoyannoe'){
+/* 🔴 НА ЛЮБОМ АДРЕСЕ РАСПРЕДЕЛЕНИЯ ОТКРЫТА ВКЛАДКА РАСПРЕДЕЛЕНИЯ, И ЭТО СИЛЬНЕЕ
+   ПАМЯТИ БРАУЗЕРА. Цена прежней редакции, измеренная владельцем на боевом сайте:
+   ПУСТОЙ ЭКРАН. `PRAVKA_SKRIPT` восстанавливает последнюю открытую вкладку из
+   `sessionStorage`, а на странице занятия разделов «Класс» и «Листки» нет вовсе
+   (их расписание читает `kt.DNI`, а он тут из одного дня). Восстановленный
+   `p-start` показывал секцию, которой на странице не существует, — и человек
+   видел меню и НИЧЕГО под ним. Его слова: «нажимаю распределение, у меня моргает
+   распределение, но я остаюсь на вкладке кондуит… я ничего не вижу».
+
+   Поэтому: адрес сильнее памяти, и проверка идёт по префиксу, а не по одному
+   пути. Скрипт стоит ПОСЛЕДНИМ (см. `skripty`), чтобы перебить восстановление. */
+var _put = location.pathname.replace(/\/+$/, '');
+if(_put === '/raspredelenie' || _put.indexOf('/raspredelenie/') === 0){
   var rasp = document.getElementById('p-rasp');
   if(rasp) rasp.checked = true;
 }
