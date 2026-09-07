@@ -80,6 +80,16 @@ VOZMOZHNOSTI = {
         "videt-klass",            # буква класса у школьника
         "pereklyuchat-dni",       # переключатель понедельник/четверг вместо даты
     }),
+    # 🔴 THE TEACHER, ADDED 2026-09-07 — one line, as the comment above promised.
+    # `videt-svoyo` buys exactly one thing: the section where this named person
+    # sees their own room and their own children. Not one editing capability is in
+    # it, and that is deliberate: a teacher who is also the senior of an auditorium
+    # enters as `organizator` by their personal password (`veb/vhod.py`), which is
+    # a DIFFERENT role, not a bigger one. Everything else on the page a teacher
+    # sees is what a guest sees — including the `data-tolko-gost` room chips, which
+    # is what makes this role guest-like and matters to the frame gate (see
+    # `veb/server.py::_karkas_prepoda_sovpadaet`).
+    "prepod": frozenset({"videt-svoyo"}),
 }
 
 
@@ -120,6 +130,12 @@ class Kontekst:
     prep: dict                 # active teachers, by id
     shk_dnya: dict = field(default_factory=dict)   # day → rows of pupils
     shk: list = field(default_factory=list)        # Monday's pupils
+    # Who the page belongs to, when it belongs to somebody: `teachers.id`.
+    # `None` is the ordinary answer for the guest page, for the organiser page, and
+    # for a teacher who came in by the COMMON password — nobody in particular. A
+    # section that shows personal data must treat all three the same way and show
+    # none, which is what `veb/razdely/lichnaya.py` does.
+    prepod_id: int | None = None
 
     def mozhno(self, vozmozhnost: str) -> bool:
         """Единственный способ спросить про права. Прямых сравнений с ролью нет.
@@ -177,6 +193,36 @@ class Kontekst:
         return f'<span class="{klass}"{podpis}>{e(k)}</span>'
 
 
+def _razobrat_rezhim(rezhim: str) -> tuple:
+    """`"admin"` → `("organizator", None)`; `"prepod:17"` → `("prepod", 17)`.
+
+    🔴 THE PERSON RIDES INSIDE THE MODE STRING, AND THAT IS A CONSTRAINT, NOT A
+    DESIGN. The composition root `tools/sobrat_stranicu.sobrat_html` is the only
+    caller of this function, and it hands the mode down as its single argument;
+    that file is outside the zone of the заход that added this, so the parameter
+    it ought to grow (`sobrat_html(rezhim, *, prepod_id=None)`) could not be added
+    there. The two alternatives were both worse: module-level state naming "the
+    current person" races between two teachers inside one `ThreadingHTTPServer`,
+    and a second renderer for the personal page is the very thing this whole file
+    exists to prevent. Named in `## ВОПРОСЫ` of `kod_lichnaya-stranica-prepodavatelya.md`
+    as the правка that belongs to whoever owns `tools/`.
+
+    An unparseable person is not a person: `"prepod:"` and `"prepod:x"` give the
+    role with `None` beside it, i.e. the page a teacher sees when the entry could
+    not say WHO they are. Refusing to build would take the whole site down for a
+    typo in a cookie.
+    """
+    if rezhim == "admin":
+        return "organizator", None
+    if ":" not in rezhim:
+        return rezhim, None
+    rol, _, hvost = rezhim.partition(":")
+    try:
+        return rol, int(hvost)
+    except ValueError:
+        return rol, None
+
+
 def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
     """Read the database once and hand back everything the sections will need.
 
@@ -184,7 +230,7 @@ def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
     A section that needs a query of its own owns that query — see
     `veb/razdely/shkolniki.shkolniki` — but a section never opens a connection.
     """
-    rol = "organizator" if rezhim == "admin" else rezhim
+    rol, prepod_id = _razobrat_rezhim(rezhim)
     if rol not in VOZMOZHNOSTI:
         raise ValueError("роль: " + " | ".join(sorted(VOZMOZHNOSTI)))
     mogu = VOZMOZHNOSTI[rol]
@@ -249,7 +295,8 @@ def sobrat_kontekst(rezhim: str = "gost") -> Kontekst:
 
     kt = Kontekst(rezhim=rezhim, rol=rol, mogu=mogu, c=c, DNI=DNI,
                   kabinety_dnya=kabinety_dnya, otkuda_kabinet=otkuda_kabinet,
-                  kabinety=kabinety, gruppy=gruppy, prep=prep)
+                  kabinety=kabinety, gruppy=gruppy, prep=prep,
+                  prepod_id=prepod_id)
 
     # 🔴 THE IMPORT SITS INSIDE THE FUNCTION, AND THAT IS NOT SLOPPINESS.
     # "Who counts as a pupil" is a question belonging to the pupils section, so
@@ -611,6 +658,19 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
 </section>"""
 
 
+# 🔴 TWO RULES, AND NOT ONE NEW COLOUR OR SIZE AMONG THEM. `doc/DIZAJN-ZAKREPLENO.md`
+# §0: a new page TAKES the palette, the sizes and the devices of what already
+# stands, and never the other way round. Everything the personal section draws —
+# the caption, the heading, the room chip, the two columns of names — is drawn by
+# rules that were already in this stylesheet for the sections next to it. What was
+# genuinely missing is only the pair every tab of this site needs: show my section
+# when my radio is checked, and light up my label in the menu while it is.
+LICH_STILI = """
+/* Личная страница преподавателя — вкладка меню и её раздел. */
+#p-lich:checked~#s-lich{display:block}
+#p-lich:checked~.menu label[for=p-lich]{color:var(--accent);background:var(--accent-soft)}"""
+
+
 def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
               poisk_skript: str, drakon_skript: str) -> str:
     """Assemble the whole page out of the sections already rendered for it.
@@ -623,6 +683,39 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
     """
     verh = verh_prava(kt)
     hvost = skripty(kt, drakon_skript)
+    # 🔴 THE SHELL IMPORTS A SECTION HERE — THE SECOND EXCEPTION IN THIS FILE, AND
+    # IT IS FORCED BY THE ZONE, NOT CHOSEN. The rule at the top of this file is
+    # that only the composition root knows both that a shell exists and that
+    # sections exist; the composition root is `tools/sobrat_stranicu.sobrat_html`,
+    # which lies OUTSIDE the zone of the заход that added the personal page, so it
+    # could not be taught to pass this section in the way it passes the other four.
+    # The import sits inside the function and inside the capability check, so it
+    # runs only while a teacher is being served: the ring `karkas → lichnaya →
+    # karkas` stays open exactly as it does for `shkolniki` in `sobrat_kontekst`,
+    # and neither the guest build nor the organiser build ever touches it.
+    # The правка that removes this exception is named in `## ВОПРОСЫ` of
+    # `_studio/zhurnal/2026-09-06_pervyj-server/kod_lichnaya-stranica-prepodavatelya.md`.
+    #
+    # 🔴 `data-org` STANDS ON THE LABEL AND ON THE SECTION, AND MUST NOT STAND ON
+    # THE RADIO INPUT. `_ubrat_elementy` in `tools/sobrat_stranicu.py` removes a
+    # marked element by BALANCING its tags — it looks for `</input>`, which does
+    # not exist in HTML, does not find it, and deletes the whole rest of the
+    # document. The input is above the menu, i.e. outside the window the frame gate
+    # compares (`id="s-rasp"` up to the first `\n<script>`), so it needs no mark;
+    # the section IS inside that window and carries one.
+    if kt.mozhno("videt-svoyo"):
+        from veb.razdely.lichnaya import razdel as lichnaya_razdel
+        lichnaya = lichnaya_razdel(kt)
+        lich_vhod = '\n<input class="rd" type="radio" name="str" id="p-lich" checked>'
+        lich_metka = '\n  <label for="p-lich" data-org="videt-svoyo">Моё</label>'
+        lich_stili = LICH_STILI
+        # Своя вкладка открыта по умолчанию: человек вошёл личным паролем, чтобы
+        # увидеть СВОЁ. Две отмеченные радиокнопки в одной группе — не «обе», а
+        # неопределённость, поэтому отметка снимается с заглавной, а не добавляется.
+        start_vybran = ""
+    else:
+        lichnaya = lich_vhod = lich_metka = lich_stili = ""
+        start_vybran = " checked"
     return f"""<!doctype html>
 <html lang="ru">
 <meta charset="utf-8">
@@ -1068,20 +1161,20 @@ body{{padding-bottom:2rem}}
 .fajly{{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}}
 .fajly li{{padding:.4em 0;border-bottom:1px solid var(--rule);break-inside:avoid}}
 .fajly a{{color:var(--accent);text-decoration:none;font-size:1.05rem}}
-@media(max-width:760px){{.menu,.holst{{padding-left:1.1rem;padding-right:1.1rem}}.fajly{{columns:1}}}}
+@media(max-width:760px){{.menu,.holst{{padding-left:1.1rem;padding-right:1.1rem}}.fajly{{columns:1}}}}{lich_stili}
 </style>
 
 <input class="rd" type="radio" name="den" id="d-pn" checked>
 <input class="rd" type="radio" name="den" id="d-cht">
-<input class="rd" type="radio" name="str" id="p-start" checked>
+<input class="rd" type="radio" name="str" id="p-start"{start_vybran}>
 <input class="rd" type="radio" name="str" id="p-list">
-<input class="rd" type="radio" name="str" id="p-rasp">
+<input class="rd" type="radio" name="str" id="p-rasp">{lich_vhod}
 
 <!-- ВЕРХНЯЯ ПАНЕЛЬ. Имя сайта стоит ОДИН раз и здесь; разделы больше не повторяют
      своё название заголовком внутри себя. Поиск живёт тут же и работает на всех
      разделах — искать надо там, где смотришь, а не там, где нашлось место. -->
 <nav class="menu">
-  <span class="im">Ключики</span>
+  <span class="im">Ключики</span>{lich_metka}
   <label for="p-start">Класс</label>
   <label for="p-list">Листки</label>
   <label for="p-rasp">Распределение</label>
@@ -1097,7 +1190,7 @@ body{{padding-bottom:2rem}}
 
 {listki}
 
-{raspredelenie}
+{raspredelenie}{lichnaya}
 
 {poisk_skript}
 {hvost}
