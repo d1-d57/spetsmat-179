@@ -147,7 +147,8 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str
             f'<tr{klass}><td class="kto"><label for="k-u{u.id}">'
             f'<b>{e(u.surname)}</b> {e(u.name)}</label></td>{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
-            f'<table class="kond"><thead><tr><th>Ученик</th>{shapka}</tr></thead>'
+            f'<table class="kond" style="max-width:{16 + len(listki) * 5.5:.1f}em">'
+            f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
@@ -182,7 +183,9 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj) -> str:
             klass = ' class="chuzh"' if u.id in chuzhoj else ""
             stroki.append(f'<tr{klass}><td class="kto">'
                           f'<b>{e(u.surname)}</b> {e(u.name)}</td>{"".join(kletki)}</tr>')
-        telo = (f'<table class="kond"><thead><tr><th>Ученик</th>{shapka}</tr></thead>'
+        potolok = 16 + len(zad) * 5.5
+        telo = (f'<table class="kond" style="max-width:{potolok:.1f}em">'
+                f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
                 f'<tbody>{"".join(stroki)}</tbody></table>')
     return (f'<section class="vid" id="n-{sh.id}">'
             f'<p class="zag2">{e(sh.title or sh.number)}</p>{telo}</section>')
@@ -299,11 +302,22 @@ def stili(kt) -> str:
    это читается как ошибка вёрстки, а не как замысел. Клетка расширена ВДВОЕ,
    решётка получила линии, шапка закреплена, и наведение показывает столбец
    целиком. Ни одного нового цвета: всё из уже объявленных переменных. */
-#s-kond table.kond{{font-size:.95rem;width:auto;border-collapse:separate;
+/* 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09, вторая: решётка занимала половину экрана.
+   Теперь она ТЯНЕТСЯ во всю доступную ширину (`width:100%`), а чтобы при трёх
+   столбцах девятого класса клетка не разъехалась на пол-экрана, потолок
+   считается по числу столбцов и приезжает инлайном на самой таблице:
+   имя + столбцы × 5.5em. Инлайн здесь дешевле класса: таблиц двадцать две,
+   а клеток тридцать одна тысяча. */
+#s-kond table.kond{{font-size:.95rem;width:100%;border-collapse:separate;
   border-spacing:0}}
 #s-kond .kond th.zn{{padding:.5rem .2rem;text-align:center;font-size:.78rem;
   min-width:3em;border-bottom:2px solid var(--rule);border-left:1px solid var(--rule)}}
-#s-kond .kond thead th{{position:sticky;top:3.4rem;z-index:6;background:var(--panel)}}
+/* 🔴 4rem — это ИЗМЕРЕННАЯ высота меню (64px при корневом кегле 16px), а не
+   прикидка: при 3.4rem шапка уезжала под меню на десять пикселей, и владелец
+   это увидел. Меню — `position:sticky;top:0`, его высота задана его же
+   padding'ом .9rem сверху и снизу плюс строка 1.05rem. Изменится меню —
+   изменить и здесь; проверяется одной командой: высота `.menu` в браузере. */
+#s-kond .kond thead th{{position:sticky;top:4rem;z-index:6;background:var(--panel)}}
 #s-kond .kond thead th:first-child{{left:0;z-index:7;text-align:left;
   border-bottom:2px solid var(--rule)}}
 #s-kond .kond td.kto{{white-space:nowrap;padding:.3rem 1.2rem .3rem 0;font-size:.95rem;
