@@ -79,6 +79,7 @@ VOZMOZHNOSTI = {
         "videt-schyot",           # счётчики нагрузки и числа по группам
         "videt-klass",            # буква класса у школьника
         "pereklyuchat-dni",       # переключатель понедельник/четверг вместо даты
+        "videt-konduit",          # раздел кондуита; см. примечание под словарём
     }),
     # 🔴 THE TEACHER, ADDED 2026-09-07 — one line, as the comment above promised.
     # `videt-svoyo` buys exactly one thing: the section where this named person
@@ -89,8 +90,17 @@ VOZMOZHNOSTI = {
     # sees is what a guest sees — including the `data-tolko-gost` room chips, which
     # is what makes this role guest-like and matters to the frame gate (see
     # `veb/server.py::_karkas_prepoda_sovpadaet`).
-    "prepod": frozenset({"videt-svoyo"}),
+    "prepod": frozenset({"videt-svoyo", "videt-konduit"}),
 }
+# 🔴 `videt-konduit` STANDS ON BOTH THE ORGANISER AND THE TEACHER, AND IT IS WHAT
+# KEEPS THE КОНДУИТ OFF THE PUBLIC PAGE. `tools/sobrat_stranicu.sobrat()` writes
+# the GUEST build to `docs/index.html`, `veb/server.py::_peresobrat` re-runs it
+# after every successful write to the база, and this repository is public: a
+# кондуит drawn without a capability would publish the surname of every pupil and
+# the record of every problem they did or did not hand in. The мандат also
+# requires `docs/index.html` byte-for-byte unchanged by this position, and one
+# unguarded section would break that on the next save rather than in the diff.
+# Ни одной возможности ПРАВКИ здесь нет: раздел только читает.
 
 
 ALL_VOZMOZHNOSTI = frozenset().union(*VOZMOZHNOSTI.values())
@@ -716,6 +726,27 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
     else:
         lichnaya = lich_vhod = lich_metka = lich_stili = ""
         start_vybran = " checked"
+    # 🔴 THE THIRD FORCED IMPORT, FOR THE THIRD TIME THE SAME REASON, AND IT IS
+    # WORTH SAYING PLAINLY: the composition root `tools/sobrat_stranicu.sobrat_html`
+    # is the only place that ought to know both that a shell exists and that
+    # sections exist, and it lies OUTSIDE the zone of this заход, so it cannot be
+    # taught to pass a sixth section in the way it passes the other four. The
+    # import sits inside the function AND inside the capability check, so the ring
+    # `karkas → konduit → karkas` stays open exactly as it does for `shkolniki` and
+    # for `lichnaya`, and the guest build never touches it. The правка that removes
+    # all three exceptions at once belongs to whoever owns `tools/`.
+    #
+    # 🔴 `data-org` СТОИТ НА МЕТКЕ И НА РАЗДЕЛЕ И НЕ ДОЛЖЕН СТОЯТЬ НА РАДИОКНОПКЕ —
+    # то же правило и та же цена, что абзацем выше: `_ubrat_elementy` ищет
+    # `</input>`, не находит и сносит остаток документа.
+    if kt.mozhno("videt-konduit"):
+        from veb.razdely.konduit import razdel as konduit_razdel, stili as konduit_stili
+        konduit = konduit_razdel(kt)
+        kond_stili = konduit_stili(kt)
+        kond_vhod = '\n<input class="rd" type="radio" name="str" id="p-kond">'
+        kond_metka = '\n  <label for="p-kond" data-org="videt-konduit">Кондуит</label>'
+    else:
+        konduit = kond_vhod = kond_metka = kond_stili = ""
     return f"""<!doctype html>
 <html lang="ru">
 <meta charset="utf-8">
@@ -1161,14 +1192,14 @@ body{{padding-bottom:2rem}}
 .fajly{{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}}
 .fajly li{{padding:.4em 0;border-bottom:1px solid var(--rule);break-inside:avoid}}
 .fajly a{{color:var(--accent);text-decoration:none;font-size:1.05rem}}
-@media(max-width:760px){{.menu,.holst{{padding-left:1.1rem;padding-right:1.1rem}}.fajly{{columns:1}}}}{lich_stili}
+@media(max-width:760px){{.menu,.holst{{padding-left:1.1rem;padding-right:1.1rem}}.fajly{{columns:1}}}}{lich_stili}{kond_stili}
 </style>
 
 <input class="rd" type="radio" name="den" id="d-pn" checked>
 <input class="rd" type="radio" name="den" id="d-cht">
 <input class="rd" type="radio" name="str" id="p-start"{start_vybran}>
 <input class="rd" type="radio" name="str" id="p-list">
-<input class="rd" type="radio" name="str" id="p-rasp">{lich_vhod}
+<input class="rd" type="radio" name="str" id="p-rasp">{lich_vhod}{kond_vhod}
 
 <!-- ВЕРХНЯЯ ПАНЕЛЬ. Имя сайта стоит ОДИН раз и здесь; разделы больше не повторяют
      своё название заголовком внутри себя. Поиск живёт тут же и работает на всех
@@ -1177,7 +1208,7 @@ body{{padding-bottom:2rem}}
   <span class="im">Ключики</span>{lich_metka}
   <label for="p-start">Класс</label>
   <label for="p-list">Листки</label>
-  <label for="p-rasp">Распределение</label>
+  <label for="p-rasp">Распределение</label>{kond_metka}
   <div class="podskazki poisk-verh">
     <input class="poisk" id="poisk" placeholder="Поиск — школьник, принимающий, листок" autocomplete="off">
     <div class="spisok" id="spisok" hidden></div>
@@ -1190,7 +1221,7 @@ body{{padding-bottom:2rem}}
 
 {listki}
 
-{raspredelenie}{lichnaya}
+{raspredelenie}{lichnaya}{konduit}
 
 {poisk_skript}
 {hvost}
