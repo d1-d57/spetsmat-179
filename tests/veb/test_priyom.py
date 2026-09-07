@@ -194,6 +194,29 @@ def test_stranica_pokazyvaet_snyatuyu_kletku_ne_sdannoj(server):
     assert "kl solved" not in kusok, kusok
 
 
+def test_snyatie_galochki_dobavlyaet_erratum_i_ne_udalyaet(server):
+    """🔴 Второй тап (цель «пусто») ДОБАВЛЯЕТ строку `erratum`, а не удаляет `assert`.
+
+    Владелец 07.09: «второй тап должен снимать галочку, а не ставить крестик».  Это
+    другое событие, чем `retract`, и потому проверяется отдельно: клетка обязана стать
+    пустой, обе прежние строки — остаться на месте, а новая — сослаться на ту, которую
+    вычёркивает.
+    """
+    c, uch, zad = server["c"], server["deti"][0], server["zadachi"][0]
+
+    _tap(server["baza"], uch, zad, "solved")
+    id_plusa = _ryady(c, uch, zad)[0]["id"]
+
+    status, otvet = _tap(server["baza"], uch, zad, "empty")
+    assert status == 200 and otvet["sostoyanie"] == "empty", otvet
+
+    ryady = _ryady(c, uch, zad)
+    assert len(ryady) == 2, "снятие галочки обязано ДОБАВИТЬ строку"
+    assert ryady[0]["id"] == id_plusa and ryady[0]["event"] == "assert"
+    assert ryady[1]["event"] == "erratum"
+    assert ryady[1]["reverses_id"] == id_plusa
+
+
 # ------------------------------------------------------------------------ запись в базу
 
 def test_tap_pishet_svoj_istochnik_i_prepodavatelya(server):

@@ -73,9 +73,14 @@ ZNAK = {CellState.SOLVED: "✓", CellState.RETRACTED: "x", CellState.EMPTY: ""}
 #: Which state the next tap aims at.  The service takes a TARGET STATE and never a
 #: "toggle" (`core/services/marking.py`), so the button carries where the cell should end
 #: up — two taps arriving in either order leave the same cell, not two rows.
+#: 🔴 Владелец 07.09: «второй тап должен снимать галочку, а не ставить крестик».
+#: Снятие своего же плюсика — это `erratum` (цель EMPTY): запись вычёркивается из
+#: статистики и клетка снова становится долгом. `retract` значит «сдал и не защитил»
+#: и долгом быть перестаёт — кнопкой он больше не ставится, но дверь его умеет, и
+#: старые события этого вида в журнале читаются как прежде.
 SLEDUYUSHCHEE = {
     CellState.EMPTY: CellState.SOLVED,
-    CellState.SOLVED: CellState.RETRACTED,
+    CellState.SOLVED: CellState.EMPTY,
     CellState.RETRACTED: CellState.SOLVED,
 }
 
@@ -353,7 +358,7 @@ def _obolochka(telo: str) -> str:
 // One tap: send the TARGET state, redraw the cell from the answer.  The target is
 // computed from what the cell shows, because the service takes a state and never a
 // toggle -- two taps arriving in either order then leave the same cell.
-var DALEE = {{"empty":"solved","solved":"retracted","retracted":"solved"}};
+var DALEE = {{"empty":"solved","solved":"empty","retracted":"solved"}};
 var ZNAK = {{"empty":"","solved":"\\u2713","retracted":"x"}};
 function narisovat(k, s) {{
   k.className = "kl " + s;
