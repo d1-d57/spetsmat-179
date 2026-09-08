@@ -12,7 +12,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from ops import storozh_sajta
+from ops import opoveshchenie, storozh_sajta
 from ops.storozh_sajta import OneCheck, postavit_diagnoz
 
 
@@ -229,6 +229,51 @@ def test_tiho_gasit_trevogu(tmp_path, monkeypatch, capsys):
     vyvod = capsys.readouterr().out
     assert code == 1
     assert "ALARM:" not in vyvod
+
+
+# ── Первый запуск больше не молчит (только когда сайт жив: OnFailure= уже кроет нездоровый) ──
+
+def test_pervyj_zdorovyj_zapusk_shlyot_puls(tmp_path, monkeypatch):
+    """Без сохранённого состояния сравнивать не с чем — а «жив» никогда не даёт rc≠0,
+    так что `OnFailure=` для этого случая не сработает никогда. Без прямой отправки здесь
+    исправно работающий сторож мог бы всю жизнь молчать о том, что вообще существует."""
+    _nastroit(tmp_path, monkeypatch, "localhost:1")
+    monkeypatch.setattr(storozh_sajta, "probe",
+                        lambda url: OneCheck(url.split("://")[0], True, True, "жив: status=200"))
+    otpravleno = {}
+    monkeypatch.setattr(opoveshchenie, "send",
+                        lambda text, kind="trevoga", **kw: otpravleno.update(text=text, kind=kind))
+    code = storozh_sajta.main([])
+    assert code == 0
+    assert otpravleno["kind"] == "puls"
+    assert "впервые" in otpravleno["text"] and storozh_sajta.ZHIV in otpravleno["text"]
+    assert _sostoyanie(tmp_path) == storozh_sajta.ZHIV
+
+
+def test_pervyj_zdorovyj_zapusk_perezhivaet_sboj_otpravki(tmp_path, monkeypatch, capsys):
+    """Пульс не смог уйти (сеть/токен) — сторож обязан отработать и отчитаться, а не упасть."""
+    _nastroit(tmp_path, monkeypatch, "localhost:1")
+    monkeypatch.setattr(storozh_sajta, "probe",
+                        lambda url: OneCheck(url.split("://")[0], True, True, "жив: status=200"))
+
+    def padaet(*a, **k):
+        raise opoveshchenie.RefusedToSend("нет токена")
+    monkeypatch.setattr(opoveshchenie, "send", padaet)
+    code = storozh_sajta.main([])
+    vyvod = capsys.readouterr().out
+    assert code == 0
+    assert "heartbeat FAILED" in vyvod
+    assert _sostoyanie(tmp_path) == storozh_sajta.ZHIV
+
+
+def test_pervyj_nezdorovyj_zapusk_ne_shlyot_svoj_puls(tmp_path, monkeypatch):
+    """Нездоровый первый запуск не дублирует сообщение: OnFailure= уже пришлёт тревогу сам."""
+    _nastroit(tmp_path, monkeypatch, "localhost:%d" % _svobodnyj_port())
+    zvali = []
+    monkeypatch.setattr(opoveshchenie, "send", lambda *a, **k: zvali.append((a, k)))
+    code = storozh_sajta.main([])
+    assert code == 1
+    assert zvali == []
 
 
 # ── Третья беда: TLS дошёл, но сертификату верить нельзя ──────────────────────

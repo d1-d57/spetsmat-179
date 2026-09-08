@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -60,6 +61,13 @@ CHAT_FALLBACK_VARIABLE = "OWNER_ID"
 
 #: Substrings that mean somebody is about to put a snapshot into a message.
 FORBIDDEN_IN_TEXT = (".db.gz", ".sqlite", ".db\n", ".db ")
+
+#: The last line of a Python traceback conventionally reads ``module.SomeError: message``.
+#: Matched against the tail rather than the whole journal because journalctl is asked for a
+#: generous window (``_OSHIBKA_JOURNAL_LINES``) so the real line is not lost among restart
+#: noise, framework retries and the OS's own service-manager chatter that follows a crash.
+_OSHIBKA_LINE = re.compile(r"\b\w*(?:Error|Exception)\b[^\n]*")
+_OSHIBKA_JOURNAL_LINES = 200
 
 
 class RefusedToSend(Exception):
@@ -89,22 +97,54 @@ def compose(kind: str, text: str, unit: str | None = None, journal_lines: int = 
     return message[:MAX_TEXT]
 
 
+def _read_journal(unit: str, lines: int) -> str | None:
+    """Raw ``journalctl`` text for ``unit``, or ``None`` if it could not be read at all.
+
+    Shared by ``_journal_tail`` (attached verbatim, for a human to read) and
+    ``poslednyaya_oshibka`` (grepped, for the alert's own headline).
+    """
+    if shutil.which("journalctl") is None:
+        return None
+    try:
+        finished = subprocess.run(
+            ["journalctl", "-u", unit, "-n", str(lines), "--no-pager", "--output", "cat"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return finished.stdout or finished.stderr or None
+
+
+def poslednyaya_oshibka(unit: str) -> str | None:
+    """The last exception-looking line in ``unit``'s own journal, or ``None`` if there is none.
+
+    THIS, not a restart count, is what tells a "broken code" failure apart from a "broken
+    network" one: five failed starts in five minutes look identical from the outside, and
+    only the text of what actually raised says which.  ``None`` is a legitimate answer -- a
+    watchdog's own failures rarely raise a Python exception at all -- and the caller falls
+    back to a generic line rather than inventing a diagnosis this function did not make.
+    """
+    text = _read_journal(unit, _OSHIBKA_JOURNAL_LINES)
+    if not text:
+        return None
+    match = None
+    for match in _OSHIBKA_LINE.finditer(text):
+        pass  # last match wins: a traceback's own line is usually followed by framework noise
+    return match.group(0).strip() if match else None
+
+
 def _journal_tail(unit: str, lines: int) -> str:
     """The last few journal lines, when journald is there.  Absent journald is not an error.
 
     The alarm must be sendable from a laptop with no systemd at all, because that is where
     this whole harness is proven before any server exists.
     """
-    if shutil.which("journalctl") is None:
+    text = _read_journal(unit, lines)
+    if text is None and shutil.which("journalctl") is None:
         return "(no journalctl on this machine -- log tail omitted)"
-    try:
-        finished = subprocess.run(
-            ["journalctl", "-u", unit, "-n", str(lines), "--no-pager", "--output", "cat"],
-            capture_output=True, text=True, timeout=10, check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as failure:
-        return "(journalctl failed: %s)" % failure
-    tail = (finished.stdout or finished.stderr or "").strip()
+    if text is None:
+        return "(journalctl failed)"
+    tail = text.strip()
     return ("last %d line(s):\n%s" % (lines, tail)) if tail else "(journal empty)"
 
 
@@ -141,16 +181,32 @@ def send(text: str, kind: str = "trevoga", unit: str | None = None, journal_line
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Send one alarm or one heartbeat through the second bot.")
     parser.add_argument("--rod", choices=KINDS, default="trevoga", help="alarm or heartbeat")
-    parser.add_argument("--tekst", required=True, help="what happened, in one line")
+    parser.add_argument("--tekst", default=None, help="what happened, in one line")
     parser.add_argument("--edinica", default=None, help="the systemd unit this is about")
     parser.add_argument("--strok-zhurnala", type=int, default=0,
                         help="how many journal lines to attach (0 = none)")
+    parser.add_argument("--avto-diagnoz", action="store_true",
+                        help="derive --tekst from --edinica's own journal instead of a fixed "
+                             "string, so a restart count never stands in for what actually "
+                             "raised (a broken network and broken code both fail 5 times in "
+                             "5 minutes; only the journal says which)")
     parser.add_argument("--proba", action="store_true",
                         help="compose and check the message, send nothing -- provable without a token")
     args = parser.parse_args(argv)
 
+    if args.avto_diagnoz:
+        if not args.edinica:
+            parser.error("--avto-diagnoz requires --edinica")
+        tekst = poslednyaya_oshibka(args.edinica) or (
+            "unit gave up, no exception line found in its own journal -- see the attached tail"
+        )
+    elif args.tekst is not None:
+        tekst = args.tekst
+    else:
+        parser.error("one of --tekst or --avto-diagnoz is required")
+
     try:
-        message = send(args.tekst, args.rod, args.edinica, args.strok_zhurnala, dry_run=args.proba)
+        message = send(tekst, args.rod, args.edinica, args.strok_zhurnala, dry_run=args.proba)
     except RefusedToSend as refusal:
         print("not sent: %s" % refusal, file=sys.stderr)
         return 1

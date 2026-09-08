@@ -1,0 +1,20 @@
+# Every 3 minutes (OnUnitActiveSec=, not OnCalendar=: this fires on an interval, not at
+# fixed wall-clock times, which is the correct systemd idiom for "keep polling" rather than
+# "run once a day"). Frequent enough to catch a filtering window like the one measured
+# 2026-09-06 (30/30 successes, then 3/3 timeouts an hour later -- a daily or hourly probe
+# would have a real chance of missing it entirely between samples), and light enough that
+# ~480 runs/day of two short GETs is nothing next to the ~2000 real requests/day nginx
+# already serves. Persistent=true so a machine that was off catches up on the next boot
+# rather than silently skipping the window it was off for.
+
+[Unit]
+Description=probe the site every few minutes, over both http and https
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+Persistent=true
+Unit=spetsmat-storozh-sajta.service
+
+[Install]
+WantedBy=timers.target

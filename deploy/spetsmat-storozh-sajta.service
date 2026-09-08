@@ -1,0 +1,23 @@
+# The site watchdog itself, run by the .timer alongside it. See ops/storozh_sajta.py for
+# why two schemes and one control sample: this unit only carries it to systemd.
+#
+# EnvironmentFile is needed here (unlike spetsmat-vygruzka-v-tablicu.service) because a
+# healthy FIRST run sends its own heartbeat directly through ops/opoveshchenie.py --
+# OnFailure= below never fires for "жив", so nothing else would ever tell the owner this
+# watchdog is alive at all.
+
+[Unit]
+Description=probe the site over http and https, name which of two ills it is
+OnFailure=spetsmat-alert@%n.service
+
+[Service]
+Type=oneshot
+Environment=TZ=UTC
+User=@USER@
+WorkingDirectory=@CHECKOUT@
+EnvironmentFile=@CHECKOUT@/secrets/bot.env
+ExecStart=/usr/bin/python3 @CHECKOUT@/ops/storozh_sajta.py
+NoNewPrivileges=yes
+PrivateTmp=no
+ProtectSystem=strict
+ProtectHome=yes

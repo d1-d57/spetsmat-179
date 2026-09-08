@@ -17,6 +17,6 @@ WorkingDirectory=@CHECKOUT@
 EnvironmentFile=@CHECKOUT@/secrets/bot.env
 ExecStart=/usr/bin/python3 @CHECKOUT@/ops/opoveshchenie.py \
     --rod trevoga \
-    --tekst "unit gave up: five failed starts in five minutes means broken code, not a broken network" \
+    --avto-diagnoz \
     --edinica %i \
     --strok-zhurnala 20

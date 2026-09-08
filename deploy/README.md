@@ -210,9 +210,13 @@ schema, which was read-only to the position that built this. The question answer
 
 ## When the alarm fires
 
-`OnFailure=` means the unit gave up after five failed starts in five minutes. That is broken
-CODE, not a broken network — a broken network is what `Restart=always` handles, and the bot
-recovers from it by itself. So:
+`OnFailure=` means the unit gave up after five failed starts in five minutes. **That is NOT
+necessarily broken code** — measured 08.09: five failed starts fired on a `TelegramNetworkError`
+(`Request timeout error`), i.e. a broken network, not broken code, and `Restart=always` alone
+did not save it because the burst limit tripped first. Five-failures-in-five-minutes looks the
+same either way; only the actual exception line says which. That is why the alert text itself
+is no longer a fixed guess (`ops/opoveshchenie.py --avto-diagnoz` greps the failing unit's own
+journal for it) — read the delivered message first, it usually already names the real cause:
 
 1. `journalctl -u spetsmat-bot.service -n 100` — the traceback is there;
 2. fix or `git revert`, then `bash deploy/vykatka.sh` from your laptop (which will refuse

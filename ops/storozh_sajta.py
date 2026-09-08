@@ -243,6 +243,26 @@ def save_state(verdict_str: str) -> None:
         pass
 
 
+def _report_first_healthy_run(outcome: str) -> str:
+    """No saved state means no PREVIOUS run to compare against -- and "жив" never fails, so
+    it never reaches `OnFailure=` either.  Without this, a watchdog that has watched
+    faithfully since install can go its whole life without once telling anyone it exists.
+
+    Only for the healthy case: an UNHEALTHY first run already exits non-zero below, and that
+    is exactly what `OnFailure=spetsmat-alert@%n.service` (deploy/spetsmat-storozh-sajta.service)
+    is for -- sending here too would be the same fact delivered twice through two channels.
+    """
+    try:
+        from ops import opoveshchenie
+    except ImportError:
+        return "first run: %s, but ops.opoveshchenie is not importable -- heartbeat not sent" % outcome
+    try:
+        opoveshchenie.send("сторож сайта поднялся впервые на этой машине, сайт %s" % outcome, kind="puls")
+    except Exception as failure:  # a heartbeat must never crash the probe it is reporting on
+        return "first run: %s, heartbeat FAILED to send: %s" % (outcome, failure)
+    return "first run: %s, heartbeat sent" % outcome
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check the site over http AND https and name which ill it is.")
     parser.add_argument("--tiho", action="store_true", help="Silence alarm on first run even if state file exists.")
@@ -265,7 +285,10 @@ def main(argv: list[str] | None = None) -> int:
         alarm_text = "%s -> %s" % (prev, outcome)
         alarm = not args.tiho
     elif not prev:
-        alarm_text = "first run (recorded, no alarm)"
+        if outcome == ZHIV and not args.tiho:
+            alarm_text = _report_first_healthy_run(outcome)
+        else:
+            alarm_text = "first run (recorded, no alarm; unhealthy first runs alert via OnFailure=)"
     elif args.tiho:
         alarm_text = "silenced by --tiho"
     else:
