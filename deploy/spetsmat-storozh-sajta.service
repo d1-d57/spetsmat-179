@@ -5,6 +5,17 @@
 # healthy FIRST run sends its own heartbeat directly through ops/opoveshchenie.py --
 # OnFailure= below never fires for "жив", so nothing else would ever tell the owner this
 # watchdog is alive at all.
+#
+# StateDirectory= below (not /tmp) is what actually lets state survive between activations.
+# Live measurement 2026-09-08: with only PrivateTmp=no and ProtectSystem=strict, EVERY run --
+# 15 messages in an hour -- printed "first run" and /tmp/spetsmat-storozh-sajta.state.json never
+# existed afterward. PrivateTmp=no keeps /tmp shared with the host, but ProtectSystem=strict still
+# makes that shared /tmp READ-ONLY, so ops/storozh_sajta.py's save_state() failed on every single
+# write -- silently, because it swallowed the exception (fixed in ops/storozh_sajta.py too).
+# StateDirectory=spetsmat-storozh-sajta gives the unit its own writable
+# /var/lib/spetsmat-storozh-sajta/ that ProtectSystem=strict does not touch, and that DOES survive
+# activations and reboots; systemd exports its path as $STATE_DIRECTORY, which the script now
+# reads (falling back to the old /tmp path when unset, e.g. under pytest or a manual run).
 
 [Unit]
 Description=probe the site over http and https, name which of two ills it is
@@ -17,6 +28,7 @@ User=@USER@
 WorkingDirectory=@CHECKOUT@
 EnvironmentFile=@CHECKOUT@/secrets/bot.env
 ExecStart=/usr/bin/python3 @CHECKOUT@/ops/storozh_sajta.py
+StateDirectory=spetsmat-storozh-sajta
 NoNewPrivileges=yes
 PrivateTmp=no
 ProtectSystem=strict

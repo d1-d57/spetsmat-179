@@ -9,6 +9,8 @@ unit test would prove the certificate machinery rather than the diagnosis.
 from __future__ import annotations
 
 import json
+import os
+import stat
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -229,6 +231,53 @@ def test_tiho_gasit_trevogu(tmp_path, monkeypatch, capsys):
     vyvod = capsys.readouterr().out
     assert code == 1
     assert "ALARM:" not in vyvod
+
+
+# ── Провал записи состояния виден, а не проглочен ─────────────────────────────
+
+def test_provalivshayasya_zapis_sostoyania_vidna_i_vozvrashaet_false(tmp_path, monkeypatch, capsys):
+    """`save_state` больше не глотает исключение молча — печатает и возвращает False.
+
+    Живое измерение 08.09: `ProtectSystem=strict` делало `/tmp` только для чтения даже при
+    `PrivateTmp=no`, и старая версия (`except Exception: pass`) была неотличима от успеха.
+    """
+    ro_dir = tmp_path / "ro"
+    ro_dir.mkdir()
+    monkeypatch.setattr(storozh_sajta, "STATE_FILE", ro_dir / "state.json")
+    os.chmod(ro_dir, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        ok = storozh_sajta.save_state("жив")
+        vyvod = capsys.readouterr().out
+        assert ok is False
+        assert "state write FAILED" in vyvod
+    finally:
+        os.chmod(ro_dir, stat.S_IRWXU)
+
+
+def test_provalivshayasya_zapis_delaet_progon_yavno_ushcherbnym(tmp_path, monkeypatch, capsys):
+    """Сайт жив, но состояние не записалось — прогон обязан вернуть ненулевой код.
+
+    Иначе дефект `ProtectSystem=strict` прячется за здоровым вердиктом ЖИВ, ровно как это
+    произошло на живом сервере (15 сообщений «впервые» за час, притом что сайт был жив).
+    """
+    ro_dir = tmp_path / "ro"
+    ro_dir.mkdir()
+    monkeypatch.setattr(storozh_sajta, "STATE_FILE", ro_dir / "state.json")
+    monkeypatch.setattr(storozh_sajta, "HOST_FILE", tmp_path / "adres-sajta.txt")
+    monkeypatch.setattr(storozh_sajta, "ADRES_FILE", tmp_path / "adres.txt")
+    (tmp_path / "adres-sajta.txt").write_text("localhost:1", encoding="utf-8")
+    monkeypatch.setattr(storozh_sajta, "probe",
+                        lambda url: OneCheck(url.split("://")[0], True, True, "жив: status=200"))
+    monkeypatch.setattr(opoveshchenie, "send", lambda *a, **k: None)
+    os.chmod(ro_dir, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        code = storozh_sajta.main([])
+        vyvod = capsys.readouterr().out
+        assert code == 1  # НЕ 0, хотя сам сайт здоров
+        assert "run degraded" in vyvod
+        assert not (ro_dir / "state.json").exists()
+    finally:
+        os.chmod(ro_dir, stat.S_IRWXU)
 
 
 # ── Первый запуск больше не молчит (только когда сайт жив: OnFailure= уже кроет нездоровый) ──
