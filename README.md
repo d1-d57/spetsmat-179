@@ -257,7 +257,13 @@
 
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_bekap-v-papku.md`** (выгрузка архива боевой базы .db.gz в папку владельца на Google Диске, рядом с таблицей кондуита)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_bystro-i-bezopasno.md`** (диагноз медленного https у владельца и решение, сохраняющее профиль безопасности Google)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_chistka-tokenov.md`** (вычистить мёртвые строки токена из четырёх файлов и из истории git публичного репозитория)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_dozabivka-dolgov-sklejki.md`** (закрыть долги заходa склейки: права у кабинетов, опечатка except Value, красные тесты enrollment)
 
@@ -271,6 +277,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_listki-kak-baza-zadach.md`** (листок как база задач: страница листка вместо PDF, скачивание PDF и TeX, кондуит и состав из базы, отметки 05.09)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_pages-i-materialy.md`** (Pages перестаёт отдавать устаревшую копию и уводит на живой сайт; /materials/ перестаёт быть вечным 404)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_profil-bezopasnosti.md`** (снять пометку «обманные страницы»: закрыть default_server, заголовки, robots.txt, пароль уходит по https)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_skleit-adminku-s-sajtom.md`** (свести рабочий редактор распределения и страницу правки на сайте в один шаблон с двумя режимами)
@@ -279,6 +288,9 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_sloj-zanyatia.md`** (слой занятия: сегодняшнее распределение сохранить как слой на 07.09, постоянное вернуть к утреннему, дальше разделить жёстко)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_storozh-vstal.md`** (подключить сторож сайта таймером и сделать его тревогу доходящей и не врущей)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_veb-konduit-proshlogo-goda.md`** (Кондуит прошлого года на чтение: 18 листков на 56 учеников, 15847 событий, уже лежащих в базе)
 
