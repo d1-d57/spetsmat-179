@@ -89,7 +89,14 @@ INSTRUMENT_SBORKI = KOREN_PROEKTA / "tools" / "sobrat_stranicu.py"
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
-MATERIALS_DIR = Path("/Users/ivanyakovlev/Documents/GitHub/materials/spetsmat-2026")
+# 🔴 Used to be a laptop-only absolute path (`/Users/.../GitHub/materials/spetsmat-2026`),
+# which never existed on the server and made `/materials/` a permanent 404. Now relative to
+# the project root, overridable per-deployment the same way `SPETSMAT_VEB_SVOBODNAYA_PRAVKA`
+# is (line above): no directory of that name exists on the server today, and the route below
+# answers accordingly rather than pretending one does.
+MATERIALS_DIR = Path(
+    os.environ.get("SPETSMAT_MATERIALS_DIR", str(KOREN_PROEKTA / "materials" / "spetsmat-2026"))
+)
 
 # 🔴 THE SHEETS THE SITE HANDS OUT, AND THE ONLY PLACE THEY LIVE.  nginx aliases
 # `/listki/` straight onto this directory, so a request for a FILE never reaches this
@@ -576,6 +583,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path.startswith("/materials/"):
+            if not MATERIALS_DIR.is_dir():
+                # Not "this one file is missing" (404) but "nothing is configured to serve
+                # here at all" — the two used to be indistinguishable, and the second one
+                # was permanent. `SPETSMAT_MATERIALS_DIR` names where materials should live.
+                self._send_json(503, {"error": "materials directory is not configured on this server"})
+                return
             rel = path[len("/materials/"):].lstrip("/")
             if ".." in rel.split("/"):
                 self._send_json(404, {"error": "not found"})
