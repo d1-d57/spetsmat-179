@@ -1,0 +1,14 @@
+# After the 02:00 conduit export (so it never races that write) and before the 03:00
+# environment check.  Persistent=true so a machine off at 02:30 catches up on the next boot
+# instead of skipping the night.
+
+[Unit]
+Description=nightly database archive to the owner's Google Drive folder
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+Persistent=true
+Unit=spetsmat-vygruzka-bazy.service
+
+[Install]
+WantedBy=timers.target

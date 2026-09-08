@@ -36,6 +36,7 @@ ENABLE_UNITS=(
   spetsmat-proverka-sredy.timer
   spetsmat-vygruzka-v-tablicu.timer
   spetsmat-storozh-sajta.timer
+  spetsmat-vygruzka-bazy.timer
 )
 
 # WHAT GETS INSTALLED IS EVERY UNIT FILE IN deploy/, FOUND BY LOOKING, NOT BY A LIST.

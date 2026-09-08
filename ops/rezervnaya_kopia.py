@@ -49,8 +49,10 @@ DEFAULT_KEEP_DAYS = 14
 DEFAULT_BACKUP_DIR = config.ROOT / "data" / "backups"
 
 #: The labels a snapshot may carry.  They are the reason the snapshot exists, and they are
-#: what makes "we lost at most one lesson" checkable after the fact.
-LABELS = ("pered-zanyatiem", "posle-zanyatia", "sutochnyj", "ruchnoj")
+#: what makes "we lost at most one lesson" checkable after the fact.  ``oblachnyj`` is the
+#: one ``ops/vygruzka_bazy.py`` uses before it uploads the snapshot to Drive -- a name, not
+#: a second snapshot mechanism: it goes through the exact same ``make_backup`` below.
+LABELS = ("pered-zanyatiem", "posle-zanyatia", "sutochnyj", "ruchnoj", "oblachnyj")
 
 #: ``VACUUM INTO`` arrived in SQLite 3.27 (2019).  Older library, and this module refuses
 #: in plain words rather than silently falling back to a copy -- the fallback would be
