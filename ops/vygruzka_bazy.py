@@ -184,13 +184,56 @@ def proverit_akkaunt(service, ozhidaem: str = OZHIDAEMYJ_AKKAUNT) -> str:
     return akkaunt
 
 
-def check_access(service, folder_id: str) -> tuple[bool, bool, str]:
-    """``(readable, can_add_children, name)`` for the folder -- ПРАВКА 1's "check first"."""
-    metadata = service.files().get(
-        fileId=folder_id, fields="name,capabilities", supportsAllDrives=True,
+def _media_proby():
+    """The probe file's body, behind its own function so the import stays lazy.
+
+    Everything Google is imported inside a function in this module on purpose (see the test
+    module's own docstring): the tests, and the owner's laptop, run without those libraries
+    installed, and a module that cannot even be imported there is a module nobody can test.
+    """
+    from googleapiclient.http import MediaInMemoryUpload
+
+    return MediaInMemoryUpload(b"proba", mimetype="text/plain")
+
+
+#: The probe file ``check_access`` writes and immediately removes.  Named, not random, so a
+#: leftover after a crash is obviously ours and obviously disposable.
+PROBNYJ_FAJL = "spetsmat-proba-dostupa.txt"
+
+
+def check_access(service, folder_id: str) -> tuple[bool, str]:
+    """``(can_write, detail)`` -- proved by actually writing, then removing the proof.
+
+    🔴 THIS USED TO READ THE FOLDER'S ``capabilities.canAddChildren`` AND THAT WAS THE WRONG
+    QUESTION TWICE OVER.
+
+    First, it answered about PERMISSION when the thing that failed was QUOTA: under the old
+    service-account key this check reported ``canAddChildren: true`` right up until the upload
+    died with 403, and the previous заход called its own diagnostic misleadingly optimistic for
+    exactly that reason.
+
+    Second, it does not even work under the narrow ``drive.file`` scope this заход measured as
+    sufficient: an app scoped to its own files cannot read the metadata of a folder it did not
+    create, so ``files().get`` on the owner's folder answers ``404 File not found`` while
+    ``files().create`` INTO that same folder succeeds -- measured, both of them.  Widening the
+    scope so that a diagnostic can pass would be taking rights for the convenience of a check
+    rather than for the work, which is precisely what item C forbids.
+
+    So the check now performs the real round trip -- create, confirm the owner, delete -- and
+    can no longer be optimistic about anything the actual upload will hit.
+    """
+    created = service.files().create(
+        body={"name": PROBNYJ_FAJL, "parents": [folder_id]},
+        media_body=_media_proby(),
+        fields="id", supportsAllDrives=True,
     ).execute()
-    capabilities = metadata.get("capabilities", {})
-    return True, bool(capabilities.get("canAddChildren")), metadata.get("name", "?")
+    try:
+        vladelec = vladelec_fajla(service, created["id"])
+    finally:
+        # Removed even if the ownership read fails: a probe that leaves litter in the owner's
+        # folder every time someone checks is worse than no probe.
+        service.files().delete(fileId=created["id"], supportsAllDrives=True).execute()
+    return True, "пробный файл создан и удалён; владелец файла %s" % vladelec
 
 
 def list_archives(service, folder_id: str) -> list[dict]:
@@ -265,6 +308,14 @@ def table_parents_after_move(current_parents: list[str], folder_id: str) -> tupl
 def move_table(service, spreadsheet_id: str, folder_id: str) -> str:
     """Moves the conduit spreadsheet's PARENT, never recreates it -- see the module docstring
     and item D of the readiness criterion: the id the nightly export writes to must not change.
+
+    🔴 THIS ONE-OFF NO LONGER WORKS UNDER THE NARROW SCOPE, AND THAT IS THE RIGHT TRADE.  The
+    spreadsheet was not created by this app, so ``drive.file`` cannot address it and this call
+    answers 404.  It is already done -- the previous заход confirmed live that the table's
+    parent IS the owner's folder -- so the flag is kept only for the idempotent re-check, and
+    needing the wide ``drive`` scope for a one-off that has already happened is not a reason to
+    hold that scope every night.  Run it, if it is ever needed again, with a token minted by
+    ``ops/avtorizacia_drive.py --obyom polnyj``.
     """
     metadata = service.files().get(
         fileId=spreadsheet_id, fields="parents", supportsAllDrives=True,
@@ -312,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
             folder_id = _folder_id(arguments.papka_fajl)
             service = _service(arguments.token)
             akkaunt = whoami(service)
-            _, can_write, name = check_access(service, folder_id)
+            can_write, detail = check_access(service, folder_id)
         except (FolderMissing, FileNotFoundError, SoglasieProtuhlo) as error:
             print(error, file=sys.stderr)
             return 5
@@ -320,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
         print("согласие выдано аккаунтом: %s%s"
               % (akkaunt, "" if akkaunt == arguments.kto_zhdyom
                  else "  🔴 А ЖДАЛИ %s" % arguments.kto_zhdyom))
-        print("папка %r видна; писать в неё %s" % (name, "можно" if can_write else "НЕЛЬЗЯ"))
+        print("запись в папку владельца: можно -- %s" % detail)
         return 0 if can_write and akkaunt == arguments.kto_zhdyom else 5
 
     if arguments.perenesti_tablicu:

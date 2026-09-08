@@ -220,9 +220,11 @@ def test_proverit_dostup_makes_no_local_snapshot(monkeypatch, papka_kopij: Path,
     folder_file = tmp_path / "drive_papka.txt"
     folder_file.write_text("folder-x\n", encoding="utf-8")
 
-    monkeypatch.setattr(vygruzka_bazy, "_service",
-                        lambda key_path: _FakeService(get_result={"name": "owner-folder",
-                                                                  "capabilities": {"canAddChildren": True}}))
+    monkeypatch.setattr(
+        vygruzka_bazy, "_service",
+        lambda token_path: _FakeService(
+            get_result={"owners": [{"emailAddress": "ye.mathclub@gmail.com"}]}))
+    monkeypatch.setattr(vygruzka_bazy, "_media_proby", lambda: None)
 
     rc = vygruzka_bazy.main(["--proverit-dostup", "--papka-fajl", str(folder_file)])
 
@@ -340,10 +342,11 @@ def test_proverit_dostup_is_red_on_the_wrong_account_even_when_writable(
     folder_file = tmp_path / "drive_papka.txt"
     folder_file.write_text("folder-x\n", encoding="utf-8")
     service = _FakeService(
-        get_result={"name": "owner-folder", "capabilities": {"canAddChildren": True}},
+        get_result={"owners": [{"emailAddress": "matfak57@gmail.com"}]},
         akkaunt="matfak57@gmail.com",
     )
     monkeypatch.setattr(vygruzka_bazy, "_service", lambda token_path: service)
+    monkeypatch.setattr(vygruzka_bazy, "_media_proby", lambda: None)
 
     rc = vygruzka_bazy.main(["--proverit-dostup", "--papka-fajl", str(folder_file)])
 
@@ -355,3 +358,42 @@ def test_proverit_dostup_is_red_on_the_wrong_account_even_when_writable(
 def test_a_missing_consent_file_names_the_one_command_that_creates_it(tmp_path: Path):
     with pytest.raises(FileNotFoundError, match="avtorizacia_drive.py"):
         vygruzka_bazy._credentials(tmp_path / "net-takogo-fajla.json")
+
+
+def test_the_access_probe_always_removes_what_it_created(monkeypatch, tmp_path: Path):
+    """A diagnostic that leaves litter in the owner's folder every time it runs is worse than
+    no diagnostic -- and the cleanup must survive a failure of the ownership read, which is why
+    the delete sits in a ``finally``."""
+    folder_file = tmp_path / "drive_papka.txt"
+    folder_file.write_text("folder-x\n", encoding="utf-8")
+    service = _FakeService(get_result={"owners": [{"emailAddress": "ye.mathclub@gmail.com"}]})
+    monkeypatch.setattr(vygruzka_bazy, "_media_proby", lambda: None)
+
+    can_write, detail = vygruzka_bazy.check_access(service, "folder-x")
+
+    assert can_write
+    assert service.files().created == [
+        {"name": vygruzka_bazy.PROBNYJ_FAJL, "parents": ["folder-x"]}]
+    assert service.files().deleted_ids == ["new-file-id"], "the probe must clean up after itself"
+    assert "ye.mathclub@gmail.com" in detail
+
+
+def test_the_access_probe_cleans_up_even_when_the_ownership_read_fails(monkeypatch):
+    """The ``finally`` is the point of the test: without it a failed read leaves the probe file
+    sitting in the owner's folder for good."""
+    class _SlomannyjGet(_FakeFiles):
+        def get(self, **kwargs):
+            raise RuntimeError("ownership read failed")
+
+    class _Service(_FakeService):
+        def __init__(self):
+            super().__init__()
+            self._files = _SlomannyjGet()
+
+    service = _Service()
+    monkeypatch.setattr(vygruzka_bazy, "_media_proby", lambda: None)
+
+    with pytest.raises(RuntimeError):
+        vygruzka_bazy.check_access(service, "folder-x")
+
+    assert service.files().deleted_ids == ["new-file-id"]
