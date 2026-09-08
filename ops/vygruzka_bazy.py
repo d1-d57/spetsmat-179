@@ -10,7 +10,20 @@ structure.  Losing the machine today loses all of that.  This tool is the door t
 for the rest: it takes one snapshot through the SAME path ``rezervnaya_kopia.make_backup``
 already proved correct on a live, WAL-mode database (never a raw file copy -- see that
 module for why), and uploads the resulting ``.db.gz`` into the owner's own Drive folder,
-through the SAME service-account key ``vygruzka_v_tablicu.py`` already uses.
+AS THE OWNER HIMSELF.
+
+🔴 WHY NOT THE SERVICE-ACCOUNT KEY ANY MORE -- MEASURED, NOT PREFERRED.  This module used to
+share ``vygruzka_v_tablicu.py``'s service-account key, and it could not work: a service account
+has NO DRIVE STORAGE QUOTA OF ITS OWN, so ``files().create`` answers 403 even inside a folder
+the owner owns and even when that folder is empty.  Proved live rather than read off a doc page
+(``kod_bekap-v-papku.md``, clause 2): ``storageQuota.limit == "0"``, and the folder carries no
+``driveId``, so it is a personal My Drive folder and not the Shared Drive that Google exempts.
+Writing into an EXISTING spreadsheet creates no file, which is exactly why the conduit export
+next door still works on that key and is deliberately left alone.
+
+So the upload now runs on the owner's own OAuth credentials, collected once by hand through
+``ops/avtorizacia_drive.py`` and living in ``secrets/oauth_token.json``.  The archives are owned
+by the account that owns the folder, and the quota is his.
 
 NOT A SECOND SNAPSHOT MECHANISM.  This module adds exactly one new label, ``"oblachnyj"``,
 to ``rezervnaya_kopia.LABELS`` -- a name, not a rewrite -- so an archive bound for Drive is
@@ -59,7 +72,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import config
 from ops import rezervnaya_kopia
-from ops.vygruzka_v_tablicu import DEFAULT_KEY_PATH, SPREADSHEET_ID
+from ops.vygruzka_v_tablicu import SPREADSHEET_ID
 
 #: One new label, not a new snapshot mechanism -- see the module docstring.
 LABEL = "oblachnyj"
@@ -73,11 +86,29 @@ DEFAULT_FOLDER_FILE = config.ROOT / "secrets" / "drive_papka.txt"
 #: point, not a coincidence.
 DRIVE_KEEP = 14
 
-SCOPES = ["https://www.googleapis.com/auth/drive"]
+#: The owner's OAuth credentials, written by ``ops/avtorizacia_drive.py``.  Mode 600, owner
+#: ``spetsmat``, and -- like the key it replaces -- never anywhere near git.
+DEFAULT_TOKEN_PATH = config.ROOT / "secrets" / "oauth_token.json"
+
+#: 🔴 WHOSE DRIVE THE ARCHIVE MUST LAND IN, CHECKED ON EVERY REAL RUN.  The Cloud project
+#: belongs to ``matfak57@gmail.com``; the folder and the conduit spreadsheet belong to this
+#: account.  Consent given as the project's account produces a run that is successful in every
+#: observable way -- rc=0, a file created, rotation performed -- into a Drive nobody will think
+#: to open.  The заход's clause 2 exists against exactly that, and so does this constant: the
+#: check belongs in the nightly path, not only in a one-off verification someone ran once.
+OZHIDAEMYJ_AKKAUNT = "ye.mathclub@gmail.com"
 
 
 class FolderMissing(Exception):
     """The owner's Drive folder id is not where it was told to be.  Said in words."""
+
+
+class SoglasieProtuhlo(Exception):
+    """The owner's consent no longer refreshes.  Said in words, with the one-line cure."""
+
+
+class NeTotAkkaunt(Exception):
+    """The token belongs to the wrong Google account -- the заход's clause 2, in code."""
 
 
 def _folder_id(path: Path) -> str:
@@ -93,21 +124,64 @@ def _folder_id(path: Path) -> str:
     return value
 
 
-def _credentials(key_path: Path):
-    from google.oauth2.service_account import Credentials
-
-    if not key_path.exists():
+def _credentials(token_path: Path):
+    """The owner's own credentials.  The scope is NOT re-declared here on purpose: it was
+    decided at consent time and is recorded in the file, so re-stating it in code would let the
+    two drift apart silently and would describe rights this token may not actually carry."""
+    # The existence check comes FIRST, before the imports: a missing consent file is the most
+    # likely failure on a fresh checkout, and it must be reportable on a machine that has no
+    # Google libraries at all -- which is exactly the machine the owner runs this from.
+    if not token_path.exists():
         raise FileNotFoundError(
-            "нет ключа сервисного аккаунта: %s -- ключ живёт вне git и не появляется в "
-            "свежем checkout сам" % key_path
+            "нет согласия владельца: %s -- его выдаёт ЧЕЛОВЕК, руками, один раз:\n"
+            "    python3 ops/avtorizacia_drive.py\n"
+            "файл живёт вне git и в свежем checkout не появляется сам" % token_path
         )
-    return Credentials.from_service_account_file(str(key_path), scopes=SCOPES)
+
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
+    credentials = Credentials.from_authorized_user_file(str(token_path))
+    if not credentials.valid:
+        # The access token lives an hour; the refresh token is what makes an unattended
+        # nightly timer possible at all.  A refresh that fails must say so in words rather
+        # than surface later as an opaque 401 from some unrelated call.
+        try:
+            credentials.refresh(Request())
+        except Exception as sboj:  # noqa: BLE001 -- the reason matters more than the type
+            raise SoglasieProtuhlo(
+                "согласие владельца больше не действует (%s).\n"
+                "Обычные причины: доступ отозван на myaccount.google.com/permissions, "
+                "или приложение вернули в режим Testing (там refresh-токен живёт 7 дней).\n"
+                "Лечится одним прогоном: python3 ops/avtorizacia_drive.py" % sboj)
+    return credentials
 
 
-def _service(key_path: Path):
+def _service(token_path: Path):
     from googleapiclient.discovery import build
 
-    return build("drive", "v3", credentials=_credentials(key_path), cache_discovery=False)
+    return build("drive", "v3", credentials=_credentials(token_path), cache_discovery=False)
+
+
+def whoami(service) -> str:
+    """The e-mail of the account this token actually belongs to.
+
+    🔴 THE ONE QUESTION THAT CANNOT BE ANSWERED BY LOOKING AT THE RUN.  Every other outcome of
+    a wrong-account authorization is indistinguishable from a right one.
+    """
+    return service.about().get(fields="user").execute()["user"]["emailAddress"]
+
+
+def proverit_akkaunt(service, ozhidaem: str = OZHIDAEMYJ_AKKAUNT) -> str:
+    """Returns the account, or refuses in words.  Called before every real upload."""
+    akkaunt = whoami(service)
+    if akkaunt != ozhidaem:
+        raise NeTotAkkaunt(
+            "согласие выдано аккаунтом %s, а папка владельца принадлежит %s.\n"
+            "Архивы легли бы в чужой Диск, и выглядело бы это полностью успешным.\n"
+            "Лечится повторной авторизацией ПРАВИЛЬНЫМ аккаунтом:\n"
+            "    python3 ops/avtorizacia_drive.py" % (akkaunt, ozhidaem))
+    return akkaunt
 
 
 def check_access(service, folder_id: str) -> tuple[bool, bool, str]:
@@ -153,6 +227,16 @@ def rotate_drive(service, folder_id: str, keep: int = DRIVE_KEEP) -> tuple[int, 
     for name in to_delete:
         service.files().delete(fileId=by_name[name], supportsAllDrives=True).execute()
     return len(entries), len(kept), len(to_delete)
+
+
+def vladelec_fajla(service, file_id: str) -> str:
+    """The e-mail that owns one Drive file.  ``whoami`` says who authorized; this says who the
+    upload actually made the owner -- and under a service account those two differed, which is
+    the whole reason this module was rewritten."""
+    owners = service.files().get(
+        fileId=file_id, fields="owners", supportsAllDrives=True,
+    ).execute().get("owners", [])
+    return owners[0].get("emailAddress", "?") if owners else "?"
 
 
 def upload(service, folder_id: str, path: Path) -> str:
@@ -211,8 +295,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="путь к базе; по умолчанию config.DB_PATH")
     parser.add_argument("--kuda", type=Path, default=None,
                         help="локальная папка снимков; по умолчанию rezervnaya_kopia.DEFAULT_BACKUP_DIR")
-    parser.add_argument("--klyuch", type=Path, default=DEFAULT_KEY_PATH,
-                        help="путь к ключу сервисного аккаунта")
+    parser.add_argument("--token", type=Path, default=DEFAULT_TOKEN_PATH,
+                        help="путь к согласию владельца (ops/avtorizacia_drive.py)")
+    parser.add_argument("--kto-zhdyom", default=OZHIDAEMYJ_AKKAUNT,
+                        help="какой аккаунт обязан стоять за согласием")
     parser.add_argument("--papka-fajl", type=Path, default=DEFAULT_FOLDER_FILE,
                         help="файл с id папки владельца")
     parser.add_argument("--tablica", default=SPREADSHEET_ID,
@@ -224,20 +310,25 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.proverit_dostup:
         try:
             folder_id = _folder_id(arguments.papka_fajl)
-            service = _service(arguments.klyuch)
+            service = _service(arguments.token)
+            akkaunt = whoami(service)
             _, can_write, name = check_access(service, folder_id)
-        except (FolderMissing, FileNotFoundError) as error:
+        except (FolderMissing, FileNotFoundError, SoglasieProtuhlo) as error:
             print(error, file=sys.stderr)
             return 5
-        print("папка %r видна роботу; писать в неё %s" % (name, "можно" if can_write else "НЕЛЬЗЯ"))
-        return 0 if can_write else 5
+        # Printed FIRST and unconditionally: "can I write" is worthless without "as whom".
+        print("согласие выдано аккаунтом: %s%s"
+              % (akkaunt, "" if akkaunt == arguments.kto_zhdyom
+                 else "  🔴 А ЖДАЛИ %s" % arguments.kto_zhdyom))
+        print("папка %r видна; писать в неё %s" % (name, "можно" if can_write else "НЕЛЬЗЯ"))
+        return 0 if can_write and akkaunt == arguments.kto_zhdyom else 5
 
     if arguments.perenesti_tablicu:
         try:
             folder_id = _folder_id(arguments.papka_fajl)
-            service = _service(arguments.klyuch)
+            service = _service(arguments.token)
             print(move_table(service, arguments.tablica, folder_id))
-        except (FolderMissing, FileNotFoundError) as error:
+        except (FolderMissing, FileNotFoundError, SoglasieProtuhlo) as error:
             print(error, file=sys.stderr)
             return 5
         return 0
@@ -262,10 +353,15 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         folder_id = _folder_id(arguments.papka_fajl)
-        service = _service(arguments.klyuch)
-        upload(service, folder_id, archive)
+        service = _service(arguments.token)
+        # 🔴 BEFORE the upload, never after: a file created under the wrong account is already
+        # in the wrong Drive, and deleting it needs that same wrong account.
+        akkaunt = proverit_akkaunt(service, arguments.kto_zhdyom)
+        print("согласие выдано аккаунтом: %s" % akkaunt)
+        file_id = upload(service, folder_id, archive)
+        print("владелец загруженного архива: %s" % vladelec_fajla(service, file_id))
         total_before, kept, deleted = rotate_drive(service, folder_id, arguments.keep)
-    except (FolderMissing, FileNotFoundError) as error:
+    except (FolderMissing, FileNotFoundError, SoglasieProtuhlo, NeTotAkkaunt) as error:
         print(error, file=sys.stderr)
         return 5
 
