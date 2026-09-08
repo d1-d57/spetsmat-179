@@ -1,0 +1,19 @@
+# The nightly database archive to the owner's Google Drive folder.  See
+# ops/vygruzka_bazy.py for why: a machine dying today loses everything except the conduit
+# spreadsheet (ops/vygruzka_v_tablicu.py) -- this is the door that leaves for the rest.
+
+[Unit]
+Description=nightly database archive to the owner's Google Drive folder
+OnFailure=spetsmat-alert@%n.service
+
+[Service]
+Type=oneshot
+Environment=TZ=UTC
+User=@USER@
+WorkingDirectory=@CHECKOUT@
+ExecStart=/usr/bin/python3 @CHECKOUT@/ops/vygruzka_bazy.py --primenit
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=@CHECKOUT@/data
