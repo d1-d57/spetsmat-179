@@ -247,7 +247,13 @@ def main(argv: list[str] | None = None) -> int:
     except (RuntimeError, FileNotFoundError, ValueError) as failure:
         print("snapshot FAILED: %s" % failure, file=sys.stderr)
         return 1
-    print("снимок: %s (%d байт)" % (archive, archive.stat().st_size))
+    # 🔴 NEVER PRINT THE ARCHIVE'S OWN NAME/PATH.  It ends in ``.db.gz``, and
+    # ``ops/opoveshchenie.py``'s own perimeter guard (``FORBIDDEN_IN_TEXT``) refuses to send
+    # ANY alert whose journal tail mentions that -- correctly, since a path is a request to
+    # fetch a snapshot.  A success line printed here lingers in the unit's journal past a
+    # LATER failure (the upload), so this line must stay clean even though it is not the
+    # line that failed.  The directory is safe to name; only the file's own name is not.
+    print("снимок: %d байт, папка %s" % (archive.stat().st_size, archive.parent))
 
     if not arguments.primenit:
         print("ПРОБА: снимок взят локально; в папку владельца ничего не загружено, "
