@@ -51,13 +51,25 @@ def test_cookie_forgery_fails():
     assert vh.rol(FakeHeaders(cookie=f"{vh.COOKIE_NAME}={forged}")) is None
 
 
-def test_entry_form_posts_to_absolute_https():
-    """The password must leave over https even when the page itself was fetched over http —
-    `marshruty()` hands `obrabotchik_vhoda` no request context, so the fix has to be an
-    address that is right regardless of which scheme served the page, not a runtime check."""
+def test_entry_form_posts_relative_and_never_pins_the_session_to_443():
+    """The form must NOT hard-code a scheme, so the visitor stays on whichever one they arrived by.
+
+    This test replaces `test_entry_form_posts_to_absolute_https` of 2026-09-08 05:40, which
+    asserted the opposite. That absolute `action` was measured on the owner's laptop
+    (заход `bystro-i-bezopasno`, 2026-09-08) to pin the WHOLE session to port 443: the POST
+    went to the https origin and the 302 answering it carries a relative `Location`, so every
+    click after the login stayed on https — 20 submissions out of 20 landed on https, against
+    20 out of 20 landing on http once the action became relative. Port 443 on this path is
+    filtered intermittently (probe of 2026-09-06: 30 successes out of 30, an hour later 3
+    timeouts out of 3), so pinning the session to it is what the owner experienced as "every
+    button takes minutes". Forcing https was never a Google requirement:
+    `ZAMYSEL-profil-bezopasnosti.md` §4 names the visible warning line as the maximum here,
+    and it is asserted by the test below.
+    """
     html = vh.obrabotchik_vhoda().decode("utf-8")
-    assert 'action="https://math-kluychiki.ru/vhod"' in html
-    assert 'action="/vhod"' not in html
+    assert 'action="/vhod"' in html
+    assert "action=\"https://" not in html
+    assert "action=\"http://" not in html
 
 
 def test_entry_form_carries_http_warning_hidden_by_default():
