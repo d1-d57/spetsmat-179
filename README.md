@@ -258,6 +258,9 @@
 
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_bekap-avtorizacia.md`** (авторизация владельца вместо сервисного аккаунта: архив базы наконец доезжает в папку на Google Диске)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_bekap-v-papku.md`** (выгрузка архива боевой базы .db.gz в папку владельца на Google Диске, рядом с таблицей кондуита)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_bystro-i-bezopasno.md`** (диагноз медленного https у владельца и решение, сохраняющее профиль безопасности Google)
