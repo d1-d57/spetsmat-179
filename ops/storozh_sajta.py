@@ -253,9 +253,20 @@ def _report_first_healthy_run(outcome: str) -> str:
     is for -- sending here too would be the same fact delivered twice through two channels.
     """
     try:
-        from ops import opoveshchenie
+        # Two contexts, two import styles.  systemd runs this file directly
+        # (`python3 @CHECKOUT@/ops/storozh_sajta.py`, matching every other unit in
+        # deploy/), which puts ops/ itself -- not its parent -- on sys.path[0], so
+        # `from ops import opoveshchenie` fails there with a real ImportError (found
+        # live, 08.09: journalctl showed exactly that on the server's first real run).
+        # Tests and any in-process caller import this module AS ``ops.storozh_sajta``,
+        # where the reverse is true.  Try the direct-script shape first since that is
+        # how production actually invokes it.
+        import opoveshchenie
     except ImportError:
-        return "first run: %s, but ops.opoveshchenie is not importable -- heartbeat not sent" % outcome
+        try:
+            from ops import opoveshchenie
+        except ImportError:
+            return "first run: %s, but opoveshchenie is not importable -- heartbeat not sent" % outcome
     try:
         opoveshchenie.send("сторож сайта поднялся впервые на этой машине, сайт %s" % outcome, kind="puls")
     except Exception as failure:  # a heartbeat must never crash the probe it is reporting on

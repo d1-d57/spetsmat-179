@@ -149,6 +149,20 @@ fi
 
 run mkdir -p "$CHECKOUT/data" "$CHECKOUT/data/backups"
 
+# ------------------------------------------------------------------ journal read access
+#
+# ops/opoveshchenie.py's own diagnosis (`--avto-diagnoz`) and its attached journal tail both
+# run `journalctl -u <unit>` AS the alerter's own user, and journald refuses that to anyone
+# outside `systemd-journal` -- silently, printing "No journal files were opened due to
+# insufficient permissions" instead of raising, so the alert still "sends" with an empty or
+# generic diagnosis and nothing here looked broken.  Found live 08.09, first real
+# provocation of `deploy/spetsmat-alert@.service` on the production server: the delivered
+# text read the honest fallback ("no exception line found") because it truly could not read
+# anything, not because there was nothing to find.
+
+say "journal read access for $SERVICE_USER"
+run usermod -aG systemd-journal "$SERVICE_USER"
+
 # ------------------------------------------------------------------------------- enable
 #
 # THE LINE THIS SCRIPT EXISTS FOR.  `systemctl enable` and not merely `start`: start makes
