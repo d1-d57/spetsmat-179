@@ -146,17 +146,29 @@ def kto(headers) -> Optional[int]:
 def obrabotchik_vhoda() -> bytes:
     """Handler for GET /vhod — entry form.
 
-    The form `action` is the ABSOLUTE `https://` address, deliberately, added
-    2026-09-08 (заход profil-bezopasnosti). `marshruty()` hands this function to the
-    neighbouring server with zero arguments (`vhod.marshruty()[path]()`), so nothing here
-    can see which scheme the current request arrived on — a redirect would need that, an
-    absolute action does not. Whatever page served the form, the browser POSTs the
-    password to `https://` and never to a bare, unencrypted `http://` origin. A redirect
-    was ruled out on purpose: port 443 is filtered on the path, intermittently, and a
-    redirect already took the whole site down once (see `deploy/README.md` / the
-    `https-i-domen` заход) — an HTML attribute cannot repeat that failure.
+    The form `action` is RELATIVE (`/vhod`), and that is the whole point of it.
+    It was an absolute `https://…` address between 2026-09-08 05:40 and 2026-09-08
+    (заход profil-bezopasnosti -> заход bystro-i-bezopasno), and that one attribute
+    silently moved the owner's entire session onto port 443: the POST went to the https
+    origin, the 302 that answers it carries a RELATIVE `Location`, so every click after
+    the login stayed on https too. Measured on the owner's laptop before this change:
+    20 submissions out of 20 landed on `https://`, median 1.271 s against 0.089 s for
+    the page before the login. Port 443 on this path is filtered INTERMITTENTLY (probe of
+    2026-09-06: 30 successes out of 30, an hour later 3 timeouts out of 3; the analyst's
+    connection did not come up at 13:20 on 2026-09-08 while the owner complained), so the
+    absolute action made a working site depend on the one thing here known to come and go.
+    A relative action leaves the visitor on whichever scheme they arrived by.
+
+    Forcing https was never a Google requirement: `ZAMYSEL-profil-bezopasnosti.md` §4 names
+    the VISIBLE WARNING LINE below as the maximum that is legitimate here, and all seven
+    clauses of that заход are closed by nginx, not by this attribute. A redirect and HSTS
+    stay ruled out for the same reason as before (`https-i-domen`): a redirect already took
+    the whole site down once. `marshruty()` hands this function to the neighbouring server
+    with zero arguments (`vhod.marshruty()[path]()`), so nothing here can see which scheme
+    the request arrived on — which is exactly why the answer must be scheme-neutral.
     The `hidden` paragraph is shown by inline JS only when `location.protocol` is
-    `http:`, so an https visitor never sees an warning that does not apply to them.
+    `http:`, so an https visitor never sees a warning that does not apply to them; the
+    link in it stays, so the owner can still choose https deliberately.
     """
     # The page is served as static HTML with embedded CSS reference.
     # See veb/static/vhod.css for styling.
@@ -178,7 +190,7 @@ def obrabotchik_vhoda() -> bytes:
     Этот адрес открыт без шифрования. Откройте
     <a href="https://math-kluychiki.ru/vhod">https://math-kluychiki.ru/vhod</a>.
   </p>
-  <form method="post" action="https://math-kluychiki.ru/vhod">
+  <form method="post" action="/vhod">
     <label for="parol">Пароль</label>
     <input type="password" id="parol" name="parol" required autocomplete="current-password">
     <button type="submit">Войти</button>
