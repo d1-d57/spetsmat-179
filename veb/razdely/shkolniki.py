@@ -277,12 +277,27 @@ def para_shk(kt, ryady, pokazat_kab=True):
         t_ = kt.prep.get(r["teacher_id"])
         g = gr_shk(kt, r)
         imya_prepoda = e(t_["name"]) if t_ else "—"
+        # 🔴 ИМЯ И КАБИНЕТ — ДВА РАЗНЫХ ФЛЕКС-РЕБЁНКА, А НЕ ОДНА СТРОКА ТЕКСТА
+        # (ПРАВКА 1). Прежде плашка кабинета была приклеена к имени преподавателя
+        # внутри одной ячейки `.dv`, и на длинных именах («Елена Мирошниченко»,
+        # «Александр Тертерян») выдавливалась за границу колонки — колонка держала
+        # фиксированную ширину, а её СОДЕРЖИМОЕ не было разбито на усекаемое имя и
+        # несжимаемую плашку. `.prep-imya` получает `text-overflow:ellipsis`,
+        # `.kab-mesto` — `flex:0 0 auto`; правило — `veb/obshchee/karkas.py`,
+        # `.para .komu .dv`.
+        # 🔴 ОБЁРТКА ОДИНАКОВА В ОБЕИХ ВЕТКАХ, И ЭТО НЕ КОСМЕТИКА. `proverit_karkas()`
+        # (`tools/sobrat_stranicu.py`, вне зоны этого захода) подставляет вместо
+        # `<select data-gost="…">` голый текст `data-gost` — БЕЗ обёртки. Обернуть
+        # `.prep-imya` только в гостевой ветке значило бы, что после сверки у гостя
+        # появляется span, которого нет у роли «organizator», — гейт каркаса краснеет
+        # на этом же расхождении (найдено первым прогоном теста, не рассуждением).
         if kt.ADMIN:
-            telo = vybor_prepoda(kt, r, sl, imya_prepoda)
+            telo = f'<span class="prep-imya">{vybor_prepoda(kt, r, sl, imya_prepoda)}</span>'
         else:
-            telo = imya_prepoda
+            telo = f'<span class="prep-imya">{imya_prepoda}</span>'
             if pokazat_kab and g and kt.kabinety_dnya[kl].get(g):
-                telo += '<span data-tolko-gost> ' + kt.kab_html(kl, g) + "</span>"
+                telo += ('<span class="kab-mesto" data-tolko-gost>'
+                         + kt.kab_html(kl, g) + "</span>")
         yacheyki.append(f'<span class="dv dv-{kl}">{telo}</span>')
     hvost = "".join(yacheyki)
     if kt.ADMIN and not kt.den:
