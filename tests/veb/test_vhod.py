@@ -51,6 +51,23 @@ def test_cookie_forgery_fails():
     assert vh.rol(FakeHeaders(cookie=f"{vh.COOKIE_NAME}={forged}")) is None
 
 
+def test_entry_form_posts_to_absolute_https():
+    """The password must leave over https even when the page itself was fetched over http —
+    `marshruty()` hands `obrabotchik_vhoda` no request context, so the fix has to be an
+    address that is right regardless of which scheme served the page, not a runtime check."""
+    html = vh.obrabotchik_vhoda().decode("utf-8")
+    assert 'action="https://math-kluychiki.ru/vhod"' in html
+    assert 'action="/vhod"' not in html
+
+
+def test_entry_form_carries_http_warning_hidden_by_default():
+    html = vh.obrabotchik_vhoda().decode("utf-8")
+    assert 'id="http-predupr"' in html
+    assert "hidden" in html
+    assert "без шифрования" in html
+    assert 'location.protocol === "http:"' in html
+
+
 def test_cookie_expiry_refuses_old_cookie(monkeypatch):
     import time
     import base64

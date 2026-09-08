@@ -144,7 +144,20 @@ def kto(headers) -> Optional[int]:
 
 
 def obrabotchik_vhoda() -> bytes:
-    """Handler for GET /vhod — entry form."""
+    """Handler for GET /vhod — entry form.
+
+    The form `action` is the ABSOLUTE `https://` address, deliberately, added
+    2026-09-08 (заход profil-bezopasnosti). `marshruty()` hands this function to the
+    neighbouring server with zero arguments (`vhod.marshruty()[path]()`), so nothing here
+    can see which scheme the current request arrived on — a redirect would need that, an
+    absolute action does not. Whatever page served the form, the browser POSTs the
+    password to `https://` and never to a bare, unencrypted `http://` origin. A redirect
+    was ruled out on purpose: port 443 is filtered on the path, intermittently, and a
+    redirect already took the whole site down once (see `deploy/README.md` / the
+    `https-i-domen` заход) — an HTML attribute cannot repeat that failure.
+    The `hidden` paragraph is shown by inline JS only when `location.protocol` is
+    `http:`, so an https visitor never sees an warning that does not apply to them.
+    """
     # The page is served as static HTML with embedded CSS reference.
     # See veb/static/vhod.css for styling.
     html_str = """<!doctype html>
@@ -161,7 +174,11 @@ def obrabotchik_vhoda() -> bytes:
   <p>Преподаватель или организатор. Без имён пользователей.</p>
 </header>
 <main>
-  <form method="post" action="/vhod">
+  <p id="http-predupr" class="note" hidden>
+    Этот адрес открыт без шифрования. Откройте
+    <a href="https://math-kluychiki.ru/vhod">https://math-kluychiki.ru/vhod</a>.
+  </p>
+  <form method="post" action="https://math-kluychiki.ru/vhod">
     <label for="parol">Пароль</label>
     <input type="password" id="parol" name="parol" required autocomplete="current-password">
     <button type="submit">Войти</button>
@@ -169,6 +186,11 @@ def obrabotchik_vhoda() -> bytes:
   <p class="note">Два уровня: преподаватель и организатор. Общие пароли из окружения.</p>
   <p class="stale">Данные обновляются при перезагрузке страницы; у других могло измениться — обновите страницу.</p>
 </main>
+<script>
+if (location.protocol === "http:") {
+  document.getElementById("http-predupr").hidden = false;
+}
+</script>
 </body>
 </html>"""
     return html_str.encode("utf-8")
