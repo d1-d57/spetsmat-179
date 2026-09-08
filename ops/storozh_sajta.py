@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import ssl
 import sys
@@ -50,7 +51,13 @@ ROOT = Path(__file__).resolve().parent.parent
 # route keeps working for whoever still uses it; it is not where the site lives now.
 HOST_FILE = ROOT / "deploy" / "ADRES-SAJTA.txt"
 ADRES_FILE = ROOT / "deploy" / "ADRES.txt"
-STATE_FILE = Path("/tmp/spetsmat-storozh-sajta.state.json")
+# $STATE_DIRECTORY is set by systemd when the unit carries StateDirectory= (see
+# deploy/spetsmat-storozh-sajta.service) -- a directory under /var/lib/ that survives both
+# activations and reboots and that ProtectSystem=strict does not lock read-only.  Falling back
+# to /tmp keeps pytest and a bare manual run working exactly as before; it is not a production
+# path any more (measured live 2026-09-08: with ProtectSystem=strict, /tmp was read-only even
+# with PrivateTmp=no, so every write there failed and every run looked like the first one ever).
+STATE_FILE = Path(os.environ.get("STATE_DIRECTORY", "/tmp")) / "spetsmat-storozh-sajta.state.json"
 
 # Content marker that must appear on OUR site and cannot appear on provider banners.
 # Per correction 1 (2026-09-04 17:41): S1 moves distribution to /raspredelenie.
@@ -236,11 +243,21 @@ def load_state() -> str:
     return ""
 
 
-def save_state(verdict_str: str) -> None:
+def save_state(verdict_str: str) -> bool:
+    """Persist the verdict for the NEXT run to compare against.  Returns whether it worked.
+
+    A failed write here is the exact defect this whole module was rewritten to fix (measured
+    live 2026-09-08: `/tmp` read-only under `ProtectSystem=strict`, 15 "first run" messages in
+    an hour): a probe that loses its memory silently is worse than one that never had any, and
+    the caller in `main()` is required to make that failure loud rather than swallow it the way
+    this function used to.
+    """
     try:
         STATE_FILE.write_text(json.dumps({"last_verdict": verdict_str}, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+        return True
+    except Exception as failure:
+        print("state write FAILED: %s -- %s (memory of this run will NOT survive to the next)" % (STATE_FILE, failure))
+        return False
 
 
 def _report_first_healthy_run(outcome: str) -> str:
@@ -307,9 +324,14 @@ def main(argv: list[str] | None = None) -> int:
 
     verdict = Verdict(checks=checks, outcome=outcome, alarm=alarm, alarm_text=alarm_text)
     print(verdict.report())
-    save_state(outcome)
+    state_saved = save_state(outcome)
+    if not state_saved:
+        # Same law this watchdog already applies to a lying alert text: an instrument that
+        # silently loses its memory is worse than one that has none.  A healthy site must not
+        # mask a broken memory -- the next run would wrongly think it is the very first one.
+        print("run degraded: site check above may say ЖИВ, but state was NOT recorded")
 
-    return 0 if verdict.passed else 1
+    return 0 if (verdict.passed and state_saved) else 1
 
 
 if __name__ == "__main__":
