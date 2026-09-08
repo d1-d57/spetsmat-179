@@ -14,12 +14,22 @@ answers them.
 EVERY SENTENCE ON THESE TWO PAGES IS CHECKED AGAINST THE CODE, NOT COPIED FROM A TEMPLATE.
 In particular: the login cookie set by `veb/server.py::_post_vhod` carries a thirty-day
 `Max-Age` (`vhod.COOKIE_MAX_AGE_SECONDS`), so it is described here as a thirty-day login
-cookie, not as a "session" cookie in the strict sense.  And the Drive scope named in
-`ops/vygruzka_bazy.py` (`SCOPES = [".../auth/drive"]`, a service account) is the full
-scope, not the narrower `drive.file` — the text below says so plainly, while describing
-what the code actually DOES with that permission (one folder, one spreadsheet, nothing
-else — `upload`, `list_archives`, `rotate_drive`, `move_table`, no other call in that
-file touches any other file).
+cookie, not as a "session" cookie in the strict sense.
+
+🔴 THE GOOGLE-DRIVE PARAGRAPH WAS REWRITTEN ONCE ALREADY, MID-заход, BECAUSE THE CODE IT
+DESCRIBES CHANGED UNDERNEATH IT.  The first draft described `ops/vygruzka_bazy.py`'s then-
+current service account (`SCOPES = [".../auth/drive"]`, the full scope).  While this заход
+was still running, the sibling заход `bekap-avtorizacia` (zone `ops/`, not this one's)
+merged into `main` and replaced that mechanism outright: `ops/vygruzka_bazy.py` now reads
+`Credentials.from_authorized_user_file` — the owner's OWN Google account, consented once
+through `ops/avtorizacia_drive.py`, not a service account at all — and that заход's own
+accepted `## ОТЧЁТ` (`zhurnal/2026-09-02_spetsmat-bot/kod_bekap-avtorizacia.md`, item C)
+records the scope it actually runs on: the NARROW `drive.file` ("The заход runs on the
+narrow scope. The wide `drive` was never taken, and the owner never had to consent
+twice."). The paragraph below was updated to match — service account language and "the
+scope is formally wide" language both removed, because both are now false about `main`.
+`ops/` stays outside this position's zone; only the PROSE here, which is squarely this
+zone's job to keep true, was touched.
 
 WHY A SEPARATE MODULE, AND WHY THIS EXTENSION POINT.  `veb/server.py` already declares
 "a section owns its own routes" (see `RAZDELY_S_MARSHRUTAMI` there) for exactly this
@@ -95,11 +105,11 @@ _TELO_PRIVACY = f"""
 <h2>Google Диск</h2>
 <p>Раз в сутки сайт делает резервную копию своей базы данных и кладёт её в отдельную
 папку на Google Диске владельца — на случай, если сервер выйдет из строя.</p>
-<p>Формально Google спрашивает у нас широкое разрешение — технически оно позволяет
-дотянуться до любого файла на Диске. По факту программа умеет только одно: класть
-архивы в одну заранее созданную владельцем папку, смотреть список файлов внутри неё
-и удалять из неё самые старые копии, оставляя примерно две последние недели. Больше
-она с Диском ничего не делает — это можно проверить по открытому коду сайта.</p>
+<p>Доступ владелец даёт лично, войдя в свой собственный Google-аккаунт, а не через
+безликого робота. Разрешение при этом узкое: программа видит только те файлы,
+которые сама туда положила, — она не может прочитать даже список остального
+содержимого этой папки, не говоря о других файлах на Диске. Раз в сутки она также
+удаляет из папки самые старые свои архивы, оставляя примерно две последние недели.</p>
 
 <h2>Кто имеет доступ к данным</h2>
 <p>Доступ к данным есть у преподавателей класса — они входят по паролю — и у
