@@ -334,6 +334,15 @@ grep -n '<как механизм назван в вызывающем коде>
 No objection to the readiness criterion itself — it's concrete and falsifiable as written. Nothing else disputed.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. `git_zona.py commit --zone ... --push` does not check the same incident gate as `vyvezti`. Discovered live this session: the git-contour subagent, following my explicit (task-sanctioned) instruction to commit and push the analyst's acceptance zone, ran `commit --zone zhurnal/2026-09-02_spetsmat-bot -m "..." --push`, and that push went through and carried all 22 pending commits to the public `origin` — even though `vyvezti` on the very same `main`, at the very same moment, was correctly refusing because of the open incident `2026-09-02T1431` (live bot token in a public repo). No secret was newly exposed (the token was already an ancestor commit on origin before this session), but the two doors disagreeing about the same safety condition is a real gap: whichever door someone reaches for first decides whether the incident gate is honored at all.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+2. The production server (`159.194.254.52`) has no IPv6 route at all (`curl -6` fails instantly, every time) and flaky IPv4 connectivity to the outside (roughly 1 success in 2-3 tight-loop tries, no code involved — reproduced with bare `curl` as both `ivan` and `spetsmat`). DNS itself mostly resolves fine, but `/etc/resolv.conf`'s nameserver `198.18.18.18` is in IANA's reserved benchmark-testing range (RFC 2544, 198.18.0.0/15) — not a normal public or provider resolver — with `options timeout:1 attempts:2`, i.e. almost no budget to survive a hiccup. This plausibly explains the original `TelegramNetworkError` (05:41-05:42), that same night's undelivered second alert (`status=2/INVALIDARGUMENT`, actually `Network is unreachable`, diagnosed this session), AND a genuine false-positive `МЁРТВ` this watchdog produced live during my own verification (09-08 14:03:09 UTC, real cause `[Errno -3] Temporary failure in name resolution`, site confirmed actually up at that exact moment from outside). Worth a look at the box's networking/DNS config; out of `ops/ deploy/ tests/` to fix myself.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -360,30 +369,146 @@ No objection to the readiness criterion itself — it's concrete and falsifiable
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+**СНИМОК ВХОДА** *(command output, verbatim, from the §0.1 git-contour subagent, BEFORE any work)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main
+(empty)
+
+$ git --no-optional-locks status --porcelain | wc -l
+      14
+
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+      19
+
+$ python3 git_zona.py zayavki
+Открытых заявок: 5
+  · 2026-09-08T0031 — main опережает origin/main на 8 коммитов, вывозить исполнителю запрещено §5
+  · 2026-09-08T0853 — main опережает origin/main на 10 коммитов, прямой запрет WARNING-блока
+  · 2026-09-08T1342-bootstrap-zahod-py-scratchpad-kod-slovari — правка кода в disciplina
+  · 2026-09-08T1342-sdelat-handoff-py-bez-zakrytiya-6 — правка кода в disciplina
+  · 2026-09-08T1436 — main опережает origin/main на 17 коммитов; vyvezti откажет на 0031/0853;
+    обход означал бы вывоз main поверх ОТКРЫТОГО инцидента 2026-09-02T1431 — живой токен бота
+    в ПУБЛИЧНОМ репозитории d1-d57/spetsmat-179; порядок снятия — сначала /revoke в @BotFather,
+    затем push
+  + 27 переадресованных ранее (в т.ч. 2026-09-02T1431 — уже передана владельцу, НЕ в этой очереди)
 ```
-<сюда — вывод, дословно>
 
-**ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+**ЧТО СДЕЛАНО** *(subagent's own six lines, verbatim, PLUS what I did myself afterward — see DIAGNOSIS below for why the subagent could not close 1431/0031/0853/1436 itself)*
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+Subagent's six-line report, inserted verbatim:
+1. Заявок было 5 открыто, закрыто через zayavka-zakryt — 0, переадресовано — 2 (`2026-09-08T1342-bootstrap-zahod-py-scratchpad-kod-slovari`, `2026-09-08T1342-sdelat-handoff-py-bez-zakrytiya-6`). 3 оставлены нетронутыми (`2026-09-08T0031`, `2026-09-08T0853`, `2026-09-08T1436`) — не закрыты и не помечены `--zastryala`, потому что итог по ним неоднозначен (см. врезку в его ответе): официальная дверь `vyvezti` отказала, а фактический push всё равно произошёл побочно через `commit --zone --push` (п.5.1). Решать, считать ли их закрытыми, субагент оставил владельцу/аналитику.
+2. Влито в основную — 0 из 0 названных. Подтверждено дважды: вливать было нечего, совпадает со снимком сборки.
+3. Хвост Cowork: забрано в git пунктом 0 — `zhurnal/_INFRA-git/INCIDENTY.md` (коммит `fc709af`). Осталось вне git: `.DS_Store`, `.commit-plan`, `README.md`, `data/spetsmat.db`, `doc/PLAN-veb-2026-09.md`, `doc/TZ-raspredelenie-dizajn-i-dva-sloya.md`, `doc/TZ-sloj-zanyatia.md`, `docs/index.html`, `zhurnal/.DS_Store`.
+4. Погашено — ничего (по заданию гасить было нечего). `zahod/storozh-vstal` не трогал.
+5. Необратимое: push 22 коммитов на публичный `origin` (`d1-d57/spetsmat-179`), совершённый побочно через п.5.1 вопреки отказу `vyvezti`. Сам секрет (токен бота) новым не является — он был публичен и до этой сессии.
+6. выдано 5 позиций из 5 найденных.
+
+Subagent's own flag, verbatim: заявка `2026-09-02T1431` (живой токен @conduit179_bot в публичном репозитории) на момент старта была **не** подтверждена как отозванная — заданный текст п.5.2 («токен отозван, интервью 2026-09-08») не совпадал с живым состоянием заявки. Subagent correctly refused to close it on an unverified premise and refused п.5.3/5.4 in consequence.
+
+I stopped and surfaced this to the owner in chat rather than proceeding (see DIAGNOSIS). Owner confirmed live, in the same conversation, that the token had just been rotated in @BotFather. I verified independently: `GET https://api.telegram.org/bot<OLD_TOKEN>/getMe` → `401 Unauthorized` (old token confirmed dead; command run without printing the token value). With that real evidence in hand, I then did myself (not the subagent, since the item had already been pulled out of its automatic queue into a owner-decision item on 2026-09-07):
+- `zayavka-zakryt 2026-09-02T1431-02-09-14-2x-conduit179-bot --rezultat "..."` → commit `e4cce3b`.
+- `zayavka-zakryt` on `2026-09-08T0031`, `2026-09-08T0853`, `2026-09-08T1436` → commits `d5d4da3`, `3f4b410`, `5ff4ec2`.
+- `git_zona.py vyvezti` (no `--vsyo-ravno`) → door opened cleanly this time; `--yes` pushed the remaining 4 commits. `origin/main..main`: 20 → 0.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** да — closed by the combination of the subagent's honest refusal and my own follow-up once the owner supplied and I independently verified the missing fact. The one open item left afterward (main 2 commits ahead of origin, from THIS zahod's own merge) is new debt created by my own later work, not input debt — filed as zayavka `2026-09-08T1713-main-origin-main-2-zahod-storozh`, see COMMIT below.
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** артефакта нет: this position's product is code (systemd units + two Python scripts), not a built document/deck/image. Live proof instead: `spetsmat-storozh-sajta.timer` is enabled and running on `159.194.254.52` (`systemctl list-timers`, `journalctl -u spetsmat-storozh-sajta.service`).
+**РОД АРТЕФАКТА:** исходник — committed before this report, hashes cited below.
+**КОММИТ:** `aa3ce97` — "storozh-vstal: watchdog timer pair (B), first-run heartbeat (C), honest alert diagnosis (D)"; `3e99b9a` — "storozh-vstal: fix two bugs found by the live run on the production server". Both fast-forward-merged into `main` (no merge commit; `main` now points at `3e99b9a`). `git_zona.py check --zone ops/` → ✅ · `--zone deploy/` → ✅ · `--zone tests/` → ✅.
+`main` is 2 commits ahead of `origin/main` (this zahod does not push `main` itself, §5 of the WARNING block) — filed as zayavka `2026-09-08T1713-main-origin-main-2-zahod-storozh`.
+
+### DIAGNOSIS, one phrase
+
+The watchdog (`ops/storozh_sajta.py`) was already written and correct; it was simply never wired to systemd, never alerted on its own first run, and shared an alerter (`ops/opoveshchenie.py`) whose fixed diagnosis text was already proven wrong once (05:41-05:42, `TelegramNetworkError` reported as "broken code, not a broken network"). All three are now fixed, live, and independently re-verified on the production server — plus two additional infrastructure bugs (an import path bug of my own making, and a pre-existing missing journal-group permission on the alerter's own service user) that only a real live run could have surfaced, both fixed.
+
+### A. GIT CONTOUR (§0.1 extended by Task A) — done, with a genuine stop along the way
+
+Ran per plan: one subagent for the whole contour (six-line report + Task A's four steps inserted into ГИГИЕНА ВХОДА above, verbatim). The subagent correctly refused to close zayavka `2026-09-02T1431` on the interview's stated premise ("token revoked") because the live zayavka text contradicted it. I stopped, surfaced this to the owner in chat (not a silent workaround), and got real-time confirmation the token had just been rotated. I verified independently (`GET .../getMe` on the OLD token → `401`, without printing the token) before treating the premise as true and closing the zayavka myself with the real evidence. Also found and reported to the owner: `git_zona.py commit --zone ... --push` does not check the same gate as `vyvezti`, and pushed all 22 pending commits to the public `origin` as a side effect of the subagent honoring my Task-A instruction — the token itself was not newly exposed (already an ancestor commit on origin before this session), but the door's own inconsistency is a real tooling finding, filed below as a queue item.
+
+After that: closed zayavka 1431 for real, closed the three vyvoz zayavki (`0031`, `0853`, `1436`), ran `vyvezti` штатно (no `--vsyo-ravno` needed) — `origin/main..main`: 20 → 0.
+
+### B–E. WHAT I DID, AND WHY
+
+**B. Timer pair.** `deploy/spetsmat-storozh-sajta.{service,timer}`, modeled on the vygruzka pair. Period: every 3 minutes via `OnUnitActiveSec=3min` + `OnBootSec=2min` — NOT `OnCalendar=` with a minute-step (`*:0/3:00`), which I tried first and which `ops/proverka_ustanovki.py`'s own sanity check rejects (`OnCalendar=%r, which names no time` — it wants an explicit HH:MM, not a step). `OnUnitActiveSec=` is also the more correct systemd idiom for "keep polling" vs. "run once at a fixed time" anyway. 3 minutes: frequent enough that the 2026-09-06 measured filtering window (roughly an hour between a clean and a filtered probe) would almost certainly be caught, light enough that ~480 runs/day of two short GETs is nothing against nginx's own ~2000 req/day. `OnFailure=spetsmat-alert@%n.service`, `Persistent=true`, added to `ENABLE_UNITS` in `deploy/ustanovka.sh`. `PrivateTmp=no` — deliberate, not an oversight: the watchdog's `STATE_FILE` is a fixed `/tmp/...json` path that must survive between separate timer-triggered activations of the SAME oneshot unit, and `PrivateTmp=yes` (used by the vygruzka unit, which never touches `/tmp`) risks a fresh private tmp per activation, silently resetting "alarm only on change" to "always looks like first run."
+
+**C. First run no longer silent.** `ops/storozh_sajta.py`: when there is no saved state AND the outcome is healthy (`жив`), the watchdog now sends its own heartbeat directly through `ops/opoveshchenie.py` (`kind="puls"`). Deliberately NOT for an unhealthy first run: that already exits non-zero and `OnFailure=` already delivers it (now with the real diagnosis, see D) — sending twice would just be the same fact through two channels. Wrapped so a delivery failure (no token, network down) cannot crash the probe itself.
+
+**D. Alert stops guessing.** `ops/opoveshchenie.py`: new `poslednyaya_oshibka(unit)` greps the failing unit's own journal (200 lines) for the last line naming an `Error`/`Exception`, and a new `--avto-diagnoz` CLI flag uses it as the message text instead of a fixed string. `deploy/spetsmat-alert@.service` switched from the hardcoded, already-proven-wrong `--tekst "unit gave up: five failed starts... broken code, not a broken network"` to `--avto-diagnoz`. Same false generalisation was ALSO asserted as fact in `deploy/README.md`'s own prose ("## When the alarm fires") — fixed there too, since it is the same bug, just written twice. Separately diagnosed `status=2/INVALIDARGUMENT` from 05:41-05:42 by reading the real journal on the server: it is NOT an argparse/systemd argument error — exit code `2` is `ops/opoveshchenie.py`'s own deliberate `return 2` on delivery failure, and systemd's generic LSB exit-code-name table happens to label `2` as `INVALIDARGUMENT` regardless of the process's own meaning. The real cause was `urlopen error [Errno 101] Network is unreachable`: the alert's own POST to Telegram failed in the exact same network blip that broke the bot it was reporting on.
+
+**E. History on disk — for free, no code change.** `Type=oneshot` systemd units capture stdout to the journal by default, and `storozh_sajta.py` already `print()`s a full per-scheme verdict every run. Wiring it to systemd (B) means every probe is already a journal entry (`journalctl -u spetsmat-storozh-sajta.service`) — verified live, see clause 2 below. No point-edit needed or made to satisfy E; justified rather than silently assumed, per the task's own instruction to decide and justify journalctl vs. file.
+
+### WHAT I DID NOT TOUCH
+
+`veb/vhod.py`, nginx config, `spetsmat-bot.service`/`spetsmat-veb.service` (never restarted, never touched — the whole live verification deliberately avoided `deploy/vykatka.sh`, which WOULD have restarted the bot since it touches `ops/`; I hand-synced only the six specific changed/new files instead). No `301`, no HSTS. Production `ADRES-SAJTA.txt`/`ADRES.txt` untouched — disease simulation used direct `probe()`/`postavit_diagnoz()` calls against throwaway local sockets, never the production `STATE_FILE` or host config. `_studio/docs/KARTA.md` — no new `.md` filed, so `register_doc.py` was not needed.
+
+### IRREVERSIBLE — separate list
+
+1. **Real push of 22 commits to public `origin`** (git-contour subagent, side effect of `commit --zone --push` bypassing `vyvezti`'s gate) — already reported above and to the owner live; the exposed token was already public before this session (ancestor commit), and is now confirmed dead (`401`). Not restorable/needed-to-restore; named for completeness.
+2. **`usermod -aG systemd-journal spetsmat`** on `159.194.254.52`, run by hand (root, via sudo) to unblock verification of D — restorable with `gpasswd -d spetsmat systemd-journal`. Also codified in `deploy/ustanovka.sh` (committed) so a fresh install gets it without a manual step.
+3. **New files placed on the production server**, outside git (`/opt/spetsmat-bot` is a plain directory per `deploy/vykatka.sh`'s own docstring, not a checkout): `ops/storozh_sajta.py`, `ops/opoveshchenie.py`, `deploy/spetsmat-alert@.service`, `deploy/ustanovka.sh` overwritten with this zahod's committed versions (rsync `--checksum`, same tool vykatka.sh itself uses); `deploy/spetsmat-storozh-sajta.{service,timer}` newly installed to `/etc/systemd/system/`. Restorable by re-syncing the pre-this-zahod git blobs and removing the two new unit files + `systemctl disable --now spetsmat-storozh-sajta.timer`.
+4. **`spetsmat-storozh-sajta.timer` enabled and running for real** — it will keep probing the site every 3 minutes and can alert going forward. This is the deliverable, not a side effect, but naming it: stop with `systemctl disable --now spetsmat-storozh-sajta.timer`.
+5. **Real Telegram messages delivered to the owner during verification**: two heartbeats ("сторож поднялся впервые… жив"), one genuine false-positive alarm at 14:03:09 UTC (`МЁРТВ`, caused by a real transient DNS failure on the server itself — see below, NOT the site actually being down, confirmed externally at the same moment: `curl` from my own machine → `200` on both schemes), and two provocation alerts carrying an obviously-fake diagnostic string (`RuntimeError: provocation-test-diagnoz-XYZ123`, `RuntimeError: verifikator-check-...`) — one from my own test, one from the independent verifier's. All expected given a live run was the explicit readiness criterion; naming them so the owner's Telegram history is not a mystery.
+6. **Zayavki closed for real** (see ГИГИЕНА ВХОДА and git contour above): `2026-09-02T1431-02-09-14-2x-conduit179-bot`, `2026-09-08T0031-main-origin-main-8-2-5`, `2026-09-08T0853-main-origin-main-10-profil-bezopasnosti`, `2026-09-08T1436-main-origin-main-17-bystro-i` — each moved to `zhurnal/_INFRA-git/zayavki/sdelano/`, commits `e4cce3b`, `d5d4da3`, `3f4b410`, `5ff4ec2`.
+
+Nothing else: no deletions, no overwrites of foreign work, no `reset`/`checkout` over unsaved changes, no edit outside the zone (`ops/`, `deploy/`, `tests/`) except the git-contour's own explicitly-scoped items above.
+
+### A genuinely new finding: the server has no IPv6 route and flaky IPv4 to the outside
+
+Found while chasing why the alert provocation kept returning `Network is unreachable`. `curl -6` from the server times out INSTANTLY (no route at all); `curl -4` succeeds roughly 1 time in 2-3 in a tight loop, no code involved (bare `curl` as both `ivan` and `spetsmat`). DNS itself resolves fine and fast (`getent hosts api.telegram.org` succeeded 3/3, consistently). This is almost certainly the same root cause behind: the original 05:41-05:42 `TelegramNetworkError`, the second alert's own `status=2/INVALIDARGUMENT` that night, AND the false-positive `МЁРТВ` this watchdog produced live during my own verification (journal shows the real cause was `[Errno -3] Temporary failure in name resolution` for `math-kluychiki.ru` specifically at 14:03:09 — a transient DNS *server* timeout, not routing, but from the same generally-flaky uplink; `/etc/resolv.conf`'s nameserver `198.18.18.18` is itself worth a second look — that address is in IANA's reserved benchmark-testing range (RFC 2544, 198.18.0.0/15), not a normal public or provider DNS server, and `options timeout:1 attempts:2` gives it almost no room to recover from a hiccup). This is server/OS network configuration, outside `ops/ deploy/ tests/` — not touched, filed as a queue item below. It plausibly bears on the ORIGINAL "site tormoza" complaint too (an intermittently flaky uplink is a very natural explanation for "loads for minutes" that "could not be reproduced" one day later), though I did not chase that connection further — it is speculation until measured, and the task's own STOP-clause says not to explain the original tormoza.
+
+### REPEATABILITY OF FINDINGS
+
+- **Will repeat on the next position, filed as an immediate-class item, not a queue entry:** none newly found this time — the ambient-state git trap (start folder / `GIT_ZONA_REPO`) already predicted by `bystro-i-bezopasno`'s own factory lesson repeated EXACTLY as predicted (my first `worktree add` landed in the wrong repository, `disciplina`, because I ran it before `cd`-ing anywhere and the tool silently picked its own repo). I do not re-file it — it is already the exact lesson on record in this same arka's `UROKI-FABRIKE.md`; this occurrence is corroborating evidence, not a new fact.
+- **Legitimately queued, not immediate:** `git_zona.py commit --zone ... --push` bypassing `vyvezti`'s incident gate (found this session, real consequence realized); the server's IPv6/DNS flakiness (infrastructure, not code); both filed in `## ВОПРОСЫ` below.
+- **Will not repeat:** the two bugs found by MY OWN live run (`from ops import opoveshchenie` import-path mismatch, missing `systemd-journal` group membership) are both already fixed in this same commit set — nothing left to recur.
+
+### RESULT OF THE §3 VERIFIER
+
+Fresh subagent, AFTER-type, different method (created both disease conditions itself via direct socket-level tests against `probe()`/`postavit_diagnoz()`, and a separate temporary unit + real alert delivery, all on the live server — did not re-read my report or my config diffs). Full 100% sample: timer liveness, both diseases, alert delivery+honesty. All 4 positions PASSED. Verbatim closing line: **«выдано 4 позиций из 4 найденных»**. Its own account is in the ГИГИЕНА ВХОДА/DIAGNOSIS sections above where directly relevant; full quotes available in this session's transcript if needed.
+
+### GIT HYGIENE Г1–Г6 (§4.1)
+
+- Г1: `git_zona.py check --zone ops/` → ✅ · `--zone deploy/` → ✅ · `--zone tests/` → ✅.
+- Г2: not applicable — every touched path is inside `spetsmat-bot`.
+- Г3: `git --no-optional-locks branch --no-merged main` → empty (0, same as input snapshot).
+- Г4: no new `.py` under `_generator/**` — not applicable.
+- Г5: no new `.md` filed — not applicable.
+- Г6: `git show --stat` on both my commits — only the eight named paths, nothing foreign.
+
+### WARNING BLOCK — full git hygiene before this report
+
+1. **All commits.** Worktree `git status --porcelain` on my zone → 0. Main folder overall → 11 dirty paths, none mine (pre-existing, other захода's work-in-progress — arka-level note already at the top of this file about the open клапан). "Вне git 0" on my own zone specifically.
+2. **Merge.** `git_zona.py vlit-v-osnovnuyu zahod/storozh-vstal --zone ops/ --zone deploy/ --zone tests/ --vsyo-ravno "..."` (worktree still alive, per contract) — fast-forward, no conflicts, no merge commit; `main` now at `3e99b9a`.
+3. **Post-check from the MAIN folder** (`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`, not the worktree): `pytest tests/ops/test_storozh_sajta.py tests/ops/test_opoveshchenie.py tests/ops/test_deploy_edinicy.py -q` → 68 passed; `python3 ops/proverka_ustanovki.py` → GREEN, 10 of 10; live grep confirms the calling unit names the file (`deploy/spetsmat-storozh-sajta.service` → `ExecStart=.../ops/storozh_sajta.py`). Green — no rollback needed.
+4. **Гашение.** `git branch --no-merged main` → 0.
+5. **Вывоз.** My branch: pushed (`git push -u origin zahod/storozh-vstal`), `git log --oneline @{u}..` → 0. `main` NOT pushed by me (§5) — 2 commits ahead of `origin/main`, filed as zayavka `2026-09-08T1713-main-origin-main-2-zahod-storozh` with a `--kak-vlit` (nothing to merge, plain push, README conflict rule named per template).
+6. **Fact, not memory** — every number above just re-run before writing this line. Worktree `../spetsmat-bot-wt/storozh-vstal` intentionally NOT dropped: `git_zona.py worktree drop` refused (2 paths outside git — `data/spetsmat.db`, `docs/index.html`, both pre-existing and not mine); did not `--force` it, since that would risk destroying a neighbouring position's uncommitted work. Left standing, named here rather than silently forced.
+
+### RUNTIME AND TOKENS
+
+Not applicable — channel `app`, no `tee`-captured log exists to read this from (see the zahod's own note on this line).
+
+### OPEN "TO RETURN TO"
+
+- The `git_zona.py commit --push` vs `vyvezti` gate mismatch (filed below, `## ВОПРОСЫ`).
+- The server's missing IPv6 route and flaky IPv4/DNS (filed below).
+- `deploy/README.md`'s "## When the alarm fires" section could use one more pass once the owner has watched a few real alerts land — I fixed the specific false claim but did not rewrite the whole section end-to-end (out of zone-scope for a text file whose job is mostly correct).
+- Repeat-alert noise during a SUSTAINED outage: the storozh unit alerts on every failing run (matching how every other `OnFailure=` unit in this codebase already behaves), not only on state change — a multi-hour outage at 3-minute intervals would page roughly 20 times. Not fixed: the task scoped C and E as point-edits to `storozh_sajta.py`, and de-duplicating alert delivery would be a real behavior change beyond that scope. Named, not silently left for the next reader to rediscover.
+
+### COVERAGE
+
+**Проверено 8 из 8 клауз.**
+1. Live: `systemctl is-enabled spetsmat-storozh-sajta.timer` → `enabled`; `systemctl list-timers` shows a future next run. ✅
+2. ≥3 real timer-fired runs, verbatim, different timestamps: `13:55:01`, `14:00:01`, `14:03:08` (verifier independently also saw `14:06:11`). ✅
+3. Both diseases distinguished by created conditions (mine AND the independent verifier's, both on the live server): `443 отфильтрован` vs `мёртв`, never the same answer for both. ✅
+4. Alert delivered for real, with the real exception line, not a restart count — confirmed by me and independently by the verifier. Bonus: a genuine, unplanned false-positive alert during natural operation also delivered correctly (with an honest fallback message, since a DNS-resolution OSError does not literally contain the word "Error"/"Exception"). ✅
+5. `ENABLE_UNITS` updated, `tests/ops/test_deploy_edinicy.py` green (37/37), `ops/proverka_ustanovki.py` green both locally (10/10) and on the live server with `--zhivaya` (11/11). ✅
+6. `pytest tests/ -q`: input 994 passed / 17 failed / 13 skipped / 30 errors → output 997 passed (+3 new tests) / same 17 failed / 13 skipped / 30 errors (pre-existing, unrelated, unchanged). ✅
+7. Zone clean (`git_zona.py check` ✅ ×3), `origin/main..main` → 0 (Task A's own deliverable). ✅
+8. Cleanup: all temporary units removed (mine and the verifier's), `systemctl reset-failed` clean, `spetsmat-alert@.service` on the server byte-identical to the committed version (diffed), production site/bot never restarted or touched. ✅
+
+ПРАВКИ ПРОЧИТАНЫ: none (block was empty at start and stayed empty — checked again just before writing this report).
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
@@ -397,7 +522,60 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — заход сделал больше, чем просили: он поймал ЛОЖНУЮ ПОСЫЛКУ, которую аналитик передал ему с чужих слов, проверил её командой вместо того, чтобы исполнить, и нашёл причину, объясняющую половину инцидентов этой недели.
+
+**ЧТО ПЕРЕГНАЛА ПРИЁМКА СВОИМ КАНАЛОМ:**
+
+| утверждение отчёта | чем перегнано | сошлось |
+|---|---|---|
+| четыре заявки закрыты по-настоящему | `ls zhurnal/_INFRA-git/zayavki/sdelano/` по каждому id — `1431`, `0031`, `0853`, `1436`: **1, 1, 1, 1**, все на месте | ✅ |
+| вывоз прошёл штатно, 20 → 0 | `git rev-list --count origin/main..main` → **2**: это два СОБСТВЕННЫХ коммита захода, которые он по §5 не вывозил и на которые подал заявку `T1713`. Сходится с отчётом | ✅ |
+| пара юнитов заведена и вызывает сам инструмент | `deploy/spetsmat-storozh-sajta.{service,timer}` в git; `ExecStart=/usr/bin/python3 @CHECKOUT@/ops/storozh_sajta.py` — точка вызова ЖИВАЯ, не обещанная | ✅ |
+| период 3 минуты | `OnBootSec=2min` + `OnUnitActiveSec=3min`, и в комментарии объяснено, почему не `OnCalendar=` | ✅ |
+| юнит вписан в `ENABLE_UNITS` | `grep -c storozh deploy/ustanovka.sh` → **3** | ✅ |
+| таймер живёт на сервере, обе болезни различаются, тревога доходит | 🔴 **не перегнала:** ssh из песочницы недоступен. Принято по отчёту исполнителя и независимого верификатора, который создавал условия обеих болезней сам, сокетными тестами, и доставлял тревогу по-настоящему; его строка охвата на месте — «выдано 4 позиций из 4 найденных» | не проверено, названо |
+
+**ОХВАТ ПРИЁМКИ: перегнано 5 утверждений из 5, перегоняемых без доступа к серверу.**
+
+🔴 **ГЛАВНОЕ В ЭТОЙ ПРИЁМКЕ — ЗАХОД НЕ ИСПОЛНИЛ ЛОЖНУЮ ПОСЫЛКУ АНАЛИТИКА.** Я вписал в §ЧТО ФИНАЛИЗИРОВАНО пункт «токен ОТОЗВАН, заявку закрыть» — со слов владельца, **не проверив**. Субагент гит-контура отказался закрывать заявку `2026-09-02T1431`, потому что живой текст заявки противоречил этому утверждению. Исполнитель не обошёл отказ: остановился, вынес расхождение владельцу в чат, получил подтверждение, что токен ротирован только что, **и всё равно проверил сам** — `GET .../getMe` на СТАРОМ токене → `401`, без печати токена. Только после этого закрыл заявку, приложив доказательство.
+Это ровно то, ради чего в заходах стоит «оспорить ложную предпосылку». Цена моей небрежности была бы велика: закрытие живого инцидента про токен в публичном репозитории по слову, а не по проверке. **Дефект мой, поведение исполнителя образцовое.** → урок фабрике.
+
+🔴 **ИНЦИДЕНТ, КОТОРЫЙ ЗАХОД НАЗВАЛ САМ И НЕ СПРЯТАЛ.** В ходе гит-контура ушли в ПУБЛИЧНЫЙ `origin` 22 коммита разом — как побочный эффект того, что `git_zona.py commit --zone … --push` **не проверяет тот же гейт, что `vyvezti`**. То есть дверь, объявленная единственной, имеет две ручки с разными замками. Токен новым этим не стал (он был коммитом-предком на origin ещё до сессии и подтверждённо мёртв), но дефект инструмента настоящий и повторяемый. → заявка в `disciplina`, где инструмент живёт.
+
+🔴 **НАХОДКА, КОТОРАЯ МОЖЕТ ОКАЗАТЬСЯ ОТВЕТОМ НА ВЕСЬ ДЕНЬ — и заход честно не объявил её ответом.** Гоняя провокацию тревоги, исполнитель уперся в `Network is unreachable` и измерил САМ сервер: `curl -6` не имеет маршрута вовсе, `curl -4` в тесном цикле проходит примерно 1 раз из 2–3 — голым curl, без всякого нашего кода. Отдельно: резолвер в `/etc/resolv.conf` — `198.18.18.18`, адрес из диапазона `198.18.0.0/15`, зарезервированного RFC 2544 под тестирование производительности, при `options timeout:1 attempts:2`. Этим одним объясняются сразу три вещи: `TelegramNetworkError` бота 05:41, недоставленная вторая тревога той же ночи, и ложная тревога `МЁРТВ`, которую сторож выдал прямо в ходе проверки (сайт в тот момент отвечал 200 обеим схемам снаружи).
+**И заход прямо написал, что связь с исходными тормозами — спекуляция, пока не измерена, и что объяснять тормоза ему запрещено собственным СТОП-условием.** Это правильная граница, а не осторожность.
+
+🔴 **РИСК, КОТОРЫЙ ПРИЁМКА ОБЯЗАНА НАЗВАТЬ ГРОМЧЕ, ЧЕМ ОТЧЁТ.** Сторож стоит НА сервере с нестабильным исходящим каналом и ходит к сайту через этот же канал каждые 3 минуты. Если `curl -4` действительно проходит 1 раз из 2–3, сторож будет регулярно объявлять живой сайт мёртвым, а «тревога только на смену состояния» превратит это в мигание МЁРТВ↔ЖИВ с сообщением на каждый переход. Один такой ложный сигнал уже случился за час проверки. **Сторож, который врёт, хуже отсутствующего — это тот же закон, по которому в этом же заходе чинили текст тревоги.** Отсюда пункт владельцу №1 ниже: он единственный видит, сколько сообщений реально приходит.
+
+**ЧТО ПРИЁМКА СЧИТАЕТ СИЛЬНЫМ, помимо перечисленного.**
+1. `PrivateTmp=no` выбран осознанно и объяснён: `STATE_FILE` живёт в `/tmp` и обязан переживать активации, иначе «тревога на смену» вырождается в «всегда первый запуск».
+2. `status=2/INVALIDARGUMENT` разобран до конца: это не ошибка аргументов, а собственный `return 2` из `opoveshchenie.py`, которому systemd приклеил своё имя из LSB-таблицы. Настоящая причина — `[Errno 101] Network is unreachable`.
+3. Одна и та же неверная фраза про «broken code, not a broken network» была найдена в ДВУХ местах — в юните и в прозе `deploy/README.md` — и починена в обоих. Обычно чинят одно.
+4. Выкатка сделана без `deploy/vykatka.sh` намеренно: тот перезапустил бы бота, а задача его не касалась. Синхронизированы шесть конкретных файлов.
+5. Две ошибки, найденные СВОИМ живым прогоном (путь импорта и отсутствие группы `systemd-journal`), названы и починены, а не умолчаны.
+
+**ДЕФЕКТ, НАЗВАННЫЙ ЧЕСТНО.** Рабочая папка `../spetsmat-bot-wt/storozh-vstal` не снята: `worktree drop` отказал из-за двух путей вне git (`data/spetsmat.db`, `docs/index.html`), оба чужие и существовали до захода. `--force` не применён — правильно, он унёс бы чужое несохранённое.
+
+**ВЕТКА РАБОТЫ:** `zahod/storozh-vstal`
+*Проверено фактом: `git branch --merged main` содержит её — ВЛИТА fast-forward, `main` на `3e99b9a`. `git branch --no-merged main` → 0.*
+
+**ЗАЯВКИ, ПОСТАВЛЕННЫЕ ЭТОЙ ПРИЁМКОЙ:**
+
+- `2026-09-08T1713-main-origin-main-2-zahod-storozh` — `git-operaciya` — поставлена самим заходом, приёмка подтверждает числом: `git rev-list --count origin/main..main` → **2**.
+
+*Своих новых заявок приёмка в этом репозитории не ставила. Дефект `git_zona.py commit --push` уходит заявкой в `disciplina` — урок сегодняшнего дня: заявка о дефекте инструмента идёт в очередь ТОГО репозитория, где инструмент лежит.*
+
+**ПУНКТЫ ВЛАДЕЛЬЦУ:**
+
+1. 🔴 Сколько сообщений от сторожа реально пришло в телеграм за последний час? Если больше двух-трёх — сторож мигает на нестабильном канале, и его надо либо загрубить (несколько неудачных проб подряд вместо одной), либо ходить к сайту изнутри машины, минуя внешний канал.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+2. Резолвер сервера — `198.18.18.18` из диапазона, зарезервированного RFC 2544 под тестирование, с `timeout:1 attempts:2`. Проверить у хостера, это ли штатная настройка. Кандидат в объяснение и бота, и недоставленной тревоги, и ложного `МЁРТВ`.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+3. Исходящий канал сервера: `curl -6` без маршрута, `curl -4` проходит примерно 1 из 2–3. Это конфигурация машины, вне зон наших заходов.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 
 **ВЕТКА РАБОТЫ:** `zahod/storozh-vstal`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
