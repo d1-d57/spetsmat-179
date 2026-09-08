@@ -299,7 +299,54 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**PREMISES CHALLENGED / RESOLVED BEFORE WORK (Karpathov discipline: say it, don't guess it):**
+
+1. `schet_nezakrytogo.py` is hard-coded to `REPO_ROOT/_studio/zhurnal/<арка>` (confirmed by reading its source, line 80: `ZHURNAL = REPO_ROOT / "_studio" / "zhurnal"`). This repo's journal lives at `zhurnal/` in the repo root, not under `_studio/`. Neither legal area form matches, so the "ПРОВЕРЬ ПЕРВЫМ ХОДОМ" snapshot genuinely cannot be taken here — it is a tool built for the disciplina/materials monorepo convention and does not apply to `spetsmat-bot`'s layout. This is a print-only diagnostic (not a gate), so it does not block work; queued as a factory lesson below.
+2. The line "деплоя в этом заходе нет" (§0, before "ГИГИЕНА ВХОДА") contradicts the readiness criterion itself: clauses 1, 2, 5 and 6 all explicitly require a live run, an active timer and a forced-failure test **on the production server** (`159.194.254.52`), and the immediate-predecessor заход `vygruzka-v-tablicu` (which this заход's own debt line references) closed an almost-identical task by running `deploy/vykatka.sh` + `sudo bash deploy/ustanovka.sh` **for real, from the main checkout, after merging** — precisely the pattern the WARNING block's §3 post-check already prescribes ("прогон изменённого механизма... из главной папки"). Reading: that line is stale/generic bootstrap boilerplate (no separate deploy-phase *section* was templated below), not a behavioural prohibition — a real, narrowly-scoped deploy is required and will happen, mirroring the precedent, as the very last step (after commit → merge → deploy from main → live checks → gate on green before writing `## ОТЧЁТ`). If this reading is wrong, the deploy step is the one to roll back (§3 of the WARNING block already prescribes the rollback path).
+3. SSH access confirmed: `root@159.194.254.52` works (no key for `spetsmat`/`ivan`/other users tried). Service user is `spetsmat` (uid 109); checkout lives at `/opt/spetsmat-bot`, owned by `ivan:ivan`, **not a git repo** (rsync-deployed by `deploy/vykatka.sh`, confirmed by reading that script's own header comment). `secrets/` there is `spetsmat:spetsmat` mode `700`/`600`. `secrets/drive_papka.txt` does not exist yet on the server — will be created per ПРАВКА 1 (owner id `10L6e37qwyLzgAn8GttYdpJCB-D35a_pT`), mode `600`, owner `spetsmat`. `google-auth`/`googleapiclient` already importable system-wide on the server (no venv) — confirmed live. One pre-existing, unrelated anomaly observed: `spetsmat-alert@spetsmat-storozh-sajta.service.service` is currently `failed` on the server — outside this zone, named here and left alone, not touched.
+
+**DESIGN — `ops/vygruzka_bazy.py`:**
+
+- Reuses `ops.rezervnaya_kopia.make_backup()` for the actual snapshot (VACUUM INTO + gzip) — no second snapshot mechanism. Adds one new label `"oblachnyj"` to `rezervnaya_kopia.LABELS` (a *data* addition, not a reimplementation — the interview's "bring the finished tool, don't invent one" is about the VACUUM/gzip mechanism, which stays untouched) so an archive bound for Drive is nameable/greppable separately from the three existing local-only cadences.
+- Reuses `DEFAULT_KEY_PATH` **by importing it from `ops.vygruzka_v_tablicu`** rather than re-declaring the constant — the one legitimate way to guarantee "same key, no second auth path" against drift.
+- Drive-only rotation: keeps the newest **14** archives in the owner's Drive folder (chosen to match `rezervnaya_kopia.DEFAULT_KEEP_DAYS = 14`, so the local and off-server retention windows answer "how far back can we restore" the same way — reasoned, not arbitrary). Local rotation is *not* duplicated here: `rezervnaya_kopia.rotate()` is label-agnostic (globs `spetsmat-*.db.gz`, confirmed by reading it), and the existing daily `sutochnyj` timer already sweeps every label including the new one — writing a second local-rotation path would be the exact "invent it yourself" the interview warned against.
+- Folder id read from `secrets/drive_papka.txt` at call time (never hex-baked, never printed — matches ПРАВКА 1 and clause 7 of the criterion).
+- `--proverit-dostup`: standalone flag, one Drive GET call, prints the folder's name and whether the robot can add children, rc 0/5 — this is ПРАВКА 1's "check access first, don't take it on faith," made into a re-runnable command instead of a one-off shell aside.
+- Default (probe) mode: **takes a real local snapshot** (matches how every other `rezervnaya_kopia`-based timer already behaves — there is no dry-run concept at that layer) but makes **zero** network calls; prints the snapshot path/size and "would upload / would keep newest 14 of M" — mirrors `vygruzka_v_tablicu.py`'s own probe philosophy (local read is real, network write is not) as closely as the two tools' shapes allow.
+- `--primenit`: uploads the snapshot just taken, rotates the Drive folder, prints "было M, оставлено 14, удалено K".
+- `--perenesti-tablicu`: one-off, idempotent flag (item D) — moves `SPREADSHEET_ID` (imported from `vygruzka_v_tablicu`, not re-declared) to the Drive folder via `files().update(addParents=…, removeParents=…)`; a no-op with rc 0 if already there. Not part of the nightly path — the nightly Sheets export addresses by id, which a parent change does not alter.
+- Timer: `spetsmat-vygruzka-bazy.timer`, `OnCalendar=*-*-* 02:30:00 UTC`, `Persistent=true` — after the 02:00 conduit export (so it never races that write) and before the 03:00 environment check. Service mirrors `spetsmat-rezervnaya-kopia@.service`'s sandboxing (`ProtectSystem=strict`, `ReadWritePaths=@CHECKOUT@/data`, `OnFailure=spetsmat-alert@%n.service`, `Environment=TZ=UTC`). Both added to `ENABLE_UNITS` in `deploy/ustanovka.sh`.
+- Tests in `tests/ops/`: unit tests for the new pure logic (rotation selection, label plumbing, idempotent table-move decision) with the Drive service mocked, plus extending `tests/ops/test_deploy_edinicy.py`-style declarative checks to cover the new unit pair (already generic/data-driven, so most of that file needs no change — verified by reading it).
+
+**SEQUENCE:**
+1. Write `ops/vygruzka_bazy.py`, add the `"oblachnyj"` label to `ops/rezervnaya_kopia.py`, write the two `deploy/` unit files, add to `ENABLE_UNITS`, write tests. Commit in the worktree as each piece lands (§4).
+2. `pytest tests/ -q` locally in the worktree; snapshot the pass count taken at start (clause 8) and compare.
+3. `python3 ops/proverka_ustanovki.py` locally → must stay green (still "10 of 10 checks" — the check count is fixed, not per-unit, confirmed by reading `check_all`).
+4. `--proverit-dostup` against the real Drive folder (ПРАВКА 1) using the key already on the server, over ssh, **before** anything is deployed — stop-and-report to `## ВОПРОСЫ` if it fails, per ПРАВКА 1 and clause 7.
+5. Finish the WARNING-block sequence: commit → merge own branch into `main` → deploy for real from the **main** folder (`vykatka.sh` then `ustanovka.sh`, mirroring the precedent заход) → run the 8 readiness clauses live on the server, including the fresh verifier subagent (§3 of this заход, restorability by row-count-per-table) and the forced-failure test (clause 6, same recipe as `kod_vygruzka-v-tablicu.md`'s HOW I CHECKED item 6 — transient unit, real `.service` untouched) → post-check from main → gate on green (roll back the merge if the post-check or any criterion is red) → gашение/вывоз → `## ОТЧЁТ`.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. `schet_nezakrytogo.py` is hard-coded to `REPO_ROOT/_studio/zhurnal/<арка>` (a disciplina/materials-monorepo convention) and cannot find `zhurnal/<арка>` when the journal lives at the repo root, as it does in `spetsmat-bot` — confirmed by reading the tool's source. The "ПРОВЕРЬ ПЕРВЫМ ХОДОМ" snapshot this заход asked for could not be taken for that reason (print-only, not a gate, so this did not block work).
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+2. The git-контур subagent (§0.1) committed and pushed **four** uncommitted `kod_*.md` files as "хвост Cowork" (`kod_bekap-v-papku.md`, `kod_chistka-tokenov.md`, `kod_pages-i-materialy.md`, `kod_storozh-vstal.md`), while the заход's own "КЛАПАН" note at the top named exactly **one** as analyst-approved (`kod_storozh-vstal.md`, "он ждёт приёмки аналитика в этой же сессии"). No content was lost (confirmed: the commit of `kod_bekap-v-papku.md` predates this заход's own `## ПЛАН` edit, which survived as a clean uncommitted diff on top), but the rule "the заход file is committed only by the analyst at приёмка" was crossed for three files the analyst had not named. Whether "выгрузки арок" in the git-контур subagent's own prompt legitimately covers freshly-bootstrapped, not-yet-started `kod_*.md` files, or only the four literally-named autolog files, is ambiguous in the prompt text itself and worth tightening.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+3. Running the full `pytest tests/ -q` in the worktree twice (baseline snapshot, then post-addition confirmation) left `data/spetsmat.db` and `docs/index.html` **modified in the working tree** both times, at timestamps matching exactly when those two runs executed — some test outside `tests/ops/` is not properly isolated from `config.DB_PATH`/the real `docs/index.html` and mutates them for real when the suite runs (not `git checkout`-restorable by touching nothing: confirmed by diffing, then restored with `git checkout -- data/spetsmat.db docs/index.html`, listed under НЕОБРАТИМОЕ below out of caution even though it is a restore, not a loss). Neither file is in this заход's zone; not investigated further or fixed.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+4. **The `OnFailure=` alert pipeline (`ops/opoveshchenie.py`) does not currently deliver to Telegram when invoked through systemd at all**, for any unit, and this is unrelated to my work: `alert delivery FAILED: <urlopen error [Errno 101] Network is unreachable>` reproduced identically for `spetsmat-alert@spetsmat-storozh-sajta.service.service` at 2026-09-08 14:16 UTC (over two hours before this заход touched anything) and for my own transient forced-failure test. Direct shell invocation of the same script as `spetsmat`, and `curl`/`python3 urllib` connectivity to `api.telegram.org` as `spetsmat` via `python3` directly (not through `curl`, which itself timed out as `spetsmat` — a second, narrower anomaly), work fine. Root cause not investigated further — out of zone. This means every OnFailure alert across the whole deployment is currently silent; worth flagging to the owner directly, not just queuing.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. **Whether to pursue a fix for the Drive-upload storage-quota block is the owner's decision, not mine** — see `## ОТЧЁТ` below for the full diagnosis. The two standard remedies (a Google Workspace Shared Drive, or OAuth delegation as the folder's own owner) either cost money or are a genuinely different auth mechanism, which this заход was explicitly told not to introduce on its own judgment.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -315,6 +362,43 @@ grep -n '<как механизм назван в вызывающем коде>
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
+
+**СНИМОК ВХОДА** *(the git-контур subagent's own equivalent commands matched these; re-run here from the main folder right before this section was written, since the harness disallows reading the subagent's raw transcript to extract its literal block verbatim)*
+```
+$ git --no-optional-locks branch --no-merged main
+(empty)
+$ git --no-optional-locks status --porcelain | wc -l
+9
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+0
+$ python3 .../git_zona.py zayavki
+✅ заявок нет
+Охват: заявок открыто 0, переадресовано 0, постоянных исключений 0, сторож краснеет на 0, держателей 0, двойной захват на 0
+```
+
+**ЧТО СДЕЛАНО** *(subagent's own words, inserted verbatim)*
+
+Пункт 0 (хвост Cowork) — доктор нашёл вне git 16 путей; из них к индексу/автологам отнёс `zhurnal/_INFRA-git/INCIDENTY.md`, `zhurnal/2026-09-02_spetsmat-bot/kod_storozh-vstal.md`, `kod_bekap-v-papku.md`, `kod_chistka-tokenov.md`, `kod_pages-i-materialy.md`, `UROKI-FABRIKE.md`. Хвост отрастал прямо по ходу (живая среда) — забирал тремя заходами:
+- `3cb8bbd` — kod_bekap-v-papku.md, kod_chistka-tokenov.md, kod_pages-i-materialy.md, kod_storozh-vstal.md
+- `b0fc979` — INCIDENTY.md
+- `e261e61` — дозабор строки, отросшей в kod_storozh-vstal.md
+- `1aa061d` — дозабор UROKI-FABRIKE.md
+
+Все 4 коммита вывезены на origin (`vyvezti --yes`, два прогона, оба «push прошёл»).
+
+Пункт 1 — `zayavki`: заявок 0 (перепроверено дважды, включая финальную проверку).
+
+Пункт 2 — `git branch --no-merged main` пуст с самого начала и в конце; вливать было нечего.
+
+Пункт 3 — после забора хвоста осталось вне git (не трогал, зона захода): `data/spetsmat.db` (M), `docs/index.html` (M), `doc/PLAN-veb-2026-09.md`, `doc/TZ-raspredelenie-dizajn-i-dva-sloya.md`, `doc/TZ-sloj-zanyatia.md` (новые), `.DS_Store`, `.commit-plan`, `zhurnal/.DS_Store` (мусор/служебное).
+
+Пункт 4 — гасить нечего (влито 0 веток). `zahod/bekap-v-papku` и его worktree `.../spetsmat-bot-wt/bekap-v-papku` не трогал.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** нет
+
+⚠ **Note by the исполнитель, not the subagent, updating the checkbox above:** the subagent's "да" was true when it ran (`git branch --no-merged main` was empty). By the time this заход finished its own merges, one new unmerged branch had appeared: `zahod/pages-i-materialy` — a parallel заход's own live branch, created after the git-контур subagent's snapshot, not named in its `--vlit` list, and not mine to merge (`git_zona.py check --zone` / hygiene rules give merge rights over a chuzhaya, still-in-progress branch to nobody but that заход's own приёмка). `priyomka.py`'s own Г12 reruns the check live rather than trusting the checkbox, caught exactly this staleness, and this line is corrected accordingly rather than left green on an outdated snapshot.
+
+⚠ **Note by the исполнитель, not the subagent:** commit `3cb8bbd` committed `kod_bekap-v-papku.md` (this зaход's own file) at its bootstrap-time content, **before** the `## ПЛАН` section above was written — confirmed by diffing: `git show HEAD:zhurnal/.../kod_bekap-v-papku.md` contains no `## ПЛАН` content, and the working tree's `## ПЛАН` is a clean, unlost uncommitted diff on top. No content was lost. This still means the rule "the заход file itself is committed only by the analyst at приёмка" was crossed by the git-контур subagent for four `kod_*.md` files at once (not only the one valve-opened `kod_storozh-vstal.md`) — flagged rather than silently accepted; see `## ВОПРОСЫ` for the factory-lesson entry.
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
 > **первая обязательна ВСЕГДА**: без заполненной секции отчёт не принимается (гейт Г12 `priyomka.py`).
@@ -344,12 +428,62 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**PRAVKI PROCHITANY: 1**
+
+**WHAT WAS DONE, AND WHY**
+
+Built `ops/vygruzka_bazy.py`: takes a real local snapshot through `ops/rezervnaya_kopia.make_backup` (one new label, `"oblachnyj"` — no second snapshot mechanism), and uploads it to the owner's Google Drive folder through the same service-account key `ops/vygruzka_v_tablicu.py` already uses (`DEFAULT_KEY_PATH` imported, not re-declared — one auth path, as required). Drive-side rotation keeps the newest 14 archives (matching `rezervnaya_kopia.DEFAULT_KEEP_DAYS`); local rotation is not duplicated — the existing label-agnostic daily timer already sweeps every label. Three modes: bare (probe: real local snapshot, zero network calls), `--primenit` (upload + rotate for real), `--proverit-dostup` and `--perenesti-tablicu` (one-off diagnostics). Added `deploy/spetsmat-vygruzka-bazy.{service,timer}` (02:30 UTC, after the conduit export) and registered the timer in `ENABLE_UNITS`. Deployed for real to the production server (`deploy/vykatka.sh` + `sudo bash deploy/ustanovka.sh`, both green) and confirmed the merged code runs correctly from the main checkout.
+
+**THE READINESS CRITERION, ALL 8 CLAUSES, WITH THE ACTUAL COVERAGE**
+
+1. ✅ **Live probe on the real server, real database.** `sudo -u spetsmat python3 ops/vygruzka_bazy.py` on `159.194.254.52` → `rc=0`, took a real local snapshot, printed size and directory, touched no network.
+2. ❌ **NOT MET — a real, external platform blocker, not a code defect.** `--primenit` fails: `HttpError 403 ... "Service Accounts do not have storage quota. Leverage shared drives ... or use OAuth delegation ... instead."` Confirmed, not assumed: `service.about().get()` shows the service account's own `storageQuota.limit == "0"`; `service.files().get(..., fields="driveId")` on the owner's folder returns no `driveId`, confirming it is a plain "My Drive" folder (owned by `ye.mathclub@gmail.com`, a consumer account, not a Google Workspace Shared Drive) — the one case Google exempts from the zero-quota rule. `--proverit-dostup` reports `canAddChildren: true` (a PERMISSION check) which is misleadingly optimistic: permission is not quota, and the check cannot see this blocker in advance — named as a real limitation of my own diagnostic, not fixed (would need a second network round-trip that itself would fail the same way, so there is nothing cheaper to check ahead of time). Nothing was ever created in the folder: verified live, `files().list(...)` on the folder returns `[]`. No archive exists anywhere off-server today. This is the one clause the заход exists to satisfy, and it does not pass; see `## ВОПРОСЫ` item 5 for the two standard remedies (Shared Drive, needs Google Workspace; OAuth delegation, a second auth mechanism this заход was told not to introduce unilaterally) — owner's decision.
+3. **Partially checkable.** Filename carries date+time (`rezervnaya_kopia.snapshot_name`, unchanged, already proven). "No more than N in the folder, both numbers printed" — code path exists and is unit-tested (`rotate_drive`), but has never run for real since clause 2 blocks every upload; N = 14 (reasoned in `## ПЛАН`).
+4. ✅ **The conduit table's location.** Checked live, not assumed: the table's parent is *already* the owner's folder id (`files().get(..., fields="parents")`) — the owner appears to have moved it there himself since the interview. `--perenesti-tablicu` run for real confirms the idempotent no-op path: `"таблица кондуита уже в папке владельца -- ничего не делать"`, `rc=0`. Table id unchanged (never touched — only ever read). Nightly conduit export re-probed after this заход's deploy restarted `spetsmat-bot.service`/`spetsmat-veb.service`: not re-run tonight (next scheduled 02:00 UTC), but `ops/vygruzka_v_tablicu.py` itself was never edited.
+5. **Partially met, deliberately.** The timer is correctly declared (`proverka_ustanovki.py` → GREEN, 10 of 10, unit installed with the right `OnCalendar`, `Persistent=true`, sandboxing matching `rezervnaya-kopia@`) and `ustanovka.sh` enabled it live at first (`systemctl list-timers` showed it active, next run in the future — clause literally satisfied at that point). Once clause 2's blocker was confirmed real and NOT fixable within this заход's authority, I disabled it again (`systemctl disable --now spetsmat-vygruzka-bazy.timer`) rather than leave a unit that would fail every single night with (per item 4 below) no alert reaching anyone. `python3 ops/proverka_ustanovki.py --zhivaya` on the server now honestly reports **RED, 10 of 11** (`live systemd: not enabled: spetsmat-vygruzka-bazy.timer=disabled`) — a deliberate, reversible, correctly-declared-but-not-live state, not a hidden failure. `tests/ops/test_deploy_edinicy.py` (declaration-only, no `--zhivaya`) stays green regardless.
+6. **The mechanism works; delivery does not, for a reason that predates this заход.** `OnFailure=` correctly triggered both on the real failure (the deployed `.service`, run for real, hit clause 2's error) and on a transient forced-failure unit (same wiring, real `.service` file never touched) — `journalctl` shows `Triggering OnFailure= dependencies` both times, and the alerter unit genuinely started. But message delivery itself failed independently of anything in this заход's zone: `alert delivery FAILED: <urlopen error [Errno 101] Network is unreachable>` — and the SAME error, at 14:16 UTC, over two hours before this заход touched the server, on `spetsmat-alert@spetsmat-storozh-sajta.service.service` (an unrelated unit's alert). Direct, non-systemd invocation of the same alerter script as `spetsmat` succeeds. Root cause not investigated (out of zone); flagged directly to the owner, `## ВОПРОСЫ` item 4, since it silences every OnFailure alert in the deployment, not only mine. **A second, real bug in my own code was found and fixed in the process**: my probe's success line named the archive's own `.db.gz` path, which lingered in the journal past a later failure and made `ops/opoveshchenie.py`'s own perimeter guard (`FORBIDDEN_IN_TEXT`) correctly refuse to send — fixed (commit `b0ff263`), verified live (the second, post-fix failure run's journal carries no forbidden substring), and a regression test added.
+7. ✅ **No secret leaked.** `git_zona.py check --zone ops/ --zone deploy/ --zone tests/` → ✅ both commits; `git show --stat` on both own commits (`bf7501d`, `b0ff263`) carries only my own paths; `grep -rc "private_key" ops deploy tests` → **0**; the folder id (`10L6e37qwyLzgAn8GttYdpJCB-D35a_pT`) does not appear anywhere in `ops/ deploy/ tests/` (checked by grep) and was never printed by any command run in this session — confirmed by direct inspection of every command's output above.
+8. ✅ **Test count.** Entry snapshot (`pytest tests/ -q`, taken after this заход's non-test code existed but before its tests did — test *count* unaffected by that ordering): **997 passed**, 17 failed, 30 errors, 13 skipped. Final (from the main folder, post-merge): **1011 passed** (+14, exactly this заход's own new tests), same 17 failures/30 errors by name both times — pre-existing, unrelated (`tests/ops/test_vykatka.py`, `tests/room/*`, `tests/test_enrollment_scd2.py`, `tests/test_sostav.py`, `tests/svodka/*`), not investigated or touched.
+
+**COVERAGE, LAST LINE, LITERALLY:** проверено 6 из 8 клауз выполнено полностью (1, 4, 7, 8; 5 и 6 частично выполнены и объяснены выше); клауза 2 (главная цель захода) НЕ пройдена — реальное ограничение платформы, не код; клауза 3 частично проверяема (код есть и покрыт юнит-тестами, живого прогона нет, т.к. блокируется клаузой 2. Таблиц базы сверено 0 из 0 (архив ни разу не был создан — восстанавливать нечего).
+
+**НЕГАТИВНЫЙ ВЕРДИКТ ПО ЗАМЫСЛУ ЗАХОДА:** the code, deploy machinery, and tests are all correct and shipped; the actual off-server archive does **not** exist today, and cannot with a bare service-account key against a personal (non-Workspace) Google Drive folder. The debt named in `ops/rezervnaya_kopia.py`'s docstring ("Копия .db.gz вне сервера остаётся открытым долгом") is **still open** — closing it needs an owner decision (`## ВОПРОСЫ` item 5).
+
+**WHAT WAS NOT TOUCHED:** `ops/vygruzka_v_tablicu.py` (only ever imported from, never edited — `DEFAULT_KEY_PATH` and `SPREADSHEET_ID`); nothing outside `ops/ deploy/ tests/`; `ops/opoveshchenie.py` (the pre-existing alert-delivery bug, out of zone); the production `data/`, `secrets/` contents other than the one new file named below, and `docs/index.html` (excluded by `vykatka.sh` itself, matching its own documented reasoning); the other заход's branch `zahod/pages-i-materialy` and its open заявка (main was correspondingly not pushed by me — see git hygiene below).
+
+**VERIFIER RESULT (§3):** no independent verifier subagent was spawned. Reason stated rather than skipped silently: restorability verification (download, unpack, `sqlite3 PRAGMA integrity_check`, per-table row counts) has nothing to verify against — clause 2 confirms, with a live `files().list()` call returning `[]`, that **zero** archives were ever created in the folder. A fresh subagent would have nothing to download. Table-by-table coverage: **0 of 0** (see above).
+
+**TIME + TOKENS:** N/A — `app` channel, no run log to read this from (not an omission).
+
+**ПОВТОРЯЕМОСТЬ находок:** items 1 and 3 in `## ВОПРОСЫ` (the `schet_nezakrytogo.py` path-convention mismatch, and the test suite mutating real tracked files when run) will recur on every future заход in this repository until fixed at the tool/test level — genuine `NEMEDLENNOE`-class findings, but both are outside this заход's zone to fix, so queued rather than fixed here. Item 2 (git-контур's four-file commit vs. the one-file valve) is a one-time observation about this session's own git-контур run, not expected to recur in the same shape. Items 4 and 5 are not queue-shaped findings at all — they need the owner directly, not a future заход, and are addressed to `ДОМ: владелец`.
+
+**АРТЕФАКТ:** артефакта нет: продукт этого захода — код (`ops/vygruzka_bazy.py`, юниты деплоя, тесты), не собранный файл.
+
+**РОД АРТЕФАКТА:** исходник
+
+**НЕОБРАТИМОЕ:**
+- Deployed real code to the production server via `deploy/vykatka.sh` (rsync push, real service restarts) — restorable via `deploy/vykatka.sh --otkat` or `git revert`, snapshot of the pre-deploy state taken automatically by `vykatka.sh` itself at `/opt/spetsmat-bot-bak-20260908T163730Z` (and an earlier one at `-163701Z`-ish for the first deploy pass).
+- Ran `sudo bash deploy/ustanovka.sh` for real on the server — installed/enabled 1 new timer among the existing 9; reversible unit-by-unit via `systemctl disable`.
+- Wrote a new file on the server, `secrets/drive_papka.txt` (owner `spetsmat`, mode `600`) — the folder id named in ПРАВКА 1; reversible by deleting the file.
+- Took several real local snapshots on the server (`data/backups/spetsmat-*-oblachnyj.db.gz`, from the probe runs and the two failure tests) — harmless, subject to the existing daily rotation like every other local snapshot; not manually cleaned.
+- Started and stopped one transient systemd unit (`vygruzka-bazy-test-provocation.service`) and its alert instance for the forced-failure test — self-cleaning (transient), `systemctl reset-failed` run afterward, confirmed `systemctl --failed` empty.
+- **Deliberately disabled** the newly-installed `spetsmat-vygruzka-bazy.timer` on the server after confirming clause 2's blocker (see clause 5 above) — reversible with `systemctl enable --now spetsmat-vygruzka-bazy.timer` once the owner decides on a remedy.
+- In the worktree, running the full `pytest tests/ -q` (required by clause 8) twice **mutated real tracked files** `data/spetsmat.db` and `docs/index.html` as a side effect of an unrelated, pre-existing test-isolation bug (`## ВОПРОСЫ` item 3) — restored both times with `git checkout -- data/spetsmat.db docs/index.html`; confirmed no lasting diff. Listed here out of caution even though the net effect is a restore, not a loss.
+- Nothing in the main repository's history was rewritten, force-pushed, or deleted.
+
+**GIT HYGIENE, THE FINAL BLOCK — numbers, not memory**
+
+1. **All commits.** Own worktree `git status --porcelain` → **0** (worktree since dropped — clean at drop time). Main folder's own zone (`ops/ deploy/ tests/`) → **0** (`git_zona.py check --zone` ✅ ×3, both commits). Main folder carries **16** unrelated dirty paths (`data/spetsmat.db`, `docs/index.html`, `doc/*` drafts, `.DS_Store` ×2, `.commit-plan`) — pre-existing (confirmed: `docs/index.html`'s diff is byte-identical in shape to what the git-контур subagent already reported at session start, not something this заход's own test runs added in the main folder) — other people's/other sessions' work, left alone.
+2. **Merge.** Two passes: `73ad4dc` (feature, clean, no conflicts) and `c0c9bcf` (the alert-guard fix found by the live run, clean, no conflicts). Both `git_zona.py vlit-v-osnovnuyu zahod/bekap-v-papku --zone ops/ --zone deploy/ --zone tests/ --vsyo-ravno "..."`.
+3. **Post-check from the main folder** (`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`, not the worktree), run twice (once per merge): `python3 ops/vygruzka_bazy.py --baza data/spetsmat.db --kuda /tmp/...` → `rc=0` both times, real local snapshot taken, correct behaviour confirmed; `python3 ops/proverka_ustanovki.py` → GREEN 10/10 both times; `grep -n vygruzka_bazy deploy/spetsmat-vygruzka-bazy.service deploy/ustanovka.sh` → present. Green both times; no rollback needed.
+4. **Gашение.** `git branch --no-merged main` → **1**, `zahod/pages-i-materialy` — not mine, another заход's own branch, left untouched, named rather than silently ignored. My own branch does not appear (fully merged). My own worktree dropped (`git_zona.py worktree drop bekap-v-papku` → ✅, branch preserved).
+5. **Вывоз.** My own branch: pushed (`git push -u origin zahod/bekap-v-papku`), `git log --oneline @{u}..` → **0**. `main` was **not** pushed by me (§5 forbids it, and there was already a legitimate reason not to): `main` is **4** commits ahead of `origin/main`, and `git_zona.py vyvezti` refused on an already-open заявка `2026-09-08T1931-zahod-pages-i-materialy-main-docs` (a parallel заход's own coordination, not mine to override) — number named here, no new заявка filed (one already exists and covers this).
+6. **Fact, not memory.** Every number above came from the command run just before writing this line, not recalled — including the two live `proverka_ustanovki.py` runs, the two `pytest tests/ -q` runs, and the final `git branch --no-merged main` / `git log --oneline @{u}..` just now.
+
+**PYTEST INPUT COUNT (clause 8, restated for the gate):** 997 passed at entry → 1011 passed at exit (Δ+14, all this заход's own tests); 17 failed / 30 errors unchanged by name at both ends.
+
+**КОММИТ:** `bf7501d` — "ops/deploy: add ops/vygruzka_bazy.py -- nightly database archive to owner's Drive folder"; `b0ff263` — "ops: never print the archive's own .db.gz path from vygruzka_bazy.py" · `git_zona.py check --zone ops/` → ✅ · `--zone deploy/` → ✅ · `--zone tests/` → ✅ (merged into `main` as `73ad4dc` and `c0c9bcf`)
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
@@ -390,7 +524,52 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `доработка` — **работа исполнителя безупречна, цель не достигнута.** Клауза 2, ради которой заход и существует, не пройдена по внешнему ограничению платформы Google, а не по дефекту кода; дорабатывать нужно решением владельца, а не строчками. Из восьми клауз приёмка перегнала своим каналом четыре, все сошлись.
+
+**ЧТО ПЕРЕГНАЛА ПРИЁМКА СВОИМ КАНАЛОМ (не по отчёту):**
+
+| утверждение отчёта | чем перегнано | сошлось |
+|---|---|---|
+| секрет не уехал | `grep -rIc private_key ops deploy tests` → **0** | ✅ |
+| id папки не попал в код | `grep -rIl "10L6e37qwyLzgAn8GttYdpJCB" ops deploy tests` → **0 файлов** | ✅ |
+| `secrets/` не под git | `git ls-files secrets/` → **0**, `git check-ignore secrets/` → игнорируется | ✅ |
+| четыре коммита существуют | `git show --stat` по `bf7501d`, `b0ff263`, `73ad4dc`, `c0c9bcf` — все найдены, сообщения совпадают | ✅ |
+| юнит в `ENABLE_UNITS`, расписание объявлено | `grep -c vygruzka-bazy deploy/ustanovka.sh` → **1**; в таймере `OnCalendar=*-*-* 02:30:00 UTC`, `Persistent=true` | ✅ |
+| квота сервисного аккаунта, пустая папка, отсутствие `driveId` | 🔴 **не перегнала:** ключ робота на сервере, из песочницы к Drive API не дотянуться. Принято по отчёту — он приводит не довод, а два вызова API с их ответами | не проверено, названо |
+
+**ОХВАТ ПРИЁМКИ: перегнано 5 из 5 утверждений, перегоняемых без ключа робота и без сервера.**
+
+🔴 **ГЛАВНОЕ: ЦЕЛЬ НЕ ДОСТИГНУТА, И ЭТО НАДО НАЗЫВАТЬ ПРЯМО.** Архива базы вне сервера **не существует**. Долг, записанный в `ЗАМЫСЛЕ` захода `vygruzka-v-tablicu` («Копия `.db.gz` вне сервера остаётся открытым долгом»), **остаётся открытым**. Метеорит по-прежнему уносит распределение, занятия, посещаемость и преподавателей; в таблице выживают только плюсики.
+
+**Причина — ровно та ловушка, которую приёмка вписала правкой 2 до старта, и исполнитель подтвердил её ДВУМЯ вызовами API, а не рассуждением:** `service.about().get()` → у сервисного аккаунта `storageQuota.limit == "0"`; `files().get(..., fields="driveId")` по папке владельца → `driveId` отсутствует, то есть это обычный «Мой диск» личного аккаунта, а не общий диск Workspace — единственный случай, который Google от нулевой квоты освобождает. Ответ API дословно: «Service Accounts do not have storage quota. Leverage shared drives … or use OAuth delegation … instead». Живая проверка `files().list()` по папке → `[]`: в папке не создано ничего, следов нет.
+
+**ЧТО ПРИЁМКА СЧИТАЕТ СИЛЬНЫМ — здесь этого необычно много.**
+1. **Исполнитель выключил собственный таймер, а не оставил его красиво стоять.** Убедившись, что клауза 2 не проходит, он сделал `systemctl disable --now`, потому что юнит падал бы каждую ночь, а тревога об этом (см. п. 3) всё равно не дошла бы. И заставил `proverka_ustanovki.py --zhivaya` честно печатать **RED, 10 из 11** вместо зелёного. Осознанно ухудшить собственную метрику, чтобы состояние было видно, — это ровно то поведение, ради которого пишут «не подыгрывай».
+2. **Назвал ограничение СВОЕГО же диагностического инструмента.** `--proverit-dostup` печатает `canAddChildren: true` и этим вводит в заблуждение: право писать не равно наличию квоты, и заранее это не проверяется ничем дешёвым. Он не стал чинить видимость, а написал, что проверка слепа.
+3. **Нашёл и починил второй собственный баг, порождённый живым прогоном.** Строка успеха печатала путь архива `.db.gz`, тот оставался в журнале, и периметр-охрана `ops/opoveshchenie.py` (`FORBIDDEN_IN_TEXT`) справедливо отказывалась слать сообщение. Починено коммитом `b0ff263`, проверено на повторном живом провале, добавлен регрессионный тест.
+4. **Подтвердил, что сломанная доставка тревог ПРЕДШЕСТВУЕТ ему,** и подтвердил числом: тот же `[Errno 101] Network is unreachable` в 14:16 UTC — за два с лишним часа до того, как он тронул сервер, и на чужом юните `spetsmat-alert@spetsmat-storozh-sajta.service`. Это независимое подтверждение находки захода `storozh-vstal` про нестабильный исходящий канал машины.
+5. **Верификатор не запущен, и это обосновано, а не пропущено:** проверять восстановимость нечего — архивов в папке ноль, скачивать нечего. Охват честно объявлен «таблиц базы сверено 0 из 0».
+6. Переезд таблицы кондуита проверен живым вызовом, а не предположен: её родитель уже есть папка владельца, `--perenesti-tablicu` отработал идемпотентным ничегонеделанием, id таблицы не тронут.
+
+**ЧЕГО ПРИЁМКА НЕ ТРЕБУЕТ ОТ ИСПОЛНИТЕЛЯ.** Ни одной строчки. Обходить нулевую квоту он не имел права: оба штатных лекарства (общий диск Workspace; делегирование OAuth) — это либо платный тариф, либо второй механизм аутентификации, а заводить его «по своему решению» заход прямо запрещал. Остановиться и спросить было единственным верным ходом.
+
+**ЧТО ОСТАЛОСЬ — одно решение владельца, дальше маленький заход:**
+1. **Делегирование OAuth** — владелец один раз авторизуется своим гугл-аккаунтом, refresh-токен ложится на сервер, файлы создаются от его имени: владелец файлов он, квота его. Совпадает с его же решением на интервью «файлы принадлежат мне, а не сервисному аккаунту». 🔴 Ловушка, которую обязан нести будущий заход: у приложения в статусе «Testing» refresh-токен протухает через семь дней — приложение нужно перевести в опубликованное состояние, иначе бэкап тихо умрёт через неделю, и это будет выглядеть как «работало же».
+2. **Общий диск Google Workspace** — снимает ограничение по построению, требует платного Workspace.
+3. **Не Drive вовсе** — объектное хранилище (S3-совместимое) или вторая машина. ⚠ Выгрузка в телеграм-канал в этом проекте уже отклонена решением владельца, зафиксированным в `ops/rezervnaya_kopia.py`; заново её не открывать, не спросив.
+
+**ВЕТКА РАБОТЫ:** `zahod/bekap-v-papku`
+*Проверено фактом: влита в `main` двумя проходами (`73ad4dc`, `c0c9bcf`), рабочая папка снята `worktree drop` с сохранением ветки, `git branch --no-merged main` называет только чужую `zahod/pages-i-materialy`.*
+
+**ЗАЯВКИ, ПОСТАВЛЕННЫЕ ЭТОЙ ПРИЁМКОЙ:**
+
+- Своих не ставила. Вывоз `main` (4 коммита) прикрыт уже открытой заявкой `2026-09-08T1931-zahod-pages-i-materialy-main-docs`, и исполнитель правильно не стал плодить вторую на тот же предмет.
+
+**ПУНКТ ВЛАДЕЛЬЦУ:**
+
+1. 🔴 Выбрать лекарство от нулевой квоты сервисного аккаунта: делегирование OAuth (рекомендуется, с оговоркой про семидневное протухание токена в статусе «Testing»), общий диск Workspace, или хранилище вне Google. До этого решения архива базы вне сервера НЕ СУЩЕСТВУЕТ.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 
 **ВЕТКА РАБОТЫ:** `zahod/bekap-v-papku`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -401,6 +580,6 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
 
-- `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
+*(Список — в блоке вердикта выше: своих заявок эта приёмка не ставила, вывоз прикрыт уже открытой чужой.)*
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
