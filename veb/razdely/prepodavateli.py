@@ -161,7 +161,14 @@ def para_prep(kt, x, pokazat_gruppu=True):
         hvost = ""
         if pokazat_gruppu and x["gruppa"] and kt.kabinety_dnya[kl].get(x["gruppa"]) \
                 and not kt.ADMIN:
-            hvost = ('<span data-tolko-gost> '
+            # 🔴 ПЛАШКА — СВОЙ ФЛЕКС-РЕБЁНОК В `.den-ryad`, А НЕ ХВОСТ ВНУТРИ
+            # `.deti-ryad` (ПРАВКА 1). Список детей переносится по словам
+            # (`flex-wrap:wrap`); плашка, приклеенная последним элементом ВНУТРИ
+            # этого переноса, вставала там, где список случайно кончился в этой
+            # конкретной строке, — не колонкой. Вынесена СОСЕДОМ `.deti-ryad`, с
+            # `flex:0 0 auto;margin-left:auto` (как у `.sch`, которая ту же задачу
+            # уже решает для счётчика) — правило в `veb/obshchee/karkas.py`.
+            hvost = ('<span class="kab-mesto" data-tolko-gost>'
                      + kt.kab_html(kl, x["gruppa"]) + "</span>")
         schyot = ""
         if kt.mozhno("videt-schyot"):
@@ -171,8 +178,8 @@ def para_prep(kt, x, pokazat_gruppu=True):
                   else f'<span class="den-podpis">{e(kt.DNI[kl][3])}</span>')
         stroki.append(f'<span class="den-ryad dv-{kl}">{podpis}'
                       '<span class="deti-ryad">'
-                      + deti_prepoda(kt, x, ego, sl) + hvost + "</span>"
-                      + schyot + "</span>")
+                      + deti_prepoda(kt, x, ego, sl) + "</span>"
+                      + hvost + schyot + "</span>")
     return (f'<div class="para" data-i="{e(x["name"].lower())}">'
             f'<span class="kto"><b>{e(x["name"])}</b>{metki}</span>'
             f'<span class="komu deti">{"".join(stroki)}</span></div>')
