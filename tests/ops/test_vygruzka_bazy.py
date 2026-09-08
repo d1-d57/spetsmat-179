@@ -170,6 +170,33 @@ def test_the_new_label_is_accepted_by_rezervnaya_kopia():
     assert vygruzka_bazy.LABEL in rezervnaya_kopia.LABELS
 
 
+def test_stdout_never_names_the_archive_file_even_on_success(
+    monkeypatch, zhivaya_baza: Path, papka_kopij: Path, tmp_path: Path, capsys,
+):
+    """Found live on the production server: ``ops/opoveshchenie.py``'s own perimeter guard
+    (``FORBIDDEN_IN_TEXT``) refuses to send ANY alert whose journal tail mentions
+    ``.db.gz`` -- correctly, a path is a request to fetch a snapshot. This module's probe
+    line named the archive's own path, which lingered in the unit's journal past a LATER,
+    real failure (the Drive upload) and silently swallowed the alert that failure should
+    have sent. This test would have caught that before it reached the server.
+    """
+    monkeypatch.setattr(vygruzka_bazy, "_service",
+                        lambda key_path: (_ for _ in ()).throw(AssertionError("no network in probe")))
+
+    rc = vygruzka_bazy.main([
+        "--baza", str(zhivaya_baza),
+        "--kuda", str(papka_kopij),
+        "--papka-fajl", str(tmp_path / "nope.txt"),
+    ])
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    for forbidden in (".db.gz", ".sqlite", ".db "):
+        assert forbidden not in out.lower(), (
+            "stdout must never name the archive file: %r found in %r" % (forbidden, out)
+        )
+
+
 def test_proverit_dostup_makes_no_local_snapshot(monkeypatch, papka_kopij: Path, tmp_path: Path):
     folder_file = tmp_path / "drive_papka.txt"
     folder_file.write_text("folder-x\n", encoding="utf-8")
