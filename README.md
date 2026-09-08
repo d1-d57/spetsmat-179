@@ -102,6 +102,9 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/VHOD-2026-09-05.md`** (Вход в сессию 2026-09-05: волна ОСНОВАНИЕ собрана, семь заходов готовы, ждёт починки хука)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/VHOD-2026-09-09.md`** (Вход в сессию: приёмка двух заходов и решение по заявке в Search Console)
+
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-02.md`** (Выгрузка сессии 2026-09-02 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
 
@@ -137,6 +140,12 @@
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-07-3.md`** (Выгрузка сессии 2026-09-07 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-07.md`** (Выгрузка сессии 2026-09-07 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-08-2.md`** (Выгрузка сессии 2026-09-08 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-08.md`** (Выгрузка сессии 2026-09-08 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_N0-dovezti-rabotu-noch-0904.md`** (довезти в git работу ночи 04.09: две регрессии и вся волна ОСНОВАНИЕ, двумя коммитами)
 
@@ -247,6 +256,9 @@
 
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_bystro-i-bezopasno.md`** (диагноз медленного https у владельца и решение, сохраняющее профиль безопасности Google)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_dozabivka-dolgov-sklejki.md`** (закрыть долги заходa склейки: права у кабинетов, опечатка except Value, красные тесты enrollment)
 
 
@@ -257,6 +269,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_https-i-domen.md`** (HTTPS на math-kluychiki.ru: сертификат, редиректы с http и с IP, сторож на новый адрес)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_listki-kak-baza-zadach.md`** (листок как база задач: страница листка вместо PDF, скачивание PDF и TeX, кондуит и состав из базы, отметки 05.09)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_profil-bezopasnosti.md`** (снять пометку «обманные страницы»: закрыть default_server, заголовки, robots.txt, пароль уходит по https)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_skleit-adminku-s-sajtom.md`** (свести рабочий редактор распределения и страницу правки на сайте в один шаблон с двумя режимами)
 
@@ -275,6 +290,9 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_veb-vhod-i-obshchee-sostoyanie.md`** (Два пароля из окружения в подписанной куке и общее состояние: правка с одного компьютера видна на другом)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_vygruzka-v-tablicu.md`** (ночная выгрузка кондуита в Google-таблицу владельца через сервисный аккаунт Sheets API и суточный таймер)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_vykatka-tunnel-i-storozh.md`** (Выкатка сайта распределения наружу по HTTPS через туннель с машины владельца плюс сторож продукта)
 
