@@ -303,6 +303,45 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Written before any change. Premises checked by command, not assumed.**
+
+### 0. Premises verified on disk (and one I got wrong first)
+
+- `~/Downloads/client_secret_106745579247-agr3irkb6b1ok6oen50127cljut109m2.apps.googleusercontent.com.json` — exists, 414 bytes. Found by mask, as instructed. Contents never printed.
+- **The server is real and reachable**, contrary to my own first reading. `deploy/ustanovka.sh` still carries the stale line "there is no server yet"; the previous заход (`kod_bekap-v-papku.md`) in fact deployed to `ivan@159.194.254.52`. Verified live: `ssh` → `OK`, host `matshkola-01`, `id spetsmat` → `uid=109`, checkout `/opt/spetsmat-bot`, `secrets/drive_papka.txt` present (600, owner `spetsmat`), `systemctl is-enabled spetsmat-vygruzka-bazy.timer` → `disabled` (exactly the state the previous заход documented leaving). Clauses 1 and 6 are therefore executable as written; I am NOT contesting them.
+- Zero-quota (clause 2 of `kod_bekap-v-papku.md`) read, not re-opened: service accounts have no Drive storage quota, so `files().create` 403s. That is precisely why this заход moves to OAuth user credentials.
+- `python3 ops/raspisanie.py` → `free: no lesson window around 2026-09-08 22:14 Moscow`, `rc=0` — deploy window open.
+
+### 1. A premise of task B that does NOT hold, and how I route around it
+
+Task B says the tool is "запускаемый ВЛАДЕЛЬЦЕМ на ноутбуке". The laptop has **Python 3.9.6 and no `google_auth_oauthlib`** (`ModuleNotFoundError`, checked). The server has the libraries (`google-auth 2.57.1`, `Credentials.from_authorized_user_file` present), the laptop does not.
+
+I will **not** make the owner install packages, and I will **not** move the flow to the server (its loopback is not the browser's loopback). Instead `ops/avtorizacia_drive.py` uses **the standard library only** — `http.server` for the loopback listener, `urllib` for the token exchange. The installed-app OAuth flow is a URL, a redirect catch and one POST; it does not need a library. Output is written in the ordinary `authorized_user` JSON shape, which the server's `google-auth` reads natively. This keeps the owner's action to literally one line.
+
+The tool reads `client_id`/`client_secret` **from the server** over the ssh the owner already has, so nothing sensitive has to stay on the laptop — which is what makes deleting the `~/Downloads` copy in task A safe rather than destructive.
+
+### 2. The one thing that genuinely blocks completion, named now rather than at the end
+
+Clause 2 cannot be satisfied by me: consent is given by the owner, by hand, in a browser, and the заход forbids me to do it ("согласие даёт ВЛАДЕЛЕЦ, руками, и только он"). So this заход **stops mid-way and waits for the owner**, by design, not by failure. Everything that does not depend on the token I do first; then I hand over one Terminal line; then I finish.
+
+**Consequence of task C that the criterion does not spell out, and the owner should hear before it happens:** the scope is baked into the consent, so measuring `drive.file` vs `drive` may cost **two** consent rounds, not one. I will not pre-emptively ask for the wide scope ("Не бери широкий «на всякий случай»"). Round 1 = `drive.file`; if `files().create` with the owner's existing folder as `parents` is refused, I paste the exact API refusal and ask for one more run with `--obyom polnyj`. I expect the refusal (with `drive.file` an app cannot address a folder it did not create), but expectation is not a measurement, and clause 5 asks for the refusal itself.
+
+### 3. Order of work
+
+1. Take the pytest entry count by command, in my own worktree (clause 8). Not in the main folder: the previous заход measured that the suite mutates tracked `data/spetsmat.db` and `docs/index.html`.
+2. **A.** Copy the client JSON to the server as `secrets/oauth_klient.json`, `spetsmat:spetsmat`, `600`. Verify by `stat`, never by printing. Delete the `~/Downloads` copy afterwards — listed as irreversible in the report.
+3. **B.** Write `ops/avtorizacia_drive.py` + tests. Big warning banner naming `ye.mathclub@gmail.com` and ruling out `matfak57@gmail.com` before the browser opens; `access_type=offline`, `prompt=consent`. Commit.
+4. **HAND OVER TO THE OWNER — one line, no git commands.** Wait.
+5. **C.** With the token in place: `about().get(fields="user")` first — if it is not `ye.mathclub@gmail.com`, stop and have the owner redo it (clause 2 exists for this). Then measure the scope by attempting the real upload.
+6. **D.** Switch `ops/vygruzka_bazy.py` to user credentials from `secrets/oauth_token.json`. `ops/vygruzka_v_tablicu.py` is not touched — the conduit keeps riding the service account. Commit.
+7. Deploy (`raspisanie.py` first), **E.** enable the timer, live run, `proverka_ustanovki.py --zhivaya` green.
+8. Fresh verifier subagent (§3): downloads the archive by API, unpacks, `PRAGMA integrity_check`, per-table row counts against the live database — 100% of tables.
+9. Final git hygiene block, merge, post-check from the main folder.
+
+### 4. What I will not do
+
+`ops/vygruzka_v_tablicu.py` and the service account; `/privacy` and `/terms`; printing key or token contents anywhere; committing `secrets/`; authorizing on the owner's behalf or substituting an account; anything outside `ops/ deploy/ tests/`.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
