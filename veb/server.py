@@ -673,6 +673,14 @@ class Handler(BaseHTTPRequestHandler):
             if self._listok(unquote(path.split("/", 2)[2])):
                 return
 
+        # 🔴 THE PUPIL CARD, BY ID — GUEST SEES THE TOP, A SIGNED-IN VIEWER ALSO SEES
+        # (AND CAN TICK) HIS MARKS. See `veb/razdely/kartochka.py` for why ticking here
+        # reaches the SAME `/api/priyom` door as everywhere else, and why the card is a
+        # standalone page rather than a sixth tab of the shell.
+        if path.startswith("/kartochka/"):
+            if self._kartochka(unquote(path[len("/kartochka/"):])):
+                return
+
         # 🔴 РАСПРЕДЕЛЕНИЕ ОТКРЫВАЕТСЯ НА ЗАНЯТИИ, А ПОСТОЯННОЕ — ЗА ОТДЕЛЬНОЙ КНОПКОЙ.
         # Решение владельца, и причина у него прямая: «чтобы ты случайно всё не начинал
         # править постоянное распределение». 2026-09-07 это уже стоило данных — разовый
@@ -809,6 +817,30 @@ class Handler(BaseHTTPRequestHandler):
             return True
 
         self._send_html(200, list_odin.stranica(listok, bloki).encode("utf-8"))
+        return True
+
+    def _kartochka(self, hvost: str) -> bool:
+        """`/kartochka/<id>` — false = not a number, fall through to 404.
+
+        🔴 SAME ROW THE GROUP TAB ALREADY SHOWS, NOT A SECOND COMPUTATION OF IT.
+        `_build_views` is what `/api/view` and the whole distribution screen already
+        build the teacher/room/group columns from; asking it again here (and picking
+        one row out of it) means the card can never disagree with the group page about
+        who takes this pupil or which room they are in.
+        """
+        if not hvost.isdigit():
+            return False
+        student_id = int(hvost)
+        connection = self._connection()
+        vid = _build_views(connection, SLOT_DEFAULT)
+        row = next((r for r in vid["students"] if r["student_id"] == student_id), None)
+        if row is None:
+            return False
+        from veb.razdely import kartochka
+        telo = kartochka.stranica(
+            connection, row, vhodivshij=vhod.rol(self.headers) is not None
+        ).encode("utf-8")
+        self._send_html(200, telo)
         return True
 
     def _koren(self) -> bytes:

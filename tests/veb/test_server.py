@@ -172,7 +172,10 @@ def test_the_standing_arrangement_carries_both_days_of_every_pupil(running_serve
     telo = body.decode("utf-8")
     vid = re.search(r'<section class="vid" id="v-shk">.*?</section>', telo, re.S)
     assert vid, "вкладка школьников на месте"
-    shkolniki = re.findall(r'<div class="para" data-i="[^"]*">', vid.group(0))
+    # 🔴 `data-sid` СТОИТ ПОСЛЕ `data-i` НА ТОЙ ЖЕ СТРОКЕ (заход poisk-i-kartochka,
+    # подсветка школьника с адреса поиска) — узор больше не кончается на `data-i`
+    # сразу закрывающим `>`.
+    shkolniki = re.findall(r'<div class="para" data-i="[^"]*" data-sid="\d+">', vid.group(0))
     polya = re.findall(r'data-slot="\d+"', vid.group(0))
     assert shkolniki, "школьники на вкладке есть"
     assert len(polya) == 2 * len(shkolniki), (
