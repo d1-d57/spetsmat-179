@@ -116,7 +116,8 @@ LISTKI_DIR = KOREN_PROEKTA / "docs" / "listki"
 # neighbour is the normal state while its заход is still running, so the import failure of
 # one module is skipped, not raised.  A handler takes the request handler and returns True
 # if it answered.
-RAZDELY_S_MARSHRUTAMI = ("veb.priyom", "veb.razdely.priyom", "veb.razdely.pravovye")
+RAZDELY_S_MARSHRUTAMI = ("veb.priyom", "veb.razdely.priyom", "veb.razdely.pravovye",
+                         "veb.razdely.istoria")
 
 
 def _marshruty_razdelov() -> dict:
