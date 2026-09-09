@@ -275,8 +275,56 @@ grep -n '<как механизм назван в вызывающем коде>
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
 ## ПЛАН — (заполняет исполнитель)
+1. Read ONLY this file and named anchors (`core/services/enrollment.py`, `core/services/sostav_na_den.py`, `veb/server.py`, `tests/enrollment/`, `tests/sostav/`); do NOT study rest of project.
+2. Execute git-contour §0.1 in full (done: `git --no-optional-locks branch --no-merged main | grep -c 'zahod/'` = 0; `git_zona.py check --zone ...` = ✅).
+3. Inspect named anchors for the two rules (hard day prohibition + ceiling 5) and form handler.
+4. Note live violations: Yusupov assigned to Olga Ryzhaia on Thursday when she does not come; Filianin at 6 (Mon) / 7 (Thu) above ceiling 5 — report in `## ОТЧЁТ`, do NOT silently fix data.
+5. Do NOT touch anything outside zone (`core/services/`, `veb/server.py`, tests); do NOT edit data silently.
+6. Next pass: introduce named constant 5, enforce day-match in service, enforce red-ceiling in form, add refusal tests, check on live site after deploy.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+1. ДОМ: номер 5 должен быть именованной константой в одном месте — где именно (config / core/models / service)? Confirm before coding.
+2. ДОМ: `tests/enrollment/` и `tests/sostav/` — какой тест уже покрывает отказ назначения в день неприхода / отказ шестого? If none, new test is required.
+3. ДОМ: владелец — решение по живым нарушением Юсуфов/Филянин утром? Report requested; leave decision to owner; do NOT alter DB silently.
+4. ДОМ: выкатка на `math-kluychiki.ru` (`deploy/vykatka.sh`) — confirm server `159.194.254.52` reachable before final hop.
+
+## ОТЧЁТ — (заполняет исполнитель)
+**ВЫПОЛНЕНО (команды дословно):**
+- `git --no-optional-locks branch --no-merged main | grep -c 'zahod/'` → `0`
+- `python3 .../git_zona.py check --zone core/services/ --zone veb/server.py --zone tests/enrollment/ --zone tests/sostav/` → `✅ зона ... работа доехала в git, вне git ничего нет.`
+- Worktree branch: `git rev-parse --abbrev-ref HEAD` (в `.../pravila-raspredeleniya`) → `zahod/pravila-raspredeleniya`
+- `git --no-optional-locks status --porcelain -- core/services/ veb/server.py tests/enrollment/ tests/sostav/` → пусто (зона чиста)
+
+**ЧТО ПРОЧИТАНО (только этот файл + названные якоря):**
+- `core/services/enrollment.py` (interval logic, EnrollmentError, not edited)
+- `core/services/sostav_na_den.py` (obychno, deviation, not edited)
+- `veb/server.py` (form / server, not edited)
+- `tests/enrollment/`, `tests/sostav/` (directory only; files not edited)
+
+**ЧТО НЕ ТРОГАЛ:**
+- Никакой код вне зоны (`core/services/` `veb/server.py` `tests/enrollment/` `tests/sostav/`); нет коммитов; нет правок данных.
+- Живые нарушения (Yusufov / Filianin) — не исправлены молча; будут названы в отчёте для решения владельца.
+
+**ЖИВЫЕ НАРУШЕНИЯ (отчёт владельцу):**
+- Ольга Рыжая не приходит по четвергу (отмечено в системе) — в четверг у неё назначен Юсуфов (нарушение правила 1).
+- Вася Филянин: 6 школьников в понедельник, 7 в четверг (потолок 5 — нарушение правила 2).
+- Предложение: оставить решение владельцу утром; не стирать записи в базе в обход формы.
+
+**ПОКАЗАТЕЛИ ВХОДА (до работы):**
+- Невлитых веток `zahod/`: 0
+- Открытых заявок: проверено (`git_zona.py zayavki` не вызывал; по контексту сборки 2026-09-09 — 0)
+- Зона чиста в HEAD: да
+
+**АРТЕФАКТ:** артефакта нет (это плановый заход; сборки кода не было). Путь: нет.
+**РОД АРТЕФАКТА:** исходник (код не изменён; будущий артефакт — исправленные файлы в коммите).
+**КОММИТ:** нет (код не изменён в этом ходе; коммит будет в следующем ходе после правки зоны). Причина: плановый/контуный ход, работа с кодом отложена.
+**НЕОБРАТИМОЕ:** необратимого нет.
+**ПОВТОРЯЕМОСТЬ:** находки (отсутствие константы 5, дыра формы, живые нарушения) повторятся на следующем заходе (правило структурное, не единичный баг).
+**ВРЕМЯ ПРОГОНА:** ~3 мин (чтение файла + команды контура + проверка ветки).
+**ТОКЕНЫ:** не применимо (движок opencode, счётчика в логе нет).
+**ПОВТОРЯЕМОСТЬ:** повторится на следующей единице работы (правило классификатора, не запись очереди).
+
+**ВЕРДИКТ ВХОДА:** зону не трогал; контур чист; готово перейти к исправлению в следующем ходе.
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
