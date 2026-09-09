@@ -137,6 +137,19 @@ def zamer():
             _otkryt(page, url, put, radio)
             itog["gruppa"] = page.evaluate(ZAMER_GRUPPY)
 
+            # 🔴 THE SAME PAGE, THE OTHER ROLE.  Everything above is measured with an
+            # organiser cookie, because the conduit tab does not exist without one --
+            # and an organiser sees the teacher's name inside a `<select>`, which
+            # sizes itself to its options.  A guest sees the same name as plain text
+            # in a column frozen at `flex:0 0 9.6rem`, and that is a different render
+            # of the same markup.  Measuring one role and reporting «the page» is how
+            # a gate stays green over a page most of its visitors see broken.
+            gost_ctx = brauzer.new_context(viewport=ETALON)
+            gost = gost_ctx.new_page()
+            _otkryt(gost, url, "/raspredelenie", "t-shk")
+            itog["gost"] = gost.evaluate(ZAMER)
+            gost_ctx.close()
+
             # The lever must be provable, not merely present: break the page the same
             # way the tool's self-test does and require the measurement to go red.
             page.evaluate(SLOMAT)
@@ -218,6 +231,33 @@ def test_gruppa_pomeshchaetsya_na_odin_ekran(zamer):
     assert g["niz"] <= g["okno"], (
         f"группа не помещается на экран: {g['shkolnikov']} школьников, последняя "
         f"строка кончается на {g['niz']} px при окне {g['okno']} px")
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "ЗАМЕРЕНО, А НЕ ПРЕДПОЛОЖЕНО: гостю на /raspredelenie имена принимающих режет "
+    "рамка — 36 элементов на здешней базе, вживую на боевом сервере 48. Причина "
+    "названа в самом каркасе: столбец дня заморожен на `flex:0 0 9.6rem`, а имя "
+    "внутри усечено многоточием. Это ровно тот запрет, ради которого канон и "
+    "написан — ширина, выбранная на глаз, режет то имя, которое никто не примерил "
+    "(«Настя Вахрина»: надо 113 px, есть 99). Чинится это общей сеткой колонок на "
+    "разметке вкладки (veb/razdely/**) — зона verstka-raspredeleniya (P3). Маркер "
+    "строгий: в день, когда P3 починит, тест покраснеет как XPASS, и это красное "
+    "значит «сними маркер»."))
+def test_gost_vidit_to_zhe_chto_organizator(zamer):
+    """Гость — тоже роль, и страницу он видит ЧАЩЕ организатора.
+
+    Гейт `tools/gejt_verstki.py` ходит по сайту только с куки организатора: без неё
+    нет вкладки кондуита. Цена — целый режим страницы, ни разу не измеренный.
+    """
+    z = zamer["gost"]
+    print(f"\nГОСТЬ · /raspredelenie: обрезка {len(z['obrezka'])}, "
+          f"переносы {len(z['perenos'])}, скролл {z['skroll']} px, "
+          f"осмотрено {z['osmotreno']}")
+    for d in z["obrezka"][:3]:
+        print(f"   ОБРЕЗКА · {d['put']} · «{d['tekst']}» · надо {d['nado']} есть {d['est']}")
+    assert not z["obrezka"], f"гостю обрезано {len(z['obrezka'])} элементов"
+    assert z["skroll"] == 0
+    assert not z["perenos"]
 
 
 @pytest.mark.parametrize("imya", [s[0] for s in STRANICY])
