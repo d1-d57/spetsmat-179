@@ -67,6 +67,9 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-08.md`** (Хэндофф в сессию 2026-09-08)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/HANDOFF-2026-09-10.md`** (Хэндофф в сессию 2026-09-10)
+
 **`zhurnal/2026-09-02_spetsmat-bot/NADEZHNOST-zakaz-na-resyorch.md`** (надёжность: разбор топологии, оффлайн-очередь тапов, бэкапы и заказ на ресёрч Р1-Р7)
 
 **`zhurnal/2026-09-02_spetsmat-bot/NAVIGATOR.md`** (навигатор арки 2026-09-02_spetsmat-bot (ориентация, читается первым): Кондуит спецмата в телеграме)
@@ -144,6 +147,9 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-08-2.md`** (Выгрузка сессии 2026-09-08 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-08-3.md`** (Выгрузка сессии 2026-09-08 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-08.md`** (Выгрузка сессии 2026-09-08 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
@@ -282,6 +288,9 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_pages-i-materialy.md`** (Pages перестаёт отдавать устаревшую копию и уводит на живой сайт; /materials/ перестаёт быть вечным 404)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_privacy-i-terms.md`** (две недостающие страницы сайта — политика конфиденциальности и условия — по адресам, вписанным в консоль Google)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_profil-bezopasnosti.md`** (снять пометку «обманные страницы»: закрыть default_server, заголовки, robots.txt, пароль уходит по https)
 

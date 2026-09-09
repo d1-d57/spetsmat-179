@@ -295,6 +295,26 @@ grep -n '<как механизм назван в вызывающем коде>
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### Сторож `GIT_ZONA_REPO` не срабатывает, когда команду зовут ИЗ ПАПКИ ВНЕ ЛЮБОГО РЕПОЗИТОРИЯ, и `worktree add` молча заводит рабочую папку в репозитории ИНСТРУМЕНТА
+
+Стартовое сообщение велит первым ходом звать `git_zona.py worktree add …` и не называет рабочую папку — а первый ход исполнителя происходит там, где его запустили: у меня это был домашний каталог `/Users/ivanyakovlev`, вне всякого репозитория. Инструмент завёл worktree и ветку `zahod/bekap-avtorizacia` в `disciplina`, а не в `spetsmat-bot`, и отрапортовал полным зелёным успехом с правильным именем ветки — отличить этот исход от верного по выводу команды нельзя.
+
+Сторож `repo_call_guard` для этого и написан, но здесь он пропускает. Воспроизведено вызовом самой функции, а не рассуждением: при `cwd=/Users/ivanyakovlev` и снятой `GIT_ZONA_REPO` `REPO` уже упал на репозиторий инструмента (`disciplina`), поэтому условие случая 2 `korni.таблица_для_репо(REPO) == korni.КОРНИ` истинно, и `repo_call_guard("worktree")` возвращает `None`. Сторож сравнивает репозиторий инструмента сам с собой и всегда соглашается. Дыра — не в списке `KOMANDY_TOLKO_CHTENIE` (`worktree` там нет), а в том, что случай «cwd не принадлежит НИ ОДНОМУ репозиторию» неотличим от случая «cwd принадлежит тому же».
+
+ЦЕНА: рабочая папка и ветка заведены в чужом репозитории `disciplina` (веток стало 170); три хода на обнаружение и уборку — `worktree drop`, `poteri`, `zakryt-vetku` (стало 169). Работа не потеряна только потому, что я успел заметить до первой записи в неё: заход, который начал бы писать код в `disciplina-wt/`, обнаружил бы это на коммите — ровно тот сценарий «правка утекает МИМО worktree», цена которого уже записана в самом контракте зоны как пять файлов и откат главной папки. Гейт `Г1` этого бы не поймал: он проверяет зону в том репозитории, где стоит исполнитель.
+
+### `git_zona.py zayavki` без `GIT_ZONA_REPO` молча отвечает про ЧУЖУЮ очередь и зеленеет
+
+Найдено субагентом гит-контура при снятии снимка входа. Команда `zayavki` входит в `KOMANDY_TOLKO_CHTENIE`, поэтому сторож её пропускает по построению — и она читает очередь того репозитория, где лежит сам инструмент (`disciplina`), отвечая «✅ заявок нет». С `GIT_ZONA_REPO=…/spetsmat-bot` та же команда на том же диске в ту же минуту даёт «открыта 1 заявка, переадресовано 28». Родственная `plan` в этой же ситуации честно отказывает — то есть внутри одного инструмента два поведения на одну ошибку.
+
+ЦЕНА: снимок входа захода, который приёмка обязана сверять по гейту Г12, содержал ложный ноль вместо одной открытой заявки. Ложь попала бы в `## ГИГИЕНА ВХОДА` дословно и была бы неотличима от честного «долгов нет» — поймал только субагент, перепроверивший команду с переменной.
+
+### Клауза 7 критерия невыполнима буквально ЛЮБОЙ корректной реализацией задачи B того же захода
+
+Клауза 7 требует `grep -rc "client_secret\|refresh_token\|private_key" ops deploy tests` → **0**. Задача B того же захода требует написать OAuth-инструмент, а протокол OAuth 2.0 обязывает называть поля `client_secret` и `refresh_token` — они уезжают в тело POST-запроса и в имена ключей файла `authorized_user`. Критерий унаследован от мира сервисного аккаунта, где `private_key` в зоне действительно означал утёкший ключ, и не пережил смены механизма, которую сам же и заказывает.
+
+ЦЕНА: буквальный прогон гейта даёт 12 совпавших строк (14 вхождений) в двух моих файлах при полном отсутствии утечки, и заход обязан был бы вернуть провал по клаузе 7. Подменено содержательной проверкой — грепом по реальным ЗНАЧЕНИЯМ (`client_secret`, `client_id`, `project_id`, прочитанным с сервера): 0 совпадений в зоне. Правильная формулировка гейта — искать значения, а не имена полей.
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -343,6 +363,30 @@ Clause 2 cannot be satisfied by me: consent is given by the owner, by hand, in a
 `ops/vygruzka_v_tablicu.py` and the service account; `/privacy` and `/terms`; printing key or token contents anywhere; committing `secrets/`; authorizing on the owner's behalf or substituting an account; anything outside `ops/ deploy/ tests/`.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. Сторож `repo_call_guard` в `git_zona.py` пропускает вызов, когда `cwd` не принадлежит ни одному репозиторию: `REPO` уже упал на репозиторий инструмента, и сравнение `таблица_для_репо(REPO) == КОРНИ` тривиально истинно. Чинится третьим случаем — «cwd вне любого репозитория» проверять отдельно от «cwd в том же». Воспроизведение и цена — в `## УРОКИ ФАБРИКЕ`.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py
+   ДОСТАВЛЕНО: нет
+
+2. `git_zona.py zayavki` состоит в `KOMANDY_TOLKO_CHTENIE` и потому без `GIT_ZONA_REPO` молча читает очередь чужого репозитория, отвечая зелёным «заявок нет». Читающая команда, отвечающая НЕ ПРО ТОТ репозиторий, безопасна для диска, но не для решения: её ответ уходит в снимок входа под гейт Г12.
+   ДОМ: /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py
+   ДОСТАВЛЕНО: нет
+
+3. Клауза 7 шаблона критерия ищет ИМЕНА полей (`client_secret`, `refresh_token`), а не их значения, и потому несовместима с любым OAuth-кодом. Гейт стоит переписать на поиск значений, читаемых из `secrets/`.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+4. Прогон `pytest tests/ -q` мутирует отслеживаемые `data/spetsmat.db` и `docs/index.html` — дефект изоляции тестов, найденный прошлым заходом и повторившийся у меня дословно, оба раза. Восстанавливается `git checkout --`, но каждый заход, которому клауза про число тестов предписывает полный прогон, обязан помнить об этом сам.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+5. `ops/vygruzka_bazy.py --perenesti-tablicu` под узкими правами `drive.file` больше не работает (404: приложение не может адресовать таблицу, которой не создавало). Разово это уже сделано — таблица кондуита лежит в папке владельца, — и держать ради него широкие права каждую ночь не стоит. Понадобится снова — минуть токен через `ops/avtorizacia_drive.py --obyom polnyj`. Решение оставить так — за владельцем.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+6. `deploy/ustanovka.sh` в шапке до сих пор утверждает «there is no server yet», хотя сервер `159.194.254.52` живой с прошлого захода. Я прочитал это как факт и первым ходом сделал неверный вывод, что клаузы 1 и 6 неисполнимы; поймал только сверкой с отчётом прошлого захода. Строка лежит В моей зоне (`deploy/`), но её правка не входит в задачу — не трогал по правилу «менять только то, о чём просили».
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -376,17 +420,118 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+```
+$ git --no-optional-locks branch --no-merged main
+(пустой вывод — ни одной строки)
+
+$ git --no-optional-locks status --porcelain | wc -l
+      16
+
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+       3
+
+$ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki
+✅ заявок нет
+
+Охват: заявок открыто 0, переадресовано 0, постоянных исключений 0, сторож краснеет на 0, держателей 0, двойной захват на 0
+```
+
+🔴 **ЧЕТВЁРТАЯ КОМАНДА СНИМКА СОЛГАЛА.** `git_zona.py zayavki` без переменной `GIT_ZONA_REPO` читает очередь репозитория, в котором лежит сам инструмент (disciplina), а не рабочего — и отвечает «заявок нет». С `GIT_ZONA_REPO=/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` та же команда даёт: **открыта 1 заявка**, переадресовано 28. Родственная команда `plan` в той же ситуации честно отказывает («⛔ `GIT_ZONA_REPO` не выставлена… НИЧЕГО НЕ СДЕЛАНО»), а `zayavki` молча зеленеет. Это ровно тот же класс ложно-зелёного, что «зона-префикс». Все мои команды дальше шли с переменной.
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+- п.0 хвост Cowork закоммичен: **53ff5c8** (8 путей: `SESSIYA.md`, `UROKI-FABRIKE.md`, `kod_bekap-v-papku.md`, `kod_pages-i-materialy.md`, `kod_bekap-avtorizacia.md`, `kod_storozh-pomnit.md`, `_INFRA-git/INCIDENTY.md`, файл открытой заявки)
+- вывезено `vyvezti --yes`: main → origin/main, 4 коммита (e0287b4, 997780e, e0a8dba, 53ff5c8)
+- заявка **2026-09-08T2039-main-3-origin-main-e0a8dba-997780e** закрыта, коммит переноса **96d41d6**
+- индекс регистрации `README.md` закоммичен: **5e8ce18**, вывезен
+- хвост отрос по ходу — дозабран: **cc17367** (`kod_bekap-avtorizacia.md`), вывезен с `--push`
+- влито в основную: 0 веток; погашено: ничего
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ШЕСТЬ СТРОК ДОКЛАДА СУБАГЕНТА, ДОСЛОВНО:**
+
+1. **Заявок было 1, закрыто 1, застряло 0.** Закрыта `2026-09-08T2039-main-3-origin-main-e0a8dba-997780e` (род `git-operaciya`, операция `vyvoz`) — исполнена штатным `vyvezti --yes`, push прошёл, слияний не требовалось. На входе снимок показывал «заявок нет» — это была ложь инструмента, см. блок выше. Ещё 28 заявок лежат в `zayavki/na-zahod/` — они переадресованы прошлыми проходами и гит-контуру не принадлежат по правам (чужой репозиторий disciplina либо содержательная правка кода); я их не трогал.
+2. **Влито в основную 0 веток из 0 названных.** Основная ветка снята командой: `main` (`git rev-parse --abbrev-ref HEAD`). Факт: `git --no-optional-locks branch --no-merged main` даёт **пустой вывод — 0 невлитых веток** (и на входе, и на выходе). Ветки `zahod/bekap-avtorizacia` в репозитории не существует вовсе, worktree под неё не заведён — заход работает в главной папке. Чужих невлитых веток, которые стоило бы назвать, нет: все 68 локальных веток уже влиты в main.
+3. **Хвост Cowork.** ЗАБРАНО пунктом 0 (коммит 53ff5c8) и добором (5e8ce18, cc17367): `zhurnal/2026-09-02_spetsmat-bot/SESSIYA.md`, `…/UROKI-FABRIKE.md`, `…/kod_bekap-v-papku.md`, `…/kod_pages-i-materialy.md`, `…/kod_bekap-avtorizacia.md`, `…/kod_storozh-pomnit.md`, `zhurnal/_INFRA-git/INCIDENTY.md`, `zhurnal/_INFRA-git/zayavki/2026-09-08T2039-….md`, `README.md` (вайтлист «индексы регистрации»; дифф — ровно одна запись о регистрации `kod_bekap-avtorizacia.md`). ОСТАЛОСЬ ВНЕ ЕГО (снято `git_zona.py check`, не мои по правам): `M data/spetsmat.db` — боевая база; `?? doc/PLAN-veb-2026-09.md`, `?? doc/TZ-raspredelenie-dizajn-i-dva-sloya.md`, `?? doc/TZ-sloj-zanyatia.md` — три незарегистрированных чужих `.md`, за автора не регистрирую; `?? .DS_Store`, `?? zhurnal/.DS_Store` — мусор Finder, в `.gitignore` их нет; `?? .commit-plan` — черновик самого `git_zona.py`. Ни один из остатков не лежит в зоне захода `ops/ deploy/ tests/` — эта зона на выходе чистая.
+4. **Погашено: ничего.** Веток к гашению не названо; ветку захода `zahod/bekap-avtorizacia` не гасил и в main не вливал (её не существует), чужие worktree-папки не трогал. rc последней проверки: `check` → «вне git 7 путей» (rc=1, ожидаемо — это перечисленный выше остаток не моей зоны); `branch --no-merged main` → 0 строк; `log @{u}..` → 0.
+5. **Необратимое:** `git_zona.py plan` перезаписал уже лежавший на диске черновик `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/.commit-plan` (файл вне git, прежнего содержимого не осталось). Восстанавливается командой `GIT_ZONA_REPO=… git_zona.py plan --force`. Больше необратимого не было: все четыре коммита обратимы, ничего не удалялось.
+6. выдано 17 позиций из 17 найденных
+
+🔴 **ЗАМЕЧАНИЕ ИСПОЛНИТЕЛЯ К ПУНКТУ 2 СУБАГЕНТА.** Его строка «ветки `zahod/bekap-avtorizacia` не существует вовсе, worktree под неё не заведён — заход работает в главной папке» была ВЕРНА в момент его прогона и объясняется моей ошибкой первого хода: ветка и worktree к тому времени существовали, но в ЧУЖОМ репозитории `disciplina` (разбор — `## УРОКИ ФАБРИКЕ`). После его доклада я убрал ошибочную пару и завёл рабочую папку в `spetsmat-bot` штатно; заход в главной папке НЕ работал.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да` — на выходе субагента: `@{u}..` = 0, заявок открыто 0, невлитых веток 0. Остаток вне git (7 путей) — не его зоны и не моей: чужая содержательная работа, незарегистрированные чужие `.md` и мусор Finder, перечислены поимённо в строке 3 выше.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
+
+**ПРАВКИ ПРОЧИТАНЫ:** блок `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` пуст («правок нет») — проверен при старте и перед отчётом.
+
+**WHAT WAS DONE, AND WHY**
+
+The nightly archive now leaves the machine. It could not before, and not through a bug: a service account has no Drive storage quota of its own, so `files().create` answered 403 in the owner's own empty folder — measured by the previous заход, re-read here rather than re-opened. The remedy is the one the owner picked at the interview: the archive is created BY THE ACCOUNT THAT OWNS THE FOLDER, so the files are his and the quota is his.
+
+**A.** The Desktop-client JSON was moved from `~/Downloads` to `/opt/spetsmat-bot/secrets/oauth_klient.json` (`spetsmat:spetsmat`, `600`, 414 bytes), verified byte-identical by sha256 comparison — the hashes were compared programmatically and only the verdict printed. The `~/Downloads` copy was then deleted. Contents were never printed anywhere.
+
+**B.** `ops/avtorizacia_drive.py` — one-off consent collector, run by the owner on his laptop. **Standard library only**, and that is a decision, not a shortcut: the laptop has Python 3.9.6 with no `google_auth_oauthlib` (checked by command), and installing packages on the owner's machine to collect one consent is the worse trade. An installed-app flow is a URL, a loopback redirect and one POST; what it writes is the ordinary `authorized_user` JSON, which the server's `google-auth 2.57.1` reads natively. `access_type=offline` and `prompt=consent` are both sent — without the first Google issues no refresh token at all, without the second it silently omits one on every re-authorization. PKCE (S256) closes the loopback race. The client secret is read FROM the server over ssh and the token written back the same way, over stdin — so neither ever lands on the laptop's disk or in a command line visible to `ps`, and that is what made deleting the `~/Downloads` copy safe rather than destructive. The handler's `log_message` is silenced because `BaseHTTPRequestHandler` logs the request line by default, and the request line carries the consent code.
+
+**C. The scope was measured, and the measurement contradicted my own expectation — which is the argument for measuring.** I expected the narrow `drive.file` to fail on a folder the app did not create, and said so in `## ПЛАН`. It does not: `files().create` with the owner's existing folder in `parents` **succeeds**, and the created file is owned by `ye.mathclub@gmail.com`. **The заход runs on the narrow scope. The wide `drive` was never taken, and the owner never had to consent twice.**
+
+The measurement also found an asymmetry worth naming: under `drive.file`, `files().create` INTO that folder succeeds while `files().get` ON that folder answers `404 File not found` — an app scoped to its own files cannot read metadata of a folder it did not create. That broke `--proverit-dostup`, which read `capabilities.canAddChildren`. I did **not** widen the scope to make a diagnostic pass — that is taking rights for a check rather than for the work. Instead the probe now does the real round trip: create a tiny file, confirm its owner, delete it in a `finally`. That also fixes a defect the previous заход named in its own report and could not fix: `canAddChildren` answers about PERMISSION and reported "writable" right up to the quota 403, so the old check was structurally incapable of seeing the failure it was meant to catch.
+
+**D.** `ops/vygruzka_bazy.py` now authenticates from `secrets/oauth_token.json`. The identity check lives in the **nightly** path, not in a one-off verification: `about().get(fields="user")` is asserted **before** anything is created, because a file made under the wrong account is already in the wrong Drive and deleting it needs that same wrong account. A stale-consent failure is named in words with the one-line cure instead of surfacing as an opaque 401.
+
+**E.** `spetsmat-vygruzka-bazy.timer` enabled and live.
+
+**НЕ ТРОГАЛ:** `ops/vygruzka_v_tablicu.py` и сервисный аккаунт — кондуит продолжает ездить им, и это правильно: запись в СУЩЕСТВУЮЩУЮ таблицу файла не создаёт и квоты не требует. Страницы `/privacy` и `/terms` не заводил. `secrets/` не коммитил. Сам не авторизовался — согласие выдал владелец руками. Устаревшую строку «there is no server yet» в `deploy/ustanovka.sh` не правил, хотя путь в моей зоне: правка не входит в задачу (`## ВОПРОСЫ` 6).
+
+**КРИТЕРИЙ ГОТОВНОСТИ — ВСЕ 8 КЛАУЗ, ЧИСЛАМИ**
+
+1. ✅ **Живой прогон на реальном сервере и боевой базе.** `sudo -u spetsmat python3 ops/vygruzka_bazy.py --primenit` на `159.194.254.52` → **rc=0**, снимок 292 142 байта. Плюс прогон через САМ ЮНИТ (`systemctl start spetsmat-vygruzka-bazy.service`) → `Result=success`, `ExecMainStatus=0`, журнал 19:45:38→19:45:42 `Finished`. 🔴 В журнале выше стоит 403 про квоту сервисного аккаунта — он от **16:35**, то есть от ПРОШЛОГО захода; проверено отметками времени, а не порядком строк. `files().list()` по папке печатает: `spetsmat-20260908T194538Z-oblachnyj.db.gz`, 292 142 байта, создан `2026-09-08T19:45:40Z`.
+2. ✅ **Архив лёг в Диск правильного аккаунта — проверено, а не предположено.** `about().get(fields="user")` → `emailAddress: ye.mathclub@gmail.com` (ждали `ye.mathclub@gmail.com` — совпало). `files().get(<id архива>, fields="owners")` → `ye.mathclub@gmail.com`. Обе печатаются самим инструментом на каждом реальном прогоне, не только здесь.
+3. ✅ **Архив восстановим.** Свежий субагент-верификатор, кода писателя не читавший, скачал архив тем же API, распаковал, открыл sqlite: `PRAGMA integrity_check` → **`ok`**. Списки таблиц идентичны (19 и 19, ни одной только-в-архиве, ни одной только-в-живой). Счёт строк по КАЖДОЙ из 19 таблиц совпал: расхождений **0 из 19** (`marks` 16184/16184, `problems` 595/595, `enrollment` 186/186, `students` 57/57, `sheets` 21/21, `teachers` 19/19, `sheet_blocks` 48/48, `kabinet_na_den` 12/12, `_yoyo_log` 8/8, `_yoyo_migration` 8/8, `attendance` 6/6, `gruppy` 3/3, `kabinety` 3/3, `sessions` 2/2, `_yoyo_version` 1/1, `prepodavatel_ne_prihodit` 0/0, `sent_notifications` 0/0, `teacher_attendance` 0/0, `yoyo_lock` 0/0). Сверх задания он посчитал sha256 по отсортированным строкам каждой таблицы с обеих сторон — совпали все 19, то есть там не «столько же строк», а ровно те же строки. Временные файлы убраны, живая база открывалась только `mode=ro`.
+4. ✅ **Имя и число.** Имя несёт дату и время: `spetsmat-20260908T194538Z`. Архивов в папке — **2**, предел `DRIVE_KEEP` — **14**; лишних нет, удалено **0** (оба числа печатает сам инструмент: «архивов было 2, оставлено 2, удалено 0»).
+5. ✅ **Объём прав назван и доказан.** Взят **узкий** `https://www.googleapis.com/auth/drive.file` — он сработал, поэтому широкий `drive` не брался. Доказательство обратного не потребовалось: клауза допускает оба исхода, и здесь верен первый. Отказ API всё же зафиксирован, но по другому поводу: `files().get` на папке под узкими правами → `404 File not found` — из-за него переписан `--proverit-dostup` (см. C), а не расширены права.
+6. ✅ **Таймер активен, следующий запуск в будущем.** `systemctl is-enabled` → `enabled`; `list-timers` → `NEXT Wed 2026-09-09 02:30:00 UTC, LEFT 6h`. `ops/proverka_ustanovki.py --zhivaya` → **`verdict: GREEN -- passed 11 of 11 checks`**, `rc=0`. Прошлый заход намеренно оставил здесь красное 10 из 11 — долг закрыт.
+7. ⚠️ **Секреты целы — но клауза проверена ПО СУЩЕСТВУ, потому что буквально она невыполнима.** `git_zona.py check` → ✅ по всем трём зонам (`ops/`, `deploy/`, `tests/`). `git show --stat` по трём своим коммитам не несёт ни одного пути из `secrets/` (всего 4 файла, все мои). Файл из `~/Downloads` удалён — проверено маской, совпадений нет. 🔴 Буквальный `grep -rc "client_secret\|refresh_token\|private_key" ops deploy tests` даёт **12** (совпавших строк: 8 в `ops/avtorizacia_drive.py` и 4 в `tests/ops/test_avtorizacia_drive.py`; вхождений 14), а не 0, и дать 0 не может: OAuth обязывает называть эти поля, а задача B того же захода требует OAuth-инструмент. Прогнана содержательная проверка — греп по реальным ЗНАЧЕНИЯМ, прочитанным с сервера (`client_secret`, `client_id`, `project_id`): **0 совпадений** в зоне; единственное совпадение по `project_id` — имя файла ключа в `ops/vygruzka_v_tablicu.py`, оно было до меня и трогать его запрещено. Утечки нет. Разбор и предлагаемая формулировка гейта — `## УРОКИ ФАБРИКЕ` и `## ВОПРОСЫ` 3.
+8. ✅ **Тесты.** Вход снят командой ДО работы, в своей рабочей папке: **1013 passed**, 17 failed, 13 skipped, 30 errors. Выход: **1039 passed**, 17 failed, 13 skipped, 30 errors. Зелёных **+26** — ровно мои новые тесты (19 на `avtorizacia_drive` + 7 на `vygruzka_bazy`); падения и ошибки не изменились ни числом, ни именами (`tests/ops/test_vykatka.py`, `tests/room/*`, `tests/test_enrollment_scd2.py`, `tests/test_sostav.py`, `tests/svodka/*`) — унаследованные, не мои, не трогал.
+
+**ОХВАТ:** проверено 8 из 8 клауз; таблиц базы сверено 19 из 19.
+
+**ВЕРДИКТ ПО ЗАМЫСЛУ ЗАХОДА: ПОЛОЖИТЕЛЬНЫЙ.** Долг «копия `.db.gz` вне сервера» из докстринга `ops/rezervnaya_kopia.py`, который прошлый заход закрыть не смог, закрыт: архив лежит в Диске `ye.mathclub@gmail.com`, восстановим построчно, и таймер поднимет следующий в 02:30 UTC.
+
+**РЕЗУЛЬТАТ ВЕРИФИКАТОРА (§3):** ВОССТАНОВИМ. `PRAGMA integrity_check` → `ok`; 19 таблиц из 19, расхождений 0; сверх задания — побайтовое совпадение содержимого всех 19. Финальная строка ответа получена дословно: «выдано 19 позиций из 19 найденных».
+
+**ПОВТОРЯЕМОСТЬ НАХОДОК.** Повторятся на следующем заходе (класс НЕМЕДЛЕННОЕ, чинятся ДО следующего прогона, а не пунктом очереди): **дыра сторожа `GIT_ZONA_REPO`** — сработает у каждого исполнителя, чей первый ход происходит вне репозитория, а стартовое сообщение велит звать `worktree add` именно первым ходом; **молчаливо-зелёный `zayavki`** — повторится в снимке входа каждого гит-контура; **мутация отслеживаемых файлов прогоном `pytest`** — повторилась у меня дословно после того, как её описал прошлый заход, и повторится у всякого, кому клауза 8 предписывает полный прогон. НЕ повторится и потому законно уходит записью: клауза 7 (свойство ЭТОГО критерия, а не шаблона всех) и устаревшая строка в `ustanovka.sh`. Пункты 5 и 6 `## ВОПРОСЫ` адресованы владельцу и заходом не чинятся.
+
+**НЕОБРАТИМОЕ**
+- **Удалён** `~/Downloads/client_secret_106745579247-…apps.googleusercontent.com.json`. Восстанавливается: копия цела на сервере (`/opt/spetsmat-bot/secrets/oauth_klient.json`, сверена sha256 ДО удаления), и клиент в любой момент перевыпускается в Google Cloud Console.
+- **Заведены и погашены** ошибочный worktree `/Users/ivanyakovlev/Documents/GitHub/disciplina-wt/bekap-avtorizacia` и ветка `zahod/bekap-avtorizacia` в ЧУЖОМ репозитории `disciplina` — моя ошибка первого хода (разбор в `## УРОКИ ФАБРИКЕ`). Убрано `worktree drop` + `zakryt-vetku`; `poteri` перед гашением дал «Потерь нет, проверено 1 из 1», веток стало 169 из 170. Ветка воскрешается: `git_zona.py voskresit --branch zahod/bekap-avtorizacia` (в `disciplina`).
+- **Записан новый файл на сервере** `/opt/spetsmat-bot/secrets/oauth_klient.json` (`spetsmat:spetsmat`, `600`). Обратимо удалением файла.
+- **Записан новый файл на сервере** `/opt/spetsmat-bot/secrets/oauth_token.json` (`spetsmat:spetsmat`, `600`) — его создал прогон владельца, не я. Обратимо удалением файла; отзывается на `myaccount.google.com/permissions`.
+- **Выкачен боевой сервер** `deploy/vykatka.sh` (rsync + рестарт `spetsmat-veb.service` и `spetsmat-bot.service`; сайт ответил 200 через 1 с). Откат: снимок, снятый самим `vykatka.sh` в `/opt/spetsmat-bot-bak-<ISO>/`, либо `deploy/vykatka.sh --otkat`.
+- **Включён таймер** `systemctl enable --now spetsmat-vygruzka-bazy.timer` (создан symlink в `timers.target.wants`). Обратимо `systemctl disable --now`.
+- **Созданы два реальных архива** в Диске владельца (`…194507Z…` ручным `--primenit`, `…194538Z…` прогоном юнита) и два локальных снимка в `/opt/spetsmat-bot/data/backups`. Безвредно, подпадают под штатную ротацию (предел 14).
+- **Созданы и удалены** три пробных файла в папке владельца: `spetsmat-zamer-prav.txt` (замер C) и два `spetsmat-proba-dostupa.txt` (`--proverit-dostup`) — каждый удалён тем же прогоном, в папке не осталось ни одного.
+- **Мутированы прогоном `pytest`** отслеживаемые `data/spetsmat.db` и `docs/index.html` в рабочей папке — оба раза восстановлены `git checkout --`, итоговый `status --porcelain` пуст. Чужой дефект изоляции тестов, не мой.
+- Историю не переписывал, force-push не делал, ничего в `main` не удалял.
+
+**ГИТ-ГИГИЕНА, ФИНАЛЬНЫЙ БЛОК — ЧИСЛА, А НЕ ПАМЯТЬ**
+
+1. **Все коммиты.** Рабочая папка `spetsmat-bot-wt/bekap-avtorizacia`: `status --porcelain` → **вне git 0**. Главная папка `spetsmat-bot`: **13** грязных путей, из них моей зоны — **0** (проверено `status --porcelain -- ops/ deploy/ tests/` → 0). Это `README.md`, два `INCIDENTY.md`, `data/spetsmat.db`, три черновика `doc/*.md`, два `.DS_Store`, `.commit-plan`, файл новой заявки и `kod_privacy-i-terms.md` соседнего захода — чужая работа и хвост Cowork, отросший после прохода контура; названы и оставлены. `Г1`: `git_zona.py check --zone` → ✅ по `ops/`, ✅ по `deploy/`, ✅ по `tests/`.
+2. **Влитие своей ветки.** `git_zona.py vlit-v-osnovnuyu zahod/bekap-avtorizacia --zone ops/ --zone deploy/ --zone tests/` → **`f131149`**, без конфликтов, затронуто 4 пути. Хэш `main` ДО влития — `1cabd99` (на случай отката). Инструмент подтвердил живые точки вызова обоих новых файлов.
+3. **Пост-проверка ИЗ ГЛАВНОЙ ПАПКИ** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` (не из рабочей) — **ЗЕЛЁНАЯ**, отката не потребовалось: в `main` лежит именно OAuth-версия (6 совпадений `oauth_token.json|proverit_akkaunt|OZHIDAEMYJ_AKKAUNT`, `service_account` отсутствует); `python3 ops/avtorizacia_drive.py --proba` → **rc=0**; `python3 ops/vygruzka_bazy.py --baza data/spetsmat.db --kuda /tmp/postcheck-bekap` → **rc=0**; живая точка вызова на месте — `deploy/spetsmat-vygruzka-bazy.service:14 ExecStart=… ops/vygruzka_bazy.py --primenit` и `deploy/ustanovka.sh:39 spetsmat-vygruzka-bazy.timer`; тесты зоны из главной папки — **40 passed**.
+4. **Гашение.** `git --no-optional-locks branch --no-merged main` → **пусто, 0 невлитых** (и на входе было 0 — не прибавилось, `Г3` зелёный). Своя ветка `zahod/bekap-avtorizacia` НЕ гасится намеренно: `Г14` приёмки требует, чтобы она существовала и была влита — она существует и влита. Рабочую папку не снимал: её гасит приёмка через `worktree drop`. Чужих рабочих папок не трогал.
+5. **Вывоз.** Своя ветка вывезена: `git push -u origin zahod/bekap-avtorizacia` → `[new branch]`, затем `git log --oneline @{u}..` из рабочей папки → **0**. 🔴 Проверил отдельно, что именно уехало в ПУБЛИЧНЫЙ репозиторий: `origin/main..zahod/bekap-avtorizacia` — ровно три моих коммита, 4 файла, греп по `bot_token|private_key|BEGIN … PRIVATE KEY|<токен телеграма>` → 0 совпадений. `main` НЕ вывозил (§5 запрещает): он впереди `origin/main` на **5**. Новой заявки не заводил, потому что операция УЖЕ в очереди — открыта `2026-09-08T2240-spetsmat-bot-main-is-1-commit`, род `git-operaciya`, операция `vyvoz`, поставлена параллельным заходом; дубль на ту же операцию был бы шумом. Всего открытых заявок 1, переадресовано 28.
+6. **Прочие ворота.** `Г2` неприменим: все пути зоны внутри `spetsmat-bot`, зона за его пределы не расширялась. `Г4` неприменим: ни одного нового `.py` в `_generator/**` — мои `.py` лежат в `ops/` рабочего репозитория. `Г5` неприменим: новых `.md` не заводил, `register_doc.py` не звал, `KARTA.md` не трогал. `Г6`: `show --name-only` по каждому из трёх коммитов — только `ops/avtorizacia_drive.py`, `ops/vygruzka_bazy.py`, `tests/ops/test_avtorizacia_drive.py`, `tests/ops/test_vygruzka_bazy.py`; чужих путей нет. Дома `## ВОПРОСЫ`: `bootstrap_zahod.py --proverit-doma` → **rc=0**, недостижимых 0.
+7. **Всё названное снято командой в момент написания строки**, а не по памяти.
+
+**ВРЕМЯ ПРОГОНА + ТОКЕНЫ:** неприменимо — канал `app`, лога прогона не существует.
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/ops/avtorizacia_drive.py` — открывать редактором кода; продукт захода есть КОД. Наблюдаемый результат его работы — архив `spetsmat-20260908T194538Z-oblachnyj.db.gz` в папке Google Drive владельца `ye.mathclub@gmail.com`, открывать браузером.
+
+**РОД АРТЕФАКТА:** `исходник`
+
+**КОММИТ:** `027eb4e` — "ops: add ops/avtorizacia_drive.py -- the owner's one-off Drive consent, stdlib only"; `5a0fe0f` — "ops: vygruzka_bazy uploads as the OWNER, not as the quota-less service account"; `f319576` — "ops: the access probe proves the write instead of reading a capability flag" · влиты в `main` как `f131149` · `git_zona.py check --zone ops/` → ✅ · `--zone deploy/` → ✅ · `--zone tests/` → ✅
 **АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
 **РОД АРТЕФАКТА:** `<исходник | собранный>`
@@ -406,7 +551,55 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — **долг закрыт: копия базы вне сервера существует и доказанно восстановима.** Заход измерил там, где все трое до него предполагали, и измерение опровергло ожидание — включая моё.
+
+**ЧТО ПЕРЕГНАЛА ПРИЁМКА СВОИМ КАНАЛОМ (по коду и git, а не по отчёту):**
+
+| утверждение отчёта | чем перегнано | сошлось |
+|---|---|---|
+| взят УЗКИЙ объём прав | `grep "auth/drive" ops/*.py` → в `avtorizacia_drive.py:77` объявлен `SCOPE_UZKIJ = .../auth/drive.file`, широкий лежит рядом строкой 80 неиспользованным запасом | ✅ |
+| личность сверяется ДО создания файла | `ops/vygruzka_bazy.py:172` — `service.about().get(fields="user")…["emailAddress"]`, и это в ночном пути, а не в разовой проверке | ✅ |
+| PKCE и offline-согласие на месте | греп по `avtorizacia_drive.py`: `S256`/`code_challenge` — 3 вхождения, `access_type=offline`/`prompt=consent` — 4 | ✅ |
+| буквальный греп клаузы 7 даёт 12, а не 0 | `grep -rIc "client_secret\|refresh_token\|private_key" ops deploy tests` → **12**. Число отчёта воспроизведено ровно | ✅ |
+| `secrets/` не в git | `git ls-files secrets/` → **0** | ✅ |
+| личность аккаунта, восстановимость, таймер, ротация | 🔴 **не перегнала:** к Drive API и серверу из песочницы не дотянуться. Принято по отчёту и независимому верификатору | не проверено, названо |
+
+**ОХВАТ ПРИЁМКИ: перегнано 5 утверждений из 5, перегоняемых без сервера и без ключа.**
+
+🔴 **ГЛАВНОЕ: ЗАМЕР ОПРОВЕРГ ОЖИДАНИЕ, И ЭТО ГЛАВНАЯ ЦЕННОСТЬ ЗАХОДА.** Я написал в заходе, что узкий `drive.file` «может не суметь положить файл в уже существующую папку». Исполнитель написал в `## ПЛАН`, что ожидает того же. **Оба ошиблись:** `files().create` с папкой владельца в `parents` под узкими правами **проходит**, и созданный файл принадлежит `ye.mathclub@gmail.com`. Широкий `drive` не брался вовсе, владельцу не пришлось соглашаться дважды. Ровно ради этого в заходе стояло «объём прав выбрать ЗАМЕРОМ, а не догадкой», и механизм сработал против составителя — как и должен.
+
+**Побочная находка того же замера, названная честно:** под `drive.file` создать файл В папке можно, а прочитать метаданные САМОЙ папки нельзя — `files().get` отвечает `404`. Из-за этого сломалась диагностика `--proverit-dostup`. 🔴 **И вот что здесь важнее самой находки: исполнитель НЕ расширил права, чтобы починить проверку.** Его слова: «это взятие прав ради проверки, а не ради работы». Вместо этого проверка переписана на настоящий круг — создать пробный файл, убедиться во владельце, удалить в `finally`. Тем же ходом закрыт дефект, который прошлый заход назвал у себя и починить не смог: `canAddChildren` отвечает про ПРАВО, а не про квоту, и рапортовал «писать можно» вплоть до 403 — то есть был структурно неспособен увидеть тот отказ, ради которого существовал.
+
+**ВОССТАНОВИМОСТЬ ДОКАЗАНА СИЛЬНЕЕ, ЧЕМ ТРЕБОВАЛОСЬ.** Клауза просила счёт строк по таблицам. Верификатор сверил 19 таблиц из 19, расхождений 0 — и сверх задания посчитал sha256 по отсортированным строкам каждой таблицы с обеих сторон: совпали все 19. Это не «столько же строк», а ровно те же строки. `PRAGMA integrity_check` → `ok`. Живая база открывалась только `mode=ro`.
+
+**ЧТО ПРИЁМКА СЧИТАЕТ СИЛЬНЫМ СВЕРХ ЭТОГО.**
+1. **Секрет ни разу не оказался там, где его могли бы подобрать.** Клиентский ключ читается С СЕРВЕРА по ssh, токен пишется обратно через stdin — ни то, ни другое не ложится на диск ноутбука и не появляется в командной строке, видимой `ps`. Именно поэтому удаление копии из «Загрузок» стало безопасным, а не разрушительным. Отдельно заглушён `log_message` обработчика: `BaseHTTPRequestHandler` по умолчанию пишет строку запроса, а в ней едет код согласия.
+2. **Только стандартная библиотека, и это решение, а не экономия.** На ноутбуке Python 3.9.6 без `google_auth_oauthlib` — проверено командой; ставить пакеты на машину владельца ради одного согласия хуже, чем написать поток самому.
+3. **Сверка личности живёт в НОЧНОМ пути, а не в разовой проверке.** Довод исполнителя точен: файл, созданный не под тем аккаунтом, уже лежит в чужом Диске, и удалять его придётся тем же чужим аккаунтом.
+4. **Ложный след в журнале распознан по времени, а не по порядку строк:** 403 про квоту выше в журнале оказался от 16:35, то есть от прошлого захода.
+5. `pytest` 1013 → 1039, +26 — ровно его новые тесты; падения не изменились ни числом, ни именами.
+
+🔴 **МОЙ ДЕФЕКТ, ШЕСТОЙ ЗА ДЕНЬ ОДНОЙ СЕМЬИ, И САМЫЙ НАГЛЯДНЫЙ.** Клауза 7 требовала `grep -rc "client_secret\|refresh_token\|private_key" ops deploy tests` → **0**. Это невыполнимо ПО ПОСТРОЕНИЮ в заходе, задача B которого — написать OAuth-инструмент: протокол обязывает называть эти поля. Исполнитель не подогнал число и не ослабил клаузу: напечатал честные 12, объяснил, почему нуля быть не может, и прогнал содержательную проверку — греп по реальным ЗНАЧЕНИЯМ, прочитанным с сервера, → **0 совпадений**. Утечки нет. **Критерий проверял ИМЕНА полей вместо их значений — и в заходе про секреты это ровно та проверка, которая не проверяет ничего.** → урок фабрике.
+
+**ГЕЙТ Г7 И КАК ОН ЗАКРЫТ.** Два пункта очереди родились с домом `/Users/…/disciplina/_generator/tools/git_zona.py` — абсолютный путь в ЧУЖОЙ репозиторий, домом внутри `spetsmat-bot` быть не может, и гейт прав. Содержание не потеряно: приёмка перевыставила оба **заявкой `2026-09-08T2313-08-09-1-repo-call-guard`** в очередь `disciplina`, где инструмент и лежит. База замера домов поднята дверью `--zamer-domov-obnovit` с этой причиной, 0 → 2. *(В тексте причины стоит id `…T2312` — описка приёмки на минуту; действующий id — `…T2313`, он и в очереди.)*
+
+**ВЕТКА РАБОТЫ:** `zahod/bekap-avtorizacia`
+*Ветка-двойник, заведённая по ошибке в чужом `disciplina`, снята самим заходом: `poteri` → «Потерь нет, проверено 1 из 1», веток там стало 169 из 170, воскрешается одной командой.*
+
+**ЗАЯВКИ, ПОСТАВЛЕННЫЕ ЭТОЙ ПРИЁМКОЙ:**
+
+заявок нет: ни одна из пяти операций в очередь ЭТОГО репозитория не понадобилась. Влитие и коммит зоны сделал сам заход, `check --zone` зелёный по всем трём путям. Вывоз прикрыт уже открытой заявкой на вывоз `main`. Деплой заход сделал сам (`vykatka.sh`, сайт ответил 200 через секунду). Гасить нечего — своя ветка влита, ошибочная в чужом репозитории снята самим заходом.
+
+⚠ **Отдельно, и это НЕ дубль строкой выше — потому что дублировать сюда нечего.** Два пункта очереди захода адресованы `git_zona.py`, а он живёт в `disciplina`. Приёмка завела там заявку `2026-09-08T2313-08-09-1-repo-call-guard` (`pravka-koda`, адресат `_generator/tools/git_zona.py`): два дефекта одного механизма — сторож `repo_call_guard` пропускает вызов вне репозитория и уводит worktree в чужой репозиторий (сработало трижды за один день), и `zayavki` без `GIT_ZONA_REPO` молча читает чужую очередь и печатает зелёное «заявок нет» (уже испортило обязательный снимок входа). В блок выше этот id не вписан намеренно: гейт Г13 сверяет id с очередью `spetsmat-bot` и справедливо не находит там чужую заявку. Разница между намерением и копией — ровно то, что гейт ловит, и обходить его строкой было бы враньём.
+
+**ПУНКТЫ ВЛАДЕЛЬЦУ — два, оба не срочные:**
+
+1. `--perenesti-tablicu` под узкими правами больше не работает: приложение не видит папку, которую не создавало. Переезд таблицы кондуита уже сделан раньше и не нужен; если понадобится снова — делается руками на Диске за десять секунд.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+2. `deploy/ustanovka.sh` в шапке до сих пор утверждает «there is no server yet», хотя сервер живой. Исполнитель не стал править: вне задачи, хотя путь в его зоне. Правильное решение.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 
 **ВЕТКА РАБОТЫ:** `zahod/bekap-avtorizacia`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -417,6 +610,6 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
 > 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
 
-- `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
+*(Список — в блоке вердикта выше.)*
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
