@@ -80,18 +80,48 @@ ZAMER_GRUPPY = """
 }
 """
 
-# The same deliberate breakage the tool's --slomat performs: right-align every cell,
-# squeeze one of them, and hang a 2400px block off the body.
-SLOMAT = """
+# 🔴 THREE BREAKAGES, ONE PER DETECTOR, AND NOT ONE COMBINED ONE.  The tool's own
+# `--slomat` hangs a 2400px block off the body and calls the gate proven: the run goes
+# red, the self-test prints «рычаг работает» and returns 0.  Measured by the verifier
+# of this заход, 10.09: that breakage reddens the SCROLL number only -- clipping and
+# wrapping both stay at 0 on all four pages.  Two detectors out of three were being
+# certified by a test that never touched them, which is the exact shape of a silent
+# gate: it is not the gate that is silent, it is the proof of the gate.
+# Each entry says WHERE it breaks as well as HOW: the wrap detector needs a page that
+# carries a text leaf with slack around it, and «страница группы» has two of them
+# («9 КЛ · школа №179», «В 303 · Д 302 · Н 20»), while the distribution rows are
+# already snug and answer an indent with a scrollbar instead of a second line.
+SLOMAT = {
+    # Squeeze every visible text leaf until its own text cannot fit inside it.
+    "obrezka": ("/raspredelenie", "t-shk", """
 () => {
-  document.querySelectorAll('td, th, .kl, li').forEach(e => { e.style.textAlign = 'right'; });
-  const c = document.querySelector('td, li, .kl');
-  if (c) { c.style.width = '8px'; c.style.overflow = 'hidden'; }
+  [...document.querySelectorAll('body *')].filter(el => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return false;
+    const t = (el.textContent || '').trim();
+    if (!t) return false;
+    return ![...el.children].some(c => (c.textContent || '').trim().length > 0);
+  }).forEach(el => { el.style.width = '12px'; el.style.overflow = 'hidden'; });
+}
+"""),
+    # Push the first line of every text leaf sideways so that a word that fitted on one
+    # line no longer does -- a wrap the available width did not require.
+    "perenos": ("/glavnaya", "p-start", """
+() => {
+  [...document.querySelectorAll('p, span, td, li, label')].forEach(el => {
+    el.style.textIndent = '90%';
+  });
+}
+"""),
+    # The tool's own breakage, kept as it is: a block wider than the window.
+    "skroll": ("/raspredelenie", "t-shk", """
+() => {
   const d = document.createElement('div');
   d.style.width = '2400px'; d.style.height = '1px';
   document.body.appendChild(d);
 }
-"""
+"""),
+}
 
 
 def _otkryt(page, baza_url, put, radio):
@@ -113,7 +143,7 @@ def zamer():
     """
     db = zhivaya_baza()
     httpd, conn, potok, url = podnyat_server(db)
-    itog = {"stranicy": {}, "kanon": {}, "gruppa": None, "slomannaya": None}
+    itog = {"stranicy": {}, "kanon": {}, "gruppa": None, "slomannaya": {}, "gost": None}
     try:
         with sync_playwright() as pw:
             brauzer = pw.chromium.launch()
@@ -150,11 +180,13 @@ def zamer():
             itog["gost"] = gost.evaluate(ZAMER)
             gost_ctx.close()
 
-            # The lever must be provable, not merely present: break the page the same
-            # way the tool's self-test does and require the measurement to go red.
-            page.evaluate(SLOMAT)
-            page.wait_for_timeout(120)
-            itog["slomannaya"] = page.evaluate(ZAMER)
+            # The lever must be provable per DETECTOR, not merely present: each of the
+            # three questions is broken on its own page load and must go red by itself.
+            for vopros, (put, radio, skript) in SLOMAT.items():
+                _otkryt(page, url, put, radio)
+                page.evaluate(skript)
+                page.wait_for_timeout(120)
+                itog["slomannaya"][vopros] = page.evaluate(ZAMER)
 
             brauzer.close()
     finally:
@@ -192,17 +224,22 @@ def test_tri_voprosa_kanona(zamer, imya):
                   for d in z["perenos"][:5]))
 
 
-def test_gejt_krasneet_na_narushenii(zamer):
-    """🔴 Молчащий гейт хуже отсутствующего.
+@pytest.mark.parametrize("vopros", list(SLOMAT))
+def test_kazhdyj_detektor_krasneet_otdelno(zamer, vopros):
+    """🔴 Молчащий гейт хуже отсутствующего — и доказывать это надо по детекторам.
 
-    Страница ломается нарочно — гейт обязан это увидеть.  Без этой проверки
-    зелёный результат выше не отличим от гейта, который ничего не измеряет.
+    Страница ломается тремя способами, по одному на вопрос, и каждый обязан покрасить
+    СВОЁ число. Общая поломка, красящая одно число из трёх, аттестует два детектора,
+    которых она не касалась: находка верификатора этого захода 10.09 — штатный
+    `--slomat` инструмента даёт скролл 960 px на всех четырёх страницах при обрезке 0
+    и переносах 0.
     """
-    z = zamer["slomannaya"]
-    ploho = len(z["obrezka"]) + len(z["perenos"]) + (1 if z["skroll"] else 0)
-    print(f"\nСАМОПРОВЕРКА на подстроенном нарушении: обрезка {len(z['obrezka'])}, "
+    z = zamer["slomannaya"][vopros]
+    chislo = z["skroll"] if vopros == "skroll" else len(z[vopros])
+    print(f"\nСАМОПРОВЕРКА · {vopros}: обрезка {len(z['obrezka'])}, "
           f"переносы {len(z['perenos'])}, скролл {z['skroll']} px")
-    assert ploho, "страницу сломали нарочно, а замер остался зелёным"
+    assert chislo, (f"страницу сломали именно по вопросу «{vopros}», а этот детектор "
+                    "остался зелёным")
 
 
 @pytest.mark.xfail(strict=True, reason=(
