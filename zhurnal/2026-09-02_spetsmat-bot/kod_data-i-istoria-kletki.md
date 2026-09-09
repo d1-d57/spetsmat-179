@@ -274,6 +274,41 @@ grep -n '<как механизм назван в вызывающем коде>
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### Зона захода не содержала единственного файла, который пишет отметку
+
+ЦЕНА: часть 4 задания («правило даты») пришлось перепроектировать целиком. Задание велит,
+чтобы галочка «относилась» к последнему прошедшему занятию, — то есть говорит о МОМЕНТЕ
+ЗАПИСИ. Единственная дверь записи отметки в проекте — `veb/priyom.py`, и она НЕ названа
+ни в списке «что прочитать поимённо», ни в зоне; зона называет `veb/razdely/`, а
+`veb/priyom.py` лежит не там. Дальше то же самое со второй частью: жест обязан висеть на
+клетке кондуита, а скрипт кондуита живёт в `veb/obshchee/karkas.py` — тоже вне зоны.
+Обошлось: правило даты сделано ЧИСТОЙ ФУНКЦИЕЙ от уже записанного `valid_at` (и поэтому
+достаёт все 16 188 событий, а не только будущие), а скрипт эмитится самим разделом внутри
+его `data-org`-секции. Но обошлось по удаче — оба обхода нашлись при чтении, а не были
+предусмотрены заходом. Аналитик, назначая зону, обязан проверить, что дверь, о которой
+задание говорит «пусть теперь пишет иначе», внутри зоны лежит.
+
+### Критерий готовности назвал время, которому проект уже противоречит
+
+ЦЕНА: правило даты было бы неверно 75 минут каждый понедельник, и тест был бы про это
+зелёный. Заход говорит «занятия по понедельникам и четвергам 13:10–15:00» и требует
+проверки «в понедельник до 13:10». В проекте расписание живёт в ОДНОМ месте —
+`core/services/sostav_na_den.py`, — и там написано, с датой и источником: с 2026-09-07
+понедельник 14:15–15:55, четверг 13:10–15:00. Заход повторил четверг и промахнулся
+понедельником. Исполнитель, читающий ТОЛЬКО заход (а именно так ему велено), взял бы
+13:10 и написал бы тест, подтверждающий свою же ошибку. Правило «читай только заход»
+работает лишь тогда, когда числа в заходе взяты из дома, а не с голоса.
+
+### Детектор «влито, но не встроено» краснеет на модуле, который зовут по точечному пути
+
+ЦЕНА: два ложных красных в одном слиянии, и оба на файлах с живой точкой вызова —
+`core/services/history.py` (импортируется `veb/razdely/konduit.py:51`) и
+`veb/razdely/istoria.py` (назван в `veb/server.py:120` строкой `"veb.razdely.istoria"` и
+собирается `_marshruty_razdelov`). Детектор ищет ИМЯ ФАЙЛА, а питон зовёт модуль точечным
+путём без `.py`. Следующий исполнитель, увидев это красное, либо припишет модулю
+`# TOOL-CONTRACT: called-by-hand` (ложь в файле), либо потратит ход на доказательство
+обратного. Чинится добавлением второй формы поиска — `a.b.c` рядом с `a/b/c.py`.
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -281,6 +316,70 @@ grep -n '<как механизм назван в вызывающем коде>
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
 ## ПЛАН — (заполняет исполнитель)
+
+**Entry numbers, taken by command BEFORE any work** (§2 criterion 8):
+`python3 -m pytest -q` → `17 failed, 1056 passed, 13 skipped, 2 xfailed, 30 errors in 98.25s`.
+`python3 -m pytest tests/test_append_only.py tests/grid -q` → `34 passed`.
+`python3 -m pytest tests/veb -q` → `88 passed, 2 xfailed`.
+`git --no-optional-locks branch --no-merged main | grep -c zahod/` → `0`.
+
+**Facts the зона gave me that reshape the задание (named before writing code, §1).**
+
+1. `veb/priyom.py` and `veb/obshchee/karkas.py` are OUTSIDE my зона, and they are the
+   two files that (a) write a mark and (b) carry the кондуит's tap script. So the date
+   rule cannot be implemented as "stamp something at write time" and the gesture cannot
+   be added to `KONDUIT_SKRIPT`. Both are therefore done inside the зона: the date rule
+   as a PURE function over a mark that already exists, and the gesture as a script
+   emitted by `veb/razdely/konduit.py::razdel` itself, inside its own
+   `data-org="videt-konduit"` section (which `tools/sobrat_stranicu._snyat_organy`
+   removes wholesale, so neither каркас gate sees it).
+2. `tests/test_events.py::test_valid_at_defaults_to_the_moment_of_recording` asserts
+   `mark.valid_at == mark.recorded_at`, and `tests/` root is outside my зона. So
+   `MarkingService` keeps stamping `valid_at = recorded_at` and the lesson attribution
+   is DERIVED, never stored on `marks`. This is also the only way part 4 reaches taps
+   made through `/api/priyom`, which I may not edit.
+3. The live journal carries `sessions = 0 rows` and `marks with session_id = 0`, so
+   nothing today attributes a mark to a lesson at all — the attribution being derived
+   breaks no existing reader.
+4. The timetable has ONE written home already: `core/services/sostav_na_den.py`
+   (`SLOTY_ZANYATIJ = {1: 1, 4: 2}`, `KONEC_ZANYATIA = {1: (15,55), 4: (15,0)}`), and
+   its docstring names the current timetable as **Monday 14:15–15:55, Thursday
+   13:10–15:00**. The задание's «понедельникам и четвергам 13:10–15:00» is right about
+   Thursday and stale about Monday; `ops/raspisanie.py` is known-wrong and is NOT read.
+   I add the missing half — `NACHALO_ZANYATIA` — to that same file rather than starting
+   a second timetable. Criterion 5's «в понедельник до начала» is therefore tested at
+   Monday 13:00 **and** Monday 14:00, both of which are before Monday's 14:15 start.
+5. Append-only is absolute (`migrations/001_init.sql` triggers + `tests/test_append_only.py`),
+   so «перебить занятие» cannot be an UPDATE. It is a row in a new append-only table
+   `mark_lesson_override`; the effective attribution of a mark is its LAST override,
+   else the derived rule — the same "last event wins" shape the journal already has.
+
+**Work, in four commits.**
+
+1. `core/services/sostav_na_den.py` + new `core/services/history.py`: `NACHALO_ZANYATIA`;
+   `zanyatie_dlya(moment)` (the last lesson whose START has passed, Moscow);
+   `tehnicheskie(events)` (a reversing event and the event it reverses, both marked when
+   `recorded_at` differ by < 60 s); `istoria_kletki(...)`; `schyot_sobytij(...)` — the
+   statistics counter that skips technical events. Tests in `tests/grid/`.
+2. `migrations/009_perebivka_zanyatia.sql`: `mark_lesson_override`, append-only by
+   trigger, `references marks(id)`.
+3. `veb/razdely/istoria.py`: `GET /api/istoria` (the feed of one cell) and
+   `POST /api/istoria/zanyatie` (the override), registered through
+   `RAZDELY_S_MARSHRUTAMI` in `veb/server.py`. Tests in `tests/veb/`.
+4. `veb/razdely/konduit.py`: the date under the ✓ (`data-d` + a `::before`, so the
+   каркас's own `td.textContent = ЗНАК` redraw after a tap cannot wipe it), and the
+   gesture — `contextmenu` on desktop, ~550 ms press on a phone — opening the feed. No
+   visible marker on the cell (owner 09.09).
+
+Then: live run on the боевой сервер, the three criteria printed with numbers, deploy.
+
+**Where I think the критерий готовности is right and where it is loose.** Criterion 3
+says the technical pair «НЕ меняет счётчик статистики» without naming the counter — there
+is no such counter in the project yet (statistics are the next заход). I read it as: the
+пара must be excluded by the признак I ship, and I print the number through
+`history.schyot_sobytij`, which is that признак applied. If the владелец meant a counter
+on a page, it does not exist to change.
+
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
@@ -296,6 +395,33 @@ grep -n '<как механизм назван в вызывающем коде>
 > rc=0 — все дома достижимы; rc=1 — назван дом, которого нет (команда печатает какой именно). Тот же разбор гоняет `Г7` приёмки, и у него храповик: у ЭТОГО захода база 0, поэтому первый же недостижимый дом здесь — красный на приёмке, а не запись, которую через неделю никто не найдёт.
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+
+1. `ops/raspisanie.py` по-прежнему несёт расписание прошлого сезона (`LESSON_START=16:00`,
+   `LESSON_END=19:00`), пока `core/services/sostav_na_den.py` несёт нынешнее обеими
+   половинами (`NACHALO_ZANYATIA` добавлено этим заходом рядом с `KONEC_ZANYATIA`).
+   Расхождение уже стоило снимка «перед занятием», снятого 07.09 после его конца.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/PLAN.md
+   ДОСТАВЛЕНО: нет
+2. Страница преподавателя выросла на 226 КБ (2393 → 2619 КБ): 215.6 КБ — атрибут
+   `data-d="ДД.ММ"` на 14 722 отмеченных клетках, 10.1 КБ — панель и скрипт истории.
+   Это цена требования «дата видна прямо в клетке» на решётке в 31 тысячу клеток.
+   Дешевле её можно сделать только словарём дат в CSS (`td[data-d="7"]::before{content:"10.09"}`),
+   и это экономит около 60 КБ — решение о том, стоит ли оно лишнего механизма, за владельцем.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+3. Список занятий для перебивки (`veb/razdely/istoria.zanyatiya_do`) предлагает СЕГОДНЯШНИЙ
+   учебный день, даже если занятие ещё не началось: он считает по календарю, а правило
+   даты — по часам. Отнести отметку к занятию, которое начнётся через шесть часов, можно
+   намеренно, но спросить владельца, законно ли это, стоит.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+4. Отсев тестовых нажатий судит ТОЛЬКО канал `'кнопка'`. Канал `'фото'` (53 события на
+   локальной базе) пишется пачкой распознавания и тоже может нести пары с нулевым
+   разрывом; сегодня их там нет, но правило для него не назначено ни владельцем, ни
+   заходом. Следующая позиция (`statistiki-i-grobarij`) считает по этому же признаку.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
@@ -321,7 +447,15 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 **ЧТО СДЕЛАНО** *(с хэшами)*
 <влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да` — входной ритуал §0.1 ОТМЕНЁН ОРКЕСТРАТОРОМ (указание
+сильнее текста захода), субагент гит-контура не запускался. Вместо всего блока выполнена
+одна названная команда, её вывод дословно:
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+Ноль невлитых `zahod/*`-веток на входе — то же число, что стояло снимком при сборке
+2026-09-09, то есть контур пуст и вливать было нечего. Ничего чужого не вливалось.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*

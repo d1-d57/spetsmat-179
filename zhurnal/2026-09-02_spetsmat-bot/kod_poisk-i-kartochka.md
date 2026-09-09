@@ -278,6 +278,81 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+Read the four named anchors (`veb/server.py`, `veb/razdely/lichnaya.py`,
+`veb/razdely/gruppy.py`, `veb/obshchee/karkas.py`) plus, to understand what
+already exists, `veb/razdely/glavnaya.py` (the current search box script),
+`veb/razdely/shkolniki.py` (`para_shk`, `gr_shk`, `kab_shk`), `veb/razdely/
+list_odin.py` (the pattern for a standalone page outside the shell — used as
+the template for the card), `veb/priyom.py` (the existing tick-marking door
+`/api/priyom`), `core/services/progress.py` (read-only surface only), and
+`tests/veb/test_server.py` / `test_priyom.py` / `test_kanon_verstki.py` for
+test conventions and the layout gate this заход must not break.
+
+**Disputing one premise before writing code**, as §1 invites: the "гейт вёрстки
+из захода kanon-verstki зелёный на карточке" clause in the readiness criterion
+cannot literally mean a NEW gate on the new `/kartochka/<id>` page — the gate
+file `tests/veb/test_kanon_verstki.py` is hard-wired to four specific existing
+screens (школьникам/принимающим/страница группы/кондуит) and does not know
+about a card that does not exist yet. Reading it as "the existing gate must
+stay green after this заход's changes to the distribution screens" instead —
+i.e. a no-regression requirement on `.poisk-verh` width and on the group tab's
+highlight markup, both of which touch screens the gate already measures.
+
+**Part 1 — wide search field.** The actual constraint is `.poisk-verh{max-
+width:34rem}` in `veb/obshchee/karkas.py` (the input itself already has
+`width:100%` inside it); raise that cap substantially and let it flex-grow
+more aggressively. `.menu` already wraps (`flex-wrap:wrap`), so a wider search
+box pushes neighbours to the next line rather than clipping anything.
+
+**Part 2 — search leads to the group page, no unclosable strip.** Today,
+picking a pupil from the top-nav search (`veb/razdely/glavnaya.py:poisk_skript`)
+writes into `#nashli`, an absolutely-positioned box that only clears on the
+next keystroke — never on an outside click, and it sits over the group
+tab's teacher column. Fix: split the search index into a pupils map (id +
+group letter) and the existing teachers/sheets map; picking a PUPIL now
+navigates (`location.href`) to `/raspredelenie?g=<letter>&sid=<id>` instead of
+opening the overlay. A tiny script on the shell reads `sid`/`g` from the
+query string, checks the matching group-tab radio (`t-В`/`t-Д`/`t-Н`, default
+`t-shk` when the pupil has no group), and highlights the row bearing that
+`data-sid` (a new attribute added to the row `<div>` in `shkolniki.para_shk` —
+same on every role, so it does not disturb `proverit_karkas()`'s byte
+comparison). Leaving the page is then just normal navigation — nothing to
+reset. Teacher search results keep the `#nashli` overlay (that read is not
+what the owner reported broken), but the existing outside-click handler is
+extended to also clear `#nashli`, so it stops being unclosable either way.
+
+**Part 3 — the pupil card, `/kartochka/<id>`.** A new standalone page
+(`veb/razdely/kartochka.py`, mirroring `list_odin.py`'s pattern: its own
+`<!doctype html>`, the site's shared stylesheet pulled via
+`_obshchij_stil()`, no shell/tabs) served by a new branch in
+`veb/server.py::do_GET`. Guest-visible top part: surname, name, class,
+group, room, and the teacher who takes them — reusing `_build_views()`'s
+existing per-student row (same source of truth as the group tab, no second
+query). Below that, ONLY for a signed-in viewer (`vhod.rol() is not None` —
+organiser or teacher, matching this заход's "вошедший" for now; pupil-
+password login is `paroli-shkolnikov`'s job per the STOP clause): the current
+academic year's sheets, one row per sheet, a tappable cell per problem.
+
+Tapping reuses the EXISTING `/api/priyom` door (`MarkingService` under it,
+already gated on "signed in" — see `veb/priyom.py:otmetka`) with the exact
+`{student, problem, target}` contract `veb/priyom.py`'s own inline script
+already speaks. This is the one place I am deliberately NOT adding a new
+mutation path: `core/services/progress.py` exposes read-only methods only
+(`grid`/`states_for`/`states_for_many`/`debts`/`graveyard`), and adding a
+write method there is `core/services/` — outside this заход's zone
+(`veb/razdely/`, `veb/server.py`, `veb/obshchee/`, `tests/veb/`). Calling the
+already-public `/api/priyom` HTTP door from a new page is well inside the
+zone and adds no second journal; growing `ProgressService` would not be.
+
+A guest gets none of the above — verified by grepping the guest response body
+for the absence of any tick/mark markup, per the readiness criterion's "гостю
+не пришло ни одной галочки".
+
+Exit: a `✕` link back to `/raspredelenie`, per the owner's explicit ask.
+
+**Order of commits (each committed as it lands, per §4):** Part 1, then Part
+2, then Part 3, then tests, then the pre-report full git hygiene (§ WARNING).
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -312,12 +387,33 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+ORCHESTRATOR OVERRIDE (see top of this заход's launch message): the full §0.1
+git-contour ritual was cancelled for this run; ran ONE command instead, as instructed:
+
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+
+(the one unmerged `zahod/*` branch is `zahod/verstka-raspredeleniya`, a sibling
+заход, not mine — confirmed via `git --no-optional-locks branch --no-merged main`,
+which listed exactly `zahod/verstka-raspredeleniya`. My own branch
+`zahod/poisk-i-kartochka` has 0 commits ahead of `main` at the moment of this
+snapshot, so it correctly does not appear in `--no-merged`.)
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Nothing merged/pushed/gashenie yet — this is the entry snapshot, taken before any
+work in this заход. See `## ОТЧЁТ` at the end of the file for what was actually
+committed/merged/pushed by this заход's own work.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+*(орфографически "нет" по формальному критерию: 1 chужой невлитый `zahod/*` —
+`zahod/verstka-raspredeleniya`. This is NOT my debt to close: §0.1 of this same
+заход says explicitly "первая вернула не 0 — ничего чужого не вливай (свою ветку
+вольёшь последним ходом), назови число строкой в отчёте и работай дальше." Merging
+someone else's in-progress branch is outside my rights and would be exactly the
+kind of "чинить заодно чужое" this заход's own contract forbids. No other input
+debt was checked beyond the one command the orchestrator asked for — the fuller
+git-contour self-check (`git_zona.py check --zone`, `git_zona.py zayavki`) was
+explicitly skipped by the same override for this run.)
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
