@@ -1,0 +1,125 @@
+/* КАНОН КОЛОНОК — one place, and the only one.
+ *
+ * Why this file exists.  The column rule of this site was written down three
+ * times and did not hold three times: it lived in prose, in three different
+ * documents, and nothing anywhere turned red when a page broke it.  A rule with
+ * no carrier is a hope.  This file is the carrier of the WRITING half — the
+ * tokens and the classes a page builds its columns out of; `tests/veb/
+ * test_kanon_verstki.py` is the carrier of the JUDGING half, and it fails the
+ * build both when a page breaks the three geometric questions and when an
+ * element wears a canon class while disobeying the canon.
+ *
+ * THE CANON, in the owner's own four sentences (09.09):
+ *   1. A column is the unit of layout.  Values stand in columns, not in prose
+ *      rows that happen to line up.
+ *   2. Inside a column the text is ALWAYS aligned to the left edge.  Not right,
+ *      not centred, not "right for numbers" — left, so that the eye runs down
+ *      one straight edge instead of hunting for the start of every value.
+ *   3. The width of a column is set by the LONGEST REAL VALUE it carries —
+ *      `max-content`, computed by the browser from the data that actually came
+ *      out of the database, never a `rem` picked by eye.  A width picked by eye
+ *      is a width that truncates the one surname nobody tried.
+ *   4. No horizontal scrolling, ever.  And the vertical gaps stretch, so the
+ *      content occupies the height of the screen instead of huddling at the top.
+ *
+ * 🔴 RULE 4 IS NOT IMPLEMENTED WITH `overflow-x:hidden`, AND MUST NOT BE.
+ * Hiding the scrollbar does not remove the overflow, it removes the EVIDENCE of
+ * it: `documentElement.scrollWidth` stops exceeding `clientWidth`, the gate's
+ * third question goes permanently green, and the site loses the only lever it
+ * has over its own width.  Overflow is prevented here by letting boxes shrink
+ * (`min-width:0`) and letting long values wrap (`overflow-wrap`), never by
+ * cropping the document.
+ *
+ * WHO ADOPTS THIS.  The sections themselves (`veb/razdely/**`) are outside the
+ * zone of the заход that wrote this file; converting their markup to
+ * `.kolonki` / `.kolonka` is the work of `verstka-raspredeleniya` (P3) and of
+ * P8-P10 after it.  What is live from this file today is what the frame itself
+ * owns: the no-overflow guard and the screen-height stretch below.
+ */
+
+:root{
+  /* The gap between two columns.  One token, so that every grid on the site
+     breathes the same amount and «на глаз» never enters the stylesheet. */
+  --kol-zazor:2.5rem;
+  /* The gap between two rows of one column. */
+  --kol-ryad:.34rem;
+  /* Everything above the canvas: the sticky menu row.  Rule 4 subtracts it from
+     the viewport, otherwise «full screen height» means «one menu taller than
+     the screen» and every page gains a scrollbar it did not need. */
+  --verh-vysota:4.6rem;
+}
+
+/* ── THE VOCABULARY ───────────────────────────────────────────────────────
+   `.kolonki` is the container; `.kolonka` is one column; `.ryad` is one row
+   that spans them.  The container holds the grid, not the row, and that is the
+   whole point: columns can only line up across rows if ONE element knows about
+   all of them.  A row that is its own grid lines up with nothing. */
+
+.kolonki{
+  display:grid;
+  /* RULE 3.  `max-content` is the longest real value, measured by the browser
+     after the data arrived.  This is the difference between a column that fits
+     the school it actually has and a column that fits the school someone
+     imagined while writing the CSS. */
+  grid-auto-columns:max-content;
+  grid-auto-flow:column;
+  gap:var(--kol-ryad) var(--kol-zazor);
+  align-items:start;
+  /* Columns start at the left edge and stop where the data stops; the leftover
+     space stays leftover instead of being distributed into the gaps, which
+     would move every value away from the straight edge of rule 2. */
+  justify-content:start;
+  /* RULE 4, the honest half: the grid may not exceed its parent. */
+  max-width:100%;
+}
+
+/* Row-wise markup: rows carry the semantics, the container carries the grid.
+   `display:contents` hands the row's cells up to the container so that they
+   join its columns — the only way to keep `<div class="ryad">` in the markup
+   and still have every cell of every row share one column width. */
+.kolonki>.ryad{display:contents}
+
+.kolonka{
+  /* RULE 2.  Stated once, here, for every column on the site. */
+  text-align:left;
+  /* RULE 4: a grid item defaults to `min-width:auto`, which refuses to shrink
+     below its content and is the single commonest source of a page wider than
+     its window.  Measured on this site once already: `scrollWidth` 1444 at a
+     window of 1440, three rows hanging past the edge. */
+  min-width:0;
+  /* A value longer than any column can be (a pasted URL, a triple surname)
+     wraps instead of pushing the document sideways. */
+  overflow-wrap:anywhere;
+}
+
+/* A column of numbers is still a column: it does NOT get to align right.
+   The class exists so that «this column holds numbers» can be said in the
+   markup without saying «and therefore it is right-aligned». */
+.kolonka.chisla{font-variant-numeric:tabular-nums}
+
+/* ── RULE 4, THE VERTICAL HALF ────────────────────────────────────────────
+   The canvas is at least as tall as the screen, and the section's content grows
+   into that height instead of stopping under the tab row and leaving the bottom
+   two thirds of a 900-pixel screen empty.
+   🔴 The selectors repeat those of the frame's own show/hide rule on purpose:
+   they must have the SAME specificity and stand LATER in the cascade, because a
+   section is hidden with `display:none` and shown with `display:block`, and a
+   blanket `display:flex` here would show every section at once. */
+#p-start:checked~#s-start,
+#p-list:checked~#s-list,
+#p-rasp:checked~#s-rasp,
+#p-lich:checked~#s-lich,
+#p-kond:checked~#s-kond{
+  display:flex;
+  flex-direction:column;
+  min-height:calc(100dvh - var(--verh-vysota));
+}
+/* The content region takes the slack.  Hidden tabs are `display:none` and take
+   part in nothing, so this needs no per-tab selector. */
+.str.holst>.vid,
+.str.holst>.rast{flex:1 1 auto}
+
+/* Opt-in for lists that should spread their rows over the height they were
+   given rather than stack at the top of it.  Named, not automatic: a list of
+   three items spread over 900 pixels reads as three unrelated items. */
+.rast-rovno{display:flex;flex-direction:column;justify-content:space-between}
