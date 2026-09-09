@@ -46,10 +46,14 @@ from anywhere.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+from core.services.history import zanyatie_dlya, zanyatie_po_iso
 from core.services.progress import ProgressService
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
 from tools.export_xlsx import SIGN
 from veb.obshchee.karkas import e
+from veb.razdely.istoria import perebivki
 from veb.razdely.lichnaya import deti_na_datu, segodnya
 
 
@@ -96,7 +100,7 @@ def _moi_deti(kt) -> set:
 
 
 def _daty(kt) -> dict:
-    """(pupil, problem) → the date of the last event on that pair. WHEN, never WHAT.
+    """(pupil, problem) → the LESSON DAY the last event on that pair counts towards.
 
     🔴 THIS IS NOT A SECOND READING OF THE JOURNAL, AND THE LINE IS EXACT: the
     query below never selects the column `event` and never decides anything about
@@ -107,14 +111,44 @@ def _daty(kt) -> dict:
 
     One query instead of fourteen thousand calls to `last_event`, riding the same
     index `marks_lookup (student_id, problem_id, id)` the projection rides.
+
+    🔴 ЭТО ДЕНЬ ЗАНЯТИЯ, А НЕ МОМЕНТ ЗАПИСИ, и правило владельца 09.09 живёт в
+    ОДНОМ месте — `core/services/history.zanyatie_dlya`: галочка относится к
+    последнему НАЧАВШЕМУСЯ занятию по московскому времени, так что поставленная в
+    пятницу или в понедельник до начала она всё равно четверговая. Здесь правило
+    только зовётся. Ответ кэшируется по строке `valid_at`: у 15 847 импортных
+    событий она одна на всех, и без кэша одно и то же вычислялось бы четырнадцать
+    тысяч раз на каждой пересборке страницы (а страница пересобирается после
+    КАЖДОЙ записи в базу — `veb/server.py::_peresobrat`).
+
+    Перебивка (`mark_lesson_override`) сильнее правила и читается тем же адаптером,
+    что и панель истории, — второго чтения этой таблицы в проекте нет.
     """
-    return {(r["student_id"], r["problem_id"]): r["valid_at"] for r in kt.c.execute("""
-        select m.student_id, m.problem_id, m.valid_at
+    posledniye = list(kt.c.execute("""
+        select m.id, m.student_id, m.problem_id, m.valid_at
         from marks m
         join (select student_id, problem_id, max(id) as last_id
                 from marks group by student_id, problem_id) last
           on last.last_id = m.id
-    """)}
+    """))
+    ruchnye = perebivki(kt.c, [r["id"] for r in posledniye])
+    pamyat: dict = {}
+    daty = {}
+    for r in posledniye:
+        kogda = ruchnye.get(r["id"], r["valid_at"])
+        if kogda not in pamyat:
+            pamyat[kogda] = zanyatie_po_iso(kogda)
+        daty[(r["student_id"], r["problem_id"])] = pamyat[kogda]
+    return daty
+
+
+def _kratko(den: str) -> str:
+    """`2026-09-10` → `10.09` — то, что помещается под галочкой в клетке 3em шириной.
+
+    Год не пишется: кондуит показывает один учебный год, и четыре лишних знака
+    съели бы ровно ту ширину, из-за которой владелец уже просил расширить клетку.
+    """
+    return "%s.%s" % (den[8:10], den[5:7])
 
 
 def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str:
@@ -156,7 +190,7 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
-def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj) -> str:
+def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
     """Cut two: one листок, in the alphabet of the workbook — `1`, `x`, empty.
 
     This is the table `tools/export_xlsx.py` writes to a worksheet, drawn on
@@ -184,6 +218,19 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj) -> str:
                 # `MarkingService`; второго журнала здесь по-прежнему нет, и этот
                 # раздел по-прежнему не пишет в базу сам.
                 adres = f' data-u="{u.id}" data-z="{p.id}"'
+                # 🔴 ДАТА СДАЧИ СТОИТ У ГАЛОЧКИ, И ОНА ПРИЕЗЖАЕТ АТРИБУТОМ, А НЕ
+                # ТЕКСТОМ. Владелец 09.09 просил видеть, «когда и кто её поставил»;
+                # «когда» помещается прямо в клетку, «кто» — в историю по жесту.
+                # Атрибут, а не вложенный узел, по одной живой причине: скрипт
+                # кондуита в `veb/obshchee/karkas.py` (не зона этой позиции)
+                # перерисовывает клетку после тапа через `td.textContent = ЗНАК`,
+                # то есть СНОСИТ всё содержимое узла. Атрибут это переживает, и
+                # дату рисует `::before` в стилях ниже. Пустой клетке дата не
+                # ставится: у неё нет события, о котором можно было бы сказать
+                # «когда», и 16 500 лишних атрибутов на странице тоже не нужны.
+                kogda = daty.get((u.id, p.id))
+                if znak and kogda:
+                    adres += f' data-d="{_kratko(kogda)}"'
                 if znak == "1":
                     # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: сдано — это ГАЛОЧКА, не единица.
                     # Алфавит клетки от этого не меняется: `tools/export_xlsx.py`
@@ -248,6 +295,203 @@ def _uchenik(u, listki, zadachi, sostoyaniya, daty) -> str:
             f'<p class="zag2"><label for="k-vse">← ко всем</label></p>'
             f'<h2 class="kond-imya">{e(u.surname)} {e(u.name)}</h2>'
             f'<table class="kond-lich"><tbody>{"".join(stroki)}</tbody></table></section>')
+
+
+#: Панель истории клетки и жест, которым она открывается.
+#:
+#: 🔴 ВИДИМОЙ МЕТКИ НА КЛЕТКЕ НЕТ — решение владельца 09.09: «правый клик на десктопе,
+#: долгое зажатие на телефоне, видимой метки не заводить». Кондуит остаётся ровно тем,
+#: каким владелец его принял; в разметке появились только атрибут даты на клетке и эта
+#: панель, свёрнутая до жеста.
+#:
+#: 🔴 СКРИПТ ЖИВЁТ ЗДЕСЬ, А НЕ В `veb/obshchee/karkas.py`, И ЭТО НЕ СТИЛЬ. Каркас — не
+#: зона этой позиции, а раздел ею является; и раздел ЦЕЛИКОМ снимается со страницы
+#: гостя по `data-org="videt-konduit"` (`tools/sobrat_stranicu._snyat_organy` считает
+#: вложенные теги, поэтому скрипт внутри секции уходит вместе с ней). То есть ни один
+#: гейт каркаса его не видит и в `docs/index.html` он не попадает — там нет и самой
+#: секции. По той же причине здесь НЕТ переноса строки перед `<script>`: окно, которое
+#: сверяют оба гейта, кончается на первом `\n<script>`.
+#:
+#: 🔴 ДОЛГОЕ ЗАЖАТИЕ ОБЯЗАНО ГАСИТЬ ПОСЛЕДУЮЩИЙ ТАП. Клик по клетке ставит отметку
+#: (слушатель каркаса на `document`), и без гашения «посмотреть историю» на телефоне
+#: означало бы «поставить галочку». Гасится перехватом на ФАЗЕ ПОГРУЖЕНИЯ
+#: (`addEventListener(..., true)`): она проходит раньше всплывающего слушателя каркаса,
+#: и другого способа опередить чужой слушатель, не трогая его файл, нет.
+ISTORIA_SKRIPT = """<div class="kl-ist" id="kl-ist" hidden>\
+<div class="kl-ist-verh"><b id="kl-ist-kto"></b>\
+<span class="kl-ist-chto" id="kl-ist-chto"></span>\
+<button type="button" class="kl-ist-x" id="kl-ist-x" aria-label="закрыть">✕</button></div>\
+<div class="kl-ist-telo" id="kl-ist-telo"></div></div><script>
+(function () {
+  var PANEL = document.getElementById("kl-ist");
+  if (!PANEL) { return; }
+  var TELO = document.getElementById("kl-ist-telo");
+  var KTO = document.getElementById("kl-ist-kto");
+  var CHTO = document.getElementById("kl-ist-chto");
+  var ZANYATIE_SEGODNYA = "%(segodnya)s";   // день занятия, к которому пойдёт новый тап
+  var ZADERZHKA = 550;                      // мс: столько держат палец, чтобы это было «зажатие»
+  var tekushchaya = null;                   // клетка, чья история открыта
+  var tajmer = null, gasit_klik = false, nachalo = null;
+
+  function ekran(s) { return String(s).replace(/[&<>"]/g, function (z) {
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[z]; }); }
+
+  function zakryt() { PANEL.hidden = true; tekushchaya = null; }
+
+  function postavit(td) {
+    // Рядом с клеткой на ноутбуке, шторкой снизу на телефоне (там позиция снимается
+    // медиазапросом). Панель прижимается к краю окна, если у края не помещается.
+    var r = td.getBoundingClientRect();
+    PANEL.hidden = false;
+    var w = PANEL.offsetWidth, h = PANEL.offsetHeight;
+    var x = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - w - 8));
+    var y = r.bottom + 6;
+    if (y + h > window.innerHeight - 8) { y = Math.max(8, r.top - h - 6); }
+    PANEL.style.left = x + "px";
+    PANEL.style.top = y + "px";
+  }
+
+  function narisovat(d) {
+    KTO.textContent = d.kto;
+    CHTO.textContent = d.chto;
+    if (!d.sobytia.length) {
+      TELO.innerHTML = '<p class="kl-ist-net">по этой клетке ещё ничего не отмечали</p>';
+      return;
+    }
+    var vybor = d.zanyatiya.map(function (z) {
+      return '<option value="' + ekran(z.den) + '">' + ekran(z.vid) + "</option>"; }).join("");
+    TELO.innerHTML = d.sobytia.map(function (s) {
+      return '<div class="kl-ist-ryad' + (s.tehnicheskoe ? " teh" : "") + '">'
+        + '<span class="kl-ist-chto2">' + ekran(s.chto) + "</span>"
+        + '<span class="kl-ist-kto2">' + ekran(s.kto) + "</span>"
+        + '<span class="kl-ist-kogda">' + ekran(s.kogda) + "</span>"
+        + (s.tehnicheskoe ? '<span class="kl-ist-teh">техническое</span>' : "")
+        + '<label class="kl-ist-zan">занятие '
+        + '<select data-mark="' + s.id + '">' + vybor + "</select>"
+        + (s.perebito ? '<span class="kl-ist-ruka">перебито</span>' : "") + "</label>"
+        + "</div>"; }).join("");
+    // Выбранным стоит то занятие, к которому событие отнесено СЕЙЧАС.
+    d.sobytia.forEach(function (s) {
+      var sel = TELO.querySelector('select[data-mark="' + s.id + '"]');
+      if (sel && s.zanyatie) { sel.value = s.zanyatie; }
+    });
+  }
+
+  function otkryt(td) {
+    tekushchaya = td;
+    KTO.textContent = "";
+    CHTO.textContent = "";
+    TELO.innerHTML = '<p class="kl-ist-net">читаю журнал…</p>';
+    postavit(td);
+    fetch("/api/istoria?student=" + (+td.dataset.u) + "&problem=" + (+td.dataset.z))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (tekushchaya !== td) { return; }        // успели открыть другую клетку
+        if (d && d.sobytia) { narisovat(d); postavit(td); }
+        else { TELO.innerHTML = '<p class="kl-ist-net">'
+                 + ekran((d && d.error) || "историю не отдали") + "</p>"; }
+      })
+      .catch(function (o) {
+        TELO.innerHTML = '<p class="kl-ist-net">' + ekran("не прочиталось: " + o) + "</p>"; });
+  }
+
+  // ── жест: правый клик на ноутбуке
+  document.addEventListener("contextmenu", function (sob) {
+    var td = sob.target.closest && sob.target.closest("#s-kond .kond td[data-u]");
+    if (!td) { return; }
+    sob.preventDefault();
+    otkryt(td);
+  });
+
+  // ── жест: долгое зажатие на телефоне
+  document.addEventListener("pointerdown", function (sob) {
+    var td = sob.target.closest && sob.target.closest("#s-kond .kond td[data-u]");
+    if (!td || sob.button) { return; }
+    nachalo = {x: sob.clientX, y: sob.clientY};
+    tajmer = setTimeout(function () {
+      tajmer = null; gasit_klik = true; otkryt(td); }, ZADERZHKA);
+  });
+  function otmenit() { if (tajmer) { clearTimeout(tajmer); tajmer = null; } }
+  document.addEventListener("pointerup", otmenit);
+  document.addEventListener("pointercancel", otmenit);
+  document.addEventListener("scroll", otmenit, true);
+  document.addEventListener("pointermove", function (sob) {
+    if (!tajmer || !nachalo) { return; }
+    if (Math.abs(sob.clientX - nachalo.x) > 8 || Math.abs(sob.clientY - nachalo.y) > 8) {
+      otmenit();                                   // это прокрутка, а не зажатие
+    }
+  });
+  // Гашение тапа, который пришёл бы следом за зажатием: фаза погружения — раньше
+  // слушателя каркаса, ставящего отметку.
+  document.addEventListener("click", function (sob) {
+    if (!gasit_klik) { return; }
+    gasit_klik = false;
+    if (sob.target.closest && sob.target.closest("#s-kond .kond td[data-u]")) {
+      sob.preventDefault(); sob.stopPropagation();
+    }
+  }, true);
+
+  // ── перебивка занятия
+  TELO.addEventListener("change", function (sob) {
+    var sel = sob.target.closest && sob.target.closest("select[data-mark]");
+    if (!sel) { return; }
+    sel.disabled = true;
+    fetch("/api/istoria/zanyatie", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({mark: +sel.dataset.mark, zanyatie: sel.value})
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.sobytia) {
+        narisovat(d);
+        // Клетка обязана показать ту же дату, что и лента: они об одном событии.
+        if (tekushchaya && d.sobytia.length && d.sobytia[0].zanyatie) {
+          pometit(tekushchaya, d.sobytia[0].zanyatie);
+        }
+      } else {
+        sel.disabled = false;
+        TELO.insertAdjacentHTML("afterbegin", '<p class="kl-ist-net">'
+          + ekran((d && d.error) || "не перебилось") + "</p>");
+      }
+    }).catch(function () { sel.disabled = false; });
+  });
+
+  // ── закрытие
+  document.getElementById("kl-ist-x").addEventListener("click", zakryt);
+  document.addEventListener("keydown", function (sob) {
+    if (sob.key === "Escape") { zakryt(); } });
+  document.addEventListener("click", function (sob) {
+    if (PANEL.hidden) { return; }
+    if (sob.target.closest && sob.target.closest("#kl-ist")) { return; }
+    zakryt();
+  });
+
+  // ── дата в клетке обязана пережить чужую перерисовку
+  //
+  // Скрипт каркаса после тапа делает `td.textContent = ЗНАК[состояние]` — то есть
+  // ставит новый знак, ничего не зная о дате. Дата приезжает атрибутом и рисуется
+  // `::before`, поэтому она НЕ стирается — но становится вчерашней. Наблюдатель ниже
+  // ловит именно ту перерисовку и приводит дату к правилу: у отмеченной клетки —
+  // сегодняшнее занятие, у опустевшей — никакой.
+  function pometit(td, den) {
+    if (den) { td.setAttribute("data-d", den.slice(8, 10) + "." + den.slice(5, 7)); }
+    else { td.removeAttribute("data-d"); }
+  }
+  var setka = document.getElementById("s-kond");
+  if (setka && window.MutationObserver) {
+    var nablyudatel = new MutationObserver(function (izmenenia) {
+      izmenenia.forEach(function (i) {
+        var uzel = i.target.nodeType === 1 ? i.target : i.target.parentNode;
+        var td = uzel && uzel.closest && uzel.closest("#s-kond .kond td[data-u]");
+        if (!td) { return; }
+        pometit(td, td.textContent.trim() ? ZANYATIE_SEGODNYA : "");
+      });
+    });
+    nablyudatel.observe(setka, {subtree: true, childList: true,
+                                characterData: true, attributes: true,
+                                attributeFilter: ["class"]});
+    setka._nablyudatel_daty = nablyudatel;   // ссылка живёт: без неё Chrome соберёт её
+  }
+})();
+</script>"""
 
 
 def _sobrat(kt):
@@ -378,6 +622,22 @@ def stili(kt) -> str:
 #s-kond .kond tbody td+td{{text-align:center;padding:.42rem .3rem;
   font-family:var(--sans);font-size:1rem;min-width:3em;position:relative;
   border-left:1px solid var(--rule);border-bottom:1px solid var(--rule)}}
+/* 🔴 ДАТА СДАЧИ ПОД ГАЛОЧКОЙ. Владелец 09.09 просил видеть у галочки, «когда и кто её
+   поставил»; «когда» стоит прямо в клетке, «кто» открывается жестом.
+   Три решения, и каждое оплачено устройством этой страницы:
+   1. Рисуется `::before` из АТРИБУТА, а не вложенным узлом. Скрипт кондуита
+      (`veb/obshchee/karkas.py`, не зона этой позиции) после тапа делает
+      `td.textContent = ЗНАК` и снёс бы любой вложенный узел; атрибут это переживает.
+   2. `::before`, а не `::after`: `::after` этой же клетки уже занят подсветкой столбца
+      при наведении (правило ниже), и второго псевдоэлемента у узла не бывает.
+   3. Место под дату отводится ВСЕМ клеткам листка (`td[data-u]`), а не только
+      отмеченным: иначе строка, где сдана одна задача, стала бы выше соседних, и
+      решётка поехала бы ступеньками. Клетки годового обзора и личной карточки адреса
+      пары не несут и остаются как были. */
+#s-kond .kond tbody td[data-u]{{padding-bottom:1rem}}
+#s-kond .kond tbody td[data-d]::before{{content:attr(data-d);position:absolute;
+  left:0;right:0;bottom:.1rem;font-family:var(--sans);font-size:.6rem;line-height:1;
+  font-weight:400;letter-spacing:-.02em;color:var(--muted);pointer-events:none}}
 #s-kond .kond tbody td.vsyo{{color:var(--accent);font-weight:600}}
 #s-kond .kond tbody td.snyato{{color:var(--warm);font-weight:600}}
 #s-kond .kond tbody td.pusto{{color:var(--faint)}}
@@ -458,7 +718,49 @@ def stili(kt) -> str:
   font-size:.85rem;background:var(--chip);border-radius:6px;padding:.05em .45em;
   margin:0 .25em .25em 0}}
 #s-kond .kond-lich i.vsyo{{color:var(--accent)}}
-#s-kond .kond-lich i.snyato{{color:var(--warm)}}"""
+#s-kond .kond-lich i.snyato{{color:var(--warm)}}
+
+/* ═══ ИСТОРИЯ КЛЕТКИ. Открывается жестом — правый клик на ноутбуке, долгое зажатие
+   на телефоне; видимой метки на клетке НЕТ (решение владельца 09.09). Ни одного
+   нового цвета: всё из переменных, которые эта страница уже объявила. ═══ */
+#s-kond .kl-ist{{position:fixed;z-index:20;max-width:min(26rem,calc(100vw - 1rem));
+  background:var(--panel);border:1px solid var(--rule);border-radius:10px;
+  box-shadow:0 .5rem 1.6rem rgba(0,0,0,.18);padding:.7rem .85rem .8rem;
+  font-family:var(--sans);font-size:.9rem}}
+#s-kond .kl-ist-verh{{display:flex;align-items:baseline;gap:.5rem;
+  border-bottom:1px solid var(--rule);padding-bottom:.45rem;margin-bottom:.5rem}}
+#s-kond .kl-ist-verh b{{white-space:nowrap}}
+#s-kond .kl-ist-chto{{color:var(--muted);font-size:.82rem;flex:1}}
+#s-kond .kl-ist-x{{background:none;border:0;cursor:pointer;color:var(--muted);
+  font-size:1rem;line-height:1;padding:.1rem .2rem}}
+#s-kond .kl-ist-x:hover{{color:var(--text)}}
+#s-kond .kl-ist-telo{{max-height:min(24rem,60vh);overflow-y:auto}}
+#s-kond .kl-ist-net{{color:var(--muted);margin:.2rem 0}}
+#s-kond .kl-ist-ryad{{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem .6rem;
+  padding:.4rem 0;border-bottom:1px solid var(--rule)}}
+#s-kond .kl-ist-ryad:last-child{{border-bottom:0}}
+#s-kond .kl-ist-chto2{{font-weight:600;min-width:5.5em}}
+#s-kond .kl-ist-kto2{{color:var(--accent)}}
+#s-kond .kl-ist-kogda{{color:var(--muted);font-size:.82rem;white-space:nowrap}}
+/* Техническое нажатие видно и НЕ спрятано: событие из журнала не удаляется никогда,
+   поэтому оно стоит в ленте, приглушённое, с прямым словом о том, что это. */
+#s-kond .kl-ist-ryad.teh{{opacity:.6}}
+#s-kond .kl-ist-teh{{font-size:.72rem;color:var(--warm);border:1px solid var(--warm);
+  border-radius:5px;padding:0 .35em}}
+#s-kond .kl-ist-zan{{flex-basis:100%;color:var(--muted);font-size:.82rem;
+  display:flex;align-items:center;gap:.4rem}}
+#s-kond .kl-ist-zan select{{font-family:var(--sans);font-size:.82rem;
+  border:1px solid var(--rule);border-radius:6px;padding:.1rem .3rem;
+  background:var(--bg);color:var(--text)}}
+#s-kond .kl-ist-ruka{{color:var(--accent)}}
+/* На телефоне панель — шторка снизу: она шире экрана в любой другой раскладке, и
+   попасть пальцем в узкое окно рядом с клеткой невозможно. Позиция, которую поставил
+   скрипт, здесь перебивается — `!important` ровно потому, что она инлайновая. */
+@media(max-width:760px){{
+  #s-kond .kl-ist{{left:0!important;right:0;top:auto!important;bottom:0;
+    max-width:none;border-radius:12px 12px 0 0;padding-bottom:1.2rem}}
+  #s-kond .kl-ist-telo{{max-height:55vh}}
+}}"""
 
 
 def razdel(kt) -> str:
@@ -532,14 +834,23 @@ def razdel(kt) -> str:
                + "</div>")
     panely = (_obzor(na_uchyote, listki_9, zadachi, sostoyaniya, chuzhoj, "vse9")
               + _obzor(na_uchyote, listki_8, zadachi, sostoyaniya, chuzhoj, "vse8")
-              + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj)
+              + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj, daty)
                         for sh in listki)
               + "".join(_uchenik(u, listki, zadachi, sostoyaniya, daty)
                         for u in na_uchyote))
+
+    # День занятия, к которому пойдёт отметка, поставленная ПРЯМО СЕЙЧАС. Считается на
+    # сервере тем же правилом, что и все остальные даты, и уезжает в скрипт одним
+    # значением: клетка, перерисованная после тапа, обязана показать ту же дату, какую
+    # покажет следующая пересборка страницы. Страница, открытая до начала занятия и не
+    # обновлённая после, будет знать прежний день — она и данные показывает прежние.
+    sejchas = zanyatie_dlya(datetime.now(timezone.utc))
+    istoria = ISTORIA_SKRIPT.replace("%(segodnya)s",
+                                     sejchas.isoformat() if sejchas else "")
 
     return (f'<section class="str holst" id="s-kond" data-org="videt-konduit">'
             f'{galka}{radio}'
             f'<div class="kond-verh"><div>'
             f'<h1>Кондуит</h1>'
             f'</div>{metka_galki}</div>'
-            f'{klassy}{vkladki}{panely}</section>')
+            f'{klassy}{vkladki}{panely}{istoria}</section>')

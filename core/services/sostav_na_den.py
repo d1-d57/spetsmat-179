@@ -66,6 +66,18 @@ PRISUTSTVUET = config.ATTENDANCE_STATUSES[0]
 #: is inherit its numbers.
 KONEC_ZANYATIA = {1: (15, 55), 4: (15, 0)}
 
+#: When the lesson BEGINS, by ISO weekday -- the other half of the same timetable and
+#: the same source (``doc/PLAN-veb-2026-09.md``): Monday 14:15, Thursday 13:10.
+#:
+#: 🔴 IT LIVES BESIDE ``KONEC_ZANYATIA`` AND NOWHERE ELSE.  It is added here rather than
+#: in the file that needed it (``core/services/history.py``, which decides which lesson a
+#: tick belongs to) precisely because the end times are already here: two halves of one
+#: timetable in two files is how ``ops/raspisanie.py`` came to believe in 16:00–19:00
+#: while the school taught 13:10–15:00, and that disagreement cost a backup named "before
+#: the lesson" taken ten minutes before it ENDED.  A weekday absent from ``SLOTY_ZANYATIJ``
+#: is not a lesson day and is absent here too.
+NACHALO_ZANYATIA = {1: (14, 15), 4: (13, 10)}
+
 
 def slot_of(day: str) -> Optional[int]:
     """The lesson slot of a calendar day, or ``None`` when no lesson is taught on it."""
