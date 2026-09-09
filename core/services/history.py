@@ -45,6 +45,13 @@ from core.services.sostav_na_den import NACHALO_ZANYATIA, SLOTY_ZANYATIJ
 #: минуты, пара не идёт в статистику».
 TEHNICHESKOE_OKNO_SEK = 60
 
+#: The ``source`` a tap carries.  Named here rather than imported from ``veb/priyom.py``
+#: because ``core/`` does not import the web layer; the value is fixed by the schema
+#: (``migrations/001_init.sql`` closes the enumeration to «кнопка · фото · голос ·
+#: импорт») and ``config.MARK_SOURCES`` mirrors it, so there is no third spelling to
+#: drift into.
+ISTOCHNIK_NAZHATIYA = "кнопка"
+
 #: How far back ``zanyatie_dlya`` will look for a lesson.  Two weeks is generous for a
 #: timetable with two lesson days: it survives a week with no lesson at all (a holiday,
 #: a cancelled Monday) and still terminates on a day that is somehow not in the school
@@ -138,9 +145,10 @@ def tehnicheskie(sobytia: Iterable[Mark]) -> set:
     """Ids of every event that is one half of a test click.
 
     A pair is technical when a reversing event (``retract`` or ``erratum``) undoes an
-    event that was recorded less than ``TEHNICHESKOE_OKNO_SEK`` ago.  BOTH ids come back:
-    the plus that was never meant and the undo that took it away are one gesture, and
-    counting either of them is counting the gesture.
+    event that was recorded less than ``TEHNICHESKOE_OKNO_SEK`` ago AND both halves came
+    from a finger on a button.  BOTH ids come back: the plus that was never meant and the
+    undo that took it away are one gesture, and counting either of them is counting the
+    gesture.
 
     🔴 MEASURED BY ``recorded_at`` AND NEVER BY ``valid_at``.  ``valid_at`` is when the
     check-off happened in the world and may be moved by hand into the past; the question
@@ -148,18 +156,29 @@ def tehnicheskie(sobytia: Iterable[Mark]) -> set:
     in ``recorded_at``.  Reading ``valid_at`` would call a correctly back-dated mark a
     test click, and would miss a real one.
 
+    🔴 ONLY THE BUTTON CHANNEL IS JUDGED, AND THIS IS NOT A REFINEMENT -- IT IS THE
+    DIFFERENCE BETWEEN THE FILTER WORKING AND THE FILTER DESTROYING A YEAR OF DATA.
+    Measured on the live journal: the import wrote all 15 847 of its rows under ONE
+    ``recorded_at`` (it is one lump, and honestly so), so every one of the 735 retractions
+    it carries stands zero seconds after the ``assert`` it takes back.  A rule that looked
+    only at the clock would have declared the whole of last year's «сдал и не защитил» a
+    test click -- 1 470 events -- and handed that to the statistics position next door as
+    fact.  Speed of a finger is only a question where there was a finger: ``source`` says
+    so, and ``'кнопка'`` is the channel this page and `/priyom` write under.
+
     Nothing is deleted and nothing is written: this is a set of ids computed from rows
     that stay exactly where they are.
     """
     po_id = {s.id: s for s in sobytia}
     para = set()
     for sobytie in po_id.values():
-        if sobytie.reverses_id is None:
+        if sobytie.reverses_id is None or sobytie.source != ISTOCHNIK_NAZHATIYA:
             continue
         otmenyaemoe = po_id.get(sobytie.reverses_id)
-        if otmenyaemoe is None:
-            # The reversed event is outside the slice we were handed -- a caller asking
-            # about one cell always has it, so this is a partial read and not a pair.
+        if otmenyaemoe is None or otmenyaemoe.source != ISTOCHNIK_NAZHATIYA:
+            # Either the reversed event is outside the slice we were handed -- a caller
+            # asking about one cell always has it, so that is a partial read -- or it
+            # arrived by another channel, and the pair is not one gesture at all.
             continue
         razryv = parse_iso(sobytie.recorded_at) - parse_iso(otmenyaemoe.recorded_at)
         if timedelta(0) <= razryv < timedelta(seconds=TEHNICHESKOE_OKNO_SEK):

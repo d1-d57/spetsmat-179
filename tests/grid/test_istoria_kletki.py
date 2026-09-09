@@ -174,6 +174,52 @@ def test_the_filter_reads_recorded_at_and_not_valid_at(marking, journal, world, 
         "пять секунд между нажатиями — тест, какую бы дату им ни проставили")
 
 
+def test_the_channel_named_by_the_filter_is_one_the_schema_allows():
+    assert history.ISTOCHNIK_NAZHATIYA in config.MARK_SOURCES
+
+
+def test_an_imported_retraction_is_never_a_test_click(marking, journal, world, clock,
+                                                      connection):
+    """🔴 ЦЕНА ЭТОГО ТЕСТА ИЗМЕРЕНА НА ЖИВОМ ЖУРНАЛЕ, а не придумана.  Импорт записал все
+    15 847 своих рядов под ОДНИМ ``recorded_at`` — он один кусок, и честно об этом
+    говорит.  Значит каждая из 735 его отмен стоит НОЛЬ секунд после того `assert`,
+    который отменяет, и правило, смотрящее только на часы, объявило бы тестовым
+    нажатием весь прошлогодний «сдал и не защитил» — 1 470 событий — и отдало бы это
+    следующей позиции как факт.  Скорость пальца есть вопрос только там, где палец был.
+    """
+    student, problem = world.student_ids[0], world.problem_ids[2]
+    mig = "2026-09-02T12:11:42Z"                       # один момент на весь кусок
+    pervoe = connection.execute(
+        "insert into marks (student_id, problem_id, event, valid_at, recorded_at, source) "
+        "values (?, ?, 'assert', ?, ?, 'импорт')", (student, problem, mig, mig)).lastrowid
+    connection.execute(
+        "insert into marks (student_id, problem_id, event, reverses_id, valid_at, "
+        "recorded_at, source) values (?, ?, 'retract', ?, ?, ?, 'импорт')",
+        (student, problem, pervoe, mig, mig))
+    connection.commit()
+
+    sobytia = journal.events([student], [problem])
+    assert len(sobytia) == 2
+    assert history.tehnicheskie(sobytia) == set()
+    assert history.schyot_sobytij(sobytia) == 2
+
+
+def test_a_tap_that_undoes_an_imported_mark_is_not_a_pair_either(
+        marking, journal, world, connection):
+    """Половинки из разных каналов — это не один жест, сколько бы секунд их ни делило."""
+    student, problem = world.student_ids[1], world.problem_ids[2]
+    mig = "2026-09-02T08:00:00Z"
+    connection.execute(
+        "insert into marks (student_id, problem_id, event, valid_at, recorded_at, source) "
+        "values (?, ?, 'assert', ?, ?, 'импорт')", (student, problem, mig, mig))
+    connection.commit()
+
+    marking.erratum(student, problem, source="кнопка")     # тот же час по часам
+    sobytia = journal.events([student], [problem])
+    assert len(sobytia) == 2
+    assert history.tehnicheskie(sobytia) == set()
+
+
 def test_a_retraction_hours_after_the_plus_is_not_noise(marking, journal, world, clock):
     """«Сдал и не защитил» is a fact about the lesson, not about the keyboard."""
     student, problem = world.student_ids[3], world.problem_ids[0]
