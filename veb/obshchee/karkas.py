@@ -1968,6 +1968,13 @@ body{{padding-bottom:2rem}}
   .glav-pod{{font-size:.95rem}}
 }}{lich_stili}{kond_stili}
 </style>
+<!-- 🔴 КАНОН КОЛОНОК СТОИТ ПОСЛЕ ВСТРОЕННОГО СТИЛЯ, И ПОРЯДОК ЗДЕСЬ — ЧАСТЬ
+     ПРАВИЛА, А НЕ ОФОРМЛЕНИЕ. The canon is the site's last word about columns:
+     where a rule of the stylesheet above contradicts it, the canon must win, and
+     between two rules of equal specificity the later one wins. Moved above the
+     `<style>` this link keeps its text and loses its force. The file itself says
+     what the canon is and who has yet to adopt it: `veb/static/kanon.css`. -->
+<link rel="stylesheet" href="/static/kanon.css">
 
 <input class="rd" type="radio" name="str" id="p-start"{start_vybran}>
 <input class="rd" type="radio" name="str" id="p-list">
