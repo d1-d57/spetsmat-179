@@ -326,7 +326,13 @@ def para_shk(kt, ryady, pokazat_kab=True):
         klassy += " net"
     elif kt.den and not osnova["teacher_id"]:
         klassy += " krasn"               # единственное красное на этом экране
-    return (f'<div class="{klassy}" data-i="{e((osnova["surname"] + " " + osnova["name"]).lower())}">'
+    # 🔴 `data-sid` НА САМОЙ СТРОКЕ, ОДИНАКОВО У ОБЕИХ РОЛЕЙ. Поиск с главной
+    # находит школьника по фамилии, но фамилий бывает несколько — только id
+    # называет ровно ОДНУ строку, и подсветка с адреса `?sid=` бьёт по нему.
+    # Атрибут стоит вне `data-org`/`data-gost`, поэтому он ОДИНАКОВ у гостя и
+    # у организатора и не портит побайтовое сравнение `proverit_karkas()`.
+    return (f'<div class="{klassy}" data-i="{e((osnova["surname"] + " " + osnova["name"]).lower())}"'
+            f' data-sid="{osnova["id"]}">'
             f'<span class="kto"><b>{e(osnova["surname"])}</b> {e(osnova["name"])}{klass}'
             f'{obychno}</span>'
             f'<span class="komu">{hvost}</span></div>')

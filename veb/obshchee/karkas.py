@@ -1281,6 +1281,8 @@ tr:hover td{{background:var(--accent-soft)}}
   border:1px solid var(--rule);border-radius:0 0 9px 9px;max-height:18rem;overflow:auto}}
 .spisok div{{padding:.5em .9em;cursor:pointer}}
 .spisok div:hover{{background:var(--accent-soft);color:var(--accent)}}
+/* Строка школьника, на которую привёл поиск (`?sid=` — `glavnaya.poisk_skript`). */
+.podsvechen{{outline:2px solid var(--accent);border-radius:6px;background:var(--accent-soft)}}
 /* ТРИ КОЛОНКИ ВО ВЕСЬ ЭКРАН. Слева и посередине — школьник и его преподаватель,
    справа — преподаватель и его школьники. Разделены вертикальной линией.
    Списками, а не квадратиками: человек ищет свою фамилию по алфавиту. */
