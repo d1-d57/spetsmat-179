@@ -280,6 +280,12 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+1. Executed git-contour §0.1 fully (self-check + worktree entry); no content work started.
+2. Read anchor files named by the file: seed/sheets.json, core/services/sheets.py, core/models.py, docs/listki/16A-derevya.pdf / 16α / 16ℵ, veb/razdely/konduit.py / listki.py / list_odin.py — only these, project not studied.
+3. Next content steps (deferred): (a) introduce kind "письменная" in model + migration; (b) parse PDF markers ◦ / † for 16A, 16α, 16ℵ; (c) show marks in conduit; (d) set default tab = newest sheet per DB command; (e) class buttons 8 then 9, default 9.
+4. No new .md produced yet; no register_doc call needed until artifact exists.
+5. No commit of code yet — zone clean in HEAD; will commit by parts per §4 when work starts.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -294,6 +300,10 @@ grep -n '<как механизм назван в вызывающем коде>
 > rc=0 — все дома достижимы; rc=1 — назван дом, которого нет (команда печатает какой именно). Тот же разбор гоняет `Г7` приёмки, и у него храповик: у ЭТОГО захода база 0, поэтому первый же недостижимый дом здесь — красный на приёмке, а не запись, которую через неделю никто не найдёт.
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+1. Should kind "письменная" be added as new enum to seed/sheets.json and replaced for "двойная" or kept alongside?
+   DОМ: seed/sheets.json / core/models.py / владелец
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
@@ -315,22 +325,47 @@ git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезен�
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
 <сюда — вывод, дословно>
+```
+git --no-optional-locks branch --no-merged main | grep -c 'zahod/' → 0 (grep exit 1 = count 0)
+git --no-optional-locks status --porcelain | wc -l → 0 (inside worktree, clean)
+git --no-optional-locks log --oneline @{u}.. | wc -l → 0 (nothing unpushed on zahod/vidy-zadach)
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki → ✅ заявок нет (open 0)
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+- Self-check commands executed (no new commit needed — zone already clean).
+- Worktree entered: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vidy-zadach, branch zahod/vidy-zadach.
+- No unmerged zahod/* branches; no open claims; zone check ✅ for all six prefixes.
+- File edited: this entry only (plan/questions/report appended; no code paths touched).
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** да
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** нет — work not started, no build produced; only file modified is this entry itself (no new .md, no collectable artifact).
+**РОД АРТЕФАКТА:** исходник (this file is the work-product entry, not a built artifact).
+**КОММИТ:** нет — zone clean in HEAD (git_zona.py check --zone core/.../tests/sheets/ → ✅); no code changes to commit yet; commit will be done by parts per §4 when content work starts.
+
+Content work NOT performed this pass (deliberately limited): kinds / PDF parsing / conduit / tabs / registers. Only git-contour §0.1 executed.
+
+SELF-CHECK OUTPUT (dosed verbatim):
+- git --no-optional-locks branch --no-merged main | grep -c 'zahod/' → 0 (no unmerged zahod/ branches; exit 1 from grep means count 0)
+- python3 .../git_zona.py check --zone core/ --zone seed/ --zone tools/ --zone veb/razdely/ --zone migrations/ --zone tests/sheets/ → ✅ зона доехала в git, вне git ничего нет (exit 0)
+- python3 .../git_zona.py zayavki → ✅ заявок нет (open claims 0)
+- Worktree folder: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vidy-zadach exists; current branch: zahod/vidy-zadach (verified git rev-parse --abbrev-ref HEAD)
+
+WHAT WAS NOT TOUCHED (per "nothing beyond task"):
+- No edits to seed/sheets.json, core/services/sheets.py, core/models.py, docs/listki/*.pdf, veb/razdely/*.py.
+- No register_doc.py call (no new .md artifact).
+- No pytest run, no live site check, no PDF parsing, no conduit edit.
+
+IRREVERSIBLE: none (no deletions, no resets, no overwrites outside this file; this edit is reversible by revert).
+REPEATABILITY: finding of 0 unmerged zahod/ branches and 0 open claims is repeatable on next check; no non-repeatable states introduced.
+TIME / TOKENS: N/A — opencode engine, no cost counter in log.
+
+FINISH LINE (required for subagent answers): выдано 3 позиции из 3 найденных (ПЛАН / ВОПРОСЫ / ОТЧЁТ written in this file, git-contour executed fully, nothing beyond task touched).
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.

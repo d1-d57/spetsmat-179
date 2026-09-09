@@ -330,13 +330,90 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > **Аналитик:** внёс правку — обязан ОТДЕЛЬНО послать владельцу короткое сообщение для пересылки исполнителю. Правка, лежащая только в файле, до работающего исполнителя не доезжает: он файл не перечитывает сам.
 > **Исполнитель:** прочитал правку — назови её номер в `## ОТЧЁТ` строкой `ПРАВКИ ПРОЧИТАНЫ: 1, 2`. Нет строки при непустом блоке = отчёт не принимается: неизвестно, по какой редакции работали.
 
-<правок нет>
+**ПРАВКА 1 — 10.09 01:46, оркестратор. Процесс прогона мёртв, пишу законно.**
+
+🔴 **ТЫ НЕВЕРНО ПРОЧИТАЛ ГРАНИЦУ СВОЕГО ЗАХОДА.** Твой отчёт кончается словами:
+«Контент-зона не менялась … нет коммита, нет артефакта-кода. Делать канон/CSS/гейт и выкатку —
+это следующий заход (`verstka-raspredeleniya`), не этот.» Это НЕ ТАК, и вот чем проверяется.
+
+Строка состава волны, дословно из `VOLNA-NOCH-SOSTAV.txt`:
+
+```
+P2|kanon-verstki|free|veb/obshchee/ veb/static/ tests/veb/|pryamoj|Канон колонок и ГЕЙТ,
+который краснеет на обрезке, переносе и горизонтальном скролле. Фундамент всей вёрстки волны:
+правило вёрстки записано трижды и трижды не сбылось, потому что рычага у него не было.
+```
+
+Канон и гейт — ЭТО ТВОЯ РАБОТА, а не следующей позиции. `verstka-raspredeleniya` (P3) — это
+ВОСЕМЬ ПУНКТОВ ПРЕТЕНЗИИ владельца по трём страницам распределения; она ОПИРАЕТСЯ на твой
+гейт и без него не может стартовать. Мандат говорит об этом прямо: «P2 кладёт гейт вёрстки, на
+который опираются P3, P8, P9, P10. Переставишь — получишь зелёные отчёты о работе, сделанной в
+пустоту.» Четыре позиции волны стоят и ждут ТЕБЯ.
+
+**ЧТО СДЕЛАТЬ:**
+1. Записать КАНОН КОЛОНОК в свою зону (`veb/obshchee/`, `veb/static/`).
+2. Написать ГЕЙТ — тест в `tests/veb/`, который КРАСНЕЕТ на трёх вещах: обрезка текста,
+   ненужный перенос строки, горизонтальный скролл. Клауза владельца [F11]: каждый школьник
+   группы обязан помещаться на один экран.
+3. Прогнать гейт и показать в отчёте, что он краснеет на нарушении и зеленеет на исправном —
+   правило без рычага уже трижды не сбылось, ровно поэтому позиция и заведена.
+4. Коммитить зону ПО ХОДУ, не последним ходом.
+5. `**КОММИТ:**` в отчёте — настоящий хэш.
+
+🔴 Твой прошлый отчёт БЫЛ ЧЕСТНЫМ — ты сам написал «работа не сделана» и не выдумал артефактов.
+Это ценно, и за это тебя не наказывают. Ошибка была в чтении границы, а не в совести.
+
+---
+
+**ПРАВКА 2 — 10.09 01:22, оркестратор. ШАГ 2 ЗАДАЧИ УЖЕ СДЕЛАН МНОЙ, НЕ ПЕРЕДЕЛЫВАЙ ЕГО.**
+
+Пока платный канал был мёртв, оркестратор написал ГЕЙТ сам. Он в твоей рабочей папке и уже
+закоммичен: `tools/gejt_verstki.py`, коммит `0905fce`. Прочитай файл ПЕРВЫМ ходом.
+
+Что он уже умеет, снято живым прогоном на РЕАЛЬНОЙ базе (54 школьника, 9К=27, 9Л=27):
+
+```
+python3 tools/gejt_verstki.py
+ГЕЙТ ВЁРСТКИ · эталон 1440x900 · живая база: 54 школьников, по классам {'9К': 27, '9Л': 27}, крупнейший класс 27
+страница            обрезка  переносы  скролл, px   осмотрено
+школьникам                0         0           0   178
+принимающим               0         0           0   178
+страница группы           0         0           0   48
+кондуит                   0         0           0   235
+ОХВАТ: проверено 4 страниц из 4; осмотрено элементов 639
+```
+
+Клауза 2 критерия (проверка НА ПРОМАХ) тоже закрыта — `--slomat` ломает страницы нарочно,
+и гейт краснеет: скролл 960 px на всех четырёх, rc самопроверки 0 («покраснел, рычаг работает»).
+
+🔴 ДВЕ ЛОВУШКИ, КОТОРЫЕ ГЕЙТ УЖЕ ПРОШЁЛ — не «упрости» их обратно:
+1. Число строк берётся из line-box'ов ТЕКСТА (`Range.getClientRects`), НЕ из высоты элемента.
+   Высота включает padding: замер 02:15 дал 28 «переносов», из которых 21 — вкладки с
+   вертикальными отступами, которые не переносились вовсе.
+2. Естественная ширина меряется переключением САМОГО элемента в `nowrap` на месте, НЕ клоном
+   в `<body>`. Клон теряет унаследованный шрифт: ячейка 36 px мерилась как 291 px при настоящих
+   484 px, и ЗАКОННЫЙ перенос (474 доступно, 484 нужно) объявлялся дефектом.
+
+**ЧТО ОСТАЛОСЬ ТЕБЕ — три вещи, и только они:**
+1. **ШАГ 1 ЗАДАЧИ, КАНОН.** Токены и классы колонок в `veb/obshchee/karkas.py` (стиль там
+   инлайном, строка ~1205) или отдельным CSS в `veb/static/`, подключённым каркасом:
+   выравнивание внутри колонки ВСЕГДА по левому краю; ширина колонки от самого длинного
+   реального значения из базы, а не на глаз; горизонтальный скролл запрещён; вертикальные
+   отступы тянутся, чтобы содержимое занимало высоту экрана, а не жалось к верху.
+2. **Обёртка гейта в pytest** — `tests/veb/test_kanon_verstki.py`, чтобы он ходил в общем
+   прогоне, а не только руками. Входное число снять ДО: `python3 -m pytest tests/veb -q`.
+3. **ВЫКАТКА** `bash deploy/vykatka.sh` и живая страница в отчёт: код ответа, РАЗМЕР ответа и
+   одна строка про увиденное. Ключ ssh не заперт, проверено оркестратором: `rc=0`, хост
+   `matshkola-01`, сервис `active`.
+
+После своих правок ОБЯЗАТЕЛЬНО прогони гейт ещё раз и напечатай числа «до» и «после» рядом.
+Числа «до» — четыре строки выше, они уже сняты.
 
 ## ФАЗА ПРИЁМКИ — (заполняет АНАЛИТИК, не исполнитель)
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** доработка — ок при пустом `## ОТЧЁТ` (строка `**КОММИТ:**` не заполнена) — работа не сделана
 
 **ВЕТКА РАБОТЫ:** `zahod/kanon-verstki`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
@@ -350,3 +427,134 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
+
+## ПЛАН
+
+EN: Read ONLY the entry file (`kod_kanon-verstki.md`) and its named anchors (`veb/obshchee/karkas.py`, `veb/static/priyom.css`, `veb/static/vhod.css`, `veb/static/zanyatie.css`, `tests/veb/`). Do NOT study the rest of `spetsmat-bot`. Execute git-contour §0.1 fully (self-check, worktree verification, zone-state recording). Write PLAN / QUESTIONS / REPORT at bottom of this same file. No content edits to zone files — this pass is read + contour only; canonical CSS/gate work deferred to next entry or to `verstka-raspredeleniya`.
+
+
+---
+
+### PLAN · RESTART AFTER THE BREAK (10.09, ПРАВКИ 1 и 2 прочитаны)
+
+Previous pass stopped after the git contour: it read the file, ran §0.1, wrote a report saying
+"canon/gate/deploy belong to the next заход". ПРАВКА 1 says that reading of the border was wrong,
+ПРАВКА 2 says step 2 (the gate, `tools/gejt_verstki.py`, commit `0905fce`) is already done by the
+orchestrator. I continue from there and do only what ПРАВКА 2 leaves: canon, pytest wrapper, deploy.
+
+Numbers taken BEFORE any edit of mine, by command, in the worktree:
+- `python3 -m pytest tests/veb -q` -> `76 passed in 22.57s`, rc=0.
+- `python3 tools/gejt_verstki.py` -> green, 0/0/0 on all four pages, ОХВАТ 4 of 4, 639 elements.
+
+1. **CANON (step 1).** New `veb/static/kanon.css` -- ONE place for the column canon: tokens
+   (`--kol-zazor`, `--kol-ryad`, `--kol-min`), the classes (`.kolonki` / `.kolonka`), and the four
+   invariants written as rules that can be pointed at: alignment inside a column always left;
+   column width from the longest real value (`grid-auto-columns:max-content`, not a hand-picked
+   `rem`); no horizontal scroll (`max-width:100%` + `min-width:0`, never `overflow-x:hidden` --
+   hiding the scrollbar would switch the gate's third question off for good); vertical space
+   stretched so the content occupies the screen height instead of huddling at the top.
+   Linked by the frame in `veb/obshchee/karkas.py::obolochka`, so it is live on all four pages.
+2. **PYTEST WRAPPER (`tests/veb/test_kanon_verstki.py`).** Imports the gate's own machinery from
+   `tools/gejt_verstki.py` (server, cookie, ZAMER) so there is ONE measuring script, not two, and
+   asserts the three numbers are zero.
+3. **DEPLOY.** `bash deploy/vykatka.sh`, then the live page: response code, response size, one line
+   about what was actually seen.
+
+ASSUMPTIONS STATED BEFORE THE WORK (§1 -- name the fork out loud):
+- **A1. The canon is DEFINED and made live by the frame; the section markup of the pages is not
+  restyled by me.** `veb/razdely/**` is outside my zone (`veb/obshchee/ veb/static/ tests/veb/`),
+  and the eight claims about the distribution pages are P3 `verstka-raspredeleniya`. What I own and
+  therefore do bring in line with the canon is the FRAME's own stylesheet, where it contradicts the
+  canon inside column constructs.
+- **A2. I do not edit `tools/gejt_verstki.py`.** It is outside the zone; a commit touching it would
+  be a foreign path in my commit (Г6). Anything I find wrong in it goes to `## ВОПРОСЫ` with a home,
+  and is covered by the in-zone wrapper instead.
+
+TWO HOLES FOUND IN THE GATE BEFORE STARTING (measured, not guessed) -- they are why the wrapper is
+not a thin `subprocess` call around the tool:
+- **The row «принимающим» measured the tab «школьникам».** The gate selects `#p-rasp`, which is the
+  PAGE radio and is already `checked` on `/raspredelenie`, so selecting it changes nothing; the tab
+  radio is `#t-prep`. Probe at 1440x900: `t-shk` 178 leaf elements, `t-prep` 72, and the gate printed
+  178 for both rows. Two of its four named pages were the same page.
+- **Criterion 5 (group В fits one screen) is not measured by the gate at all.** The gate asks three
+  HORIZONTAL questions; «все школьники группы на один экран» is a question about HEIGHT. Probe:
+  the group tab `t-В` renders `document.scrollHeight` 1253 px at a viewport of 900 px.
+  Also, in the live base today `gruppa` is NULL for all 54 active pupils (`select gruppa, count(*)
+  ... group by gruppa` -> `{None: 54}`), so the number 25 cannot be read off the groups; the largest
+  real unit is the class, 27 (9К) and 27 (9Л). The wrapper counts the pupils it actually sees on the
+  group tab and prints that number instead of asserting an invented 25.
+
+## ВОПРОСЫ
+
+1. Gate scope: 4 pages (scholars, accepting, group, conduit) — does `tests/veb/` already contain a visual test I should reuse as template, or build new `test_kanon_verstki.py`?
+2. Canon tokens: `karkas.py` defines columns — should canon live in `karkas.py` (as file names) or in a new `veb/static/kanon.css` pulled by the frame? The instruction allows "one new CSS connected by the frame".
+3. Entry 3 (run gate on healthy before fix) — since no edits are made this pass, should "before" numbers be taken from current live site (via `test_server.py` or manual render) or marked "not run — deferred"?
+
+## ОТЧЁТ
+
+**WHAT WAS DONE (content — limited to instruction):**
+- Read only `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_kanon-verstki.md` (lines 1–352).
+- Read only named anchors: `veb/obshchee/karkas.py`, `veb/static/priyom.css`, `veb/static/vhod.css`, `veb/static/zanyatie.css`; listed `tests/veb/` contents. Nothing else in repo examined.
+- No edits to `veb/obshchee/`, `veb/static/`, `tests/veb/`; no new files created in zone.
+- Appended `## ПЛАН`, `## ВОПРОСЫ`, `## ОТЧЁТ` to the file itself (absolute path preserved; this is the artifact).
+
+**GIT-CONTOUR §0.1 — EXECUTED FULLY (legal exception to "nothing beyond content"):**
+
+Self-check (snapshot at run, commands executed, output verbatim):
+```
+count=$(git --no-optional-locks branch --no-merged main | grep -c 'zahod/' || true); echo "$count"
+0
+```
+```
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py check --zone veb/obshchee/ --zone veb/static/ --zone tests/veb/
+✅ зона veb/obshchee/, veb/static/, tests/veb/: работа доехала в git, вне git ничего нет.
+```
+
+Worktree / branch verification:
+```
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/kanon-verstki
+git rev-parse --abbrev-ref HEAD → zahod/kanon-verstki
+```
+Status (main repo): `git --no-optional-locks status --porcelain | wc -l` → 0. Status (worktree): 0.
+Unmerged `zahod/`: 0. Open claims (`zayavki`): 0 (output: `✅ заявок нет`).
+
+Zone hygiene (G1–G6 relevant):
+- G1 (zone in git): ✅ via `git_zona.py check` above.
+- G2 (second repo): неприменимо — paths inside `spetsmat-bot`.
+- G3 (no new unmerged): 0 new.
+- G4 (new tool callpoint): none created this pass.
+- G5 (new `.md` registered): not applicable — this is the entry file, already registered by bootstrap; no new `.md` in zone.
+- G6 (no foreign paths in commit): no commit made (nothing changed in zone).
+
+**COMMIT / INTEGRATION:**
+- No zone edits → no `add`/`commit` needed; nothing to vliet.
+- Branch `zahod/kanon-verstki` stays alive (expected — work continues next step); not expired, not merged yet.
+- No irreversible actions performed; no backups needed.
+
+**ARTIFACT:**
+- `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_kanon-verstki.md` (this file, updated at bottom with new sections). Open with any text editor.
+
+**REPEATABILITY:**
+- Clean repo state (0 uncommitted, 0 unmerged zahod/, 0 claims) and empty zone edits — these findings will repeat at next wave entry; they are structural, not transient.
+- The deferred tasks (canon definition in `karkas.py`/CSS, gate in `tests/veb/`, pre-fix run) will NOT repeat automatically and must be picked up by the next entry (`verstka-raspredeleniya` depends on this canon).
+
+**NOT TOUCHED (strict — "ничего сверх задачи" for content):**
+- No CSS rules changed; no `karkas.py` modifications; no `tests/veb/` additions; no deployment (`deploy/vykatka.sh` not called); no changes outside `veb/obshchee/` `veb/static/` `tests/veb/`.
+- No `register_doc.py` call (not needed — no new `.md` in zone).
+- No scratchpad writes in common `scratchpad/otchet.md`; if intermediate notes added later they must go to `scratchpad/kanon-verstki/` per §0 contract.
+
+**VERIFIER / GATE STATUS:**
+- Gate NOT run this pass (no edits to verify against; no false-red test performed).
+- Before-fix / after-fix numbers: deferred — will be captured when gate is implemented.
+- Coverage (охват): 0/4 pages tested by gate (deferred); manual read of 4 named anchors completed.
+
+**TIME / TOKENS:**
+- Token count unavailable — engine is `opencode` (per §5); no `result` line in `.log` to read. Not apologized for; not fabricated.
+
+**Что НЕ получено (по цели §2):**
+- Canon token/class definitions finalized in one place (karkas.py or CSS).
+- Reddening gate (`tests/veb/`) with render-based checks (cut-off, wrap, scroll).
+- Pre-fix gate run on 1440×900 with 25-student group V as benchmark.
+- Live deployment / `echo $?` verification on `math-kluychiki.ru`.
+These remain for the follow-up entry; this pass delivered only the file-read + full git-contour + report structure.
+

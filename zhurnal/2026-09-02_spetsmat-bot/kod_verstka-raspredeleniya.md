@@ -313,12 +313,30 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+NOTE (orchestrator override, this run): §0.1 git-contour subagent was cancelled by the orchestrator before this run started — reason given: 4 of 10 runs in the neighboring wave died on that exact call. Per the orchestrator's substitute instruction, the executor ran one command itself instead and pasted its output here. This section is normally filled by the git-contour subagent, not the executor; filled by the executor this time under that override.
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+```
+
+Additional commands run by the executor for context (not requested by the orchestrator, run to make the "да/нет" line below honest rather than a bare guess):
+```
+$ git --no-optional-locks branch --no-merged main
++ zahod/kanon-verstki
+$ git --no-optional-locks status --porcelain | wc -l
+0
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+fatal: no upstream configured for branch 'zahod/verstka-raspredeleniya'
+$ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki
+✅ заявок нет (open claims: 0)
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Nothing merged/committed/shipped/closed by this note — read-only self-check per the orchestrator's substitute instruction, no git_zona.py `check --zone` was run (that was not part of the substitute command).
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+*(1 unmerged `zahod/*` branch: `zahod/kanon-verstki` — a sibling zahod in the same queued wave (its tool `tools/gejt_verstki.py`, commit `0905fce`, is the layout gate this very task is told to reuse via `git checkout zahod/kanon-verstki -- tools/gejt_verstki.py`). Not mine to merge — merging a neighbor's branch is explicitly out of scope for this executor. Everything else checked is clean: 0 uncommitted, 0 open claims (`zayavki`). No `git_zona.py check --zone` was run here since it wasn't part of the orchestrator's substitute command; it will run as part of this zahod's own §4/§4.1 hygiene below.)*
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
@@ -337,7 +355,28 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > **Аналитик:** внёс правку — обязан ОТДЕЛЬНО послать владельцу короткое сообщение для пересылки исполнителю. Правка, лежащая только в файле, до работающего исполнителя не доезжает: он файл не перечитывает сам.
 > **Исполнитель:** прочитал правку — назови её номер в `## ОТЧЁТ` строкой `ПРАВКИ ПРОЧИТАНЫ: 1, 2`. Нет строки при непустом блоке = отчёт не принимается: неизвестно, по какой редакции работали.
 
-<правок нет>
+**ПРАВКА 1 — 10.09 01:24, оркестратор.**
+
+🔴 **ГЕЙТ ВЁРСТКИ, НА КОТОРЫЙ ТЫ ОПИРАЕШЬСЯ, УЖЕ СУЩЕСТВУЕТ.** Позиция P2 его не дописала,
+и оркестратор написал его сам: `tools/gejt_verstki.py`, коммит `0905fce` на ветке
+`zahod/kanon-verstki`. Твоя ветка от него отдельная, поэтому: возьми файл к себе командой
+`git checkout zahod/kanon-verstki -- tools/gejt_verstki.py` ПЕРВЫМ ходом и гоняй им свои
+страницы — свой параллельный гейт НЕ пиши, второй такой же рычаг хуже одного.
+
+Как гонять и что он печатает:
+
+```
+python3 tools/gejt_verstki.py          # три числа на страницу + ОХВАТ, rc=1 на красном
+python3 tools/gejt_verstki.py --slomat # самопроверка: ломает страницы, гейт обязан покраснеть
+```
+
+Числа «до» на живой базе (54 школьника, 9К=27, 9Л=27), сняты 10.09 01:18 — все нули на
+четырёх страницах из четырёх, осмотрено 639 элементов. Значит ЛЮБОЕ красное число после твоих
+правок — твоё, и его видно сразу.
+
+🔴 Восемь пунктов претензии владельца — это ТВОЯ работа и она НЕ про гейт: обрезанные фамилии,
+съехавшая Надя, слипшееся «обычно у», ПН и ЧТ не по центру, класс хвостом, счётчики россыпью,
+бессмысленное ПРИХОДИТ, карточки жмутся к верху. Гейт — линейка, а не работа.
 
 ## ФАЗА ПРИЁМКИ — (заполняет АНАЛИТИК, не исполнитель)
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
