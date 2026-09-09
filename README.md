@@ -274,6 +274,9 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_chistka-tokenov.md`** (вычистить мёртвые строки токена из четырёх файлов и из истории git публичного репозитория)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_data-i-istoria-kletki.md`** (дата сдачи у галочки, история клетки жестом, отсев тестовых нажатий, правило последнего занятия)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_dozabivka-dolgov-sklejki.md`** (закрыть долги заходa склейки: права у кабинетов, опечатка except Value, красные тесты enrollment)
 
 
@@ -283,12 +286,33 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_https-i-domen.md`** (HTTPS на math-kluychiki.ru: сертификат, редиректы с http и с IP, сторож на новый адрес)
 
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_istoria-zanyatij.md`** (вкладка История: школьники и преподаватели против дат занятий)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_kabinet-prepodavatelya.md`** (вкладка Кабинет, крупный блок Следующий спецмат и отметка будущего отсутствия)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_kanal-diagnostika.md`** (замер нестабильного исходящего канала сервера и резолвера; вердикт что писать хостеру)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_kanon-verstki.md`** (канон колонок плюс краснеющий гейт: без обрезки, без переносов, без горизонтального скролла)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_listki-kak-baza-zadach.md`** (листок как база задач: страница листка вместо PDF, скачивание PDF и TeX, кондуит и состав из базы, отметки 05.09)
 
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_pages-i-materialy.md`** (Pages перестаёт отдавать устаревшую копию и уводит на живой сайт; /materials/ перестаёт быть вечным 404)
 
+
+
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_paroli-shkolnikov.md`** (личные пароли школьников поверх готовой карточки — условный последний заход волны)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_poisk-i-kartochka.md`** (широкий поиск, переход на группу и полная карточка школьника — будущая личная страница)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_pravila-raspredeleniya.md`** (жёсткий запрет назначать в день неприхода и красное при превышении потолка в пять школьников)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_privacy-i-terms.md`** (две недостающие страницы сайта — политика конфиденциальности и условия — по адресам, вписанным в консоль Google)
 
@@ -302,6 +326,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_sloj-zanyatia.md`** (слой занятия: сегодняшнее распределение сохранить как слой на 07.09, постоянное вернуть к утреннему, дальше разделить жёстко)
 
 
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_statistiki-i-grobarij.md`** (четыре статистики кондуита плюс пустая вкладка гробария)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_storozh-pomnit.md`** (сторож перестаёт считать каждый свой запуск первым и заваливать владельца пульсом каждые три минуты)
 
@@ -319,6 +346,15 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_veb-vhod-i-obshchee-sostoyanie.md`** (Два пароля из окружения в подписанной куке и общее состояние: правка с одного компьютера видна на другом)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_verstka-raspredeleniya.md`** (колонки распределения: ПН и ЧТ, класс отдельной колонкой, счётчики справа, значок «обычно у»)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_vidy-zadach.md`** (вид «письменная» из крестиков листка плюс кружок, крестик и звезда прямо в кондуите)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_vnesenie-zadach.md`** (кнопка «внести задачи»: текст, фото и голос через гипотезу и диалог подтверждения)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_vygruzka-v-tablicu.md`** (ночная выгрузка кондуита в Google-таблицу владельца через сервисный аккаунт Sheets API и суточный таймер)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_vykatka-tunnel-i-storozh.md`** (Выкатка сайта распределения наружу по HTTPS через туннель с машины владельца плюс сторож продукта)
@@ -329,6 +365,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_veb-raspredelenie.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-OSNOVANIE.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-noch.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-vecher.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
