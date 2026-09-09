@@ -270,6 +270,29 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Самопроверка гейта, красящая ОДНО число из нескольких, аттестует детекторы, которых она не касалась
+
+Гейт задавал три вопроса и нёс самопроверку «сломай нарочно — обязан покраснеть». Поломка была одна
+и общая (блок 2400 px в `body`), а вопросов три; она двигала только число скролла. Отчёт при этом
+честно печатал «рычаг работает», и это было правдой ровно про одну треть рычага.
+ЦЕНА: два детектора из трёх — обрезка и перенос — стояли непроверенными, и по построению это не
+видно ни из зелёного прогона, ни из красного: оба печатают ноль и там, и там. Нашёл §3-верификатор
+чужим методом, не автор. Починка — три поломки по одной на вопрос (обрезка 68, переносы 13, скролл
+960, остальные два числа в каждом случае нули), коммит `a65daee`. Правило общее: самопроверка гейта
+обязана быть по ЧИСЛУ, которое он печатает, а не по факту «покраснел».
+
+### Гейт, ходящий по сайту ОДНОЙ ролью, зелен по построению для всех остальных ролей
+
+Инструмент логинился организатором, потому что иначе не существует вкладки кондуита. Все четыре
+страницы он мерил только этой ролью и печатал вердикт про «страницу».
+ЦЕНА: гостю — роли, в которой сайт видит большинство посетителей, — рамка резала 36 имён на здешней
+базе и 48 на боевом сервере, а гейт держал ноль и не краснел ни разу. Разница не в данных, а в
+разметке одной и той же страницы: организатору имя рисуется внутри `<select>`, который меряется по
+своим опциям, гостю — простым текстом в колонке, замороженной на `flex:0 0 9.6rem`. Правило: гейт,
+который ходит одной ролью, обязан либо ходить всеми, либо печатать в охвате, СКОЛЬКИМИ ролями он
+ходил, — иначе «проверено 4 страницы из 4» и «проверено 4 страницы одной роли из восьми» выглядят
+одинаково.
+
 ## ПЛАН — (заполняет исполнитель)
 
 ## ВОПРОСЫ — (заполняет исполнитель)
@@ -306,22 +329,36 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+🔴 **СУБАГЕНТ ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЛСЯ — ПУНКТ ОТМЕНЁН ОРКЕСТРАТОРОМ** при запуске этого
+перезапуска, и указание оркестратора сильнее текста захода. Причина, названная им: замер соседней
+волны — четыре захода из десяти умерли ровно на этом вызове. Взамен всего блока §0.1 исполнитель
+выполнил САМ одну назначенную команду; её вывод дословно:
+
+```
+git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+```
+
+Та единственная невлитая ветка — `zahod/kanon-verstki`, СВОЯ ветка этого захода, заведённая прошлым
+(оборвавшимся) прогоном. Чужих невлитых веток на входе не было.
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Коммиты зоны, сделанные по ходу работы: `1e4f32d` (канон), `c13b8b9` (гейт в общем прогоне),
+`fd0dbc2` (роль гостя). Своя ветка `zahod/kanon-verstki` влита в `main` последним ходом — см. строку
+`ВЕТКА` в `## ОТЧЁТ · RESTART AFTER THE BREAK`. Заявок не ставилось и не гасилось.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/veb/static/kanon.css` — текстовым редактором; живьём тот же файл отдаётся боевым сервером по `http://math-kluychiki.ru/static/kanon.css` (HTTP 200, 6775 bytes)
 *(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
+**РОД АРТЕФАКТА:** `исходник`
 *(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
+**КОММИТ:** `1e4f32d` — «канон колонок: one file the frame loads last…» · `c13b8b9` — «гейт вёрстки в общем прогоне…» · `fd0dbc2` — «гейт вёрстки: гость — тоже роль…» · `a65daee` — «самопроверка гейта — по детектору на поломку…» · влито в main: `ab76e8b` · `git_zona.py check --zone veb/obshchee/` → ✅ · `--zone veb/static/` → ✅ · `--zone tests/veb/` → ✅
+**ПОЛНЫЙ ОТЧЁТ ЭТОГО ПРОГОНА — В САМОМ НИЗУ ФАЙЛА:** `## ОТЧЁТ · RESTART AFTER THE BREAK (10.09)`. Секция `## ОТЧЁТ` ниже по файлу — отчёт ПРЕДЫДУЩЕГО, оборвавшегося прогона; он оставлен как есть, потому что переписывать чужую запись задним числом нельзя.
 *(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
@@ -490,6 +527,51 @@ not a thin `subprocess` call around the tool:
 2. Canon tokens: `karkas.py` defines columns — should canon live in `karkas.py` (as file names) or in a new `veb/static/kanon.css` pulled by the frame? The instruction allows "one new CSS connected by the frame".
 3. Entry 3 (run gate on healthy before fix) — since no edits are made this pass, should "before" numbers be taken from current live site (via `test_server.py` or manual render) or marked "not run — deferred"?
 
+### QUEUE ITEMS FROM THIS RESTART (10.09)
+
+4. `tools/gejt_verstki.py` measures the tab «принимающим» by selecting `#p-rasp`, which is the PAGE
+   radio and is already `checked` on `/raspredelenie`; the tab radio is `#t-prep`. Two of the gate's
+   four named pages were therefore the same page (178 leaf elements printed for both rows; the real
+   `t-prep` has 72). Fixed in `tests/veb/test_kanon_verstki.py`, which is inside this заход's zone;
+   the tool itself is not, and still carries the defect. (Its own file `tools/gejt_verstki.py` cannot
+   be the ДОМ: `--proverit-doma` rejects executable code as an address, and it is right to — a fix
+   filed inside the thing that needs fixing is not filed anywhere.)
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/kod_verstka-raspredeleniya.md
+   ДОСТАВЛЕНО: нет
+
+5. Owner's clause [F11] fails on the group tab: 19 pupils of group В end at 1189 px against a 900 px
+   window — a third of the group below the fold. The number 25 the owner quoted is 19 pupils plus the
+   6 accepting-teacher cards of the neighbouring column, so «25 fits» was never a statement about
+   pupils. Fixing it is re-laying the tab (`veb/razdely/**`), which is P3's zone; the lever is already
+   standing here as a strict xfail.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/kod_verstka-raspredeleniya.md
+   ДОСТАВЛЕНО: нет
+
+6. A GUEST on `/raspredelenie` gets 36 names cropped by the frame (48 live on the server), and an
+   organiser gets zero on the same page in the same run — the organiser sees the name inside a
+   `<select>`, which sizes itself to its options. The cause is named in the frame itself: the day
+   column is frozen at `flex:0 0 9.6rem` and the name inside is truncated with an ellipsis, which is
+   exactly the width-picked-by-eye the canon forbids («Настя Вахрина»: needs 113 px, has 99).
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/kod_verstka-raspredeleniya.md
+   ДОСТАВЛЕНО: нет
+
+7. The guest landing page `/` is a pre-built mirror (`docs/index.html`), rebuilt only as a side effect
+   of an owner's edit, so a deploy that changes the stylesheet does not reach it: `/raspredelenie`
+   carries the canon link live, `/` does not. Forcing the rebuild over ssh fails —
+   `sqlite3.OperationalError: unable to open database file`, i.e. the login user cannot open the
+   production base that the service can. The mirror will pick the canon up on the owner's next edit;
+   whether that is acceptable is the owner's call, not mine.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+8. Running `python3 -m pytest tests/veb` rewrites `docs/index.html` in the working tree — the
+   committed version is a redirect stub, the regenerated one is the full page, so the tree goes dirty
+   by 1155 lines every time the web tests run, on a path nobody in the run meant to touch. It is
+   excluded from the deploy, so nothing ships; the cost is that «is the tree clean?» stops meaning
+   anything for whoever runs those tests next.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
 ## ОТЧЁТ
 
 **WHAT WAS DONE (content — limited to instruction):**
@@ -558,3 +640,301 @@ Zone hygiene (G1–G6 relevant):
 - Live deployment / `echo $?` verification on `math-kluychiki.ru`.
 These remain for the follow-up entry; this pass delivered only the file-read + full git-contour + report structure.
 
+
+---
+
+## ОТЧЁТ · RESTART AFTER THE BREAK (10.09)
+
+**ГДЕ ОСТАНОВИЛСЯ ПРОШЛЫЙ ПРОГОН И С ЧЕГО Я ПРОДОЛЖИЛ.** The previous run stopped after the git
+contour: it had read the file, run §0.1, made no commit and no edit, and closed its report with
+«canon/CSS/gate and the deploy are the next заход». ПРАВКА 1 overturned that reading of the border,
+ПРАВКА 2 said step 2 was already done by the orchestrator (`tools/gejt_verstki.py`, commit `0905fce`)
+and named the three things left. I continued from exactly there: read the tool first, took the entry
+numbers by command, and did canon → pytest wrapper → deploy.
+
+**ПРАВКИ ПРОЧИТАНЫ: 1, 2**
+
+### ЧТО СДЕЛАНО И ЗАЧЕМ
+
+1. **КАНОН — `veb/static/kanon.css`, one place, loaded by the frame LAST** (`veb/obshchee/karkas.py`,
+   the `<link>` sits immediately after the inline `</style>`, and the order is part of the rule: the
+   canon is the site's last word about columns, and between two rules of equal specificity the later
+   one wins). Tokens `--kol-zazor` · `--kol-ryad` · `--verh-vysota`; classes `.kolonki` · `.kolonka` ·
+   `.ryad` · `.rast-rovno`. The owner's four sentences of 09.09 are written there as CSS a page can be
+   built out of: a column is the unit; text inside it is always left; the width is `max-content`, i.e.
+   the longest value the base really produced, never a `rem` picked by eye; no horizontal scroll, and
+   the vertical space stretches to the screen.
+   🔴 Rule 4 is deliberately NOT `overflow-x:hidden`. That does not remove the overflow, only the
+   evidence: `documentElement.scrollWidth` stops exceeding `clientWidth` and the gate's third question
+   goes green for ever. Overflow is prevented by `min-width:0` and `overflow-wrap` instead.
+   Live from this commit: the no-overflow guard and the screen-height stretch — the visible section
+   becomes a flex column with `min-height:calc(100dvh - var(--verh-vysota))`, measured in the browser
+   as `display:flex`, `min-height:826.4px` at a 900 px window, with exactly ONE section visible (the
+   stretch repeats the frame's own show/hide selectors at equal specificity on purpose — a blanket
+   `display:flex` would have shown every section at once).
+   Commit `1e4f32d`.
+2. **ГЕЙТ В ОБЩЕМ ПРОГОНЕ — `tests/veb/test_kanon_verstki.py`.** It imports the tool's own server,
+   cookie and measuring script, so there is ONE measuring script and not two, and it closes two holes
+   of the hand-run tool in the only place the zone allows (`tools/` is outside it):
+   - **the tab it names is now the tab it measures**: the tool selects `#p-rasp`, the PAGE radio,
+     already `checked` on `/raspredelenie`; the tab radio is `#t-prep`. The tool printed 178 elements
+     for both «школьникам» and «принимающим» because they were one page. Here: 178 / 72 / 48 / 235.
+   - **clause [F11] is measured at all**: «все школьники группы на один экран» is a question about
+     HEIGHT, and all three questions of the tool are about width.
+   It also proves its own lever: it breaks a page on purpose the way `--slomat` does and requires the
+   measurement to go red (скролл 960 px). Commit `c13b8b9`.
+3. **ГОСТЬ — ТОЖЕ РОЛЬ.** The tool walks the site with an organiser cookie only (without it there is
+   no conduit tab), and that left a whole render never measured. Commit `fd0dbc2`.
+
+### ЧИСЛА «ДО» И «ПОСЛЕ», ОБА СНЯТЫ КОМАНДОЙ
+
+Gate, live base, 54 pupils, reference 1440x900 — identical before my edits and after them, which is
+the point: the canon was added without moving a single page off green.
+
+```
+ДО (снято до правок)                          ПОСЛЕ (снято после трёх коммитов)
+страница        обрезка переносы скролл       страница        обрезка переносы скролл
+школьникам            0        0      0       школьникам            0        0      0
+принимающим           0        0      0       принимающим           0        0      0
+страница группы       0        0      0       страница группы       0        0      0
+кондуит               0        0      0       кондуит               0        0      0
+ОХВАТ: 4 из 4, 639 элементов                  ОХВАТ: 4 из 4, 639 элементов
+```
+
+Самопроверка гейта на подстроенном нарушении (клауза 2 критерия):
+`✅ САМОПРОВЕРКА: гейт покраснел на подстроенном нарушении — рычаг работает.`
+
+`python3 -m pytest tests/veb -q`: **76 passed** at the entrance (снято ДО работы) → **86 passed,
+2 xfailed** now. Not lower, and the two xfails are the two defects below, recorded rather than hidden.
+
+Числа гейта в общем прогоне (печатаются самим тестом, не константы):
+```
+ОХВАТ: проверено 4 страниц из 4; осмотрено элементов 533
+школьникам: обрезка 0, переносы 0, скролл 0 px, осмотрено 178
+принимающим: обрезка 0, переносы 0, скролл 0 px, осмотрено 72
+страница группы: обрезка 0, переносы 0, скролл 0 px, осмотрено 48
+кондуит: обрезка 0, переносы 0, скролл 0 px, осмотрено 235
+САМОПРОВЕРКА на подстроенном нарушении: обрезка 0, переносы 1, скролл 960 px
+ГРУППА В · школьников 19, карточек принимающих 6 · последняя строка школьника на 1189 px при окне 900 px
+ГОСТЬ · /raspredelenie: обрезка 36, переносы 0, скролл 0 px, осмотрено 167
+```
+
+### ЧТО ГЕЙТ НЕ ПРОВЕРЯЕТ (сказано вслух, чтобы зелёный не читали как «страница хороша»)
+
+Цвет и контраст, читаемость, подстановку шрифтов на машине без проектных шрифтов, мобильные ширины,
+печать, движение, озвучку экранным диктором. И отдельно — обрезку, сделанную НА СЕРВЕРЕ: строка,
+укороченная в Python до отдачи в браузер, приезжает в разметку уже короткой и не переполняет ничего.
+Гейт ловит обрезку РАМКОЙ, а не ножницами в коде, и судит геометрию на одном эталоне.
+
+### ДВА ДЕФЕКТА, НАЙДЕННЫЕ ЗАМЕРОМ И НЕ ПОЧИНЕННЫЕ ЗДЕСЬ (оба — строгий xfail, оба в очереди)
+
+- **Клауза [F11] не выполняется.** 19 школьников группы В кончаются на 1189 px при окне 900 —
+  треть группы под сгибом. Эталонные 25 владельца — это 19 школьников ПЛЮС 6 карточек принимающих в
+  соседней колонке; ни одно из чисел не вписано константой, оба считаются по рендеру.
+- **Гостю на `/raspredelenie` рамка режет 36 имён** (48 вживую на боевом), организатору на той же
+  странице в том же прогоне — ноль: организатор видит имя внутри `<select>`, который меряется по
+  своим опциям. Причина названа в самом каркасе: столбец дня заморожен на `flex:0 0 9.6rem`, имя
+  внутри усечено многоточием — ровно та ширина «на глаз», ради запрета которой канон и написан
+  («Настя Вахрина»: надо 113 px, есть 99).
+
+Чинится и то и другое перевёрсткой разметки вкладок (`veb/razdely/**`) — это зона P3
+`verstka-raspredeleniya`, не моя (пункты 5 и 6 в `## ВОПРОСЫ`). Маркеры строгие: в день, когда P3
+починит страницу, тест покраснеет как XPASS, и это красное значит «сними маркер» — единственный
+способ, которым маркер не переживёт дефект.
+
+### ВЫКАТКА
+
+`bash deploy/vykatka.sh` — rc=0, `== deployed; the site answered 200 after 2s`. Отказа по уроку не
+было («free: no lesson window around 2026-09-10 01:34 Moscow»), бот не перезапускался («nothing it
+runs changed»).
+
+Живьём, снято curl-ом и headless-браузером по адресу `http://math-kluychiki.ru`:
+```
+/                        HTTP 200, 175013 bytes   канон в разметке: НЕТ (см. ниже)
+/raspredelenie           HTTP 200, 149458 bytes   канон в разметке: ДА
+/static/kanon.css        HTTP 200,   6775 bytes
+```
+Одной строкой про увиденное: на живом `/raspredelenie` канон подключён и применён — `#s-rasp` в боевом
+браузере отдаёт `display:flex`, `min-height:826.4px`, раздел занимает высоту экрана, горизонтального
+скролла нет; и там же живой замер показал 48 имён, обрезанных рамкой у ГОСТЯ, — тот самый дефект, что
+воспроизвёлся локально на 36.
+
+🔴 **`/` канон НЕ получил, и это не забывчивость выкатки.** Гостевая заглавная — предсобранное зеркало
+`docs/index.html`, которое пересобирается только побочным эффектом правки владельца; выкатка его
+нарочно не везёт. Пересобрать его на сервере руками не вышло: `sqlite3.OperationalError: unable to
+open database file` — ssh-пользователь не может открыть боевую базу, которую открывает сервис. Зеркало
+подхватит канон при первой же правке владельца. Пункт 7 в `## ВОПРОСЫ`, `ДОМ: владелец`.
+
+### ЧЕГО НЕ ТРОГАЛ
+
+`veb/razdely/**` (разметка разделов — зона P3), `tools/gejt_verstki.py` (вне зоны; его дефект — пункт 4
+очереди), `deploy/**`, `bot/`, `core/`, `infra/`, база `data/spetsmat.db`. Ни одного существующего
+правила встроенного стиля не переписал и не удалил: канон стоит отдельным файлом ПОСЛЕ него.
+`docs/index.html` в рабочем дереве переписан не мной, а прогоном `pytest tests/veb` (пункт 8 очереди);
+я его не коммитил и не откатывал.
+
+### НЕОБРАТИМОЕ
+
+**Необратимого нет.** Ни удалений, ни перезаписей, ни переименований, ни `git reset`/`checkout` поверх
+несохранённого. Выкатка на боевой сервер — единственное действие наружу, и она обратима штатно:
+`bash deploy/vykatka.sh --otkat` восстанавливает снимок, снятый ею же перед переносом
+(`/opt/spetsmat-bot-bak-<ISO>/`); откат к состоянию до захода — `git revert 1e4f32d c13b8b9 fd0dbc2`
+и повторная выкатка.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+- **Повторится на следующей единице работы, и потому это заход, а не запись:** «гейт ходит одной
+  ролью». Любая следующая позиция вёрстки волны (P3, P8, P9, P10) будет мерить страницу организатором
+  и получать зелёное там, где гость видит обрезку. Цена уже замерена: 36 элементов локально, 48 живьём,
+  и ни один из них не краснел ни разу. Закрыто в моей зоне для `/raspredelenie`; для страниц, которые
+  возьмут P8–P10, оно повторится ровно так же.
+- **Повторится:** «ширина колонки, выбранная в `rem`, режет имя, которого никто не примерил». Тот же
+  `flex:0 0 <N>rem` стоит в каркасе не в одном месте.
+- **НЕ повторится, законно уходит пунктом очереди:** дефект выбора вкладки в `tools/gejt_verstki.py`
+  (пункт 4) и устаревание зеркала `docs/index.html` (пункты 7, 8) — это по одному месту каждый.
+
+### ВРЕМЯ И ТОКЕНЫ
+
+**НЕПРИМЕНИМО:** движок прогона — `opencode`, счётчика стоимости в логе нет; число снимать неоткуда.
+
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/kanon-verstki/veb/static/kanon.css` — открывать текстовым редактором; живьём тот же файл отдаётся по `http://math-kluychiki.ru/static/kanon.css` (HTTP 200, 6775 bytes).
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `1e4f32d` — «канон колонок: one file the frame loads last…» · `c13b8b9` — «гейт вёрстки в общем прогоне…» · `fd0dbc2` — «гейт вёрстки: гость — тоже роль…» · `git_zona.py check --zone veb/obshchee/` → ✅ · `--zone veb/static/` → ✅ · `--zone tests/veb/` → ✅
+
+### ГИГИЕНА §4.1 — Г1…Г6, вывод команд, а не пересказ
+
+- **Г1. Зона доехала в git.**
+  ```
+  git_zona.py check --zone veb/obshchee/  → ✅ зона veb/obshchee/: работа доехала в git, вне git ничего нет.
+  git_zona.py check --zone veb/static/    → ✅ зона veb/static/: работа доехала в git, вне git ничего нет.
+  git_zona.py check --zone tests/veb/     → ✅ зона tests/veb/: работа доехала в git, вне git ничего нет.
+  ```
+- **Г2. Второй репозиторий — неприменимо:** все три пути зоны лежат внутри `spetsmat-bot`; зона за
+  его пределы по ходу работы не расширялась.
+- **Г3. Невлитых веток не прибавилось.** На входе `1` (`zahod/kanon-verstki`, своя). После работы:
+  ```
+  git --no-optional-locks branch --no-merged main
+  * zahod/kanon-verstki
+  счёт: 1
+  ```
+  Не выросло; и эта одна закрыта влитием последним ходом.
+- **Г4. Новый инструмент имеет живую точку вызова — неприменимо:** ни одного нового `.py` в
+  `_generator/**` не заведено. Единственный новый `.py` захода — `tests/veb/test_kanon_verstki.py`, и
+  его точка вызова живая по построению: он ходит в `python3 -m pytest tests/veb` (86 passed,
+  2 xfailed), а не ждёт, пока его позовут руками.
+- **Г5. Новый `.md` зарегистрирован — неприменимо:** ни одного нового `.md` заход не завёл;
+  `register_doc.py` не звался, потому что регистрировать нечего.
+- **Г6. В коммите нет чужих путей.** `git --no-optional-locks show --stat` по трём коммитам:
+  ```
+  fd0dbc2  tests/veb/test_kanon_verstki.py
+  c13b8b9  tests/veb/test_kanon_verstki.py
+  1e4f32d  veb/obshchee/karkas.py · veb/static/kanon.css
+  ```
+  Только пути зоны. `docs/index.html`, переписанный прогоном тестов, в коммиты не попал.
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА §3 (ПОСЛЕ-типа, свежий субагент, судил по РЕНДЕРУ в headless-браузере)
+
+Доля сплошной выборки — все четыре страницы, 4 из 4. Вывод дословно, включая обязательную
+последнюю строку:
+
+> Проверка выполнена браузером (Chromium/Playwright) на живом сервере с живой базой (54 школьника,
+> 9К=27, 9Л=27), окно 1440x900, кука организатора.
+>
+> **1. Подключение и применение kanon.css — все 4 страницы.** На каждой из четырёх: link в DOM — да,
+> лист загружен (8 правил), видимый раздел — `#s-rasp` / `#s-rasp` / `#s-start` / `#s-kond`,
+> `display: flex (column)`, `min-height: 826.4px`. Порядок в каскаде, как его видит DOM: link — элемент
+> 1 из 2 в списке `style, link[rel=stylesheet]`, т.е. **после** встроенного `<style>` (461 правило).
+> Ожидание 826 подтверждено точно: 900 − 4.6rem = 826.4.
+>
+> **2. Переключение разделов не сломано.** Видимых `.str` одновременно ровно **1** на каждой из
+> четырёх страниц (всего `.str` на странице: 2 на /raspredelenie, 4 на /). Раздача `display:flex` все
+> разделы сразу не показала.
+>
+> **3. Три числа при 1440x900:** школьникам 0/0/0 px (осмотрено 178), принимающим 0/0/0 (72),
+> страница группы 0/0/0 (48), кондуит 0/0/0 (235).
+>
+> **4. Гейт не молчащий, но штатная самопроверка красит только одно число из трёх.** Штатная поломка
+> даёт скролл **960 px на всех четырёх** страницах, а обрезка и переносы остались **0 / 0** — два
+> детектора из трёх этой самопроверкой не задеваются. Заодно это доказывает, что защита от
+> горизонтального скролла сделана **не** через `overflow-x:hidden`: будь он на html/body, блок 2400px
+> дал бы 0. Проверил детекторы адресно, своей поломкой: сжатие видимых текстовых листьев до 12px c
+> `overflow:hidden` → обрезка **5 / 5 / 1 / 1**; `text-indent` до края → переносы **2** на «странице
+> группы». Все три числа краснеют.
+>
+> **5.** `python3 -m pytest tests/veb -q` → дословно: `86 passed, 2 xfailed in 28.36s`.
+>
+> **Расхождения, найденные попутно:** (а) `tools/gejt_verstki.py` мерит «принимающим» не ту вкладку
+> (`#p-rasp` вместо `#t-prep`) — инструмент всё ещё выдаёт неверное число; (б) `/glavnaya` отдаёт 302
+> на `/`, т.е. «страница группы» и «кондуит» — одна страница с вкладками, а не две; (в)
+> `docs/index.html` пачкается прогоном тестов на 1155 строк.
+>
+> ВЕРДИКТ: заявленное подтверждено рендером на всех четырёх страницах — kanon.css подключён и применён
+> (flex + 826.4px), переключение вкладок цело, все три числа нули, гейт краснеет; при этом
+> CLI-инструмент мерит «принимающим» не ту вкладку, а его штатная самопроверка красит только скролл.
+>
+> выдано 4 позиций из 4 найденных
+
+**ЧТО СДЕЛАНО ПО НАХОДКЕ ВЕРИФИКАТОРА — СРАЗУ, А НЕ ЗАПИСЬЮ В ОЧЕРЕДЬ.** Его пункт 4 — не замечание
+об оформлении: одна поломка, красящая одно число из трёх, аттестует два детектора, которых она не
+касалась. Самопроверка в `tests/veb/test_kanon_verstki.py` разбита на ТРИ поломки, по одной на вопрос,
+каждая на странице, где она действительно кусается, и каждая обязана покрасить СВОЁ число:
+
+```
+САМОПРОВЕРКА · obrezka: обрезка 68, переносы  0, скролл   0 px
+САМОПРОВЕРКА · perenos: обрезка  0, переносы 13, скролл   0 px
+САМОПРОВЕРКА · skroll:  обрезка  0, переносы  0, скролл 960 px
+```
+
+Коммит `a65daee`. После него `python3 -m pytest tests/veb -q` → **88 passed, 2 xfailed** (вход захода —
+76 passed). Пункты (а) и (в) верификатора совпали с уже выписанными пунктами 4 и 8 очереди; пункт (б)
+про 302 с `/glavnaya` на результат замера не влияет и в очередь не пошёл — обе строки гейта меряют
+разные вкладки одной страницы, что он и печатает разными числами осмотренных элементов (48 и 235).
+
+**ИТОГОВАЯ СТРОКА КОММИТОВ ЗОНЫ:** `1e4f32d` · `c13b8b9` · `fd0dbc2` · `a65daee`. Выкатку они не
+устарили: последний коммит трогает только `tests/`, а `tests/` выкаткой не везётся — на боевой сервер
+уехало ровно то, что там и стоит.
+
+### ВЕТКА · ПОСЛЕДНИЙ ХОД
+
+```
+git_zona.py vlit-v-osnovnuyu zahod/kanon-verstki --vsyo-ravno "<причина>"
+✅ Влито в `main` без конфликтов: ab76e8b Merge branch 'zahod/kanon-verstki'
+Приедет коммитов: 5 — a65daee · fd0dbc2 · c13b8b9 · 1e4f32d · 0905fce
+Затронет путей: 4 — tests/veb/test_kanon_verstki.py · tools/gejt_verstki.py ·
+                    veb/obshchee/karkas.py · veb/static/kanon.css
+git --no-optional-locks branch --no-merged main | grep -c zahod/   →   0
+```
+
+🔴 `--vsyo-ravno` понадобился и причина названа честно, а не для обхода: инструмент отказывался
+сливать ветку с ЖИВОЙ рабочей папкой, а живая папка — моя собственная, и она была в том состоянии,
+которое он и проверяет: `HEAD папки == вершине ветки (a65daee)`, `живых процессов ноль`, зона
+закоммичена. Единственный непройденный признак — «дерево чисто»: грязными числились `data/spetsmat.db`
+и `docs/index.html`, оба порождаются прогоном сервера и тестов, оба вне слияния и оба не мои. Причина
+уехала в `INCIDENTY.md` вместе с флагом.
+
+🔴 **ДОЛГ, НАЗВАННЫЙ ЯВНО, А НЕ ЗАМОЛЧАННЫЙ.** Слияние напечатало: `влито, но не встроено:
+tools/gejt_verstki.py` — у него нет ни хука, ни шага сборки, ни маркера
+`# TOOL-CONTRACT: called-by-hand`. Точка вызова у него на самом деле появилась — `tests/veb/
+test_kanon_verstki.py` импортирует из него сервер, куку и замеряющий скрипт и ходит в общем прогоне
+pytest, — но проверка ищет хук или маркер, а не импорт, и молчать об этом расхождении нельзя. Сам
+файл лежит вне зоны этого захода, поэтому маркер в него не вписан. Долг: поставить в
+`tools/gejt_verstki.py` маркер `# TOOL-CONTRACT: called-by-hand` (пункт 4 очереди — тот же файл).
+
+### ПРОВЕРКА ДОМОВ (Г7 приёмки, прогнана самим исполнителем ДО отчёта)
+
+```
+bootstrap_zahod.py --proverit-doma zhurnal/2026-09-02_spetsmat-bot/kod_kanon-verstki.md
+── kod_kanon-verstki.md: пунктов 5, достижимых 4, к владельцу 1, НЕДОСТИЖИМЫХ 0
+✅ недостижимых домов нет. Проверено файлов: 1 из 1.
+rc=0
+```
+Первый прогон был красным: пункт 4 нёс `ДОМ: tools/gejt_verstki.py`, и проверка отказала — «дом —
+исполняемый код». Отказ верный: запись о починке, положенная внутрь того, что чинят, не положена
+никуда. Адрес заменён на файл-заход P3, который на этот гейт и опирается.
+
+### ЧТО НЕ УСПЕЛ / ЧЕГО НЕТ
+
+Несделанного из заданного нет: канон записан и подключён, гейт стоит в общем прогоне, выкатка сделана,
+верификатор отработал, ветка влита. Не сделано СВЕРХ задания и названо явно: перевёрстка вкладок
+распределения под `.kolonki`/`.kolonka` (зона P3), маркер контракта в `tools/gejt_verstki.py` (вне
+зоны), пересборка гостевого зеркала `docs/index.html` на сервере (прав не хватило).
