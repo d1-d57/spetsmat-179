@@ -647,11 +647,13 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, i
         # ОДНОГО листка «закрыл один листок целиком» и «закрыл всё обязательное этого
         # листка» — вопросы про один и тот же листок, и дизъюнкция там просто ослабила бы
         # признак.  Вопрос «есть ли у школьника долги» задают году, а не листку.
-        dolgov_net = schyot.zakryl or listok_celikom is not None
         if schyot.zakryl:
             podskazka = "закрыл все %d обязательных этого разреза" % schyot.vsego
-        else:
+        elif listok_celikom is not None:
             podskazka = "закрыл листок %s целиком" % listok_celikom
+        else:
+            podskazka = ""          # галочки не будет, и подписывать нечего
+        dolgov_net = bool(podskazka)
         stroki.append(
             f'<tr{klass}><td class="kto">'
             f'<label for="k-u{u.id}">'
