@@ -341,12 +341,24 @@ ISTORIA_SKRIPT = """<div class="kl-ist" id="kl-ist" hidden>\
   function postavit(td) {
     // Рядом с клеткой на ноутбуке, шторкой снизу на телефоне (там позиция снимается
     // медиазапросом). Панель прижимается к краю окна, если у края не помещается.
+    //
+    // 🔴 ВЕРХНИЙ КРАЙ — ЭТО НИЗ МЕНЮ, А НЕ НОЛЬ. Меню липкое и рисуется поверх; панель,
+    // прижатая к нулю, уезжает ПОД него вместе со своей шапкой — с фамилией, задачей и
+    // кнопкой «закрыть». Случай не выдуманный: когда лента длинная, панель не помещается
+    // ни под клеткой, ни над ней, и прежняя редакция клала её на 8 пикселей от верха
+    // окна — то есть под меню. На боевой базе клетки с семью событиями есть уже сегодня
+    // (ученик 23, задача 582), и их панель выше трёхсот пикселей.
+    // Высоту меню спрашиваем у самого меню — то же решение и по той же причине, что и у
+    // липкой шапки решётки (`--vysota-menu`), только здесь она нужна в пикселях сразу.
     var r = td.getBoundingClientRect();
     PANEL.hidden = false;
+    var menu = document.querySelector(".menu");
+    var verh = menu ? Math.max(8, menu.getBoundingClientRect().bottom + 6) : 8;
     var w = PANEL.offsetWidth, h = PANEL.offsetHeight;
     var x = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - w - 8));
     var y = r.bottom + 6;
-    if (y + h > window.innerHeight - 8) { y = Math.max(8, r.top - h - 6); }
+    if (y + h > window.innerHeight - 8) { y = r.top - h - 6; }
+    y = Math.min(Math.max(verh, y), Math.max(verh, window.innerHeight - h - 8));
     PANEL.style.left = x + "px";
     PANEL.style.top = y + "px";
   }
@@ -724,6 +736,7 @@ def stili(kt) -> str:
    на телефоне; видимой метки на клетке НЕТ (решение владельца 09.09). Ни одного
    нового цвета: всё из переменных, которые эта страница уже объявила. ═══ */
 #s-kond .kl-ist{{position:fixed;z-index:20;max-width:min(26rem,calc(100vw - 1rem));
+  max-height:calc(100vh - 6rem);overflow:auto;
   background:var(--panel);border:1px solid var(--rule);border-radius:10px;
   box-shadow:0 .5rem 1.6rem rgba(0,0,0,.18);padding:.7rem .85rem .8rem;
   font-family:var(--sans);font-size:.9rem}}

@@ -23,6 +23,7 @@ never a paraphrase.
 from __future__ import annotations
 
 from veb.obshchee.karkas import e
+from veb.razdely.verstka_stili import STILI
 
 
 def shkolniki(c, slot):
@@ -264,7 +265,13 @@ def para_shk(kt, ryady, pokazat_kab=True):
     том, что дней один, а не два.
     """
     osnova = ryady[next(iter(kt.DNI))]
-    klass = (f'<span class="kl" data-org="videt-klass"> {e(osnova["class"])}</span>'
+    # 🔴 КЛАСС — ОТДЕЛЬНАЯ КОЛОНКА, А НЕ ХВОСТ ИМЕНИ (владелец 09.09, п.5: «класс
+    # «9Л/9К» приклеен хвостом после имени вместо отдельной колонки»). Был span
+    # ВНУТРИ `.kto`, склеенный с фамилией без видимой границы; теперь отдельный
+    # флекс-ребёнок `.para` между `.kto` и `.komu`, тем же `data-org`, поэтому
+    # гейт `proverit_karkas` (вне зоны, сравнивает admin-минус-org с гостем)
+    # видит ту же картину: у гостя колонки нет вовсе, у админа — есть.
+    klass = (f'<span class="kl-kol" data-org="videt-klass">{e(osnova["class"])}</span>'
              if kt.mozhno("videt-klass") and osnova["class"] else "")
     # 🔴 КАБИНЕТ — ГОСТЮ, НЕ АДМИНУ. Решение владельца 06.09: «на странице,
     # которую видят все, кабинет должен быть виден; на странице только для
@@ -312,12 +319,18 @@ def para_shk(kt, ryady, pokazat_kab=True):
     if kt.den and kt.ADMIN:
         hvost += otsutstvie(kt, osnova)
 
-    # «Обычно у ‹инициалы›» — только там, где сегодня НЕ как обычно (ТЗ §3.3).
+    # «Обычно у ‹кого›» — только там, где сегодня НЕ как обычно (ТЗ §3.3).
+    #
+    # 🔴 ЗНАЧОК С ПОДСКАЗКОЙ, А НЕ ТЕКСТ ВСТЫК С ФАМИЛИЕЙ (ПРАВКА этого захода,
+    # интервью 09.09 п.4). Было: голый текст «обычно у ИИ» — без CSS-правила на
+    # `.obychno` в каноне он клеился прямо к фамилии («Афанасьева Полинаобычно у
+    # НА») и нёс нечитаемые инициалы вместо имени. Значок один символ той же
+    # строки — высота строки не растёт; `title` разворачивается в ПОЛНОЕ имя.
     obychno = ""
     if kt.den and pole(osnova, "obychno") and osnova["obychno"] != osnova["teacher_id"]:
-        kratko, polnoe = _initsialy(kt, osnova["obychno"])
-        obychno = ('<span class="obychno" title="обычно у %s">обычно у %s</span>'
-                   % (e(polnoe), e(kratko)))
+        _, polnoe = _initsialy(kt, osnova["obychno"])
+        obychno = ('<span class="obychno" title="обычно у %s">\U0001f501</span>'
+                   % e(polnoe))
 
     klassy = "para"
     if kt.den and pole(osnova, "net"):
@@ -333,8 +346,9 @@ def para_shk(kt, ryady, pokazat_kab=True):
     # у организатора и не портит побайтовое сравнение `proverit_karkas()`.
     return (f'<div class="{klassy}" data-i="{e((osnova["surname"] + " " + osnova["name"]).lower())}"'
             f' data-sid="{osnova["id"]}">'
-            f'<span class="kto"><b>{e(osnova["surname"])}</b> {e(osnova["name"])}{klass}'
+            f'<span class="kto"><b>{e(osnova["surname"])}</b> {e(osnova["name"])}'
             f'{obychno}</span>'
+            f'{klass}'
             f'<span class="komu">{hvost}</span></div>')
 
 
@@ -366,8 +380,31 @@ def shapka_dnej(kt):
                   "</span>"
                   '<span class="dv dv-gr" data-org="pravit-raspredelenie">'
                   "</span>")
+    # Пустая ячейка под колонку класса — тем же приёмом, что и под замок/группу
+    # выше: без неё шапка «ПН · ЧТ» съезжала бы на ширину органа, которого в
+    # шапке нет.
+    kl_pusto = ('<span class="kl-kol" data-org="videt-klass"></span>'
+                if kt.mozhno("videt-klass") else "")
     return ('<div class="para shapka-dnej"><span class="kto"></span>'
-            f'<span class="komu">{metki}</span></div>')
+            f'{kl_pusto}<span class="komu">{metki}</span></div>')
+
+
+def shirina_imeni_ch(kt) -> int:
+    """Ширина полосы под ФИО, в символах (`ch`) — СЧИТАНА ИЗ УЖЕ ЗАГРУЖЕННЫХ
+    СТРОК, А НЕ ВПИСАНА КОНСТАНТОЙ (владелец 09.09, критерий готовности §2).
+
+    🔴 НИКАКОГО НОВОГО ОБРАЩЕНИЯ К БАЗЕ — `kt.shk_dnya` уже принесён контекстом
+    (`sobrat_kontekst`, вне зоны этого захода); этот файл, как сказано в его же
+    шапке, «не открывает базу и не импортирует shell» — и не начинает сейчас.
+    Берём самую длинную строку «Фамилия Имя» среди уже загруженных школьников,
+    а не только фамилию: `.kto` показывает оба слова одной строкой без переноса,
+    и по одной фамилии ширина оказалась бы тесной для сочетания длинной фамилии
+    с длинным именем.
+    """
+    rows = next(iter(kt.shk_dnya.values()), [])
+    if not rows:
+        return 18
+    return max(len(f'{r["surname"]} {r["name"]}') for r in rows)
 
 
 def vid_vse(kt):
@@ -386,7 +423,18 @@ def vid_vse(kt):
     deti = po_dnyam(kt)
     pol = (len(deti) + 1) // 2
     shapka = shapka_dnej(kt)
-    return ('<div class="dva">'
+    # 🔴 `STILI` И `--imya-w` ЭМИТИРУЮТСЯ ЗДЕСЬ И РОВНО ЗДЕСЬ. `vid_vse()`
+    # вызывается композицией страницы ОДИН раз на рендер (в отличие от
+    # `vkladka_gruppy`, которую зовут трижды — по разу на В/Д/Н); эмиссия из неё
+    # даёт ОДИН `<style>` на страницу, а не три одинаковых. `--imya-w` живёт на
+    # `:root`, поэтому её видят и три вкладки групп — общий предел ширины для
+    # всей школы, не только для этой вкладки. Место в разметке (внутри `<body>`)
+    # валидно для HTML5. Множитель и добавка подобраны замером: `ch` мерит
+    # ширину цифры «0», а кириллица в заголовочной паре («Й», «Ю», «Щ») шире —
+    # запас 15% плюс место под значок «обычно у» и внутренние отступы.
+    imya_style = ('<style>:root{--imya-w:calc(%dch * 0.85 + .5rem)}</style>'
+                  % shirina_imeni_ch(kt))
+    return (STILI + imya_style + '<div class="dva">'
             f'<div class="kol">{shapka}{"".join(para_shk(kt, r) for r in deti[:pol])}</div>'
             f'<div class="kol">{shapka}{"".join(para_shk(kt, r) for r in deti[pol:])}</div></div>')
 
