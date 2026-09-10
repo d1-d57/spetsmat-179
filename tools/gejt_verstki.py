@@ -120,6 +120,26 @@ ZAMER = r"""
   // A LEAF carries its own text: none of its children carries any.
   const list = (el) => ![...el.children].some(c => (c.textContent || '').trim().length > 0);
 
+  // A form control is drawn by the browser, not laid out from its text: a
+  // <select> shows one option and hides the rest BY DESIGN, and an <input> has no
+  // text nodes at all.  Judging either for clipping or wrapping is crying wolf.
+  const organ = (el) => ['SELECT','OPTION','TEXTAREA','INPUT','BUTTON'].includes(el.tagName)
+      || !!el.querySelector('select, textarea, input, button');
+
+  // Text with the content of <style>/<script>/<option> subtracted, so a report
+  // quotes what a reader sees and not a stylesheet.
+  const chistyy = (el) => {
+    const k = el.cloneNode(true);
+    k.querySelectorAll('style, script, option').forEach(n => n.remove());
+    return (k.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  };
+
+  const vnutri = (el) => {                    // padding box
+    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+    return {l: r.left + parseFloat(s.borderLeftWidth),
+            r: r.right - parseFloat(s.borderRightWidth)};
+  };
+
   const put = (el) => {
     const parts = [];
     let n = el;
@@ -142,6 +162,7 @@ ZAMER = r"""
   // judged for clipping when it carries text AND establishes its own clipping
   // context; leaves are kept too, so nothing the old walk caught is lost.
   const na_obrezku = s_tekstom.filter(el => {
+    if (organ(el)) return false;
     const s = getComputedStyle(el);
     return (s.overflowX !== 'visible' || s.overflowY !== 'visible') || list(el);
   });
@@ -149,12 +170,26 @@ ZAMER = r"""
 
   for (const el of na_obrezku) {
     const s = getComputedStyle(el);
-    const tekst = (el.textContent || '').trim().slice(0, 40);
-    // scrollWidth exceeding clientWidth means the browser had to hide part of it.
-    if (el.scrollWidth > el.clientWidth + 1 && s.overflowX !== 'visible') {
-      out.obrezka.push({put: put(el), tekst,
-                        nado: el.scrollWidth, est: el.clientWidth});
-    }
+    // scrollWidth exceeding clientWidth says the box is too small for SOMETHING.
+    if (!(el.scrollWidth > el.clientWidth + 1 && s.overflowX !== 'visible')) continue;
+    // 🔴 ...AND THE SOMETHING MUST BE TEXT.  `scrollWidth` alone is not enough:
+    // measured live 10.09, it reported `section#s-start` (1478 vs 1440, an SVG
+    // decoration the section clips ON PURPOSE) and every `.prep-imya` of the
+    // organiser (233 vs 208 — a <select> whose widest OPTION is wider than the
+    // closed control, which is how every select on earth behaves).  Neither cuts
+    // a letter, and 56 such lines per run is precisely how a gate gets switched
+    // off.  So the text's OWN line boxes are asked whether any of them reaches
+    // past the padding box: `<style>` has no boxes, `<option>` has no boxes, an
+    // SVG is not text — all three fall out by themselves, no list of exceptions.
+    const b = vnutri(el);
+    const d = document.createRange();
+    d.selectNodeContents(el);
+    const rects = [...d.getClientRects()].filter(r => r.width > 0 && r.height > 0);
+    if (!rects.length) continue;
+    const vylez = Math.max(...rects.map(r => Math.max(r.right - b.r, b.l - r.left)));
+    if (vylez <= 1) continue;
+    out.obrezka.push({put: put(el), tekst: chistyy(el),
+                      nado: el.scrollWidth, est: el.clientWidth});
   }
 
   // ── 2. NEEDLESS WRAP ───────────────────────────────────────────────────────
@@ -165,7 +200,16 @@ ZAMER = r"""
 
   for (const el of listya) {
     const s = getComputedStyle(el);
-    const tekst = (el.textContent || '').trim().slice(0, 40);
+    // 🔴 FLEX AND GRID HAVE NO LINE BOXES TO COUNT.  Their children sit on rows
+    // the layout chose, and `align-items:center` alone puts two of them at two
+    // different tops without a single wrap.  Measured live 10.09: `label.kab-pole`
+    // («чт» plus a 5rem input, `display:inline-flex`) was reported on all three
+    // group tabs as «two lines where 80px of 109 were needed» — nothing had
+    // wrapped.  Same reason a form control is skipped: its box is drawn by the
+    // browser, not laid out from the text.
+    if (['flex','inline-flex','grid','inline-grid'].includes(s.display)) continue;
+    if (organ(el)) continue;
+    const tekst = chistyy(el);
     // 🔴 Line count is taken from the TEXT's own line boxes, never from the
     // element's height.  Height includes padding and border, so a tab button
     // with 10px of vertical padding measures two line-heights while carrying a
@@ -217,17 +261,18 @@ ZAMER = r"""
   const konteyner = (el) => {
     const s = getComputedStyle(el);
     if (s.overflowX !== 'visible' || s.overflowY !== 'visible') return 'клип';
-    if (parseFloat(s.borderTopWidth) || parseFloat(s.borderLeftWidth) ||
-        parseFloat(s.borderRightWidth) || parseFloat(s.borderBottomWidth)) return 'рамка';
+    // 🔴 A BOX, NOT A RULE.  A border on ONE side is a horizontal rule between
+    // rows — the eye reads it as a separator, not as the edge of a card, and
+    // nothing «escapes» it.  Measured live 10.09: `.para` carries only
+    // `border-bottom`, and calling it a container produced 108 «escaped» lines on
+    // the organiser's tab «школьникам» for controls that sit in the row exactly
+    // where they were put.  A container is a box: borders on BOTH sides, or a
+    // rounded corner, or a background of its own.
+    if ((parseFloat(s.borderLeftWidth) && parseFloat(s.borderRightWidth)) ||
+        parseFloat(s.borderTopLeftRadius)) return 'рамка';
     if (!prozr(s.backgroundColor)) return 'фон';
     return null;
   };
-  const vnutri = (el) => {                    // padding box of a container
-    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
-    return {l: r.left + parseFloat(s.borderLeftWidth),
-            r: r.right - parseFloat(s.borderRightWidth)};
-  };
-
   for (const el of vidimye) {
     const s = getComputedStyle(el);
     // Deliberate escapes -- dropdowns, tooltips, the login modal -- are taken out
@@ -246,8 +291,7 @@ ZAMER = r"""
     const vlevo = Math.round(b.l - a.left), vpravo = Math.round(a.right - b.r);
     if (vlevo > 1 || vpravo > 1) {
       out.vyshli.push({put: put(el), rod: put(rod.el), tip: rod.tip,
-                       vlevo, vpravo,
-                       tekst: (el.textContent || '').trim().slice(0, 40)});
+                       vlevo, vpravo, tekst: chistyy(el)});
     }
   }
 
@@ -256,26 +300,56 @@ ZAMER = r"""
 """
 
 # Deliberate breakage for the self-test.  Every one of the four checks must have
-# something to catch: a gate that stays green here is a gate nobody needs.
+# something to catch AND BE SEEN TO CATCH IT: a gate that goes red on three of
+# four while the fourth quietly does nothing is the very failure this file exists
+# to end.  🔴 Everything below is applied to the elements that are VISIBLE ON THE
+# SCREEN BEING MEASURED.  Measured live 10.09: breaking `document.querySelector(
+# '.kto')` broke the first `.kto` in the DOCUMENT, which on every tab but
+# «школьникам» sits on a hidden tab — the gate never looks at it, the self-test
+# reported a triumphant red, and that red came entirely from the h-scroll.
 LOMKA = r"""() => {
-  // 1. CLIPPING -- squeeze one text box shut.  Chosen so that it hits a NON-LEAF
-  //    node (`.kto` wraps a `<b>`), which is exactly the shape the old walk
-  //    dropped: if the walk regresses to leaves only, this stays green and the
-  //    self-test says so.
-  const k = document.querySelector('.kto') || document.querySelector('td, li');
-  if (k) { k.style.width = '8px'; k.style.overflow = 'hidden';
-           k.style.whiteSpace = 'nowrap'; k.style.textOverflow = 'ellipsis'; }
-  // 2. NEEDLESS WRAP -- right-align cells so short labels break onto two lines.
-  document.querySelectorAll('td, th, .kl, li').forEach(e => {
-      e.style.textAlign = 'right'; });
+  const vidno = (el) => { const r = el.getBoundingClientRect();
+      return r.width > 1 && r.height > 1; };
+  const iz = (sel) => [...document.querySelectorAll(sel)].filter(vidno);
+
+  // 1. CLIPPING -- squeeze a text box shut.  Deliberately a NON-LEAF node
+  //    (`.kto` wraps a `<b>`), the exact shape the walk used to drop: if it ever
+  //    regresses to leaves only, this stays green and the self-test says so.
+  const k = iz('.kto')[0] || iz('td, li, .para')[0];
+  if (k) { k.style.width = '8px'; k.style.minWidth = '8px'; k.style.flex = '0 0 8px';
+           k.style.overflow = 'hidden'; k.style.whiteSpace = 'nowrap';
+           k.style.textOverflow = 'ellipsis'; }
+
+  // 2. NEEDLESS WRAP -- a break where the width did not require one.  The break
+  //    is forced with a `<br>` rather than by squeezing the box, and that is on
+  //    purpose: squeezing and then widening the box back cannot work, because
+  //    CSS re-lays out the moment the width changes and the wrap disappears with
+  //    it (tried live 10.09 — the self-test reported «ПЕРЕНОС поймано 0» and was
+  //    right to).  A `<br>` reproduces the DEFINITION the check judges by — two
+  //    line boxes where one line of text fitted the width the element HAS — and
+  //    does not depend on which CSS route produced it in the wild.
+  const w = iz('span, td, li, div').find(e => e !== k &&
+      ![...e.children].some(c => (c.textContent || '').trim()) &&
+      (e.textContent || '').trim().split(/\s+/).length >= 2 &&
+      e.scrollWidth <= e.clientWidth + 1);
+  if (w) { const slova = w.textContent.trim().split(/\s+/);
+           w.textContent = '';
+           w.append(document.createTextNode(slova.slice(0, -1).join(' ')),
+                    document.createElement('br'),
+                    document.createTextNode(slova[slova.length - 1])); }
+
   // 4. ESCAPED -- pills walk out of the LEFT edge of the card that owns them,
   //    exactly as in the owner's screenshot `13`, and the document does NOT
-  //    scroll, so checks 1-3 stay blind to it.
-  document.querySelectorAll('.kol-pr .para, .para').forEach(pa => {
+  //    scroll on that account, so checks 1-3 stay blind to it.
+  const cel = iz('.kol-pr .para').length ? iz('.kol-pr .para') : iz('.para');
+  cel.forEach(pa => {
       pa.style.background = 'rgba(255,255,255,.06)';
-      pa.querySelectorAll('.deti-ryad span, .komu.deti span').forEach(s => {
-          s.style.marginLeft = '-120px'; });
+      pa.style.borderRadius = '8px';
+      const deti = pa.querySelectorAll('.deti-ryad span, .komu.deti span, .komu');
+      (deti.length ? deti : pa.children).forEach(x => {
+          x.style.marginLeft = '-120px'; });
   });
+
   // 3. H-SCROLL -- push the document wider than the window.
   const d = document.createElement('div');
   d.style.width = '2400px'; d.style.height = '1px';
@@ -460,13 +534,32 @@ def main() -> int:
           "списки, окно входа, подсказка значка «обычно у». Гейт меряет покой.")
 
     if args.slomat:
-        if krasnyh:
-            print(f"\n✅ САМОПРОВЕРКА: гейт покраснел на {krasnyh} подстроенных "
-                  "нарушениях — рычаг работает.")
-            return 0
-        print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: экраны сломаны нарочно, а гейт зелёный. "
-              "Молчащий гейт хуже отсутствующего.")
-        return 1
+        # 🔴 «КРАСНЫЙ» ЕЩЁ НЕ ЗНАЧИТ «ВСЕ ЧЕТЫРЕ РАБОТАЮТ». Сломано четыре вещи, и
+        # проверок четыре: если краснеет только горизонтальный скролл, а три
+        # остальные молчат, общий красный это скрывает — ровно тем способом, каким
+        # гейт врал до 10.09. Поэтому самопроверка судит КАЖДУЮ проверку отдельно.
+        srabotalo = {"ОБРЕЗКА": 0, "ПЕРЕНОС": 0, "ВЫШЛО ЗА КОНТЕЙНЕР": 0,
+                     "СКРОЛЛ": 0}
+        for _rol, _imya, _put, z, _osh in itogi:
+            if not z:
+                continue
+            srabotalo["ОБРЕЗКА"] += len(z["obrezka"])
+            srabotalo["ПЕРЕНОС"] += len(z["perenos"])
+            srabotalo["ВЫШЛО ЗА КОНТЕЙНЕР"] += len(z["vyshli"])
+            srabotalo["СКРОЛЛ"] += 1 if z["skroll"] else 0
+        print()
+        for imya_pr, n in srabotalo.items():
+            print(f"   САМОПРОВЕРКА · {imya_pr:<20} поймано {n}"
+                  + ("" if n else "   🔴 НИ ОДНОГО"))
+        molchat = [k for k, n in srabotalo.items() if not n]
+        if molchat:
+            print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: сломаны все четыре вещи, а молчат "
+                  + ", ".join(molchat) + ". Проверка, которая ничего не поймала на "
+                  "подстроенном нарушении, не ловит и настоящее.")
+            return 1
+        print(f"\n✅ САМОПРОВЕРКА: покраснели все четыре проверки, "
+              f"{krasnyh} экранов из {izmereno}. Рычаг работает.")
+        return 0
 
     if krasnyh:
         print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон.")
