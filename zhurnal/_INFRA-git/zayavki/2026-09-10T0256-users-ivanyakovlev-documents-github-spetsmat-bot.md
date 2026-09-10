@@ -1,0 +1,5 @@
+ЗАЯВКА: 2026-09-10T02:56 · автор: host · арка: не названа
+СРОЧНОСТЬ: obychnaya
+РОД: git-operaciya
+
+СРОЧНО: главная папка /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot застряла в НЕЗАВЕРШЁННОМ слиянии (MERGE_HEAD = 8249a44, заход poisk-i-kartochka). После конфликта в veb/razdely/shkolniki.py (заявка 2026-09-10T0252-otkaz-zahod-poisk-i-kartochka-main-1) была предпринята попытка 'git_zona.py vlit-v-osnovnuyu --abort' — она ТОЖЕ упала: 'error: Entry tests/veb/test_server.py not uptodate. Cannot merge. fatal: Could not reset index file to revision HEAD.' (rc=128). Ничего не разрушено (git отказал безопасно), но главная папка сейчас не в обычном состоянии, и это может мешать слияниям других заходов ночной волны. Дальше я не трогал — нужен человек/аналитик с полным контекстом 16 незакоммиченных путей главной папки, чтобы понять, что там staged независимо от слияния, прежде чем звать --abort или --continue ещё раз.
