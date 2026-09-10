@@ -452,6 +452,16 @@ def main() -> int:
                     help="run one screen only, by substring of its name")
     args = ap.parse_args()
 
+    # 🔴 «ПОЗВАЛИ НЕВЕРНО» — ОТДЕЛЬНЫЙ КОД ВОЗВРАТА, А НЕ «ЧИСТО».  `--ekran` с
+    # именем, которого нет, отбирал ноль экранов, и гейт возвращал 1 — то же, что
+    # «нашёл дефект», так что опечатка в имени экрана выглядела снаружи как
+    # находка.  Второй такой же исход — argparse на неизвестном флаге, он и так
+    # отдаёт 2.  Найдено `check_tool_contract.py`, не рассуждением.
+    if args.ekran and not [e for e in EKRANY if args.ekran.lower() in e[0].lower()]:
+        print(f"позвали неверно: экрана «{args.ekran}» нет. Есть: "
+              + ", ".join(e[0] for e in EKRANY), file=sys.stderr)
+        return 2
+
     db = zhivaya_baza()
     chisla = chisla_bazy(db)
     httpd, conn, t, url = podnyat_server(db)
