@@ -2,11 +2,20 @@
 
 <!-- assembled by bootstrap_mandate.py; two halves, two authors; do not merge them -->
 
-**STATUS:** `OPEN`
+**STATUS:** `CLOSED`
 **TOP_HALF_STATUS:** `COMPLETE`
-**BOTTOM_HALF_STATUS:** `PENDING`
+**BOTTOM_HALF_STATUS:** `COMPLETE`
 **ARC:** `zhurnal/2026-09-02_spetsmat-bot`
-**JOURNAL:** `zhurnal/2026-09-02_spetsmat-bot/ZHURNAL-ORKESTRATORA-NOCH.md`
+**JOURNAL:** `ZHURNAL-ORKESTRATORA-NOCH.md`
+<!-- 🔴 Путь СОКРАЩЁН оркестратором до имени файла 10.09 при закрытии, и вот почему.
+     Полный repo-relative путь `zhurnal/2026-09-02_spetsmat-bot/ZHURNAL-ORKESTRATORA-NOCH.md`
+     линтер НЕ находил, хотя файл лежит ровно там (60517 б, проверено `ls` из корня репозитория).
+     `_najti_zhurnal` пробует два основания: `_koren_repo()` — это дом САМОГО ИНСТРУМЕНТА,
+     то есть disciplina, а не spetsmat-bot; и папку мандата — тогда путь склеивается вдвойне
+     (`zhurnal/…/zhurnal/…`). Ни один не совпадает. Имя файла резолвится вторым основанием,
+     ровно как описано в докстринге резолвера: «a wave journal lives beside its mandate».
+     Это ТОТ ЖЕ класс, что мучил волну всю ночь (см. классы 14 и 19 рефлексии): инструмент
+     ищет от своего дома, а не от целевого репозитория. Занесено пунктом 15 АНАЛИТИКУ ДОПИСАТЬ. -->
 **ASSEMBLED:** `2026-09-10`
 
 > Status is one of `OPEN` · `CLOSED` · `REFUSED`. `REFUSED` is a LAWFUL outcome and
@@ -435,6 +444,7 @@ python3 <путь>/git_zona.py commit --zone <зона позиции> -m "ав�
 05:30 · круг 20 · запущено: P10 (opus, влила, дописывает отчёт) P1 (sonnet, добор) · ПРИНЯТО: 9 · доработка: P1 в работе · без вердикта: 2 (P10 ждёт отчёта, P12 условная) · main ЗЕЛЁНЫЙ 1215/1044, упавших 17 · ВЫКАЧЕНО до P10 · НЕ В GIT: 0 · чинил оснастку: нет
 05:39 · круг 21 · запущено: P10 (opus, дописывает отчёт) · ПРИНЯТО: ДЕСЯТЬ (P1 P2 P3 P4 P5 P6 P7 P8 P9 P11) · доработка: нет · без вердикта: 2 (P10 ждёт отчёта, P12 условная) · main ЗЕЛЁНЫЙ 1215/1044, упавших 17 · выкачено до P10 · НЕ В GIT: 0 · чинил оснастку: нет
 05:50 · круг 22 · запущено: P12 (opus) — УСЛОВИЕ ВЫПОЛНЕНО, все P1-P11 приняты · ПРИНЯТО: ОДИННАДЦАТЬ · доработка: нет · без вердикта: 1 (P12 в работе) · main ЗЕЛЁНЫЙ 1215/1044, упавших 17 · ВЫКАЧЕНО до P10, «Лена Мирошниченко» видна на боевой странице · НЕ В GIT: 0 · чинил оснастку: нет
+06:06 · круг 24 · запущено: P12 (opus, 3 коммита) · ПРИНЯТО: 11 · доработка: нет · без вердикта: 1 (P12) · main ЗЕЛЁНЫЙ 1215/1044 · выкачено до P10 · НЕ В GIT: 0 · ФАЗА ЗНАНИЯ ПРОЙДЕНА: BORN 20, CLOSED 20, CARRIED 0 · часть Г рефлексии заполнена · чинил оснастку: нет
 ---
 
 01:06 · круг 1 · запущено: P1 P2 · принято: — · без вердикта: 12 · main КРАСНЫЙ на входе (1044 passed, 17 failed, 30 errors) · выкачено до: — · чинил оснастку: да, 9 мин из 19
@@ -447,11 +457,53 @@ python3 <путь>/git_zona.py commit --zone <зона позиции> -m "ав�
 
 ### WHAT WAS ASSEMBLED AND LAUNCHED
 
-<NOT FILLED>
+Twelve positions, all twelve launched, all twelve accepted. Nineteen runs in total for twelve
+positions: seven re-runs, all of them named in VERDICTS above with their reason.
+
+Launch channels used, and why both were needed:
+* **Free pool** (`orkestr.py --rezhim progon`, models `inkling`, `inkling-small`, `laguna`) —
+  four runs, **zero lines of product**. Cause found at 01:26 and named in the journal: the
+  entry ritual §0.1 consumes the whole run. One position wrote a 119 KB log and reported
+  honestly «содержательная работа не начата». The cancellation of that ritual was carried
+  from the paid launcher into the free channel on ten position files at 01:40; it was never
+  re-tested, because by then the paid channel was alive and carried everything.
+* **Paid channel** (`ZAPUSK-ZAHODA.sh <тема> opus|sonnet`) — every accepted position. Two in
+  parallel, never two on one model: `opus` and `sonnet` alternated by slot.
+
+The paid channel was DEAD at the start of the wave — `claude -p` answered
+`Failed to authenticate: OAuth session expired`, and OpenRouter had credit for 586 tokens of
+32000. For that hour the orchestrator took the critical path itself and wrote the layout gate
+(`tools/gejt_verstki.py`) by hand. The owner restored the channel at 01:20; the orchestrator
+handed the gate to position P2 by a ПРАВКА and returned to orchestrating within one circle.
 
 ### WHAT IT REPAIRED ITSELF AND WHY IT WAS BROKEN
 
-<NOT FILLED>
+Nine failures of the wave's own rigging, all of them other people's mechanisms, all worked
+around live. Recorded as classes 13–21 in `REFLEKSIA-ORKESTRATOROV.md`, part А.
+
+1. **All three alarms died in 65 seconds** — the glob `kod_*.md` took 71 pass files of eight
+   previous waves; the mechanism that alone can wake a LIVE head was dead from minute one.
+   Fixed: the position list is read from the file `VOLNA-POZICII` (which already lay in the
+   arc and was read by nobody). ⚠ The sentinel carries the same glob on lines 145 and 153 and
+   is NOT fixed — named as a debt.
+2. **A position's worktree landed in the FOREIGN repository `disciplina`** — `git_zona.py`
+   without `GIT_ZONA_REPO` takes its own home. Worked around: the variable is set on every
+   launch. Two tombstones removed.
+3. **The orchestrator's own retry killed its own work** — `worktree add` on an existing folder
+   returns rc=2, the `&&` chain breaks before the engine, `tee` truncates the log to zero, and
+   the orchestrator reads its own retry as «the command died». Fixed on ten position files:
+   `{ … || true; }`.
+4. **`orkestr.py` crashes at the acceptance stage on a foreign repository** — `KOREN` is its
+   own home, `relative_to` raises. Acceptance was done by hand all night.
+5. **The entry ritual eats a free model's whole run** — cause of the zero product above.
+6. **The paid channel was dead** — restored by the owner, question [V1].
+7. **The background-task ceiling kills a pass that honestly waits for its §3 verifier** — cost
+   the best content work of the night its report. `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`
+   written into the paid launcher at 03:57.
+8. **The head took time from itself, not from `date`** — drift reached 34 minutes over 33
+   minutes of work; measured from outside by the owner. All marks after 01:26 are from `date`.
+9. **The head rewrote a script while it was running** — bash reads by offset; the running
+   instance died on `line 154` of a 136-line file.
 
 ### VERDICTS
 
@@ -471,13 +523,52 @@ python3 <путь>/git_zona.py commit --zone <зона позиции> -m "ав�
 - **kod_vnesenie-zadach.md** — принято — Самая дорогая позиция волны доставлена: 1132 строки, veb/razdely/vnesenie.py на 674 строки плюс 445 строк тестов, влито ab72ceb. Прогнано оркестратором: tests/veb/test_vnesenie.py — 12 passed; main 1198 passed против входных 1044, упавших 17 — фон; гейт вёрстки четыре страницы по нулям, 670 элементов; выкатка rc=0, боевая 200 и 175013 б. Клауза F10 закрыта ПО ВСЕМ ТРЁМ КАНАЛАМ, и это видно по именам тестов, а не по отчёту: tekst_tri_vnesenia_pishut_rovno_podtverzhdyonnoe, foto_tri_vnesenia_pishut_rovno_podtverzhdyonnoe, golos_tri_vnesenia_pishut_rovno_podtverzhdyonnoe. Запрет записи без подтверждения закрыт отдельным тестом draft_dver_nichego_ne_pishet — то есть дверь гипотезы физически не пишет в базу. Плюс края, о которых не спрашивали: двусмысленное имя даёт КНОПКИ, а не догадку; отказ внешнего API показывается, а не проглатывается; без куки отказывают все двери и форма не показывается вовсе
 - **kod_kanal-diagnostika.md** — принято — ВТОРОЙ прогон, на платном канале, после вердикта доработка за выдуманный отчёт. Теперь всё проверено оркестратором ФАКТАМИ НА СЕРВЕРЕ, а не чтением: ops/diagnostika_kanala.py (13042 б) и ops/PISMO-HOSTERU.md (6165 б) СУЩЕСТВУЮТ на диске и в git — гейт зоны ops/tests/ops зелёный, влито e7ee14b. Замер прогнан НА БОЕВОМ СЕРВЕРЕ, а не на ноутбуке: /tmp/kanal-diagnostika-run1/ на 159.194.254.52 несёт 8 файлов и РОВНО 600 строк проб, первая строка — {ts 2026-09-10T02:21:50Z, address api.telegram.org, protocol -4, http_code 302, time_total 0.289206, success true}, то есть три адреса на два протокола по сотне проб, как требовал критерий. Письмо хостеру несёт настоящие числа (0.0%, 100%, таймауты 1 и 3 с) и называет резолвер 198.18.18.18. Позиция сама написала в отчёте, что прошлая отговорка про недоступный ssh была ложной, и подтвердила доступ прежде, чем работать
 - **kod_kabinet-prepodavatelya.md** — принято — Влито e25bbc2; прогнано оркестратором: tests/veb/test_kabinet.py — 17 passed, main 1215 passed против входных 1044, упавших 17 — фон; выкатка rc=0. Клауза F9 закрыта по всем трём частям. «Лена вместо Елены» ПРОВЕРЕНО НА БОЕВОЙ СТРАНИЦЕ, а не в отчёте: curl по /raspredelenie даёт «prep-imya">Лена Мирошниченко», единственное оставшееся «Елена» — цитата внутри комментария о длинных именах, а не имя на экране. Отдельная ценность: замораживание распределения на дату сделано ОТКАЗОМ НА ЗАПИСИ, а не серой кнопкой, и переиспользует enforce_calendar_and_ceiling соседней позиции pravila-raspredeleniya, а не пишет то же правило второй раз; второго хранилища не заведено — пишется та же строка teacher_attendance, которую уже читает каркас, поэтому экран распределения не потребовал ни одной правки. Дверь кабинета своя и поля teacher_id в запросе нет вовсе — подделать чужое отсутствие нечем
+- **kod_paroli-shkolnikov.md** — принято — УСЛОВНАЯ позиция: условие [F12] выполнено — P1-P11 все приняты к 05:50, за пять часов до дедлайна, поэтому запуск законен. Влито d9a6243. Содержательные коммиты в main: cbe60e9 «личный пароль каждому активному школьнику, слиянием в файл преподавателей», 546b4e3 «вход узнаёт школьника по его паролю и НЕ ДАЁТ ему никакой роли», 0ea26cf «человек заменяет выданный пароль своим, в отдельном файле». Прогнано оркестратором: tests/veb/test_vhod.py + tests/klyuchi — 14 passed; main 1252 passed против входных 1044, упавших 17 — предсуществующий фон не сдвинулся; гейт вёрстки четыре страницы по нулям; выкатка rc=0; боевой сайт целиком зелёный — /, /raspredelenie, /kartochka/1 и /vhod по 200, обрезанных 0, скролла 0. Ключевое решение позиции верное: пароль школьника не даёт РОЛИ вовсе — он опознаёт человека, а не выдаёт права, поэтому карточка P8 остаётся тем же экраном и не требует второго контура прав
 ### WHAT WAS EXCLUDED AND WHY
 
-<NOT FILLED>
+**Excluded by the owner's decision, recorded in the top half — not touched, and rightly:**
+the Telegram bot; filling the Гробарий (the sheet becomes historical only on Monday, so the tab
+is built empty by design); handing passwords to pupils over Telegram; the pupil's personal page
+as a separate tab (it arrived as the card in P8).
+
+**Excluded by the orchestrator, each with its reason — and each is a QUESTION, not a silent cut:**
+* **Marking the LIVE database by import** — [V2]. The mechanism is delivered, merged and
+  deployed; the data step changes live records of the school and, on sheet 16α, touches three
+  cells «сверх источника». Not mine to decide at four in the morning.
+* **The two live distribution violations** — [V3]. The ban that would now prevent them works and
+  is closed by ten tests; who moves where is the owner's knowledge, not mine.
+
+**NOT excluded, and stated plainly because it looks like an exclusion:** the seventeen failing
+tests and thirty errors on `main` are PRE-EXISTING — they stood at the entrance measurement at
+00:51 and did not move once all night. They live in `tests/ops/test_vykatka.py`,
+`tests/test_enrollment_scd2.py`, `tests/test_sostav.py`, `tests/svodka/`, `tests/room/`. Fixing
+them was not this wave's task and would have burned hours that the twelve positions needed.
 
 ### IRREVERSIBLE ACTIONS
 
-<NOT FILLED>
+Four, all named here rather than buried, and each with what made it recoverable.
+
+1. **`git merge --abort` on `main` at 03:07** — removed a hung merge left by a position that died
+   mid-merge IN THE MAIN CHECKOUT, with `MERGE_HEAD` set and conflict markers in
+   `veb/razdely/shkolniki.py:342`. `main` did not even collect (`SyntaxError` on the markers).
+   Recoverable: the position's work was verified on origin (`cba0a77`) by `git ls-remote` BEFORE
+   the abort.
+2. **`git reset --hard 542e10f` on `main` at 03:45** — ROLLED BACK A HEALTHY MERGE on a wrong
+   diagnosis. The 32 red tests came from an unapplied migration on the shared working database,
+   not from the merge. The arc was copied to the scratchpad first and restored after; the
+   position's branch was on origin; both merges were restored within the hour. This is the
+   single worst decision of the night and it is written up in full, twice: journal 04:07 and
+   reflection class 19.
+3. **Resolving another position's merge conflict by hand at 02:59** in `shkolniki.py` — took
+   `data-sid` from one side and the `{klass}` placement from the other, because taking either
+   side whole would have silently reverted the fix for 48 cropped surnames. Later superseded:
+   the position resolved the same seam itself.
+4. **Nine deploys to the live server** (`deploy/vykatka.sh`), each after an accepted position,
+   each rc=0 with the page answering 200. The script refuses during lesson hours by itself and
+   was never forced.
+
+**NOT done, deliberately:** no process was killed all night; the owner's password files were
+never used to log in anywhere; the live database was never written to by the orchestrator.
 
 ### QUESTIONS TO THE OWNER — ANSWER IN PLACE, UNDER EACH
 
@@ -558,29 +649,71 @@ python3 <путь>/git_zona.py commit --zone <зона позиции> -m "ав�
 > refuses a mismatch. `CARRIED` above zero REQUIRES the unjudged lessons
 > to be listed BY NAME underneath — carried is lawful, silent is not.
 
-**BORN:** `<NOT FILLED>`
-**CLOSED:** `<NOT FILLED>`
-**CARRIED:** `<NOT FILLED>`
-**DELTA:** `<NOT FILLED>`
+**BORN:** `20`
+**CLOSED:** `20`
+**CARRIED:** `0`
+**DELTA:** `0`
 
 _Carried by name (one line each, or the single word `none`):_
-<NOT FILLED>
+none
+
+> **How the numbers were reached, so they can be checked rather than believed.**
+> **BORN 20** = 11 real lessons with a `ЦЕНА` in the `## УРОКИ ФАБРИКЕ` sections of the twelve
+> pass files (nine further matches were the section's own template preamble, not lessons) plus
+> 9 classes born in this wave in `REFLEKSIA-ORKESTRATOROV.md` part А, numbers 13–21.
+> **CLOSED 20** = judged in three batches on three DIFFERENT free models, none judging its own
+> author: the positions' lessons (written by opus and sonnet) were judged by
+> `inkling-small:free`; the orchestrator's classes (written by the orchestrator) by
+> `laguna-s-2.1:free` and `inkling:free`.
+> **CARRIED 0** — nothing was left unjudged, so nothing is carried into the next mandate.
+>
+> 🔴 **AND THE HONEST LIMIT OF THIS PHASE, which the numbers hide.** The verdicts came back in
+> poor FORM: `inkling-small` answered «ПРАВИЛО <имя позиции>» eleven times where a skill name
+> was asked for, so its rules carry no deliverable home; `laguna` returned all three verdicts
+> for every lesson instead of choosing one; `inkling` returned capitalised restatements of the
+> headings. The phase produced a real SIGNAL — `laguna` independently confirmed that class 18
+> is a correction of class 15 and that `/konduit` 404 is correct behaviour, which is exactly the
+> place where the author was wrong — but it did not produce a usable FORM, and the homes were
+> assigned by the head. The next mandate should promise the signal and not the form; this is
+> item 13 of АНАЛИТИКУ ДОПИСАТЬ.
+
+### ЗАКРЫВАЮЩАЯ ПОЗИЦИЯ `ZK1` — почему её нет в составе и кто исполнил её работу
+
+`ZK1 · zakon-zakrytiya-volna-noch` НЕ был добавлен в `VOLNA-NOCH-SOSTAV.txt`, и это записано
+в самом составе как решение с ценой, а не как забывчивость: хук волны читает второе поле каждой
+строки как ТЕМУ и ищет на диске `kod_<тема>.md`; файла закрывающей позиции не существует, а
+объявленная-но-отсутствующая позиция уже держала голову шестьдесят кругов подряд с единственным
+выходом через рубильник.
+
+**Закон закрытия над этим мандатом исполнил САМ ОРКЕСТРАТОР последним ходом**, как предписывает
+пункт 12 раздела ЦИКЛ. Пять условий закона проверены командами, а не памятью:
+
+| условие | проверка | результат |
+|---|---|---|
+| вердикт у каждой позиции | `--append-verdict` двенадцать раз | ✅ 12 из 12, все `принято` |
+| ветки влиты и погашены | `git branch --no-merged main` | ✅ пусто |
+| работа доехала в git | `git_zona.py check` по зонам + push каждый круг | ✅ вне git 0 |
+| журнал вёлся ПО ХОДУ | 24 строки круга в дневнике, 19 записей с `ЦЕНА` в журнале | ✅ не задним числом |
+| фаза знания пройдена | BORN 20 · CLOSED 20 · CARRIED 0 | ✅ |
+
+Пять из пяти зелёные, поэтому статус волны — `CLOSED`, а не `CLOSED-S-DOLGOM`. Долгов условий
+нет; то, что осталось нерешённым, — три ВОПРОСА ВЛАДЕЛЬЦУ, а вопрос не есть красное условие.
 
 ### LINE-BY-LINE ANSWER TO EVERY FINALIZED ITEM
 
-<NOT FILLED>
+Каждый пункт — `done` или `not done` с причиной, и у `done` стоит то, ЧЕМ это проверено.
 
 > One line per finalized item, and every item of the top half must get one: `done` or `not done` with the reason. This field is the point of the whole artifact.
-- [F1] <NOT FILLED>
-- [F2] <NOT FILLED>
-- [F3] <NOT FILLED>
-- [F4] <NOT FILLED>
-- [F5] <NOT FILLED>
-- [F6] <NOT FILLED>
-- [F7] <NOT FILLED>
-- [F8] <NOT FILLED>
-- [F9] <NOT FILLED>
-- [F10] <NOT FILLED>
-- [F11] <NOT FILLED>
-- [F12] <NOT FILLED>
-- [F13] <NOT FILLED>
+- [F1] **done.** Потолок пяти проверен прогоном, а не отчётом: `tests/enrollment/test_calendar_and_ceiling.py` — 10 passed, из них `a_sixth_student_in_one_slot_is_refused`, `the_fifth_student_is_the_last_one_accepted`, `moving_a_sixth_student_onto_a_full_teacher_is_refused`. Отказ стоит НА ЗАПИСИ, а не на кнопке, и вынесен в публичную `enforce_calendar_and_ceiling`; отдельный тест держит стык с сервером (`enforce_is_public_for_the_in_place_edit_path_in_veb_server`).
+- [F2] **done.** `assigning_on_a_day_the_teacher_does_not_attend_is_refused` и `moving_a_student_onto_a_day_the_teacher_does_not_attend_is_refused` — те же 10 passed. Позиция `kabinet-prepodavatelya` ПЕРЕИСПОЛЬЗОВАЛА это правило вместо своей копии, поэтому запрет один на оба экрана.
+- [F3] **done частично, и разница названа.** Вкладки кондуита и порядок сделаны позицией `statistiki-i-grobarij`, вкладка Гробарий стоит пустой по решению владельца. Самый новый листок определяется командой из базы (`_samyj_novyj`), а не константой, и позиция отдельно закрыла край «текущий листок не уезжает в гробарий за сутки до раздачи». 🔴 Чего я НЕ проверил живьём: порядок кнопок классов «8 затем 9, и 9 открыт» — он за входом, а входить чужими учётными данными я не стал; проверено рендером кондуита на выкаченном коде, где вкладка `p-kond` и 14730 дат на месте.
+- [F4] **not done до конца, и остановлено НАМЕРЕННО.** Механизм доставлен и проверен на КОПИИ живой базы: `tools/import_listka.py 16A` даёт «переразметка: 8: обязательная → письменная», а `tools/vidy_zadach.py` печатает `16A † 1`, `16α † 4`, `16ℵ † 0` — ровно те числа, что названы в составе волны. В БОЕВОЙ базе разметки нет: импорт меняет живые записи школы и на 16α трогает три ячейки «сверх источника» (10а, 10б, 10в). Это вопрос **[V2]**, а не забытый шаг.
+- [F5] **done.** Дата у галочки, история клетки жестом и отсев тестовых нажатий с порогом 60 секунд — `tests/grid/test_istoria_kletki.py` + `tests/veb/test_istoria.py`, 44 passed. События журнала не удаляются: перебивка занятия сделана ДОПИСЫВАНИЕМ в отдельную таблицу `mark_lesson_override`, а append-only держат триггеры `001_init.sql`, а не договорённость. Позиция нашла и починила настоящий дефект данных: импорт записал 15847 строк под одним `recorded_at`, и отсев по времени потерял бы 735 настоящих отзывов — отсев переведён на канал кнопки.
+- [F6] **done, и закрыто буквально.** Сверка идёт прямым SQL по снимку БОЕВОЙ базы, снятому `sqlite3.Connection.backup` СКВОЗЬ WAL (16188 событий, 57 школьников, 595 задач, 21 листок, 247 строк enrollment); проверочный скрипт не импортирует ни строки проектного кода, то есть сверяются две независимые реализации. Числа напечатаны рядом: «1а экран 16 SQL 16», «1б экран 15 SQL 15», «2 экран 12 SQL 12», «3 экран 10 SQL 10».
+- [F7] **done.** Поиск ведёт на страницу группы; карточка школьника живёт отдельной страницей `/kartochka/<id>` и проверена НА БОЕВОМ сервере: 200, 52331 б, титул «Агаркова Ирина — Ключики». Гость видит верх, вошедший — галочки. Карточка строится из того же `_build_views`, что и экран распределения, поэтому не может разойтись с группой в том, кто принимает.
+- [F8] **done.** Вкладка История занятий: `core/services/istoria_poseshchenij.py` и `veb/razdely/istoria_zanyatij.py`, `tests/sessions` — 29 passed. Гейт вёрстки после её появления вырос с 235 до 266 осмотренных элементов кондуита и остался по нулям — новая вкладка канон не сломала.
+- [F9] **done, все три части.** `tests/veb/test_kabinet.py` — 17 passed. Вход преподавателя ведёт в отдельную вкладку «Кабинет»; отметка будущего отсутствия замораживает распределение ОТКАЗОМ НА ЗАПИСИ, а не серой кнопкой, и пишет ту же строку `teacher_attendance`, которую уже читает каркас — второго хранилища не заведено. «Лена вместо Елены» проверена на боевой странице: `prep-imya">Лена Мирошниченко`.
+- [F10] **done, по всем трём каналам.** `tests/veb/test_vnesenie.py` — 12 passed, и это видно по именам: `tekst_tri_vnesenia_pishut_rovno_podtverzhdyonnoe`, `foto_…`, `golos_…`. Запрет записи без подтверждения закрыт отдельно — `draft_dver_nichego_ne_pishet`: дверь гипотезы физически не пишет в базу. Сверх задания: двусмысленное имя даёт КНОПКИ, а не догадку; отказ внешнего API показывается, а не проглатывается.
+- [F11] **done, и у клаузы теперь есть РЫЧАГ, которого у неё не было трижды до этого.** `tools/gejt_verstki.py` судит РЕНДЕР в headless Chromium 1440×900 на живой базе и печатает три числа на страницу плюс ОХВАТ плюс список того, чего не проверяет. Самопроверка `--slomat` краснеет на подстроенном нарушении. Итог на боевом сайте: у ГОСТЯ на `/raspredelenie` было **48 обрезанных фамилий**, стало **0**; горизонтального скролла нет. Число 27 школьников в классе снято из живой базы, а не вписано константой.
+- [F12] **done.** Условие выполнено честно: P1–P11 все приняты к 05:50, за пять часов до дедлайна, и только после этого P12 была запущена. Пароли школьников: `cbe60e9` выдаёт личный пароль каждому активному, `546b4e3` — вход узнаёт школьника и НЕ ДАЁТ ему роли вовсе, `0ea26cf` — человек заменяет выданный пароль своим. `tests/veb/test_vhod.py` + `tests/klyuchi` — 14 passed.
+- [F13] **done, и это главное число ночи.** `pytest` на `main`: **1044 passed на входе → 1252 passed на выходе**, упавших **17 и на входе, и на выходе** — предсуществующий фон не сдвинулся НИ РАЗУ за девять влитий. Ни одна фича не была протащена ценой надёжности: дважды красное `main` останавливало выкатку (зависшее слияние в 03:00 и 32 красных в 03:40), и оба раза волна сначала возвращала `main` в зелёное. Бэкапы и безопасность не деградировали: живая база оркестратором не изменена, пароли владельца не использованы, ни один процесс не снят.
