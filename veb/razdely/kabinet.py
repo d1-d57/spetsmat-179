@@ -60,11 +60,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 import config
+from core.services.istoria_poseshchenij import zanyatie_zaversheno
 from core.services.sostav_na_den import (
     OTSUTSTVUET,
     blizhajshie_zanyatiya,
@@ -72,6 +73,7 @@ from core.services.sostav_na_den import (
 )
 from veb import vhod
 from veb.obshchee.karkas import VREMYA, e, menyu_ssylkami
+from veb.razdely.istoria_zanyatij import sdachi_po_zanyatiyam
 from veb.razdely.lichnaya import deti_na_datu, kabinet_na_datu, segodnya
 from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
@@ -240,6 +242,54 @@ SVOI_STILI = """
   margin:.6rem 0 0}
 .kab-beda{color:var(--krasn);font-family:var(--sans);font-size:1rem;margin:.8rem 0 0;
   min-height:1.2em}
+/* 🔴 ПОЛОСА КНОПОК ЗАМЕНЕНА ТАБЛИЦЕЙ ЗАНЯТИЙ (L1.3, владелец 10.09): «строки —
+   занятия, в каждой список школьников, клик по школьнику раскрывает сдачу.
+   Раскладка многоколоночная СВЕРХУ ВНИЗ: вся четверть должна поместиться,
+   горизонтальной прокрутки быть не должно».
+   СВЕРХУ ВНИЗ — это `columns`, а не `grid`: колоночная вёрстка льёт занятия
+   вниз по первой колонке, потом во вторую, и порядок чтения остаётся
+   хронологическим. `grid` с тем же числом колонок разложил бы их СЛЕВА НАПРАВО,
+   то есть перемешал бы даты в каждой строке. */
+.kab-tablica{columns:4;column-gap:1.6rem;margin:.9rem 0 0}
+.kab-zanyatie{break-inside:avoid;-webkit-column-break-inside:avoid;
+  border:1px solid var(--rule);border-radius:12px;padding:.6rem .8rem;
+  margin:0 0 .8rem;background:var(--bg);font-family:var(--sans)}
+.kab-zanyatie.byl{border-color:var(--zel);background:var(--zel-fon)}
+.kab-zanyatie.ne-byl{border-color:var(--krasn);background:var(--krasn-fon)}
+.kab-zanyatie.vperyod.netu{border-color:var(--krasn);background:var(--krasn-fon)}
+.kab-zag{display:flex;align-items:baseline;gap:.5rem;font-weight:600;font-size:1.02rem;
+  cursor:pointer}
+.kab-zanyatie.byl .kab-zag{color:var(--zel)}
+.kab-zanyatie.ne-byl .kab-zag{color:var(--krasn)}
+.kab-skolko{margin-left:auto;font-weight:400;font-size:.85rem;color:var(--muted)}
+.kab-spisok{list-style:none;margin:.45rem 0 0;padding:0;font-size:.95rem}
+.kab-spisok li{padding:.1rem 0}
+.kab-shk{background:none;border:none;padding:.1rem 0;font:inherit;color:var(--text);
+  cursor:pointer;text-align:left;width:100%;border-radius:5px}
+.kab-shk:hover,.kab-shk:focus-visible{color:var(--accent);background:var(--accent-soft)}
+.kab-nikogo{color:var(--muted);font-size:.9rem;margin:.4rem 0 0}
+/* Будущее: клетка сама себе выключатель, как и была. Флажок спрятан, а не убран —
+   им работают клавиатура и `:focus-visible`, и он же несёт дату для двери. */
+.kab-vpered-metka{display:flex;align-items:baseline;gap:.5rem;cursor:pointer;
+  font-weight:600;font-size:1.02rem}
+.kab-zanyatie.vperyod.netu .kab-vpered-metka{color:var(--krasn);
+  text-decoration:line-through}
+.kab-zanyatie input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.kab-zanyatie input:focus-visible+.kab-den-tekst{outline:2px solid var(--accent);
+  outline-offset:3px;border-radius:3px}
+.kab-svodka{font-family:var(--sans);font-size:1.1rem;margin:.2rem 0 0}
+.kab-raskrytie{position:sticky;bottom:0;z-index:30;margin:1.2rem 0 0;
+  background:var(--panel);border:1px solid var(--rule);border-radius:14px;
+  padding:1rem 1.3rem;font-family:var(--sans);box-shadow:0 -2px 14px rgba(0,0,0,.06)}
+.kab-raskrytie[hidden]{display:none}
+.kab-raskrytie h2{font-size:1.1rem;margin:0 0 .5rem;font-family:var(--sans)}
+.kab-raskrytie ul{margin:.3rem 0 0;padding-left:1.2rem}
+.kab-raskrytie .kab-nichego{color:var(--muted)}
+.kab-raskrytie .kab-zakryt{float:right;cursor:pointer;border:1px solid var(--rule);
+  background:none;color:var(--muted);border-radius:8px;padding:.2em .7em;font:inherit}
+@media(max-width:1200px){.kab-tablica{columns:3}}
+@media(max-width:900px){.kab-tablica{columns:2}}
+@media(max-width:640px){.kab-tablica{columns:1}}
 @media(max-width:640px){.kab-stranica{padding:1.1rem 1rem 3rem}
   .kab-listok{font-size:1.6rem}
   .kab-den{font-size:.95rem;padding:.45em .7em}}
@@ -252,9 +302,9 @@ SVOI_STILI = """
 #: would otherwise read as «сохранено».
 SKRIPT = """
 <script>
-document.querySelectorAll('.kab-den input').forEach(function(fl){
+document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
   fl.addEventListener('change', function(){
-    var ryad = fl.closest('.kab-den');
+    var ryad = fl.closest('.kab-zanyatie');
     var beda = document.getElementById('kab-beda');
     beda.textContent = '';
     ryad.classList.toggle('netu', fl.checked);
@@ -277,6 +327,59 @@ document.querySelectorAll('.kab-den input').forEach(function(fl){
       });
   });
 });
+
+/* 🔴 РАСКРЫТИЕ ЗАНЯТИЯ И ШКОЛЬНИКА (L1.2, владелец 10.09): «клик по прошлому
+   занятию раскрывает своё — кто был и что поставлено», и клик по школьнику —
+   его сдачу. Одна панель на страницу и один обработчик на документ: занятий к
+   маю около семидесяти, и по спрятанному блоку на каждое было бы вторым
+   документом внутри первого. Содержимое лежит одним словарём в `kab-dannye`. */
+(function(){
+  var uzel = document.getElementById('kab-dannye');
+  var dannye = uzel ? JSON.parse(uzel.textContent) : {};
+  var panel = document.getElementById('kab-raskrytie');
+  var telo = document.getElementById('kab-raskrytie-telo');
+  var zag = document.getElementById('kab-raskrytie-zag');
+  function zadachi(sdal){
+    return sdal.map(function(z){ return 'листок ' + z.listok + ' · задача ' + z.zadacha; });
+  }
+  function spisok(punkty, pusto){
+    if (!punkty.length) return '<p class="kab-nichego">' + pusto + '</p>';
+    return '<ul>' + punkty.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul>';
+  }
+  function zakryt(){ panel.hidden = true; }
+  function pokazat(klyuch){
+    var d = dannye[klyuch];
+    if (!d) return;
+    zag.textContent = d.kto;
+    if (d.deti) {
+      telo.innerHTML = spisok(d.deti.map(function(r){
+        var z = zadachi(r.sdal);
+        return '<b>' + r.kto + '</b>' + (z.length ? ' — ' + z.join('; ') : ' — ничего не сдал');
+      }), 'в этот день школьников не было');
+    } else {
+      telo.innerHTML = '<p>' + d.den + '</p>'
+        + spisok(zadachi(d.sdal), 'в этот день ничего не сдал');
+    }
+    panel.hidden = false;
+  }
+  document.addEventListener('click', function(sob){
+    if (!sob.target.closest) return;
+    var shk = sob.target.closest('.kab-shk');
+    if (shk) { pokazat(shk.dataset.den + '|' + shk.dataset.sid); return; }
+    var zagolovok = sob.target.closest('.kab-zag');
+    if (zagolovok) { pokazat(zagolovok.dataset.den); return; }
+    if (sob.target.closest('#kab-raskrytie')) return;
+    zakryt();
+  });
+  document.addEventListener('keydown', function(sob){
+    if (sob.key === 'Escape') zakryt();
+    if ((sob.key === 'Enter' || sob.key === ' ')
+        && sob.target.classList && sob.target.classList.contains('kab-zag')) {
+      sob.preventDefault(); pokazat(sob.target.dataset.den);
+    }
+  });
+  document.getElementById('kab-zakryt').addEventListener('click', zakryt);
+})();
 </script>"""
 
 
@@ -339,43 +442,106 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
             f'<p class="kab-gde">кабинет {kab_html}</p>'
             f'{deti_html}</div>')
 
-    # ── ПОЛОСА ЗАНЯТИЙ С НАЧАЛА УЧЕБНОГО ГОДА. Одна строка на весь экран вместо
-    # трёх кнопок, которые здесь стояли: «Моя история занятий» вела в пустое место,
-    # «Распределение на занятие» владелец не просил вовсе («я не понимаю, что это»),
-    # а «На заглавную» делает теперь верхнее меню.
+    # ── ТАБЛИЦА ЗАНЯТИЙ С НАЧАЛА УЧЕБНОГО ГОДА (L1.3, владелец 10.09).
+    # Здесь стояла ПОЛОСА КНОПОК: дата и цвет, а кто на занятии был — только во
+    # всплывающей подсказке. Владелец попросил другое: «строки — занятия, в каждой
+    # список школьников, клик по школьнику раскрывает сдачу», и «вся четверть должна
+    # поместиться», без горизонтальной прокрутки. Раскладку даёт `columns` (разбор —
+    # у `.kab-tablica` в стилях выше).
     #
-    # 🔴 ДВА СПИСКА ДАТ, И ГРАНИЦА МЕЖДУ НИМИ — ТА ЖЕ, ЧТО У ДВЕРИ ЗАПИСИ. Прошлое
-    # это `den < segodnya()` — ровно то условие, на котором `otmetit_otsutstvie`
-    # отказывает; будущее (включая СЕГОДНЯШНЕЕ занятие) остаётся правимым, потому
-    # что сказать утром «сегодня меня не будет» — обычный случай. Одна граница на
-    # экран и дверь, а не две, которые однажды разойдутся.
-    kletki = []
+    # 🔴 ГРАНИЦА «ПРОШЛОЕ/БУДУЩЕЕ» БОЛЬШЕ НЕ СРАВНИВАЕТ ДАТЫ, И ЭТО ПОЧИНКА ДЕФЕКТА
+    # ФАКТА L1.1, А НЕ ПЕРЕКРАСКА. Владелец 10.09 провёл занятие 10.09 и увидел, что
+    # плашка того дня НЕ зелёная. Причина: здесь стояло `den < segodnya()`, и для
+    # СЕГОДНЯШНЕГО занятия оно ложно — то есть занятие, которое он только что провёл,
+    # рисовалось как БУДУЩЕЕ: без цвета и с флажком «меня не будет». Состояния
+    # «сегодня, и оно уже кончилось» у полосы не было вовсе.
+    # Замер, часы переведены на дату владельца (копия боевой базы, преподаватель id=2):
+    #   часы 2026-09-10 → клетка 10.09 несёт класс `kab-den vperyod`, флажок есть
+    #   часы 2026-09-11 → та же клетка несёт `kab-den byl`, флажка нет
+    # Один и тот же факт, два разных экрана — потому что вопрос задавался календарю,
+    # а не расписанию. Спрашивается теперь то, что на него уже отвечает:
+    # `istoria_poseshchenij.zanyatie_zaversheno(den, seichas=…)` — единственное место,
+    # знающее, кончилось ли занятие этого дня (оно же держит `KONEC_ZANYATIA`).
+    #
+    # 🔴 У ДВЕРИ ЗАПИСИ ГРАНИЦА ОСТАЁТСЯ СВОЯ, И ЭТО СКАЗАНО ВСЛУХ. `otmetit_otsutstvie`
+    # отказывает на `den < segodnya()`, потому что отвечает на ДРУГОЙ вопрос — «можно
+    # ли ещё сказать, что меня не будет», а не «кончилось ли занятие». После этой
+    # правки занятие, которое сегодня уже прошло, показывается зелёным и флажка не
+    # предлагает, а дверь такую запись всё ещё приняла бы. Расширять или сужать дверь
+    # этот заход не стал: это правка пути ЗАПИСИ, которой никто не просил.
+    seichas = datetime.now(timezone.utc)
+    sdachi = sdachi_po_zanyatiyam(c, tuple(proshlo))
+    bloki = []
+    prinyato_vsego = 0
+    deti_vsego: set = set()
+    raskrytie: dict = {}
     for den in proshlo + dni:
-        wd = date.fromisoformat(den).isoweekday()
+        proshlo_li = zanyatie_zaversheno(den, seichas=seichas)
         d = date.fromisoformat(den)
+        wd = d.isoweekday()
         podpis = "%s %02d.%02d" % (KOROTKO_DNYA.get(wd, ""), d.day, d.month)
-        # Наведение называет школьников ТОГО дня: `deti_na_datu` держит интервал
-        # `enrollment`, поэтому на прошедшую дату отвечает состав, который был
-        # тогда, а не сегодняшний.
+        # Наведение и список называют школьников ТОГО дня: `deti_na_datu` держит
+        # интервал `enrollment`, поэтому на прошедшую дату отвечает состав, который
+        # был тогда, а не сегодняшний.
         kto_byl = deti_na_datu(c, teacher_id, den)
-        imena = ", ".join("%s %s" % (r["surname"], r["name"]) for r in kto_byl)
-        vsplyv = "%s · %s" % (po_russki(den), imena if imena else "школьников нет")
         netu = den in net_na
-        if den < segodnya():
-            # 🔴 «БЫЛ» — ЭТО ОТСУТСТВИЕ ОТМЕТКИ ОБ ОТСУТСТВИИ, И ДРУГОГО ИСТОЧНИКА
-            # НЕТ. Факт «этого человека не было» живёт в `teacher_attendance` и
-            # больше нигде: его пишет и организатор на распределении, и сам
-            # преподаватель этой страницей. Второй таблицы «кто присутствовал» в
-            # базе не заводится — она была бы вторым ответом на тот же вопрос.
-            kletki.append('<span class="kab-den %s" title="%s">%s</span>'
-                          % ("ne-byl" if netu else "byl", e(vsplyv), e(podpis)))
+        if proshlo_li:
+            punkty = []
+            sdach_dnya = 0
+            for r in kto_byl:
+                sdal = sdachi.get((den, r["id"]), ())
+                sdach_dnya += len(sdal)
+                deti_vsego.add(r["id"])
+                raskrytie["%s|%s" % (den, r["id"])] = {
+                    "kto": "%s %s" % (r["surname"], r["name"]),
+                    "den": po_russki(den),
+                    "sdal": [{"zadacha": z, "listok": l} for z, l, _t in sdal],
+                }
+                punkty.append(
+                    '<li><button class="kab-shk" type="button" data-den="%s" '
+                    'data-sid="%s"><b>%s</b> %s%s</button></li>'
+                    % (e(den), r["id"], e(r["surname"]), e(r["name"]),
+                       (' <span class="kab-skolko">сдал %d</span>' % len(sdal))
+                       if sdal else ""))
+            prinyato_vsego += sdach_dnya
+            raskrytie[den] = {
+                "kto": po_russki(den),
+                "den": po_russki(den),
+                "deti": [{"kto": "%s %s" % (r["surname"], r["name"]),
+                          "sdal": [{"zadacha": z, "listok": l}
+                                   for z, l, _t in sdachi.get((den, r["id"]), ())]}
+                         for r in kto_byl],
+            }
+            spisok = ('<ul class="kab-spisok">%s</ul>' % "".join(punkty) if punkty
+                      else '<p class="kab-nikogo">школьников в этот день не было</p>')
+            bloki.append(
+                '<div class="kab-zanyatie %s" data-den="%s">'
+                '<div class="kab-zag" data-den="%s" tabindex="0">%s'
+                '<span class="kab-skolko">%s</span></div>%s</div>'
+                % ("ne-byl" if netu else "byl", e(den), e(den), e(podpis),
+                   e("вас не было" if netu else "сдач: %d" % sdach_dnya), spisok))
         else:
-            kletki.append(
-                '<label class="kab-den vperyod%s" title="%s">'
+            imena = ", ".join("%s %s" % (e(r["surname"]), e(r["name"]))
+                              for r in kto_byl)
+            bloki.append(
+                '<div class="kab-zanyatie vperyod%s" data-den="%s">'
+                '<label class="kab-vpered-metka">'
                 '<input type="checkbox" data-den="%s"%s>'
-                '<span class="kab-den-tekst">%s</span></label>'
-                % (" netu" if netu else "", e(vsplyv), e(den),
-                   " checked" if netu else "", e(podpis)))
+                '<span class="kab-den-tekst">%s</span>'
+                '<span class="kab-skolko">меня не будет</span></label>'
+                '%s</div>'
+                % (" netu" if netu else "", e(den), e(den),
+                   " checked" if netu else "", e(podpis),
+                   ('<ul class="kab-spisok"><li>%s</li></ul>'
+                    % imena.replace(", ", "</li><li>")) if imena
+                   else '<p class="kab-nikogo">школьников пока нет</p>'))
+
+    # 🔴 «И ЭТО ДОЛЖНО СВОДИТЬСЯ В ОДИН ТЕКСТ» — слова владельца 10.09 про кабинет.
+    # Одна строка, три числа, все три посчитаны из того же, что нарисовано ниже: ни
+    # одного отдельного запроса ради сводки, поэтому сводка и таблица разойтись не
+    # могут по построению.
+    svodka = ("с начала года: занятий %d · принято сдач %d · работал со школьниками: %d"
+              % (len(proshlo), prinyato_vsego, len(deti_vsego)))
 
     gruppa_html = (' · <a href="/raspredelenie">группа %s</a>' % e(kto["gruppa"])
                    if kto["gruppa"] else "")
@@ -385,16 +551,22 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
   {blok_blizh}
   <div class="kab-blok">
     <p class="zag2">мои занятия с начала года</p>
-    <div class="kab-polosa">{"".join(kletki)}</div>
-    <!-- 🔴 ПОДПИСИ ЗДЕСЬ НЕТ И НЕ ДОЛЖНО БЫТЬ (K1, владелец 10.09). Пояснение
-         «зелёная — вы были, красная — вас не было…» он назвал НЕЙРОСЛОПОМ и велел
+    <p class="kab-svodka">{e(svodka)}</p>
+    <!-- 🔴 ПОДПИСИ-ПОЯСНЕНИЯ ЗДЕСЬ НЕТ И НЕ ДОЛЖНО БЫТЬ (K1, владелец 10.09).
+         «Зелёная — вы были, красная — вас не было…» он назвал НЕЙРОСЛОПОМ и велел
          убрать целиком. Короткая версия на том же месте — тот же нейрослоп, только
-         тише, и заводить её нельзя: полоса понятна цветом без слов. Поведение
-         (клик по будущей дате, подсказка при наведении) осталось прежним — убран
-         ТЕКСТ, а не механизм. -->
+         тише. Строка выше — НЕ пояснение: это три ЧИСЛА, то самое «должно сводиться
+         в один текст», которое он просил в той же надиктовке. -->
+    <div class="kab-tablica">{"".join(bloki)}</div>
     <p class="kab-beda" id="kab-beda"></p>
   </div>
-</div>{SKRIPT}"""
+  <div class="kab-raskrytie" id="kab-raskrytie" hidden>
+    <button class="kab-zakryt" id="kab-zakryt" type="button">закрыть</button>
+    <h2 id="kab-raskrytie-zag"></h2>
+    <div id="kab-raskrytie-telo"></div>
+  </div>
+</div>
+<script type="application/json" id="kab-dannye">{json.dumps(raskrytie, ensure_ascii=False)}</script>{SKRIPT}"""
     return _dokument("Кабинет — " + kto["name"], telo, put_bazy(c))
 
 

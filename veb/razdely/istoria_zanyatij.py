@@ -182,8 +182,12 @@ PUSTYE_MESTA = ('<span class="kl-ocenka" data-mesto="оценка"></span>'
                 '<span class="kl-komm" data-mesto="комментарий"></span>')
 
 
-def _sdachi_po_zanyatiyam(c: sqlite3.Connection, dni) -> dict:
+def sdachi_po_zanyatiyam(c: sqlite3.Connection, dni) -> dict:
     """`{(день, школьник): ((задача, листок, кто принял), …)}` — что сдано в этот день.
+
+    🔴 ИМЯ БЕЗ ПОДЧЁРКИВАНИЯ, ПОТОМУ ЧТО ЗВАТЕЛЕЙ ДВА: журнал (этот файл) и кабинет
+    (`veb/razdely/kabinet.py`). Второй копии этого разбора заводить нельзя — она и
+    была бы тем самым вторым мнением о том, к какому занятию относится галочка.
 
     🔴 ДЕНЬ ОТМЕТКИ НЕ ВЫВОДИТСЯ ЗДЕСЬ ЗАНОВО. Какому занятию принадлежит галочка,
     отвечает ровно одно место — `core.services.history.zanyatie_po_iso` (правило
@@ -603,7 +607,7 @@ def stranica(c: sqlite3.Connection) -> str:
     istoriya, sessii = _sostavit(c)
     rody = _rod_zanyatiya(c, sessii)
     otmeneno = _otmenennye(sessii, istoriya.dni)
-    sdachi = _sdachi_po_zanyatiyam(c, istoriya.dni)
+    sdachi = sdachi_po_zanyatiyam(c, istoriya.dni)
     dannye = _chto_raskryvaetsya(students, teachers, istoriya, sdachi)
 
     podpis = ("прошедших занятий пока нет" if not istoriya.dni

@@ -19,8 +19,9 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from http.server import ThreadingHTTPServer
+from zoneinfo import ZoneInfo
 
 import config
 import pytest
@@ -180,28 +181,64 @@ def test_the_page_has_the_top_menu_and_none_of_the_three_removed_links(running_s
     assert "На заглавную" not in telo
 
 
-def test_the_strip_covers_the_school_year_and_colours_only_the_past(running_server):
-    """Owner 10.09 (H1.6): даты с начала года, зелёная — был, красная — не был.
+def test_the_table_covers_the_school_year_and_colours_only_the_past(running_server):
+    """Owner 10.09 (H1.6 + L1.3): занятия с начала года строками, зелёное — был.
 
-    Границу «прошлое/будущее» проверяем ту же, на которой отказывает дверь записи:
-    прошедшая клетка не несёт `data-den` вовсе, то есть отметить её нечем даже
-    подделанным запросом со страницы.
+    🔴 ГРАНИЦА ПРОВЕРЯЕТСЯ ТА, НА КОТОРОЙ ЗАХОД ЕЁ ПОСТАВИЛ: «занятие завершилось»
+    (`zanyatie_zaversheno`), а не «дата уже прошла». Прежний тест сверял вторую и
+    поэтому зеленел ровно тогда, когда экран врал: сегодняшнее занятие, которое
+    владелец только что провёл, попадало в БУДУЩИЕ (дефект L1.1).
+    Флажок остаётся признаком правимости: прошедший блок его не несёт вовсе, то
+    есть отметить его нечем даже подделанным запросом со страницы.
     """
-    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+    from datetime import datetime, timezone
+
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import (GLUBINA_VPERYOD, proshedshie_zanyatiya, segodnya)
+    from core.services.sostav_na_den import blizhajshie_zanyatiya
 
     _status, body, _h = _get(
         f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
     telo = body.decode("utf-8")
-    proshlo = proshedshie_zanyatiya(segodnya())
-    kletok = telo.count('<span class="kab-den ') + telo.count('<label class="kab-den ')
-    assert kletok == len(proshlo) + 8, (
-        f"клеток {kletok}, а занятий с начала года {len(proshlo)} + 8 вперёд")
-    zelyonyh = telo.count('kab-den byl"')
-    krasnyh = telo.count('kab-den ne-byl"')
-    assert zelyonyh + krasnyh == len(proshlo), "цветом красится ровно прошлое"
-    assert telo.count('kab-den vperyod') == 8, "будущие ни зелёные, ни красные"
+    seichas = datetime.now(timezone.utc)
+    vse = proshedshie_zanyatiya(segodnya()) + blizhajshie_zanyatiya(
+        segodnya(), GLUBINA_VPERYOD)
+    proshlo = [d for d in vse if zanyatie_zaversheno(d, seichas=seichas)]
+    vperyod = [d for d in vse if not zanyatie_zaversheno(d, seichas=seichas)]
+
+    blokov = telo.count('<div class="kab-zanyatie ')
+    assert blokov == len(vse), f"блоков {blokov}, а занятий {len(vse)}"
+    assert telo.count('kab-zanyatie byl') + telo.count('kab-zanyatie ne-byl') \
+        == len(proshlo), "цветом красится ровно завершившееся"
+    assert telo.count('kab-zanyatie vperyod') == len(vperyod)
     for den in proshlo:
-        assert f'data-den="{den}"' not in telo, f"прошедшее {den} не правится"
+        assert f'<input type="checkbox" data-den="{den}"' not in telo, (
+            f"завершившееся {den} не правится")
+
+
+def test_a_lesson_that_ended_today_reads_as_past_and_not_as_future(running_server):
+    """L1.1, ДЕФЕКТ ФАКТА: владелец провёл занятие 10.09 и не увидел зелёного.
+
+    Причина была в границе `den < segodnya()`: для СЕГОДНЯШНЕГО занятия она ложна,
+    и только что проведённый урок рисовался как будущий — без цвета и с флажком
+    «меня не будет». Здесь часы переводятся на день занятия, ПОСЛЕ его конца, и
+    экран обязан назвать этот день прошедшим.
+    """
+    import veb.razdely.kabinet as kab
+    from core.services.sostav_na_den import KONEC_ZANYATIA, slot_of
+
+    den = date.today().isoformat()
+    if slot_of(den) is None:
+        pytest.skip("сегодня не день занятия — границу этим прогоном не проверить")
+    konec = KONEC_ZANYATIA[date.fromisoformat(den).isoweekday()]
+    if (datetime.now(ZoneInfo(config.TZ_DISPLAY)).hour,
+            datetime.now(ZoneInfo(config.TZ_DISPLAY)).minute) < konec:
+        pytest.skip("занятие сегодня ещё не кончилось — проверять нечего")
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    assert f'<input type="checkbox" data-den="{den}"' not in telo, (
+        "занятие, которое сегодня уже кончилось, не предлагает флажок «меня не будет»")
 
 
 def test_the_strip_starts_at_the_first_of_september(running_server):
@@ -221,7 +258,8 @@ def test_the_grid_is_the_next_lessons_and_carries_no_written_down_date(running_s
     for den in _sleduyushchie(8):
         assert f'data-den="{den}"' in telo, f"{den} должен стоять в сетке"
     vchera = (date.today() - timedelta(days=1)).isoformat()
-    assert f'data-den="{vchera}"' not in telo, "вчерашнего в сетке быть не может"
+    assert f'<input type="checkbox" data-den="{vchera}"' not in telo, (
+        "вчерашнее занятие правиться не может")
 
 
 def test_login_with_a_personal_password_lands_in_the_cabinet(running_server, monkeypatch):
@@ -430,3 +468,65 @@ def test_without_the_mark_the_same_write_goes_through(running_server):
          "teacher_id": running_server["t1"]},
         _kuka("organizator"))
     assert status == 200, body
+
+
+# --------------------------------------------- L1.2 и L1.3: таблица занятий и раскрытие
+
+
+def test_the_strip_of_chips_is_now_a_table_of_lessons_with_their_pupils(running_server):
+    """L1.3, владелец 10.09: «строки — занятия, в каждой список школьников».
+
+    Полоса плашек называла только дату; кто был на занятии, жило во всплывающей
+    подсказке, то есть на экране не стояло. Проверяется, что список школьников
+    ЕСТЬ в разметке блока, а не только в `title`.
+    """
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    assert '<div class="kab-tablica">' in telo, "занятия строками, а не полосой плашек"
+    assert 'class="kab-polosa"' not in telo, "полоса плашек снята"
+    assert 'class="kab-spisok"' in telo, "в блоке занятия стоит список школьников"
+
+
+def test_clicking_a_lesson_and_a_pupil_has_something_to_open(running_server):
+    """L1.2: «клик по прошлому занятию раскрывает своё — кто был и что поставлено».
+
+    Раскрытие содержится в блоке данных страницы, а не собирается запросом: тест
+    проверяет, что для каждого ЗАВЕРШИВШЕГОСЯ занятия ключ есть, и что у школьника
+    этого дня есть свой ключ. Пустой блок данных — красное: кликать было бы не по
+    чему, и это ровно то состояние, в котором раскрытие «как бы сделано».
+    """
+    import re
+    from datetime import datetime, timezone
+
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    blok = re.search(r'<script type="application/json" id="kab-dannye">(.*?)</script>',
+                     telo, re.S)
+    assert blok is not None, "страница обязана нести данные раскрытия"
+    dannye = json.loads(blok.group(1))
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    for den in proshlo:
+        assert den in dannye, f"клик по занятию {den} должен что-то раскрывать"
+        assert "deti" in dannye[den]
+    kluchi_shkolnikov = [k for k in dannye if "|" in k]
+    assert kluchi_shkolnikov, "клик по школьнику должен что-то раскрывать"
+    for k in kluchi_shkolnikov:
+        assert "sdal" in dannye[k], f"раскрытие школьника {k} обязано называть сдачу"
+
+
+def test_the_cabinet_sums_itself_up_in_one_line(running_server):
+    """Владелец 10.09: «И это должно сводиться в один текст»."""
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    assert 'class="kab-svodka"' in telo
+    assert "с начала года: занятий" in telo
+    assert "принято сдач" in telo and "работал со школьниками" in telo
