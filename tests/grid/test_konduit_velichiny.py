@@ -55,6 +55,23 @@ def mir(connection):
     return seed_world(connection, students=5, sheets=(LISTOK,))
 
 
+@pytest.fixture
+def uchebnyj_den(monkeypatch):
+    """Пятница — не учебный день, и без этой оснастки «мой школьник» не существует.
+
+    🔴 ЭТО НЕ УДОБСТВО, А КРАСНОЕ, КОТОРОЕ УЖЕ СТОЯЛО.  `_moi_deti` спрашивает
+    `deti_na_datu(..., segodnya())`, а та на дне без слота отвечает пустым списком
+    («не учебный день: постоянных строк не применяется ни одной»,
+    `veb/razdely/lichnaya.py:168`).  Значит любой тест про «моих» ЗЕЛЁН по понедельникам
+    и четвергам и КРАСЕН в остальные пять дней недели, ничего не сообщая о коде: замер
+    11.09 (пятница) — `test_being_mine_and_having_closed…` красный на `"moi"`, при
+    целом механизме.  День занятия здесь называется явно, и результат перестаёт зависеть
+    от того, когда запустили прогон.
+    """
+    monkeypatch.setattr(konduit, "segodnya", lambda: "2026-09-14")   # понедельник
+    return "2026-09-14"
+
+
 def kontekst(connection, prepod_id=None) -> Kontekst:
     """A `Kontekst` carrying exactly the fields the кондуит reads.
 
@@ -134,12 +151,31 @@ def test_a_retracted_obligatory_is_not_counted_as_handed_in(mir, connection, mar
                             str(mir.sheet_ids[0])))[0] == (0, 3)
 
 
-# ------------------------------------------------------- величина 2: строка светится
+# ------------------------------------- величина 2: столбец крупной зелёной галочки
 
 
-def test_the_row_glows_exactly_for_the_pupil_who_closed_his_obligatory(
+def galki(kusok: str) -> list:
+    """Столбец галочки, сверху вниз: `True` там, где она горит.
+
+    Читается по КЛАССУ клетки, а не по символу: галочка, дорисованная где-нибудь ещё
+    (в клетке фамилии, в счётчике), этой проверкой не считается — она и не должна.
+    """
+    return [bool(m.group(1))
+            for m in re.finditer(r'<td class="gt( gt-da)?"', kusok)]
+
+
+def test_no_row_glows_for_having_closed_the_obligatory_problems(
     mir, connection, marking
 ):
+    """The owner's edit of 10.09 (O1), read as the property it is: the row does not glow.
+
+    This test USED to assert the opposite — «светится ровно строка того, кто закрыл
+    обязательные» — and it was right until 10.09, when the owner looked at the live page
+    and said: «я хочу видеть своих школьников, и я их вижу. А теперь ещё вижу почему-то
+    школьников, которые просто всё сдали — это не нужно… Ты сейчас выделяешь всю строчку —
+    не надо».  The pupil below closes every obligatory problem of the листок, which is
+    exactly the state that used to light his row up.
+    """
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     for zadacha in (zadachi[0], zadachi[1], zadachi[2]):
         otmetit(marking, mir.student_ids[0], zadacha)
@@ -149,8 +185,55 @@ def test_the_row_glows_exactly_for_the_pupil_who_closed_his_obligatory(
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
     stroki = re.findall(r'<tr( class="[^"]*")?><td class="kto">', kusok)
-    goryat = [i for i, klass in enumerate(stroki) if "gotov" in (klass or "")]
-    assert goryat == [0], "светится ровно строка того, кто закрыл обязательные"
+    assert stroki, "строки школьников вообще нарисованы"
+    assert not [k for k in stroki if k], "ни одна строка не несёт класса вовсе"
+    assert "gotov" not in kusok, "класс подсветки не остался нигде в разметке"
+
+
+def test_the_green_tick_lights_in_its_own_column_exactly_for_who_closed_everything(
+    mir, connection, marking
+):
+    """O2: «должна возникать большая зелёная галочка… мы увидим, что школьник всё сдал».
+
+    The same world as the test above: the first pupil closes all three obligatory
+    problems, the second takes a звезда and an обычная and closes none.  The признак the
+    row lost is checked HERE, in the column that now carries it — that is the whole of
+    O1+O2 together, and checking only the loss would leave the fact silently dropped.
+    """
+    zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
+    for zadacha in (zadachi[0], zadachi[1], zadachi[2]):
+        otmetit(marking, mir.student_ids[0], zadacha)
+    otmetit(marking, mir.student_ids[1], zadachi[3])
+    otmetit(marking, mir.student_ids[1], zadachi[4])
+    connection.commit()
+    html = konduit.razdel(kontekst(connection))
+    kusok = panel(html, str(mir.sheet_ids[0]))
+    assert galki(kusok) == [True, False, False, False, False]
+    # It IS a column: a header of its own, in the same thead as the счётчик.
+    shapka_html = re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
+    assert shapka_html.count('<th class="gt"') == 1, shapka_html
+    # And the tick is drawn green by the class, not by a colour written in the cell.
+    assert re.search(r"td\.gt\b[^}]*var\(--zel\)", konduit.stili(kontekst(connection)))
+
+
+def test_the_tick_is_not_smeared_over_the_surname_cell_or_the_counter(
+    mir, connection, marking
+):
+    """Q4, «нельзя смешивать», judged where it actually breaks: one признак, one place.
+
+    The pupil below is in the state that carries the признак, so a second carrier would
+    be visible right now rather than in theory.
+    """
+    for zadacha in mir.problems_by_sheet[mir.sheet_ids[0]][:3]:
+        otmetit(marking, mir.student_ids[0], zadacha)
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    telo = re.search(r"<tbody>(.*?)</tbody>", kusok, re.S).group(1)
+    stroka = re.search(r"<tr[^>]*>(.*?)</tr>", telo, re.S).group(1)
+    assert '<td class="gt gt-da"' in stroka, "галочка у этого школьника вообще есть"
+    kto = re.search(r'<td class="kto">(.*?)</td>', stroka, re.S).group(1)
+    sch = re.search(r'<td class="sch">(.*?)</td>', stroka, re.S).group(1)
+    assert "✓" not in kto and "✓" not in sch, (kto, sch)
 
 
 def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marking):
@@ -160,15 +243,21 @@ def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marki
     mir = seed_world(connection, students=3, sheets=(("звезда", "обычная"),))
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    assert "gotov" not in kusok
+    assert galki(kusok) == [False, False, False], (
+        "галочка «сдал всё обязательное» на листке без обязательных не горит ни у кого: "
+        "вакуумная истина зажгла бы её всем сразу, и признак перестал бы что-либо значить")
     assert schyotchiki(kusok) == [None, None, None], "листок без обязательных пишет точку"
 
 
-def test_being_mine_and_having_closed_are_both_visible_at_once(
-    mir, connection, marking
+def test_the_row_carries_the_one_priznak_of_whose_child_it_is_and_no_other(
+    mir, connection, marking, uchebnyj_den
 ):
-    """The two marks ADD UP.  The previous expression («свой» OR «чужой») had no room for
-    a third class, and adding one without losing the first is the whole of this check.
+    """One признак, one носитель (O1, and the owner's канон «нельзя смешивать», Q4).
+
+    The pupil below is BOTH the teacher's own child AND has closed every obligatory
+    problem — the case where the two marks used to be added onto one row (this test
+    asserted that sum until 10.09).  Now the row says «мой» and says nothing else; the
+    second fact is drawn in its own column and is checked there.
     """
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     for zadacha in zadachi[:3]:
@@ -177,9 +266,7 @@ def test_being_mine_and_having_closed_are_both_visible_at_once(
     # 🔴 СТРОКА НА ОБА СЛОТА, И ЭТО НЕ ИЗБЫТОЧНОСТЬ. С 10.09 «мой» считается ПО ДНЮ:
     # кондуит спрашивает ту же службу, что распределение (требование владельца —
     # «изменение в текущем расписании на сегодня не обновляет кабинет и вкладку в
-    # кондуите»). Строка одного слота делала бы результат зависимым от того, на какой
-    # день недели пришёлся прогон, а этот тест — про СЛОЖЕНИЕ двух меток, и день ему
-    # безразличен.
+    # кондуите»).
     for slot in (1, 2):
         connection.execute(
             "insert into enrollment (student_id, teacher_id, room, slot, valid_from) "
@@ -189,7 +276,79 @@ def test_being_mine_and_having_closed_are_both_visible_at_once(
     kusok = panel(konduit.razdel(kontekst(connection, prepod_id=prepod)),
                   str(mir.sheet_ids[0]))
     pervaya = re.search(r'<tr class="([^"]*)"><td class="kto">', kusok).group(1)
-    assert "moi" in pervaya and "gotov" in pervaya, pervaya
+    assert pervaya.split() == ["moi"], pervaya
+
+
+def test_on_the_year_tab_the_tick_also_lights_for_one_listok_closed_entirely(
+    connection, marking
+):
+    """O5: «есть ли у школьника долги» — листки даны НА ВЫБОР.
+
+    Owner 10.09: «школьник закрыл один и не закрывал второй — это норма, а не долг.  По
+    кондуиту такого не различить.  На вкладке „Весь год“ ставить галочку, когда школьник
+    закрыл все обязательные ИЛИ один из листков целиком».
+
+    Two листка of five problems each, three of them obligatory.  The pupil closes the
+    FIRST листок whole — every problem of it, obligatory and not — and touches nothing on
+    the second.  He therefore has 3 of 6 obligatory over the cut, so the счётчик alone
+    would call him a debtor, which is exactly the hole the owner named.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    mir = seed_world(connection, students=3, sheets=(LISTOK, LISTOK))
+    pervyj = mir.sheet_ids[0]
+    for zadacha in mir.problems_by_sheet[pervyj]:
+        otmetit(marking, mir.student_ids[0], zadacha)
+    # The second pupil closes the obligatory HALF of the first листок and no more: not a
+    # whole листок, not the whole cut — no tick.
+    for zadacha in mir.problems_by_sheet[pervyj][:3]:
+        otmetit(marking, mir.student_ids[1], zadacha)
+    connection.commit()
+    god = panel(konduit.razdel(kontekst(connection)), "vse8")
+    assert galki(god) == [True, False, False]
+    assert schyotchiki(god)[0] == (3, 6), "по обязательным разреза он ещё не закрыл всё"
+
+
+def test_on_a_listok_tab_closing_that_listok_whole_is_not_a_second_criterion(
+    connection, marking
+):
+    """The disjunction of O5 belongs to the year cut and stays there.
+
+    On one листок «закрыл этот листок целиком» and «закрыл всё обязательное этого листка»
+    are two answers about the SAME листок, and taking the weaker one would quietly change
+    what the tick means on that tab.  Here the pupil takes the two `обязательная` problems
+    and NOT the `письменная` — obligatory too — so he has closed neither.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    mir = seed_world(connection, students=2, sheets=(LISTOK,))
+    zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
+    for zadacha in (zadachi[0], zadachi[1], zadachi[3], zadachi[4]):
+        otmetit(marking, mir.student_ids[0], zadacha)
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    assert galki(kusok) == [False, False]
+    assert schyotchiki(kusok)[0] == (2, 3), "письменная не сдана, и она обязательная"
+
+
+def test_the_year_tick_says_in_words_which_of_the_two_facts_lit_it(
+    connection, marking
+):
+    """The tooltip is the only place where the meaning of the column is written out.
+
+    Two different facts light the same tick on the year tab, and «закрыл все обязательные»
+    printed over a pupil who closed one листок instead would be the screen making a claim
+    the база does not support.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    mir = seed_world(connection, students=2, sheets=(LISTOK, LISTOK))
+    for zadacha in mir.problems_by_sheet[mir.sheet_ids[0]]:
+        otmetit(marking, mir.student_ids[0], zadacha)
+    connection.commit()
+    god = panel(konduit.razdel(kontekst(connection)), "vse8")
+    podskazka = re.search(r'<td class="gt gt-da" title="([^"]*)"', god).group(1)
+    assert "листок" in podskazka and "целиком" in podskazka, podskazka
 
 
 # ------------------------------------------------- величина 3: сколько сдало задачу
@@ -262,33 +421,37 @@ def zapisat(connection, student_id, teacher_id, slot, room="303",
         "values (?, ?, ?, ?, ?, ?)", (student_id, teacher_id, room, slot, ot, do))
 
 
-def test_the_initials_stand_beside_the_surname_and_not_in_a_column_of_their_own(
+def test_the_initials_stand_in_a_column_of_their_own_and_not_in_the_surname_cell(
     mir, connection
 ):
-    """The decision of the owner, 09.09: «не колонкой».
+    """The decision of the owner, 10.09 (O3), which REVERSES his decision of 09.09.
 
-    Judged by shape rather than by text: a column of принимающие would pass any check
-    on wording.  The header of a листок carries the surname, the счётчик обязательных
-    (its own column since the owner's edit of 10.09, H4.4) and one column per problem —
-    and NOTHING else.
+    On 09.09 he said «не колонкой» and the initials were written into the surname cell
+    as a superscript; this test asserted THAT.  On 10.09 he looked at «Агаркова Ирина
+    ᴰ·ᴱ·» on the live page and said: «ты правильно решил поместить инициалы
+    преподавателя в строку, но для этого нужен ОТДЕЛЬНЫЙ СТОЛБЕЦ. Должно быть:
+    „Агаркова Ирина“, а дальше идёт столбец» — and answered the objection that made
+    the first decision («there is no room») himself: «там, где заканчивается самая
+    длинная фамилия, ещё есть место».
 
-    🔴 THE COUNT IS SPELLED OUT AS A SUM, NOT WRITTEN AS A NUMBER.  When the счётчик
-    got its column this assertion went red, and the honest question at that moment was
-    "which column appeared" — a bare `== 7` cannot be asked that.  Naming the two
-    non-problem columns keeps the test able to say what it is defending.
+    🔴 THE COUNT IS SPELLED OUT AS A SUM, NOT WRITTEN AS A NUMBER.  Every time a column
+    appears this assertion goes red, and the honest question at that moment is "which
+    column appeared" — a bare `== 9` cannot be asked that.
     """
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1)
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    FAMILIA, SCHYOTCHIK = 1, 1
-    assert len(re.findall(r"<th[ >]", kusok)) == FAMILIA + SCHYOTCHIK + len(LISTOK)
-    # The one column that is not a problem and not the surname is the счётчик, named
-    # by its class: a column of принимающие would be an <th> of some other kind.
-    assert len(re.findall(r'<th class="sch"', kusok)) == SCHYOTCHIK
-    assert "прин" not in re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
-    # And the initials themselves live inside the surname cell.
+    FAMILIA, PRINIMAYUSHCHIJ, SCHYOTCHIK, GALKA = 1, 1, 1, 1
+    assert len(re.findall(r"<th[ >]", kusok)) == (
+        FAMILIA + PRINIMAYUSHCHIJ + SCHYOTCHIK + GALKA + len(LISTOK))
+    shapka_html = re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
+    assert len(re.findall(r'<th class="pr"', shapka_html)) == PRINIMAYUSHCHIJ
+    # 🔴 И ЭТО ТА ЖЕ ПРОВЕРКА ФОРМОЙ, ЧТО БЫЛА: клетка фамилии не несёт второго
+    # носителя.  Раньше она требовала инициалы ВНУТРИ неё, теперь — снаружи;
+    # проверяется одно и то же место, и подменить его словами по-прежнему нельзя.
     yacheyka = re.search(r'<td class="kto">(.*?)</td>', kusok, re.S).group(1)
-    assert '<i class="prin"' in yacheyka
+    assert "prin" not in yacheyka, yacheyka
+    assert '<td class="pr"><i class="prin"' in kusok
 
 
 def test_the_hover_carries_the_name_the_group_and_the_room(mir, connection):
@@ -368,6 +531,25 @@ def grobarij(html: str) -> str:
     return panel(html, "grob")
 
 
+def proza(kusok: str) -> str:
+    """Текст панели БЕЗ разметки и без её собственного заголовка — то, что владелец
+    назвал «кучей текста от тебя» (O4).  Именно эта величина обязана быть пустой у
+    пустого гробария; таблица с задачами прозой не считается — это данные."""
+    tekst = re.sub(r"<[^>]+>", "", kusok).strip()
+    return tekst[len("Гробарий"):].strip() if tekst.startswith("Гробарий") else tekst
+
+
+def pust(kusok: str) -> bool:
+    """Пустой гробарий — тот, в котором нет ни одной строки задачи.
+
+    🔴 СУДИТСЯ ФОРМОЙ, А НЕ СЛОВАМИ.  До 10.09 эти проверки искали фразу «Гробарий
+    пуст» — то есть держались за ту самую прозу, которую владелец потребовал убрать, и
+    покраснели бы на верной правке.  Пустота — это отсутствие таблицы, и такой ответ
+    переживает любой текст вокруг.
+    """
+    return "<table" not in kusok
+
+
 def devyatyj(connection, listki):
     """A world whose листки the кондуит counts as the NINTH class.
 
@@ -386,15 +568,24 @@ def devyatyj(connection, listki):
     return mir
 
 
-def test_with_one_listok_issued_the_grobarij_says_it_is_empty_and_why(connection):
-    """The state of the live база today, reproduced: exactly one листок has been issued."""
+def test_with_one_listok_issued_the_empty_grobarij_is_EMPTY(connection):
+    """The state of the live база today, reproduced: exactly one листок has been issued.
+
+    🔴 THIS TEST ASSERTED THE OPPOSITE UNTIL 10.09 and was named «…says it is empty and
+    why»: it demanded the rule «сюда попадают задачи листка…» and the sentence «Гробарий
+    пуст, и это не ошибка… наполнится сам».  The owner read that text on the live page and
+    said: «мне не нравится, что сюда попадает куча текста от тебя, а гробарий пуст.  Это не
+    ошибка — это нейрослоп.  Убираем это.  Пустой гробарий пусть будет пустым» (O4).
+    Nothing short replaces it, by the same rule that removed the кабинет caption (K1).
+    """
     devyatyj(connection, (LISTOK,))
     connection.commit()
     kusok = grobarij(konduit.razdel(kontekst(connection)))
-    assert "Гробарий пуст" in kusok
-    assert "исторических листков пока нет" in kusok
-    assert "наполнится сам" in kusok, "пустая вкладка обязана сказать, чего она ждёт"
-    assert "меньше 3" in kusok, "правило написано во вкладке всегда, а не только когда есть строки"
+    assert pust(kusok), kusok
+    assert proza(kusok) == "", proza(kusok)
+    # Заголовок панели остаётся: он называет вкладку, как называет её любая другая
+    # панель раздела, и он не «текст от тебя».
+    assert '<p class="zag2">Гробарий</p>' in kusok
 
 
 def test_the_previous_listok_falls_in_by_itself_when_the_next_one_is_issued(
@@ -420,7 +611,7 @@ def test_the_previous_listok_falls_in_by_itself_when_the_next_one_is_issued(
     connection.commit()
 
     kusok = grobarij(konduit.razdel(kontekst(connection)))
-    assert "Гробарий пуст" not in kusok
+    assert not pust(kusok), kusok
     zadachi_v_grobarii = re.findall(r'<td class="kto">([^<]*)', kusok)
     assert "1.1" not in zadachi_v_grobarii, "четверо сдали — не гробарий"
     assert "1.2" in zadachi_v_grobarii, "двое сдали — гробарий"
@@ -464,7 +655,7 @@ def test_versions_of_one_listok_do_not_make_each_other_historical(connection):
         connection.execute("update sheets set number = ?, issued_at = ? where id = ?",
                            (nomer, "2026-09-03", sheet_id))
     connection.commit()
-    assert "Гробарий пуст" in grobarij(konduit.razdel(kontekst(connection)))
+    assert pust(grobarij(konduit.razdel(kontekst(connection))))
 
 
 def test_a_listok_row_without_problems_does_not_bury_the_current_one(connection):
@@ -474,4 +665,4 @@ def test_a_listok_row_without_problems_does_not_bury_the_current_one(connection)
         "insert into sheets (number, title, issued_at, ord) values (?, ?, ?, ?)",
         ("16Z", "следующий, задачи ещё не внесены", "2026-09-14", 99))
     connection.commit()
-    assert "Гробарий пуст" in grobarij(konduit.razdel(kontekst(connection)))
+    assert pust(grobarij(konduit.razdel(kontekst(connection))))
