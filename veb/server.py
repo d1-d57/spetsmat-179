@@ -1957,6 +1957,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     vhod.proverit_okruzhenie()
 
     connection = connect()
+    # 🔴 СЕРВЕР НАЗЫВАЕТ ИСТОЧНИК ОДИН РАЗ, ПРИ СТАРТЕ, А НЕ НА КАЖДЫЙ ЗАПРОС.
+    # Он показывает числа человеку тысячу раз за занятие и в терминал их не
+    # печатает — строка на каждый запрос утонула бы в логе и её перестали бы
+    # читать. Здесь она стоит там, где на неё смотрят: рядом с адресом, по
+    # которому сервер только что открылся. Все обработчики (`veb/priyom.py`,
+    # `veb/sostoyanie.py`, `veb/razdely/*`) читают ЭТО ЖЕ соединение, поэтому
+    # названо оно для них всех разом, а не восемь раз по отдельности.
+    from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(connection)
     try:
         server = ThreadingHTTPServer((args.bind, args.port), Handler)
         server.connection = connection  # type: ignore[attr-defined]

@@ -38,7 +38,27 @@ from pathlib import Path
 KOREN = Path(__file__).resolve().parent.parent
 SHABLON = KOREN / "veb" / "templates" / "index.html"
 VYHOD_PO_UMOLCHANIYU = KOREN / "data" / "raspredelenie.html"
-BAZA = KOREN / "data" / "spetsmat.db"
+# 🔴 АДРЕС, А НЕ ИМЯ. Здесь стоял путь от корня репозитория — то самое второе
+# имя, из-за которого одна строка указывала на разные файлы на сервере и на
+# машине владельца, и указывала успешно. Источник называет переменная среды
+# `SPETSMAT_BAZA`; не названа — отказ с двумя законными адресами, а не фантом.
+# Разбор — `doc/ISTOCHNIK-BAZY.md`.
+def baza() -> Path:
+    # Корень репозитория в `sys.path`: этот файл запускают ФАЙЛОМ из `veb/`, и
+    # своим корнем он тогда видит `veb/`, где `config` не лежит.
+    if str(KOREN) not in sys.path:
+        sys.path.insert(0, str(KOREN))
+    import config
+    return config.DB_PATH
+
+
+def _istochnik_nazvat(conn) -> int:
+    """Позвать дверь источника, как её зовут все остальные читатели базы."""
+    import sys as _s
+    if str(KOREN) not in _s.path:
+        _s.path.insert(0, str(KOREN))
+    from core.istochnik import nazvat_i_proverit
+    return nazvat_i_proverit(conn)
 
 SLOT = 1  # тот же слот, что показывает страница на сервере
 
@@ -215,9 +235,12 @@ def rezhim_fajla(shablon: str) -> str:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--vyhod", type=Path, default=VYHOD_PO_UMOLCHANIYU)
-    p.add_argument("--baza", type=Path, default=BAZA)
+    p.add_argument("--baza", type=Path, default=None,
+                   help="база; без него — та, что назвала переменная SPETSMAT_BAZA")
     p.add_argument("--den", default=None, help="день занятия ГГГГ-ММ-ДД; по умолчанию ближайший")
     args = p.parse_args(argv)
+    if args.baza is None:
+        args.baza = baza()
 
     # 🔴 КОД 2 — «ПОЗВАЛИ НЕВЕРНО», И ОН ОБЯЗАН ОТЛИЧАТЬСЯ ОТ ОСТАЛЬНЫХ ДВУХ.
     # 0 — собрал, 1 — позвали верно, но собрать нечем (шаблон без метки, в файле
@@ -226,6 +249,12 @@ def main(argv=None) -> int:
     if not args.baza.is_file():
         print(f"Не нашёл базу: {args.baza}", file=sys.stderr)
         return 2
+
+    # 🔴 ЭТОТ ИНСТРУМЕНТ ПЕЧАТАЕТ ЧИСЛА ЧЕЛОВЕКУ (школьников, преподавателей,
+    # «не назначены: N») — значит обязан сказать, из какого файла они взяты. До
+    # 10.09 он не говорил, и число из мёртвой копии выглядело как число из живой.
+    with sqlite3.connect("file:%s?mode=ro" % args.baza, uri=True) as _c:
+        _istochnik_nazvat(_c)
 
     den = args.den or blizhajshee_zanyatie()
     dannye = sobrat_dannye(args.baza, den)

@@ -61,9 +61,17 @@ def test_neither_page_leaks_a_real_pupil_surname(running_server):
     stricter still, but this connection never executes a write) and the surnames pulled
     from it are used only for the ``assert ... not in`` check below — never printed.
     """
-    if not config.DB_PATH.is_file():
-        pytest.skip("no local data/spetsmat.db to check against")
-    conn = sqlite3.connect(str(config.DB_PATH))
+    # 🔴 ИСТОЧНИК МОЖЕТ БЫТЬ НЕ НАЗВАН, И ЭТО ЗАКОННЫЙ ИСХОД, А НЕ ПАДЕНИЕ ТЕСТА.
+    # С 10.09 у базы нет молчаливого умолчания: `config.DB_PATH` отказывает, когда
+    # `SPETSMAT_BAZA` не выставлена. Для этой проверки живой каталог — приятная
+    # добавка, а не условие: остальные её пункты работают и без него.
+    try:
+        put = config.DB_PATH
+    except SystemExit:
+        pytest.skip("источник не назван (SPETSMAT_BAZA): живого каталога для сверки нет")
+    if not put.is_file():
+        pytest.skip("названной базы нет на диске — сверять не с чем")
+    conn = sqlite3.connect(str(put))
     conn.row_factory = sqlite3.Row
     surnames = [
         row["surname"]

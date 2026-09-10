@@ -35,7 +35,7 @@ if str(KOREN) not in sys.path:
     sys.path.insert(0, str(KOREN))
 
 import config                                                    # noqa: E402
-from core.istochnik import SvidetelRaboty, nazvat_i_proverit      # noqa: E402
+from core.istochnik import SvidetelRaboty, nazvat_i_proverit, snyat_kopiyu  # noqa: E402
 from core.models import CellState                                 # noqa: E402
 from core.services.marking import MarkingService                  # noqa: E402
 from infra.db import SystemClock                                  # noqa: E402
@@ -69,7 +69,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--db", default=None, help="база (по умолчанию config.DB_PATH)")
     p.add_argument("--da", action="store_true", help="писать; без него — проба")
     p.add_argument("--vsyo-ravno", action="store_true",
-                   help="писать даже в базу, которую дверь источника назвала мёртвой")
+                   help="писать даже в базу, которую дверь источника отвергла")
+    p.add_argument("--bez-kopii", action="store_true",
+                   help="не снимать копию перед записью (для тестов; в школе не звать)")
     a = p.parse_args(argv)
 
     put = pathlib.Path(a.db) if a.db else config.DB_PATH
@@ -80,9 +82,16 @@ def main(argv: list[str] | None = None) -> int:
     # дату файла ставит checkout, а не запись данных. Дверь называет обе.
     # Отказ гейтует ЗАПИСЬ, а не пробу: разбор бумаги по мёртвой копии никому не
     # вреден и полезен — так проверяется сам разбор, до всякого доступа к боевой.
-    kod = nazvat_i_proverit(conn)
+    #
+    # 🔴 `boevye=` РАВНО ТОМУ, СОБИРАЕМСЯ ЛИ МЫ ПИСАТЬ, И ЭТО НЕ ЛИШНЯЯ ТОНКОСТЬ.
+    # Проба на тестовой копии — законная и полезная работа: так проверяется сам
+    # разбор бумаги, до всякого доступа к боевой. А ЗАПИСЬ в копию бессмысленна по
+    # построению: копия перезаписывается следующим снятием, и внесённые в неё
+    # тридцать шесть отметок исчезнут, ничем о себе не сообщив.
+    kod = nazvat_i_proverit(conn, boevye=a.da)
     if kod != 0 and a.da and not a.vsyo_ravno:
-        print("отказ: писать в базу, названную мёртвой, можно только с --vsyo-ravno")
+        print("отказ: писать можно только в живую боевую базу; см. строки выше. "
+              "Если ты уверен — повтори с --vsyo-ravno.")
         return 1
 
     shk = _odin(conn, "select id, surname, name from students where surname = ?",
@@ -118,6 +127,15 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print("ПРОБА. Ничего не записано. Повтори с --da, если всё верно.")
         return 0
+
+    # 🔴 КОПИЯ ПЕРЕД ЗАПИСЬЮ — ТОЧКА ОТКАТА, НАЗВАННАЯ ПУТЁМ. Дверь на запись
+    # обязана оставлять после себя файл, к которому можно вернуться, и назвать его
+    # вслух: «я сделал бэкап» без пути — это не точка отката, а обещание. Копия
+    # снимается той же штатной дверью и потому помечается `копия` изнутри — она не
+    # сможет потом выдать себя за боевую.
+    if not a.bez_kopii:
+        kopia = snyat_kopiyu(put, pathlib.Path(str(put) + ".do-vneseniya"))
+        print("копия ДО записи: %s" % kopia)
 
     # `valid_at` — когда сдача произошла НА САМОМ ДЕЛЕ, и она в прошлом; полный ISO
     # требует сервис. Полдень — середина занятия, а не попытка угадать минуту.

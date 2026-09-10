@@ -41,7 +41,14 @@ from datetime import date
 from dataclasses import dataclass, field
 
 KOREN = pathlib.Path(__file__).resolve().parent.parent.parent
-DATA = KOREN / "data" / "spetsmat.db"
+# 🔴 АДРЕС, А НЕ ИМЯ. Здесь стоял путь от корня репозитория — то самое второе
+# имя, из-за которого одна строка указывала на разные файлы на сервере и на
+# машине владельца, и указывала успешно. Источник называет переменная среды
+# `SPETSMAT_BAZA`; не названа — отказ с двумя законными адресами, а не фантом.
+# Разбор — `doc/ISTOCHNIK-BAZY.md`.
+def data() -> pathlib.Path:
+    import config
+    return config.DB_PATH
 
 # 🔴 ДНИ ЗАНЯТИЙ БЕРУТСЯ ИЗ ОДНОГО ДОМА — `veb/sobrat_fajl.py`. Вписанные руками
 # `DATA_NA` и `DATA_SLOVAMI` отсюда убраны: их никто не читал, а датой они
@@ -288,7 +295,7 @@ def sobrat_kontekst(rezhim: str = "gost", den=None) -> Kontekst:
     mogu = VOZMOZHNOSTI[rol]
 
 
-    c = sqlite3.connect(DATA)
+    c = sqlite3.connect(data())
     c.row_factory = sqlite3.Row
 
 

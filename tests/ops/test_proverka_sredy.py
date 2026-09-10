@@ -69,7 +69,10 @@ def test_foreign_keys_that_are_only_declared_go_red(tmp_path, monkeypatch):
 def test_the_probe_does_not_touch_the_live_database(monkeypatch, tmp_path):
     """A check that opens the live database is a second writer during a lesson."""
     live = tmp_path / "data" / "spetsmat.db"
-    monkeypatch.setattr("config.DB_PATH", live)
+    # 🔴 ЧЕРЕЗ СРЕДУ, А НЕ ЧЕРЕЗ `setattr`. `config.DB_PATH` больше не хранимая
+    # константа, а вопрос, на который отвечает окружение (PEP 562 `__getattr__`), и
+    # подмена атрибутом обошла бы ровно тот механизм, который тут и проверяется.
+    monkeypatch.setenv("SPETSMAT_BAZA", str(live))
     assert proverka_sredy.check_pragmas().passed
     assert not live.exists(), "the environment check created or opened the live database"
 
