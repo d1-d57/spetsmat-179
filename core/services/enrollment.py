@@ -107,6 +107,26 @@ class TeacherNotAttending(EnrollmentError):
     """
 
 
+class TeacherAbsentOnDay(EnrollmentError):
+    """Asked to give a student to a teacher who has said he will not be there THAT DAY.
+
+    🔴 NOT THE SAME REFUSAL AS ``TeacherNotAttending``, AND THE DIFFERENCE IS THE WHOLE
+    POINT.  That one is about the PERSON in general — «он вообще не ходит по четвергам»,
+    a standing fact kept in ``prepodavatel_ne_prihodit``.  This one is about ONE DATE —
+    «меня не будет 24 сентября», which the teacher himself puts into his cabinet and
+    which lands in ``teacher_attendance`` for that lesson, the same table and the same
+    row the organiser's «отсутствует» tick writes.
+
+    The owner asked for exactly this freeze, 09.09: *«в этом личном кабинете можно будет
+    отметить, что меня не будет в такое-то число… мы будем знать автоматически на вкладке
+    распределение на такую-то дату, что этого человека нету просто. Там будет написано
+    „отсутствует“, и это будет уже заморожено, потому что это человек сказал»*.  Frozen
+    means a WRITE is refused, not that a screen is greyed out: a greyed-out screen is
+    reopened by a page reload, and this заход's neighbour already paid for that lesson
+    twice in this same function.
+    """
+
+
 class CeilingExceeded(EnrollmentError):
     """Asked to give a teacher a student beyond ``TEACHER_CEILING`` in one lesson slot.
 
@@ -228,6 +248,22 @@ class TeacherCalendarPort(Protocol):
         """Does this teacher come in on this lesson slot?"""
 
 
+class TeacherPresencePort(Protocol):
+    """Has this teacher said he will not be there on THIS DATE?
+
+    A fact about one lesson, not about the person: it is written when he ticks a future
+    cell in his cabinet and unwritten when he unticks it.  It is a separate port from
+    ``TeacherCalendarPort`` because it answers a separate question and is stored in a
+    separate table; folding the two into one method would make «не ходит по четвергам»
+    and «не будет 24-го» indistinguishable to every caller, and the site has to show
+    them differently — one hides the teacher from the screen, the other marks him
+    «отсутствует» on it.
+    """
+
+    def otsutstvuet(self, teacher_id: int, day: str) -> bool:
+        """Is this teacher marked as not coming to the lesson on this calendar day?"""
+
+
 class EnrollmentPort(Protocol):
     """The store of enrollment intervals, as ``core/`` is allowed to see it.
 
@@ -337,14 +373,20 @@ class EnrollmentService:
         *,
         calendar: Optional[TeacherCalendarPort] = None,
         ceiling: Optional[int] = None,
+        presence: Optional[TeacherPresencePort] = None,
     ) -> None:
         self._rows = rows
-        # Both optional and off by default, like ``SostavService``'s ``roster``: the
-        # interactive form wires them in and gets the two hard refusals below; the
+        # All three optional and off by default, like ``SostavService``'s ``roster``:
+        # the interactive form wires them in and gets the hard refusals below; the
         # import tools and the bot correction paths — outside this заход's zone and
         # writing data that predates either rule — keep writing exactly as before.
         self._calendar = calendar
         self._ceiling = ceiling
+        # Added by the заход `kabinet-prepodavatelya` beside the other two rather than
+        # in a second method: a caller that has to remember to ask a SECOND question
+        # before every write is a caller that will forget on one path, and the path it
+        # forgets on is reachable by a page reload. One door, three refusals.
+        self._presence = presence
 
     # ------------------------------------------------------------- the two hard rules
 
@@ -372,6 +414,15 @@ class EnrollmentService:
             raise TeacherNotAttending(
                 "teacher %s does not attend slot %d: refused before the write"
                 % (teacher_id, slot)
+            )
+        # 🔴 THE DATE RULE IS ASKED SECOND AND ON PURPOSE. «Он вообще не ходит по
+        # четвергам» is the stronger statement and the one worth saying first when both
+        # are true; a person reading the refusal on screen should be told the permanent
+        # reason rather than today's one.
+        if self._presence is not None and self._presence.otsutstvuet(teacher_id, day):
+            raise TeacherAbsentOnDay(
+                "teacher %s is marked absent on %s: refused before the write"
+                % (teacher_id, day)
             )
         if self._ceiling is not None:
             carrying = [
