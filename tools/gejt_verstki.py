@@ -293,7 +293,8 @@ ZAMER = r"""
   const out = {obrezka: [], perenos: [], vyshli: [], centr: [], skroll: 0,
                osmotreno: 0, vsego: 0, na_obrezku: 0, na_vyhod: 0,
                na_centr: 0, isklyucheno: 0, bez_sdviga: 0,
-               pravil: 0, pravila_zhivye: [], pravila_pustye: [], pravil_nechitaemyh: 0};
+               pravil: 0, pravila_zhivye: [], pravila_pustye: [], pravil_nechitaemyh: 0,
+               vidno_uzlov: 0, vidno_simvolov: 0, glavnoe: '', skryto_simvolov: 0};
 
   out.skroll = Math.max(0,
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -754,6 +755,28 @@ ZAMER = r"""
   }
   out.centr = [...nayden.values()];
 
+  // ── 7. НА ЭКРАНЕ ВИДНО ХОТЬ ЧТО-ТО ─────────────────────────────────────────
+  // 🔴 ПУСТОЙ ЭКРАН ПРИ НЕПУСТЫХ ДАННЫХ — КРАСНОЕ.  Все проверки выше судят то,
+  // что НАРИСОВАНО: где ничего не нарисовано, там у каждой из них ноль находок,
+  // и пять нулей подряд читаются как «чисто».  `/istoria` печатала ровно такие
+  // нули, будучи невидимой целиком.  Считается собственный текст видимых узлов
+  // главной области — то, что человек может прочитать глазами.
+  //
+  // Рядом считается и СКРЫТОЕ: разница между «страница пуста» и «страница
+  // написана, но не показана» — это и есть болезнь «написано, не подключено»,
+  // и без второго числа первое ни о чём не говорит.
+  const glavnoe = document.querySelector('main') || document.body;
+  out.glavnoe = glavnoe.tagName.toLowerCase();
+  for (const el of glavnoe.querySelectorAll('*')) {
+    if (['SCRIPT', 'STYLE'].includes(el.tagName)) continue;
+    let svoy = '';
+    for (const k of el.childNodes)
+      if (k.nodeType === 3 && (k.nodeValue || '').trim()) svoy += k.nodeValue.trim();
+    if (!svoy) continue;
+    if (vidim(el)) { out.vidno_uzlov++; out.vidno_simvolov += svoy.length; }
+    else out.skryto_simvolov += svoy.length;
+  }
+
   // ── 6. ПРАВИЛО CSS, НЕ СОВПАВШЕЕ НИ С ОДНИМ УЗЛОМ ───────────────────────────
   // 🔴 ЭТО ТА САМАЯ ПРОВЕРКА, БЕЗ КОТОРОЙ УМЕРЛА ИСТОРИЯ.  Правило
   // `#iv-shk:checked~#is-shk{display:block}` требует, чтобы панель была СЕСТРОЙ
@@ -1112,6 +1135,17 @@ def kuka() -> dict:
     return {"name": vhod.COOKIE_NAME, "value": vhod._make_cookie("organizator")}
 
 
+def pustoy_ekran(zamer: dict, shkolnikov: int) -> bool:
+    """Пуст ли экран ПРИ НЕПУСТЫХ ДАННЫХ.
+
+    Правилом, а не строкой внутри печати, по той же причине, что и `svoy_dom`:
+    его испытывают литералами.  🔴 Условие двойное нарочно. Пустой экран на
+    пустой базе — честный пустой экран, и краснеть на нём значит краснеть на
+    свежей установке; пустой экран при 54 живых школьниках — дефект.
+    """
+    return bool(shkolnikov) and zamer.get("vidno_uzlov", 0) == 0
+
+
 def svoy_dom(baza_url: str, adres: str) -> bool:
     """Осталась ли страница на сервере, который поднял гейт.
 
@@ -1296,10 +1330,22 @@ def main() -> int:
                   f"🔴 ОХВАТ НОЛЬ: узлов {z['vsego']}, на обрезку "
                   f"{z['na_obrezku']}, на центр {z['na_centr']}")
             continue
+        # 🔴 ПУСТОЙ ЭКРАН ПРИ НЕПУСТЫХ ДАННЫХ — КРАСНОЕ, И ЭТО ОТДЕЛЬНЫЙ ИСХОД.
+        # Пять нулей на экране, где ничего не нарисовано, выглядят как чистая
+        # страница: у всех проверок ноль находок ровно потому, что судить нечего.
+        if pustoy_ekran(z, chisla["vsego"]):
+            krasnyh += 1
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}{'—':>8}   "
+                  f"🔴 ПУСТОЙ ЭКРАН: в <{z['glavnoe']}> не видно ни одного узла с "
+                  f"текстом, а в базе {chisla['vsego']} школьников"
+                  + (f"; при этом СКРЫТО {z['skryto_simvolov']} знаков разметки — "
+                     f"написано, но не показано" if z["skryto_simvolov"] else ""))
+            continue
         print(f"{rol:<13}{imya:<15}{len(z['obrezka']):>9}{len(z['perenos']):>10}"
               f"{len(z['vyshli']):>8}{len(z['centr']):>7}{z['skroll']:>8}   "
               f"проверено {z['na_obrezku']}/{z['osmotreno']}/{z['na_vyhod']}/"
-              f"{z['na_centr']} из {z['vsego']}")
+              f"{z['na_centr']} из {z['vsego']} · видно {z['vidno_uzlov']} узлов "
+              f"({z['vidno_simvolov']} знаков), скрыто {z['skryto_simvolov']}")
 
     print()
     print(f"ОХВАТ: проверено {izmereno} экранов из {dolzhno_byt} обещанных "
@@ -1452,6 +1498,11 @@ def main() -> int:
           "только НЕСОБИРАЕМОЕ правило: все части на месте, связь невозможна."
           "\n · правило из листа, который браузер не отдал (чужой источник): "
           "считается отдельным числом, содержимое недоступно."
+          "\n · ЭКРАН, НА КОТОРОМ ВИДНО МАЛО, А СКРЫТО МНОГО. Красное — только "
+          "полный ноль видимых узлов с текстом; отношение «видно к скрыто» "
+          "порогом не судится, потому что на распределении скрытых вкладок "
+          "законно в сто раз больше видимого, а на мёртвой истории — впятеро. "
+          "Оба числа печатаются рядом на каждом экране, и читает их человек."
           "\n · правило, живущее в состоянии, до которого гейт не доходит "
           "(раскрытый список, окно входа): состояние снимается ПЕРЕД проверкой, "
           "поэтому такое правило судится по структуре и мёртвым не станет — но "

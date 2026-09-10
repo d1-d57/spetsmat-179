@@ -960,3 +960,50 @@ def test_pravilo_zhivoe_na_sosednem_ekrane_ne_mertvoe(server, brauzer):
         "кондуите — значит эта проверка испытана не была")
     assert not (zh_rasp & set(pu_rasp)), (
         "один экран объявил селектор и живым, и пустым одновременно")
+
+
+# ── 7. пустой экран при непустых данных ───────────────────────────────────────
+
+def test_pustoy_ekran_krasneet_i_zeleneet(server, brauzer):
+    """🔴 ПЯТЬ НУЛЕЙ НА ПУСТОМ ЭКРАНЕ ЧИТАЮТСЯ КАК ЧИСТАЯ СТРАНИЦА.  Все проверки
+    гейта судят НАРИСОВАННОЕ: где не нарисовано ничего, у каждой ноль находок —
+    и `/istoria` печатала ровно такие нули, будучи невидимой целиком.  Пара:
+    главная область спрятана — экран объявлен пустым; возвращена — молчит."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        do = _zamer(p)
+        assert do["vidno_uzlov"] > 0, "здоровый экран объявлен пустым"
+        assert not gejt.pustoy_ekran(do, 54)
+
+        p.evaluate("""() => {
+            const m = document.querySelector('main') || document.body;
+            m.setAttribute('data-bylo', m.getAttribute('style') || '');
+            m.style.setProperty('visibility', 'hidden', 'important');
+        }""")
+        posle = _zamer(p)
+        assert posle["vidno_uzlov"] == 0, (
+            f"главная область спрятана, а гейт видит {posle['vidno_uzlov']} узлов")
+        assert gejt.pustoy_ekran(posle, 54), "пустой экран не объявлен пустым"
+        # 🔴 И ЭТО ИМЕННО «НАПИСАНО, НО НЕ ПОКАЗАНО», А НЕ «ПУСТАЯ СТРАНИЦА»:
+        # разметка на месте, и второе число это говорит.
+        assert posle["skryto_simvolov"] > 0
+
+        p.evaluate("""() => {
+            const m = document.querySelector('main') || document.body;
+            m.setAttribute('style', m.getAttribute('data-bylo') || '');
+        }""")
+        vernuli = _zamer(p)
+        assert vernuli["vidno_uzlov"] > 0
+        assert not gejt.pustoy_ekran(vernuli, 54)
+    finally:
+        ctx.close()
+
+
+def test_pustoy_ekran_na_pustoy_baze_ne_nahodka():
+    """Граница, названная вслух: пустой экран на ПУСТОЙ базе — честный пустой
+    экран.  Красное на нём значило бы красное на свежей установке, где показывать
+    ещё нечего, и такой гейт выключают в первый же день."""
+    pusto = {"vidno_uzlov": 0, "skryto_simvolov": 0}
+    assert gejt.pustoy_ekran(pusto, 54)
+    assert not gejt.pustoy_ekran(pusto, 0)
+    assert not gejt.pustoy_ekran({"vidno_uzlov": 3}, 54)
