@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# TOOL-CONTRACT: called-by-human — the owner runs it when somebody asks for their password to
+# TOOL-CONTRACT: called-by-hand — the owner runs it when somebody asks for their password to
 # be changed and the browser form is not yet there (`veb/server.py`, outside this заход's zone).
 """Change one person's personal password to one they chose, from the terminal.
 
