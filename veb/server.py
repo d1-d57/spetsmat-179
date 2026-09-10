@@ -788,6 +788,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/teachers":
             self._send_json(200, _all_teachers(self._connection()))
             return
+        if path == "/api/den/perekrytiya":
+            # 🔴 ЧИСЛО ДЛЯ ВОПРОСА «СНЯТЬ N РУЧНЫХ ПРАВОК?» СЧИТАЕТСЯ В МОМЕНТ ПОКАЗА,
+            # А НЕ ВПИСЫВАЕТСЯ В СТРАНИЦУ ПРИ СБОРКЕ. Страницу распределения держат
+            # открытой всё занятие, а слой занятия правят с телефонов в это же время:
+            # число, посчитанное при сборке, к моменту нажатия успевает устареть, и
+            # человек подтверждает не то, что произойдёт. Здесь же берётся и СПИСОК
+            # имён — тем же вызовом, что и число, чтобы вопрос и ответ не разошлись.
+            self._den_perekrytiya()
+            return
         if path == "/api/view":
             slot = self._read_slot()
             if slot is None:
@@ -1064,6 +1073,14 @@ class Handler(BaseHTTPRequestHandler):
             if self._pravka_zapreshchena():
                 return
             self._post_zanyatie()
+            return
+        if path == "/api/den/primenit-postoyannoe":
+            # 🔴 ТА ЖЕ ДВЕРЬ ПРАВ, ЧТО У `/api/zanyatie`: кнопка пишет слой ЗАНЯТИЯ и
+            # ничего кроме. Постоянное она не трогает ни строкой — она его ПРИМЕНЯЕТ,
+            # то есть убирает то, что стояло поверх.
+            if self._pravka_zapreshchena():
+                return
+            self._post_primenit_postoyannoe()
             return
         if path == "/api/enrollment":
             # 🔴 ПРАВКА ЗА ПАРОЛЕМ — решение владельца 2026-09-06 (см. SVOBODNAYA_PRAVKA).
@@ -1560,6 +1577,145 @@ class Handler(BaseHTTPRequestHandler):
             _peresobrat()
         except Exception:
             pass
+
+    # ------------------------------------------- «применить постоянное к этому дню»
+    #
+    # 🔴 ЗАЧЕМ ЭТА КНОПКА ВООБЩЕ СУЩЕСТВУЕТ. Правка постоянного распределения
+    # действует с сегодняшнего дня — это проверено живым прогоном на копии боевой
+    # базы 2026-09-10 и работает. Не видно её ровно на тех школьниках, на которых в
+    # слое ЗАНЯТИЯ лежит ручная строка со своим преподавателем: слой занятия сильнее
+    # постоянного, и это правило владельца, а не дефект. Значит чинить нужно не
+    # старшинство слоёв, а отсутствие способа сказать «сегодня ручных правок больше
+    # нет, возьми постоянное». Кнопка и есть этот способ.
+
+    def _den_iz_zaprosa(self):
+        """Дата из строки запроса, или день по умолчанию. `None` — ответ уже отправлен."""
+        zapros = parse_qs(urlparse(self.path).query).get("den", [""])[0]
+        try:
+            return date.fromisoformat(zapros).isoformat() if zapros else data_po_umolchaniyu()
+        except ValueError:
+            self._send_json(400, {"error": "den must be YYYY-MM-DD"})
+            return None
+
+    def _perekrytiya_dnya(self, conn, den: str) -> tuple:
+        """id школьников под снятие — ОДИН расчёт, которым отвечают ОБА маршрута.
+
+        🔴 `roster` СЮДА НЕ ПЕРЕДАЁТСЯ, И ЭТО НЕ ЭКОНОМИЯ. Он нужен составу дня для
+        того, чтобы на экране не пропал школьник, оставшийся без строк вовсе; у такого
+        школьника перекрытия нет по построению, и попасть в этот список он не может.
+        Лишний порт здесь означал бы лишний повод разойтись с тем, что считает служба.
+        """
+        from core.services.sostav_na_den import SostavService, perekrytiya_k_snyatiyu
+        from veb.razdely.zanyatie import otsutstvuyushchie_prepodavateli
+        from infra.room_repo import SqliteAttendance, SqliteSessions
+        sostav = SostavService(
+            enrollment=SqliteEnrollmentRepo(conn),
+            sessions=SqliteSessions(conn),
+            attendance=SqliteAttendance(conn),
+        ).sostav(den)
+        return perekrytiya_k_snyatiyu(sostav, otsutstvuyushchie_prepodavateli(conn, den))
+
+    def _chisla_dnya(self, conn, den: str) -> dict:
+        """Три числа, которыми судят кнопку: строк всего · из них с принимающим ·
+        отметок отсутствия. Считаются запросом, а не выводятся из ответа обработчика:
+        число, посчитанное тем же кодом, который правил, подтверждает само себя.
+        """
+        from core.services.sostav_na_den import OTSUTSTVUET
+        ryad = conn.execute("select id from sessions where held_on = ?", (den,)).fetchone()
+        if ryad is None:
+            return {"strok": 0, "s_prepodavatelem": 0, "otmetok_otsutstvia": 0}
+        sid = ryad["id"]
+        odno = lambda sql, *p: conn.execute(sql, p).fetchone()[0]
+        return {
+            "strok": odno("select count(*) from attendance where session_id = ?", sid),
+            "s_prepodavatelem": odno(
+                "select count(*) from attendance "
+                "where session_id = ? and teacher_id is not null", sid),
+            "otmetok_otsutstvia": odno(
+                "select count(*) from attendance where session_id = ? and status = ?",
+                sid, OTSUTSTVUET),
+        }
+
+    def _den_perekrytiya(self) -> None:
+        """Сколько ручных правок по принимающему лежит на этом дне, и на ком именно."""
+        den = self._den_iz_zaprosa()
+        if den is None:
+            return
+        from core.services.sostav_na_den import slot_of
+        if slot_of(den) is None:
+            self._send_json(400, {"error": "не день занятия"})
+            return
+        conn = self._connection()
+        ids = self._perekrytiya_dnya(conn, den)
+        imena = []
+        for student_id in ids:
+            r = conn.execute("select surname, name from students where id = ?",
+                             (student_id,)).fetchone()
+            imena.append({"id": student_id,
+                          "imya": ("%s %s" % (r["surname"], r["name"])) if r else str(student_id)})
+        self._send_json(200, {"den": den, "n": len(ids), "shkolniki": imena})
+
+    def _post_primenit_postoyannoe(self) -> None:
+        """Снять ручные правки по принимающему за этот день — и больше ничего.
+
+        🔴 СНЯТИЕ ПЕРЕКРЫТИЯ — ЭТО УДАЛЕНИЕ СТРОКИ, А НЕ ЗАПИСЬ ПОСТОЯННОГО В СЛОЙ
+        ЗАНЯТИЯ. `doc/TZ-sloj-zanyatia.md §2`: чего занятие не упоминает, то читается
+        из постоянного на лету. Записав сюда сегодняшнего преподавателя, кнопка
+        заморозила бы постоянное на этом дне ровно так же, как это делает ручная
+        правка, — то есть починила бы симптом, воспроизведя причину.
+
+        Строка, которая несёт ЕЩЁ ЧТО-ТО кроме преподавателя (отметку отсутствия или
+        группу дня), не удаляется: у неё обнуляется только `teacher_id`. Это второе
+        высказывание о том же школьнике, и кнопка про него ничего не говорит.
+        """
+        try:
+            p = json.loads(self.rfile.read(
+                int(self.headers.get("Content-Length", 0))) or b"{}")
+        except (ValueError, TypeError):
+            self._send_json(400, {"error": "нечитаемое тело"})
+            return
+        den = (p.get("den") or "").strip()
+        try:
+            date.fromisoformat(den)
+        except ValueError:
+            self._send_json(400, {"error": "den must be YYYY-MM-DD"})
+            return
+        from core.services.sostav_na_den import OTSUTSTVUET, slot_of
+        if slot_of(den) is None:
+            self._send_json(400, {"error": "не день занятия"})
+            return
+
+        conn = self._connection()
+        do = self._chisla_dnya(conn, den)
+        ryad = conn.execute("select id from sessions where held_on = ?", (den,)).fetchone()
+        if ryad is None:
+            # Занятия нет — значит и отклонений нет. Заводить его здесь нечем и незачем:
+            # кнопка не создаёт день, она разбирает то, что на нём лежит.
+            self._send_json(200, {"ok": True, "den": den, "snyato": 0,
+                                  "do": do, "posle": do})
+            return
+        session_id = ryad["id"]
+
+        ids = self._perekrytiya_dnya(conn, den)
+        for student_id in ids:
+            stroka = conn.execute(
+                "select status, gruppa from attendance "
+                "where session_id = ? and student_id = ?", (session_id, student_id)).fetchone()
+            if stroka is None:
+                continue
+            if stroka["status"] != OTSUTSTVUET and stroka["gruppa"] is None:
+                conn.execute("delete from attendance "
+                             "where session_id = ? and student_id = ?",
+                             (session_id, student_id))
+            else:
+                conn.execute("update attendance set teacher_id = null "
+                             "where session_id = ? and student_id = ?",
+                             (session_id, student_id))
+        conn.commit()
+        posle = self._chisla_dnya(conn, den)
+        self._peresobrat_tiho()
+        self._send_json(200, {"ok": True, "den": den, "snyato": len(ids),
+                              "shkolniki": list(ids), "do": do, "posle": posle})
 
     def _post_enrollment(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")
