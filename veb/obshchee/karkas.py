@@ -562,6 +562,11 @@ PRAVKA_SKRIPT = r"""
   }
 
   function pomenyalos(el, klyuch, operacia){
+    /* 🔴 ОДНО ИМЯ АТРИБУТА, И ЭТО СОГЛАШЕНИЕ, А НЕ ПРОВЕРКА. Правка на один день
+       уезжает сразу; шаблонная ждёт кнопки. Различает их `data-den` — и ТОЛЬКО он.
+       Второе имя здесь было бы заплаткой: имён стало бы два, и следующий орган
+       выпал бы опять. Поле кабинета, единственное выпавшее из соглашения, приведено
+       к нему (`veb/razdely/gruppy.py`), а не обойдено здесь. */
     if(el.dataset.den){
       srazu(el, operacia);
       return;
@@ -702,9 +707,11 @@ PRAVKA_SKRIPT = r"""
     }else if(el.classList.contains('kab-inp')){
       const k = el.value.trim();
       if(!k){ el.value = el.defaultValue; return; }
-      pomenyalos(el, 'kab:' + el.dataset.gruppa + ':' + el.dataset.data,
+      /* День читается ОТТУДА ЖЕ, откуда его берёт `pomenyalos` — из `data-den`.
+         Два источника одной даты разошлись бы при первой же правке разметки. */
+      pomenyalos(el, 'kab:' + el.dataset.gruppa + ':' + el.dataset.den,
         {put:'/api/kabinety', telo:{gruppa:el.dataset.gruppa, kabinet:k,
-                                    data:el.dataset.data}});
+                                    data:el.dataset.den}});
     }
   });
 

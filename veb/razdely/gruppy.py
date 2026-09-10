@@ -75,8 +75,18 @@ def vkladka_gruppy(kt, kod):
         # вводится: в списках распределения у организатора его нет вовсе.
         polya = "".join(
             f'<label class="kab-pole">{e(kt.DNI[k][3])}'
+            # 🔴 `data-den`, А НЕ `data-data` — ЭТО СОГЛАШЕНИЕ ВСЕЙ СТРАНИЦЫ.
+            # Автосохранение включается единственным условием `if(el.dataset.den)`
+            # в `pomenyalos`. Все прочие правящие органы несут `data-den`
+            # (`kabinet.py:374`, `prepodavateli.py:229`, `shkolniki.py` в трёх
+            # местах, `karkas.py`); поле кабинета было ЕДИНСТВЕННЫМ выпавшим — и
+            # потому его правка уходила в очередь `pravki`, а кнопки «Сохранить»
+            # на этой странице нет вовсе («правки сохраняются сразу»). Очередь
+            # отправить было нечем, `beforeunload` держал страницу навсегда.
+            # ЦЕНА, ОПЛАЧЕНА ВЛАДЕЛЬЦЕМ ПЕРЕД ЗАНЯТИЕМ 10.09: набрал 207, поле
+            # показало 207, в базе осталось 202, со страницы не выпускало.
             f'<input class="org kab-inp" data-gruppa="{e(kod)}"'
-            f' data-data="{e(kt.DNI[k][2])}"'
+            f' data-den="{e(kt.DNI[k][2])}"'
             f' value="{e(kt.kabinety_dnya[k].get(kod) or "")}"'
             f' size="5" placeholder="—"></label>'
             for k in kt.DNI)
