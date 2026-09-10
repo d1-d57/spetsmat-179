@@ -226,7 +226,14 @@ def vidimye_prepodavateli(kt):
     что этот преподаватель вообще не ходит по четвергам, и тогда мы его не будем
     видеть в текущем распределении на четверг»*.
     """
-    vse = sorted(kt.prep.values(), key=lambda z: z["name"])
+    # 🔴 ПО ФАМИЛИИ, А НЕ ПО ИМЕНИ (владелец 10.09, G7: «сейчас отсортированы по
+    # имени. Должны быть по фамилии, в русском алфавитном порядке»). Ключ живёт
+    # в `shkolniki.kluch_familii` — там же, где им сортируется выпадающий список
+    # принимающих: два ответа на вопрос «в каком порядке идут принимающие»
+    # разошлись бы, и порядок в списке перестал бы совпадать с порядком карточек
+    # справа от него.
+    from veb.razdely.shkolniki import kluch_familii
+    vse = sorted(kt.prep.values(), key=lambda z: kluch_familii(z["name"]))
     if not kt.den:
         return vse
     slot = kt.DNI[next(iter(kt.DNI))][1]
