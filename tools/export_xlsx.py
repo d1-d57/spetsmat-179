@@ -123,6 +123,16 @@ def open_read_only(db_path: Optional[Path] = None) -> sqlite3.Connection:
             "для проверки самого экспорта: python3 tools/export_xlsx.py --proba" % path
         )
     connection = sqlite3.connect("file:%s?mode=ro" % path, uri=True, isolation_level=None)
+    # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09). Путь и дата последней
+    # ЗАПИСИ внутри базы; красное, если база старше последнего занятия. Дата ФАЙЛА
+    # для этого не годится: копирование и rsync её обновляют, не добавив ни строки.
+    try:                                  # запуск и модулем, и файлом из tools/
+        from core.istochnik import nazvat_i_proverit
+    except ModuleNotFoundError:           # прямой запуск: корня репозитория нет в sys.path
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+        from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(connection)
     connection.row_factory = sqlite3.Row
     connection.execute("pragma busy_timeout = %d" % config.BUSY_TIMEOUT_MS)
     return connection

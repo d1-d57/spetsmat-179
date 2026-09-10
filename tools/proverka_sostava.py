@@ -26,6 +26,16 @@ COMPOSITION_ARITH = 55    # арифметика по изменениям со�
 
 def main() -> int:
     conn = sqlite3.connect(DB)
+    # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09). Путь и дата последней
+    # ЗАПИСИ внутри базы; красное, если база старше последнего занятия. Дата ФАЙЛА
+    # для этого не годится: копирование и rsync её обновляют, не добавив ни строки.
+    try:                                  # запуск и модулем, и файлом из tools/
+        from core.istochnik import nazvat_i_proverit
+    except ModuleNotFoundError:           # прямой запуск: корня репозитория нет в sys.path
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+        from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(conn)
     cur = conn.cursor()
 
     # 🔴 ТОЛЬКО АКТИВНЫЕ. Правка оркестратора 2026-09-04 18:44: ушедшие остаются в

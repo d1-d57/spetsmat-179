@@ -534,6 +534,15 @@ def main(argv=None) -> int:
     import config
     put = pathlib.Path(args.db) if args.db else config.DB_PATH
     conn = sqlite3.connect(str(put), isolation_level=None)
+    # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09): путь и дата последней
+    # ЗАПИСИ внутри базы, красное — если база старше последнего занятия.
+    try:                                  # запуск и модулем, и файлом из tools/
+        from core.istochnik import nazvat_i_proverit
+    except ModuleNotFoundError:           # прямой запуск: корня репозитория нет в sys.path
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+        from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(conn)
     conn.execute("pragma foreign_keys = on")
     conn.execute("begin immediate")
     try:

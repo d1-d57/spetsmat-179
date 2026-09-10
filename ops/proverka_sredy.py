@@ -101,6 +101,16 @@ def check_pragmas(db_path: Path | str | None = None) -> OneCheck:
         db_path = Path(workspace.name) / "probe.db"
     try:
         connection = connect(db_path)
+        # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09). Путь и дата последней
+        # ЗАПИСИ внутри базы; красное, если база старше последнего занятия. Дата ФАЙЛА
+        # для этого не годится: копирование и rsync её обновляют, не добавив ни строки.
+        try:                                  # запуск и модулем, и файлом из tools/
+            from core.istochnik import nazvat_i_proverit
+        except ModuleNotFoundError:           # прямой запуск: корня репозитория нет в sys.path
+            import sys as _s, pathlib as _p
+            _s.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+            from core.istochnik import nazvat_i_proverit
+        nazvat_i_proverit(connection)
         try:
             journal = connection.execute("pragma journal_mode").fetchone()[0]
             busy = connection.execute("pragma busy_timeout").fetchone()[0]

@@ -293,6 +293,15 @@ def snyat_snimok(db_path: Path, backup_dir: Path, *, now: Optional[datetime] = N
     snapshot = backup_dir / now.strftime(SNAPSHOT_FORMAT)
 
     connection = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True, isolation_level=None)
+    # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09): путь и дата последней
+    # ЗАПИСИ внутри базы, красное — если база старше последнего занятия.
+    try:                                  # запуск и модулем, и файлом из tools/
+        from core.istochnik import nazvat_i_proverit
+    except ModuleNotFoundError:           # прямой запуск: корня репозитория нет в sys.path
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+        from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(connection)
     try:
         connection.execute("pragma busy_timeout = %d" % config.BUSY_TIMEOUT_MS)
         with tempfile.TemporaryDirectory(prefix="spetsmat-vacuum-") as directory:

@@ -69,6 +69,16 @@ POLYA = ("id", "student_id", "teacher_id", "room", "slot", "valid_from", "valid_
 def _open_ro(path: str) -> sqlite3.Connection:
     """Read-only, and through the URI form so SQLite enforces it rather than us."""
     conn = sqlite3.connect("file:%s?mode=ro" % Path(path).resolve(), uri=True)
+    # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09). Путь и дата последней
+    # ЗАПИСИ внутри базы; красное, если база старше последнего занятия. Дата ФАЙЛА
+    # для этого не годится: копирование и rsync её обновляют, не добавив ни строки.
+    try:                                  # запуск и модулем, и файлом из tools/
+        from core.istochnik import nazvat_i_proverit
+    except ModuleNotFoundError:           # прямой запуск: корня репозитория нет в sys.path
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+        from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(conn)
     conn.row_factory = sqlite3.Row
     return conn
 

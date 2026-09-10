@@ -156,6 +156,16 @@ def roster_from_catalogue(db_path):
     from infra.repositories import SqliteCatalogue
 
     connection = connect(db_path)
+    # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09). Путь и дата последней
+    # ЗАПИСИ внутри базы; красное, если база старше последнего занятия. Дата ФАЙЛА
+    # для этого не годится: копирование и rsync её обновляют, не добавив ни строки.
+    try:                                  # запуск и модулем, и файлом из tools/
+        from core.istochnik import nazvat_i_proverit
+    except ModuleNotFoundError:           # прямой запуск: корня репозитория нет в sys.path
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+        from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(connection)
     try:
         students = [s for s in SqliteCatalogue(connection).students() if s.status != "left"]
     finally:

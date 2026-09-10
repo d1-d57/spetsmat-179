@@ -165,6 +165,15 @@ def prochitat_shkolnikov(db_path: Path) -> list:
     file knows the field is not a single global id.
     """
     connection = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True)
+    # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09): путь и дата последней
+    # ЗАПИСИ внутри базы, красное — если база старше последнего занятия.
+    try:                                  # запуск и модулем, и файлом из tools/
+        from core.istochnik import nazvat_i_proverit
+    except ModuleNotFoundError:           # прямой запуск: корня репозитория нет в sys.path
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+        from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(connection)
     connection.row_factory = sqlite3.Row
     lyudi = []
     for row in connection.execute(
