@@ -275,11 +275,18 @@ grep -n '<как механизм назван в вызывающем коде>
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
-> Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
-> **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
-> Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
-> **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
-> **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
+
+### The live schema of the боевая база is wider than `migrations/`, and a заход only learns it on its first test
+ЦЕНА: four columns — `teachers.gruppa`, `teachers.kabinet`, `teachers.aktiven`,
+`students.gruppa` — exist on the live база and in the repository's `data/spetsmat.db`, and
+not one of the ten migrations creates them: a database built from scratch by
+`apply_migrations` has none of them. It cost five red tests and half an hour of diagnosis,
+because the refusal arrives as `no such column: t.gruppa` from somebody else's function
+(`veb/razdely/lichnaya.kabinet_na_datu`), so the first hypothesis is «I called the
+neighbour wrongly» rather than «the schema in git is incomplete». Worked around inside the
+zone (the test adds the missing columns and says why); NOT fixed — touching `migrations/`
+is not this position's right. It is a trap for EVERY future заход of this project that
+writes a test against a fresh database.
 
 ## ПЛАН — (заполняет исполнитель)
 
@@ -361,19 +368,64 @@ threshold.
    the §3 верификатор subagent, then commit → влитие → пост-проверка → гашение → вывоз.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
-> Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
-> ```
-> N. <текст находки>
->    ДОМ: <путь от корня репозитория | владелец>
->    ДОСТАВЛЕНО: нет
-> ```
-> 🔴 **`ДОМ:` — ОБЯЗАТЕЛЬНОЕ ПОЛЕ, И АДРЕС В НЁМ ОБЯЗАН СУЩЕСТВОВАТЬ В МОМЕНТ, КОГДА ТЫ ЕГО ПИШЕШЬ.** Путь, которого нет на диске, — не адрес: такую запись нельзя ни доставить, ни спросить, и она не чинится ничем. Замер 2026-09-06 по 632 файлам `kod_*.md`: 370 пунктов очереди из 1570 родились ровно так — больше, чем всех доставимых (195) вместе взятых. Проверить СВОЙ файл до отчёта — одна команда:
-> ```
-> python3 _generator/tools/bootstrap_zahod.py --proverit-doma <этот файл>
-> ```
-> rc=0 — все дома достижимы; rc=1 — назван дом, которого нет (команда печатает какой именно). Тот же разбор гоняет `Г7` приёмки, и у него храповик: у ЭТОГО захода база 0, поэтому первый же недостижимый дом здесь — красный на приёмке, а не запись, которую через неделю никто не найдёт.
-> `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
-> 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+1. THE THRESHOLD HAS A GAP IN IT, AND THE GAP IS THE OWNER'S OWN WORDING RATHER THAN A BUG.
+   «Закрыта классом» is *more* than three solvers; гробарий is *fewer* than three. A problem
+   taken by EXACTLY three falls into neither: it is not closed and it is not a гробарий.
+   Both halves read the single `config.GRAVEYARD_THRESHOLD = 3`, so they cannot drift
+   further apart, but closing the gap is a person's decision: «closed at >= 3» or «гробарий
+   at <= 3». On the live база today 22 problems of 595 sit in that gap (439 closed by the
+   class, 134 below three).
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. THE ГРОБАРИЙ EXISTS ONLY FOR THE NINTH CLASS. The eighteen листки of the eighth were
+   issued 2025-09-01 and nothing will ever supersede them — by the rule they are ALL
+   historical, so a гробарий over them would open on hundreds of rows of last year's
+   problems. That is precisely NOT the empty tab the owner asked for, so the tab stands only
+   in the ninth-class tab bar. Whether the eighth class should get a гробарий-archive of its
+   own is a question for the owner.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. THE LIVE SCHEMA IS WIDER THAN `migrations/`: `teachers.gruppa`, `teachers.kabinet`,
+   `teachers.aktiven`, `students.gruppa` are on the live база and in `data/spetsmat.db`, and
+   no migration creates them. The кондуит now leans on `teachers.gruppa` (through
+   `lichnaya.kabinet_na_datu`, which leaned on it already), so on a database built from
+   scratch the section fails with `no such column`. The live база is in no danger — the
+   columns are there; the fix is a migration, and `migrations/` is not this position's zone.
+   ДОМ: doc/HRUPKOST.md
+   ДОСТАВЛЕНО: нет
+
+4. THE NEXT ЛИСТОК JOINS THE NINTH CLASS ONLY ONCE IT IS WRITTEN INTO `L9`. The class of a
+   листок is taken across the whole page from the list `L9` in `veb/razdely/listki.py`
+   («the number starts with 16»), and there is no other mark of class in the база at all —
+   `sheets` has no class column. So on Monday листок 17 must be entered into `L9`, or it
+   will land in the eighth class, and not only will the гробарий stay empty: the листок
+   itself will not appear among the ninth-class tabs. Measured live: inserting листок 17
+   into a COPY of the боевая база WITHOUT touching `L9` leaves the гробарий empty, and WITH
+   the entry it fills with the 17 problems of листок 16.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+5. THE COUNTER AND THE INITIALS STAND ON TWO CUTS OF THREE. The pupil's own record (the tab
+   opened by pressing a surname, `_uchenik`) is untouched: it carries neither the obligatory
+   counter nor the initials of the принимающий. The owner asked for «слева у школьника» and
+   «у каждого школьника» about the решётка; putting them on the personal card would be a
+   further layout decision, and this заход did not take it on the owner's behalf.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+6. IS `двойная` OBLIGATORY? Found by the §3 верификатор, not by me. `config.OBLIGATORY_KINDS`
+   is `обязательная` + `письменная`, so a problem of kind `двойная` counts in no denominator
+   — and on the live база there are exactly two of them, `11**` on листок 4 and `16**` on
+   листок 7. The site follows the letter of the owner's «кружки и крестики вместе», and
+   `veb/razdely/konduit.znachok` already records that nobody now knows what the senior meant
+   by `**` — which is why this заход did not decide it. If `двойная` is a doubled
+   обязательная, the denominators of листки 4 and 7 are each low by one, and so is the
+   215 of the eighth-class year overview.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
@@ -387,30 +439,244 @@ threshold.
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+🔴 **§0.1 WAS CANCELLED BY THE ORCHESTRATOR AND THE ГИТ-КОНТУР SUBAGENT WAS NEVER LAUNCHED.**
+The instruction in the launch line: «СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ… пункт ОТМЕНЁН
+оркестратором, данное указание сильнее текста захода», with the reason given as a
+measurement — four заходы out of ten died on exactly that call. One command was prescribed
+in place of the whole block; its output is below. The section is filled by the исполнитель
+because there is nobody else left to fill it.
+
+**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снят ПЕРВЫМ ходом, до всякой работы)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
 ```
-<сюда — вывод, дословно>
+The single command the orchestrator prescribed. Zero unmerged `zahod/*` branches on entry:
+the контур was empty and there was nothing to carry in by merging.
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+There were no entry debts: unmerged branches 0. The position's own work was carried through
+as `08fce7e` → `bb6465d` → `b7b13fe` → `5861e57` → `7cfbeaa` → `7882ebd`, merged into `main`,
+and pushed to `origin/zahod/statistiki-i-grobarij` (unpushed on the branch: 0).
+Merged into `main` by `50cf01e` and `79643b3`, both without conflicts.
+`main` is left with 11 unpushed commits — six mine, five belonging to the neighbouring заход
+`istoria-zanyatij`, which merged in parallel while this one was running. A заход does not push
+`main` by the canon; the заявка is filed and names the number as it stood when it was written:
+`zhurnal/_INFRA-git/zayavki/2026-09-10T0434-main-spetsmat-bot-origin-6-statistiki.md`.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+**Г3 — невлитых веток не прибавилось.** On entry `0`; on exit `git --no-optional-locks branch
+--no-merged main` prints nothing at all — `0` as well. My own branch is merged, and the
+neighbour's `zahod/istoria-zanyatij`, which appeared mid-run, was merged by its own заход.
+**Г2** — неприменимо: every path of the zone lies inside the `spetsmat-bot` repository, and no
+second repository was touched. **Г4** — no new `.py` in `_generator/**`: not one was created.
+**Г5** — no new `.md` was created at all, so `register_doc.py` had nothing to register.
+**Г6** — `git show --stat` on each of the six commits carries only paths of the zone.
+**Вне git** in my working folder: only `scratchpad/statistiki-i-grobarij/`, the personal
+scratchpad the зона contract prescribes; it is outside the zone and is deliberately not
+committed.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
+*(the output of the prescribed command is `0` — there was nothing to close)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `http://159.194.254.52/` (the same site as `math-kluychiki.ru`), section **«Кондуит»** — open it in a browser signed in as a принимающий or as the организатор; the section is deliberately not served to a guest. The built copy of the same page on disk: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/docs/index.html` — the «Кондуит» section is NOT in it, because it is stripped from the guest page by `data-org="videt-konduit"`, and that is the lock keeping fifty-seven children off the public internet.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `7882ebd` — `tests: put the prose of the two new test files into English, as the заход requires of every file it creates` (the last of six) · `git_zona.py check --zone core/services/` → ✅ · `--zone veb/razdely/` → ✅ · `--zone tests/svodka/` → ✅ · `--zone tests/grid/` → ✅
+
+Six commits of the zone, one per part of the задание, made as the work went:
+
+| хэш | what |
+|---|---|
+| `08fce7e` | the four величины as pure projections in `core/services/progress.py`, with tests |
+| `bb6465d` | величины 1–2: the obligatory counter on the left and the glowing row |
+| `b7b13fe` | величина 3: how many pupils took each problem, and «закрыта классом» |
+| `5861e57` | величина 4: initials of the принимающий, hover → имя · группа · кабинет |
+| `7cfbeaa` | величина 5: the «Гробарий» tab |
+| `7882ebd` | the prose of both new test files put into English (§2 rule about every file created) |
+
+### WHAT WAS BUILT, AND WHY THIS WAY
+
+**Величина 1 — обязательные у школьника.** To the left of the surname, on EVERY row of EVERY panel, stands `сдано/всего` of the obligatory problems; «сколько осталось» opens on hover («обязательных сдано 3 из 5, осталось 2»). Обязательные is `config.OBLIGATORY_KINDS`, that is `обязательная` (◦) and `письменная` (†) together: the pair of kinds is ASKED of its owner rather than retyped, because a retyped copy would be the fourth one — and the fourth copy is the one that drifts (adding `письменная` already cost three edits instead of one). The scope is THE CUT THE ROW IS DRAWN IN: on a листок panel the obligatory problems of that листок, on «Весь год» those of every листок of THAT class. A листок with no obligatory problems at all (`1д`–`4д`: 99 problems, not one obligatory) prints a dot rather than `0/0`, because `0/0` reads as «took nothing» — the exact opposite of what is happening.
+
+**Величина 2 — светящаяся строка.** `tr.gotov`, background `--chip`. Not one new colour: the palette is closed (`doc/DIZAJN-ZAKREPLENO.md §2`). Why not `--accent-soft`: that already paints the rows of one's OWN children (the owner's edit of 07.09), and one's own child who has closed his obligatory problems would then stop being distinguishable from one's own child who has not. The two marks are carried by DIFFERENT devices on purpose and are therefore visible at once: «свой» is the rail on the left and the colour of the surname, «закрыл» is the background of the row. Checked on the render in all three sign-in modes; the live row classes come out as `moi`, `chuzh`, `moi gotov`, `chuzh gotov` — for `admin:2` that is 42 / 622 / 50 / 505, summing to 1219 = 53 pupils × 23 panels.
+
+**Величина 3 — сколько человек сдало задачу.** The number stands UNDER the problem's label in the column header, and «closed by the class» is expressed by the colour of that number (`--accent`) rather than by a new glyph — there are already three glyphs beside a label (◦ † ⋆) and up to forty of them in a row. It is counted over THE SAME pupils whose rows are drawn below, and that is the number's only promise: the column can be recounted by eye from the ticks under it. `ProgressService.graveyard` defaults to every pupil in the catalogue, including those who left; it is right about its own question, but on screen that number would agree with nothing visible.
+
+**Величина 4 — инициалы принимающего.** `<i class="prin" title="принимающий: Наталья Амбург · группа Д · кабинет 302">Н.А.</i>` beside the surname — NOT a column (the owner's decision), and that is checked by shape: `<th>` in a листок panel is exactly `1 + the number of problems`. The room is asked of `lichnaya.kabinet_na_datu` and of nothing else: there are FOUR sources of a room in this project and they disagree; on 07.09 that already cost the owner a page that argued with itself (303 against 307). A one-word name stays itself: «Надя» does not become «Н.», or she would merge with «Наталья Амбург». Where there is no open distribution today, a dash with a hover, not a blank.
+
+**Величина 5 — вкладка «Гробарий».** Empty BY THE RULE rather than because emptiness was written into it, and it says out loud both the rule, and that it is empty, and what it is waiting for. A historical листок is one whose `issued_at` is strictly earlier than the freshest `issued_at` of the same class among листки THAT HAVE PROBLEMS. Today the ninth class is `16A`, `16α`, `16ℵ`, all issued 2026-09-03: nothing is historical, and the tab is lawfully empty.
+
+### HOW IT WAS CHECKED
+
+🔴 **All four величины are checked by DIRECT SQL against the LIVE база, both numbers printed side by side.** The snapshot was taken with `sqlite3.Connection.backup` from `159.194.254.52:/opt/spetsmat-bot/data/spetsmat.db` — through the WAL rather than around it: 16 188 events, 57 pupils, 53 on the roll, 595 problems, 21 листков, 247 `enrollment` rows. The check (`scratchpad/statistiki-i-grobarij/sverka.py`) reads `marks` with its own raw SQL and imports not one line of the project's code:
+
+```
+сверено пар (панель × школьник): 1219, расхождений 0
+величина 3 — столбцов сверено 595 из 595, из них закрытых классом 439, расхождений 0
+величина 4 — сверено 1219 строк с принимающим, прочерков на экране 0, расхождений 0
+```
+
+«Экран рядом с SQL», листок 16A:
+
+```
+      1а    экран 16  SQL 16  закрыта классом
+      1б    экран 15  SQL 15  закрыта классом
+      2     экран 12  SQL 12  закрыта классом
+      3     экран 10  SQL 10  закрыта классом
+      4     экран 11  SQL 11  закрыта классом
+
+      Агаркова     экран Д.Е.  Дима Елисеев · группа Н · кабинет 202
+                   SQL   Д.Е.  Дима Елисеев · группа Н · кабинет 202
+```
+
+**Технические пары (criterion 2) — the count BEFORE and AFTER, by scenario.** The отсев is not rewritten but CALLED (`core/services/history.tehnicheskie`, laid down by the заход `data-i-istoria-kletki`):
+
+```
+СЧЁТ ДО отсева                     : 16188
+СЧЁТ ПОСЛЕ отсева (schyot_sobytij) : 16134
+технических событий                : 54 (пар: 27), all through the «кнопка» channel
+
+величина                                        ДО отсева      ПОСЛЕ
+сдано обязательных, всего по классу                 10327      10327 ✅
+задач, закрытых классом (сдало > 3)                   439        439 ✅
+сданных клеток всего                                14235      14235 ✅
+```
+
+Not one величина moves, and that is not a coincidence: all four read the PROJECTION (the last event of a pair) and never a count of events, and a technical pair is an `assert` together with the `retract` that took it back — throw both away and the cell is left exactly as uncredited as it was. Eighteen pairs changed state, every one of them `EMPTY → (no event at all)`: uncredited stayed uncredited.
+
+**Criterion 5 — the glowing row live, as a number per panel.** «Найди хотя бы одного» is answered per panel rather than as one number, because under the scope premise a single number would hide which table it came from:
+
+```
+   весь год, 9 класс      0 из 53      листок 9       25 из 53
+   весь год, 8 класс      8 из 53      листок 10      32 из 53
+   листок 1              37 из 53      листок 11      43 из 53
+   листок 2              43 из 53      листок 12      39 из 53
+   листок 3              45 из 53      листок 13      43 из 53
+   листок 4              38 из 53      листок 14      23 из 53
+   листок 6              49 из 53      листок 15      27 из 53
+   листок 7              51 из 53      листки 1д–4д    0 из 53 (no obligatory problems at all)
+   листок 8              48 из 53      листок 16A      0 из 53
+                                       листок 16α      3 из 53
+                                       листок 16ℵ      1 из 53
+```
+
+A live example taken off the RUNNING SITE, the whole cell:
+
+```
+<i class="ob-sch" title="все 215 обязательных сдано">215<span class="iz">/215</span></i>
+<label for="k-u8"><b>Борисов</b> Дмитрий</label>
+<i class="prin" title="принимающий: Наталья Амбург · группа Д · кабинет 302">Н.А.</i>
+```
+
+**The «Гробарий» tab opens and explains its emptiness — read off the live site:**
+
+> Сюда попадают задачи листка, ставшего историческим — то есть такого, после которого раздали следующий, — если их сдали меньше 3 человек. Рядом — имена тех, кто их всё-таки сдал: не больше 3, дальше имена не записываются.
+> Гробарий пуст, и это не ошибка: исторических листков пока нет. Розданы 16A, 16α, 16ℵ — и пока следующий листок не раздан, в гробарий попадать нечему. Он наполнится сам в тот день, когда выйдет следующий листок.
+
+🔴 **And it is checked that it WILL fill by itself rather than being empty forever.** A tab that is empty because emptiness was written into it looks EXACTLY THE SAME today. On a COPY of the live база (`scratchpad/statistiki-i-grobarij/proba-ponedelnik.db`; the live база was not touched) листок 17 was issued — and the гробарий filled with 17 problems of листок 16 with no edit to the code: 6 rows «никто», and no problem naming more than two solvers. The same transition is held by the test `test_the_previous_listok_falls_in_by_itself_when_the_next_one_is_issued`.
+
+**Tests.** The entry number was taken by command BEFORE the work: `1 failed, 96 passed`. After: `1 failed, 131 passed` — 35 new tests, the same single red one, inherited (`tests/svodka/test_vopros_prepodavatelyu.py::test_only_the_teachers_of_that_day_are_asked`), which was already red on `8333c21` before my first line. The WHOLE suite was compared against a baseline in a separate working folder on `8333c21`: it was `32 failed, 1105 passed, 13 skipped, 1 xfailed, 43 errors` and it is now `32 failed, 1140 passed, 13 skipped, 1 xfailed, 43 errors` — the same list of failures name for name, plus 35 green. Nothing was broken.
+
+**Выкатка.** `bash deploy/vykatka.sh` from the MAIN folder after the merge (`main` at `50cf01e`): `deployed; the site answered 200 after 1s`. The live page was then read ON THE SERVER ITSELF under an organiser cookie (the secret never left the server and was never printed): **КОД ОТВЕТА 200**, 3 342 530 bytes, carrying exactly the numbers checked against SQL — 1219 counters, 555 glowing rows, 595 «сколько сдало» numbers of which 439 closed by the class, 1219 sets of initials, and the «Гробарий» tab in place. The last commit, `7882ebd`, touches only `tests/`, which the
+deploy does not send at all, so the server still carries exactly the reviewed code — checked by
+hash rather than assumed: `veb/razdely/konduit.py` and `core/services/progress.py` on
+`/opt/spetsmat-bot/` are byte-identical to `7882ebd` (`sha256` `e7031649…` and `798c0489…`).
+🔴 **A second deploy was deliberately NOT run.** By the time `7882ebd` was merged, `main` had
+also taken the neighbouring заход `istoria-zanyatij`; deploying again would have pushed
+somebody else's work to the live server on my judgement, an hour before a lesson, and the
+wave's first requirement is «главное, чтобы ничего не сломалось». Their work is theirs to roll
+out.
+
+**The cost in speed, measured rather than estimated.** Building the section from the live база: `0.141 с / 2 629 324 байт` before the work → `0.171 с / 2 895 032 байт` after. That is +30 ms and +10 % of bytes on a rebuild that runs after every write to the база. Not one new query to the journal: all four величины are computed from THE SAME rectangle of states the section already fetched in one `states_for_many`; the принимающие cost one extra query for the whole page.
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА (§3, ПОСЛЕ-типа, свежий субагент, другой метод)
+
+Judged the RENDER of the live page and direct SQL against the боевая база; did not open a
+single diff or file of this заход. Wrote its own page-fetching script and its own SQL rather
+than trusting mine. Its verdict, five for five, **все 4 из 4 величин сверены сплошь**:
+
+* **величина 1 — СОШЛОСЬ**, 1219 counters of 1219 (53 pupils × 23 panels): every N, every M,
+  every `title`. 1007 with numbers and 212 dots, on exactly the four листки `1д`–`4д`.
+  Examples: `n-19` Агаркова — экран 8/18, SQL 8/18; `n-vse9` — экран 8/33, SQL 8/33;
+  `n-vse8` — экран 203/215, SQL 203/215. `ob-sch` outside `<td class="kto">`: 0.
+* **величина 2 — СОШЛОСЬ**, 1219 rows of 1219; 555 glowing on screen and 555 by SQL, matching
+  panel by panel; on `n-15`–`n-18` (no obligatory problems) `gotov` occurs 0 times.
+* **величина 3 — СОШЛОСЬ**, 595 problems of 595. The order of `data-z` matches `problems.ord`
+  on all 21 листков — no off-by-one. `zakr` stands exactly at K>3: 439 closed, 156 not, and
+  among the 156 are 22 problems with K **exactly 3**, none of them marked closed.
+* **величина 4 — СОШЛОСЬ**, 1219 occurrences of `i.prin`, initials and the whole hover text.
+  The room comes from `kabinet_na_den` for 2026-09-10 (В→203, Д→302, Н→202) and not from the
+  stale `teachers.kabinet`. The two-slot case works live: Кудишин — `О.Р./В.Ф.`, «пн — Ольга
+  Рыжая · группа В · кабинет 203; чт — Вася Филянин · группа В · кабинет 203», two open
+  `enrollment` rows in SQL. **Not a column:** in all 21 листок panels `<th>` = 1 + problems,
+  `prin` outside `td.kto`: 0.
+* **величина 5 — СОШЛОСЬ, пустота законна**: by SQL the ninth class is `16A`/`16α`/`16ℵ`, all
+  `issued_at = 2026-09-03`, nothing strictly earlier ⇒ 0 historical листки; the tab, the radio
+  and the panel are in place and the panel states both the rule and why it is empty.
+
+**Дыр не найдено, и вердикт несёт охват.** It hunted for holes rather than confirmations:
+all 31 535 cells of the решётка (53 × 595) were re-projected as «last event by `id`» —
+`vsyo` 14 235, `snyato` 673, empty 16 627, 0 discrepancies, and the check has teeth (691
+pairs of active pupils end on a non-`assert` and not one was counted); the four pupils who
+left (id 3, 14, 21, 33) appear in no row, no panel and no `data-u` — had their hand-ins been
+counted, K would have moved on 291 problems of 595 and it moved on none; every panel's set of
+pupils is exactly the 53 active ones, one `ob-sch` and one `prin` per row.
+
+Four remarks came back, none of them a discrepancy: `двойная` not counted as obligatory (now
+`## ВОПРОСЫ` item 6), `erratum` and `retract` drawn differently (pre-existing, affects none of
+the four величины), the personal card carrying none of the new величины (already item 5,
+found independently), and the eighth class having no гробарий tab (already item 2).
+
+Final line of the answer, verbatim as §3 requires: «выдано 9 позиций из 9 найденных».
+
+### WHAT THE CHECK DOES NOT COVER
+
+* **4 pupils who left** (`status='left'`) and their **552 marks**: they are not drawn in the решётка, so they enter none of the four величины and nothing about them was checked. That is not a hole but a decision inherited from `_uchastniki` — the number is named rather than left silent.
+* **68 problems of 595 carry no event at all** — their «сдало 0» is checked, but it is zero against zero.
+* **The pupil's own record** (panels `n-u<id>`, the tab behind a surname) received neither counter nor initials and so was not checked — see `## ВОПРОСЫ` item 5.
+* **A filled гробарий on live data** is unverifiable in principle right now: the ninth class has NO historical листки today. It is verified on a copy of the база and by tests; on Monday it is the first thing worth looking at.
+* **Hover as a gesture** (that the tooltip actually appears) was not checked in a browser: `playwright` does not come up in this environment — the same 43 errors stand on the base commit. What is checked is the presence and the content of the `title` attribute, not its rendering.
+* **There are 0 lesson overrides on the live база**, so the ordering of «первые сдавшие» under a manual override was exercised only by test, never by live data.
+
+### ВНЕ GIT — ПО КАЖДОМУ РЕПОЗИТОРИЮ, КОТОРОГО Я КАСАЛСЯ
+
+```
+== /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/statistiki-i-grobarij
+       1     ?? scratchpad/statistiki-i-grobarij/
+== /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot
+      22
+```
+
+The one path outside git in my own working folder is the personal scratchpad the зона contract
+prescribes (`scratchpad/statistiki-i-grobarij/`); it is outside the zone and deliberately not
+committed. The 22 in the MAIN folder are somebody else's content and are left exactly where
+they are, as the canon says to do: the wave's journals and `zayavki`
+(`PULS-CHASOVOGO-noch.log`, `SERDCE-VOLNY-noch.md`, `INCIDENTY.md`, seven `zayavki/*.md`),
+drafts under `doc/`, two `.DS_Store`, `data/spetsmat.db` and `docs/index.html`. Two of those I
+touched myself and name here rather than let them be read as somebody's lost work:
+`docs/index.html` was rewritten by running `tools/sobrat_stranicu.py` as the пост-проверка from
+the main folder (a generated file, which the live server rewrites after every write to the база
+and which the deploy explicitly excludes), and `data/spetsmat.db` in the MAIN folder was already
+modified before I arrived — I did not restore it, because in a folder shared with running
+neighbours that would discard state I cannot identify.
+
+### WHAT WAS NOT TOUCHED
+
+The kinds of problems (`core/services/sheets.py`, `config.PROBLEM_KINDS`) — taken ready from the заход `vidy-zadach`. The отсев of technical pairs (`core/services/history.py`) — called, not rewritten. `core/models.py`, `infra/`, `migrations/`, `tools/`, `veb/obshchee/karkas.py`, `veb/priyom.py`, `data/spetsmat.db` — outside the zone and untouched. No second journal of marks was started: the section still asks `ProgressService` and still writes nothing to the база.
+
+### НЕОБРАТИМОЕ
+
+* **A temporary working folder was deleted** — `…/scratchpad/bazovaya` (`git worktree remove --force`), created on commit `8333c21` only to take the baseline test run. Exactly one thing was lost with it: an incidental modification of `data/spetsmat.db` inside it, made by that very test run. Restored by `git worktree add --detach <путь> 8333c21`.
+* **`data/spetsmat.db` was restored twice in my own working folder** with `git --no-optional-locks checkout -- data/spetsmat.db`: the file is tracked by git and is touched both by `sqlite3` and by the test run (part of the suite works against the live база). Only that incidental modification was discarded; this заход wrote nothing into the база. Restored from `HEAD`.
+* **The live база was NOT touched:** every read was `mode=ro`, the snapshot was taken with `backup` into `/tmp` on the server, and the листок-17 experiment was done on a COPY. No writes to `marks` were made.
+* **The deploy to the live server** is irreversible in the sense that the site already answers with the new code. Rollback: `bash deploy/vykatka.sh --otkat` (the script takes its own snapshot before the transfer), or `git -C /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot reset --hard f7a83f7` and a second deploy.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+* **Repeats on the NEXT заход of this project — therefore a заход, not a queue entry:** the live schema is wider than `migrations/` (`## УРОКИ ФАБРИКЕ`). Any following заход that writes a test against a freshly built database and touches `teachers`/`students` will stop in the same place and spend the same half hour on the same false diagnosis. Cost of the fix: one migration. Cost of not fixing it: half an hour per заход until somebody works it out.
+* **Does not repeat, so it went to the queue:** the gap between `>3` and `<3` (the owner's decision, once), the гробарий only for the ninth class (once), entering листок 17 into `L9` (once, but on Monday), the counter on the personal card (once).
+
+**ВРЕМЯ ПРОГОНА И ТОКЕНЫ:** неприменимо — движок `opencode`, счётчика стоимости в логе нет.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.

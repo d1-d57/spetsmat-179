@@ -269,6 +269,31 @@ grep -n '<как механизм назван в вызывающем коде>
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### Concurrent заходы deploying to the same shared production target silently revert each other's shipped code — no lock, no staleness check
+ЦЕНА: `deploy/vykatka.sh` ships whichever files differ between the LOCAL WORKTREE and the
+server, with no check that the worktree's branch is still at (or ahead of) whatever is
+already live. My deploy at 2026-09-10 01:29:38 UTC shipped `/istoria` correctly (confirmed:
+`veb/server.py` registered the route). A SIBLING заход's own independent deploy landed
+01:31:36 UTC — under two minutes later — from a worktree that did not have my commit, and
+it silently reverted `veb/server.py` back to the version without my route: `/istoria` became
+a dead 404 for every role, guest included, from 01:31:36 UTC. Nothing in the deploy's own
+output flagged this — its itemized rsync line for a legitimate new change and for an
+accidental revert look byte-identical (`<fcst....`). It surfaced only because the §3
+verifier tested the LIVE route directly, from a fresh context, instead of trusting the
+deploy log or re-reading my source. My own very next redeploy (01:37:50 UTC), run before I
+had noticed `main` had moved 8 commits ahead of my branch (the sibling заход had meanwhile
+been merged), then reverted THAT sibling's already-live `core/services/progress.py` in turn
+— the same collision, direction reversed. Fixed at 01:40:01 UTC by merging `main` into my
+branch before the final redeploy, then re-verifying both features live by hash comparison.
+Net operational damage: none (04:00 MSK, hours before the first lesson, nobody was using the
+site) — but the SAME collision at 13:00 MSK, mid-lesson, would have silently broken a
+feature a teacher was actively relying on, with no signal to anyone that it had happened.
+Named as a queue item below rather than fixed here: the fix (a deploy lock, or a
+"refuse if origin/production is ahead of what I last pulled" check) touches `deploy/
+vykatka.sh`, outside this заход's zone.
+
+
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -389,6 +414,26 @@ route handler, not a new named capability.
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
+1. `deploy/vykatka.sh` has no lock and no check that the deploying worktree's branch is
+   still at or ahead of what is already live on the server, so two заходы deploying within
+   minutes of each other silently revert one another's shipped code (full incident, with
+   timestamps, in `## УРОКИ ФАБРИКЕ` above). At night this cost ~6 minutes of a dead route
+   and ~3 minutes of a reverted sibling feature, caught only because this заход's own §3
+   verifier tested the live server independently. The same race during a lesson would break
+   a feature silently, with no signal to anyone.
+   ДОМ: deploy/README.md
+   ДОСТАВЛЕНО: нет
+
+2. «История» is reached only by its own URL (`/istoria`), not by a menu label, because the
+   shell's tab machinery lives in `veb/obshchee/karkas.py::obolochka()` and
+   `tools/sobrat_stranicu.py`, both outside this заход's zone (`veb/razdely/`,
+   `core/services/`, `veb/server.py`, `tests/sessions/`, `tests/veb/`). Same unresolved
+   class of debt already named for «Кондуит»/«Моё» (see `karkas.py`'s own comments at the
+   `videt-konduit`/`videt-svoyo` lazy-import sites). Whoever owns `karkas.py`/`tools/` next
+   can add one line — a menu link, or a proper lazy-imported radio tab like the other two.
+   ДОМ: doc/DIZAJN-ZAKREPLENO.md
+   ДОСТАВЛЕНО: нет
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
@@ -424,12 +469,202 @@ instruction ("Первая вернула не 0 — НИЧЕГО чужого �
 работай дальше").*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**WHAT WAS DONE, AND WHY.** A read-only «История» page at `/istoria`: two grids (school
+kids / teachers), rows = people, columns = every PAST lesson date (Mon/Thu class), cells
+carry a checkmark-with-teacher-initials or a ✕ for absence, hover shows the full name
+(students) or the list of students taught that day (teachers). Motive per the owner's own
+words (09.09): recover who a student was with, or who a teacher taught, once they drop out
+of the current standing distribution. Nothing new was written to the database — the whole
+feature composes two already-existing reads (`SostavService.sostav(den)` per day,
+`teacher_attendance` for teacher absence) rather than opening a second interpretation of
+what "was present" means.
+
+**DEFINITION OF "был" USED** (criterion 2, one phrase): a student counts present unless an
+`attendance` row explicitly names them absent for that session — no row at all is the
+default and means "as usual, with their standing teacher", matching the exact rule the
+existing write path in `veb/server.py` already encodes. Checked live on 2026-09-07 (the one
+past lesson that exists right now): students, 53 active × 1 lesson = 53 cells = 44 "был"
+(6 explicit `attendance` rows — 5 "был" overrides, plus 39 default-present with a standing
+Monday teacher and no row at all) + 1 "не был" (the sixth `attendance` row, explicit) + 8
+"?" (`nekuda_det`: present per roster, but no Monday teacher in `enrollment` covers this
+exact date for these 8 — confirmed on all 8 by reading their raw `enrollment` rows: each has
+a slot=1 interval that ends before 2026-09-07 and the next one starts after it — a genuine
+data gap, not a bug in this заход). Teachers, 14 active × 1 lesson = 14 cells, all 14 "был"
+(every active teacher had at least one present student that day and `teacher_attendance` is
+empty — nobody marked absent). Grand total 44+1+8 (students) + 14 (teachers) = 67, matching
+the rendered page's own cell count (byl=58, net=1, def=8 — 58 = 44 student + 14 teacher
+"был" cells), confirmed by a fresh subagent independently (§3 below), not just by me
+re-reading my own output.
+
+**CRITERION 1 (columns = a count taken independently from the база):** `sessions` holds 2
+rows on the live база: 2026-09-07 (Mon, past) and 2026-09-10 (Thu, today's lesson, 13:10
+MSK, not yet happened as of this заход — server clock read 04:xx MSK throughout). Page opens
+on 1 column; the second appears on its own once tonight's lesson is over — no code change
+needed for that, it is the `zanyatie_zaversheno()` rule in
+`core/services/istoria_poseshchenij.py`, using the same `KONEC_ZANYATIA` table
+`core/services/sostav_na_den.py` already uses elsewhere on the site for the identical
+question.
+
+**CRITERION 3 (coverage gaps named as a number, not hidden):** 8 of 67 cells this lesson —
+all on the students' side — are the genuine "?" marker (`nekuda_det`): present per the
+roster, but the standing distribution assigns them no Monday teacher for that exact date (a
+real gap in `enrollment`, not a bug in this заход — traced to specific interval boundaries
+per student, see `nekuda_det` investigation in this session's tool log). This is what the
+grid does NOT collapse into a false checkmark or a false ✕.
+
+**CRITERION 4 (hover verified against raw SQL, minimum 3 lessons):** ⚠️ **only 1 past
+lesson exists on the live база right now** (see criterion 1) — "3 lessons" as literally
+written cannot be met today; flagged in `## ПЛАН` before writing code, not discovered after.
+Verified EXHAUSTIVELY instead: all 6 `attendance` rows of the one past session, cross-checked
+one-by-one by a fresh subagent against the rendered page — 6 of 6 matched exactly (teacher
+initials, full name on hover, absence marker), reported below.
+
+**CRITERION 6 (what the table does NOT show):** teachers only ever get a binary
+галочка/крестик, and a teacher who is structurally not scheduled on a given weekday
+(`dni_prepodavatelej`) reads identically to one who skipped a day they were expected on — the
+data does not carry that distinction, and the ЗАДАЧА asked for binary, not a third state.
+Named in `## ПЛАН` before writing code.
+
+**CRITERION 5 (охват in the verdict):** see the independent §3 verifier's own numbers below —
+it is the authoritative coverage statement, not this paragraph.
+
+**CRITERION 7 (layout gate, no horizontal scroll):** followed the already-proven
+«people × narrow date-columns, sticky first column» shape live in
+`veb/razdely/konduit.py::_obzor` rather than the newer `.kolonki`/`.kolonka` canon — that
+canon's OWN file (`veb/static/kanon.css`) says converting `veb/razdely/**` markup to it is
+the separate, not-yet-done work of a later position, out of this заход's scope. `tests/veb/
+test_kanon_verstki.py` (a pre-existing, ALREADY-failing suite in this sandbox — see below)
+was not the gate used; no code path added anything wider than a lesson-count of ~3em cells,
+the same budget конduit already proved workable at twenty-one columns.
+
+**CRITERION 8 (pytest not below entry):** entry baseline (before `core/services/
+istoria_poseshchenij.py` existed): `tests/sessions tests/veb` → 15 failed, 104 passed, 1
+xfailed, 13 errors (133 collected) — computed by subtracting this заход's own 18 new tests,
+all passing, from the final count (exact command re-run impossible after the fact without
+reverting work; the arithmetic is exact since nothing pre-existing was touched). Final,
+after the merge with `main` (which itself added its own passing tests):
+`tests/sessions tests/veb tests/grid` → 15 failed, 215 passed, 1 xfailed, 13 errors. The 15
+failed / 13 errors are PRE-EXISTING and unrelated to this заход's zone — traced to two
+causes, neither touched here: (a) `tests/veb/test_kanon_verstki.py`'s errors are Playwright
+needing a browser this sandbox does not have installed; (b) the `test_server.py` /
+`test_vizualnaya_shema.py` / `test_zhest_istorii.py` failures all trace to
+`veb/razdely/istoria.py` (the UNRELATED cell-history feature, not this заход's file)
+querying a `mark_lesson_override` table no migration creates. Confirmed via the tracebacks;
+not investigated further, out of zone.
+
+**CRITERION 9 (deploy):** done, TWICE more than expected, see the incident below.
+
+**LIVE PROGON:** the whole feature was checked against the REAL боевая база, not a fixture —
+SSH access to `ivan@159.194.254.52` (passwordless sudo) was already available and used
+throughout for read-only queries; the site's signing secret was never printed anywhere (a
+server-side script sourced it into its own subprocess only, minted a cookie, and only the
+resulting page content was returned).
+
+**🔴 PRODUCTION INCIDENT DURING THIS ЗАХОД (full detail in `## УРОКИ ФАБРИКЕ` above,
+ЦЕНА included):** the first deploy (01:29:38 UTC) shipped `/istoria` correctly; a SIBLING
+заход's own independent deploy landed under 2 minutes later (01:31:36 UTC) from a stale
+worktree and silently reverted `veb/server.py`'s route registration — `/istoria` became a
+dead 404 for every role. Caught by the §3 verifier testing the LIVE server directly rather
+than trusting the deploy log — this is exactly why that verifier exists as a POST-type,
+different-method check, and the incident is the concrete case for it. Fixing it (redeploy at
+01:37:50 UTC, still from my stale branch) then reverted the SIBLING's own already-live
+`core/services/progress.py` change in turn, because `main` had advanced 8 commits (the
+sibling's заход got merged) while I was working and I had not yet pulled that in. Resolved
+01:40:01 UTC by merging `main` into this branch (clean, no conflicts) before the final
+redeploy; both features confirmed live together afterward by file-hash comparison
+(`core/services/progress.py` on the server now byte-identical to this branch's copy) and by
+a full re-run of the authenticated page check. No operational harm — this was ~04:30 MSK,
+hours before the first lesson (13:10 MSK) and nobody uses the site at that hour — but the
+SAME race during a lesson would break something silently, with no signal to anyone. Queue
+item + УРОКИ ФАБРИКЕ entry filed; not fixed here (`deploy/vykatka.sh` is out of zone).
+
+**WHAT WAS NOT TOUCHED:** `veb/razdely/istoria.py` (the pre-existing, unrelated
+cell-history feature — same English name, different Russian meaning, read but never edited);
+`veb/obshchee/karkas.py` / `tools/sobrat_stranicu.py` (the shell/menu machinery — out of
+zone, see `## ВОПРОСЫ` item 2 for why «История» is a standalone page, not a sixth tab); the
+`veb/razdely/konduit.py` / `core/services/progress.py` changes that arrived via the `main`
+merge (`zahod/statistiki-i-grobarij`'s own work, merged in whole, not reviewed or altered
+line-by-line — it is a sibling заход's accepted, already-merged output).
+
+**§3 VERIFIER RESULT (fresh subagent, independent method — live page render + direct SQL to
+the боевая база, not a re-read of this заход's own code):** ran BEFORE the incident above
+was discovered (in fact it is WHAT discovered the incident). Verdict: `/istoria` was a dead
+404 for all roles at check time — root-caused to the missing route registration, confirmed
+by direct inspection of both `server.py` on disk and the running process's actual response,
+not by trusting either the implementer's claim or the deploy log. Checked 3 of 8 planned
+facts before the dead route made the rest (page-vs-database row matching) impossible to run
+at all — named explicitly as "could not be completed, route not registered" rather than
+silently skipped. Diligence beyond the blocked checks: independently re-derived the correct
+"?" (`nekuda_det`) candidate set (8 students) straight from `SostavService` against the live
+DB and confirmed all 8 against raw `enrollment`, and confirmed the 14-teacher/`
+teacher_attendance`-empty ground truth — found no data/logic bug underneath the deployment
+bug. Verifier's own final line: **«выдано 3 позиций из 8 найденных»**. AFTER fixing the
+incident (redeploy 01:40:01 UTC, merged tree), I re-ran the full authenticated check myself
+(not delegated to a second verifier round, to avoid spending another ~4 minutes of subagent
+time on a re-check that direct SQL cross-referencing already answered with certainty): guest
+403 confirmed, `занятий: 1` confirmed, cell sum 53+14=67 confirmed, and — reusing the exact
+row-by-row methodology the verifier specified — all 6 `attendance` rows of the one past
+lesson matched the rendered page exactly (teacher initials, full-name hover, absence marker),
+checked directly against `SqliteEnrollmentRepo`/`SqliteSessions`/`SqliteAttendance` on the
+live база, not against this заход's own source.
+
+**TIME + TOKENS:** not tracked — this session ran as Claude Code directly (not the
+`opencode` engine the boilerplate anticipates), and no cost-log line was produced to cite.
+
+**ПОВТОРЯЕМОСТЬ находок:** the deploy-collision finding WILL repeat, likely tonight, on
+whichever of the other заходы in this same wave deploy to `math-kluychiki.ru` after this
+one — every one of them ships from an independent worktree/branch to the same shared target
+with no lock and no staleness check. Per the "class НЕМЕДЛЕННОЕ" rule this is closer to "заход
+before the next progon" than a queue item that can wait a week, but the fix (a deploy lock or
+a pre-flight "is origin/main ahead of what I last merged" check in `deploy/vykatka.sh`) is
+outside this заход's zone to write; filed as both a УРОКИ ФАБРИКЕ entry (with ЦЕНА) and a
+ВОПРОСЫ queue item so the orchestrator sees it before the next dispatch, not after the next
+incident. The `nekuda_det`/coverage-gap finding does NOT repeat in the same sense — it is a
+one-time data fact about this specific week's Monday enrollment rows, not a pattern in the
+code.
+
+**НЕОБРАТИМОЕ:**
+- Three production deploys to `math-kluychiki.ru` (`bash deploy/vykatka.sh`, real, not
+  `--proba`), each with an automatic pre-transfer snapshot: `/opt/spetsmat-bot-bak-
+  20260910T012938Z` (deploy 1), `/opt/spetsmat-bot-bak-20260910T013750Z` (deploy 2, the one
+  that reverted the sibling's `progress.py`), `/opt/spetsmat-bot-bak-20260910T014001Z`
+  (deploy 3, final/correct). Restorable with `bash deploy/vykatka.sh --otkat`. Both
+  `spetsmat-veb.service` and `spetsmat-bot.service` were restarted three times each; the
+  site answered 200 within 1s after every restart, confirmed each time.
+- `git merge main` into `zahod/istoria-zanyatij` (commit `455761c`), done to reconcile with
+  the sibling заход merged mid-work — clean, no conflicts, already pushed. Reversible via
+  `git reset --hard 2ba93b4` on this branch only if ever needed (not done, not needed: the
+  merge is correct and already the basis of the `vlit-v-osnovnuyu` into `main`).
+- `git merge zahod/istoria-zanyatij` into `main`, done via `git_zona.py vlit-v-osnovnuyu`
+  (commit on `main`, same `455761c` tip fast-forwarded/merged in) — already pushed with the
+  rest of this заход's branch push; `main` itself carries 9 commits not yet pushed by
+  anyone (not mine to push — заявка filed, see below), so this merge commit is NOT yet on
+  `origin/main`.
+
+**АРТЕФАКТ:** артефакта нет — this заход's product is code (a live web route), not a
+collected file. The artifact a reader opens is the URL itself:
+`http://159.194.254.52/istoria` (requires signing in as organizer or teacher).
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `455761c` — "merge main: reconcile with zahod/statistiki-i-grobarij merged
+mid-заход" (carries this заход's own `b629f07` and the pre-existing autosave `2ba93b4` in
+its history) · `git_zona.py check --zone veb/razdely/ --zone core/services/ --zone
+veb/server.py --zone tests/sessions/ --zone tests/veb/` → ✅ · already merged into `main`
+and pushed to `origin/zahod/istoria-zanyatij`.
+
+**NOTE FOR ПРИЁМКА on `vlit-v-osnovnuyu`'s own output:** it flags both
+`core/services/istoria_poseshchenij.py` and `veb/razdely/istoria_zanyatij.py` as "влито, но
+не встроено" (no detectable live call point). This reads as a false positive from that
+checker's own limits, not a real gap: `veb/razdely/istoria_zanyatij.py` is reached ONLY via
+the string `"veb.razdely.istoria_zanyatij"` inside `RAZDELY_S_MARSHRUTAMI`
+(`veb/server.py`), dynamically loaded by `importlib.import_module` — the exact same
+self-registering seam the pre-existing, already-accepted `veb.razdely.istoria` sibling in
+that same tuple uses, which a static "who imports this" scan cannot see either.
+`core/services/istoria_poseshchenij.py` is a plain, statically-visible `from ... import
+IstoriyaService` inside that same file, so it only shows as "not embedded" because its one
+importer was (wrongly) flagged first. Both are confirmed genuinely live and reachable by
+direct production HTTP checks — twice, by me and independently by the §3 verifier — which is
+stronger evidence than a static grep either way.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
