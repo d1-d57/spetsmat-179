@@ -279,6 +279,78 @@ def test_the_row_carries_the_one_priznak_of_whose_child_it_is_and_no_other(
     assert pervaya.split() == ["moi"], pervaya
 
 
+def test_on_the_year_tab_the_tick_also_lights_for_one_listok_closed_entirely(
+    connection, marking
+):
+    """O5: «есть ли у школьника долги» — листки даны НА ВЫБОР.
+
+    Owner 10.09: «школьник закрыл один и не закрывал второй — это норма, а не долг.  По
+    кондуиту такого не различить.  На вкладке „Весь год“ ставить галочку, когда школьник
+    закрыл все обязательные ИЛИ один из листков целиком».
+
+    Two листка of five problems each, three of them obligatory.  The pupil closes the
+    FIRST листок whole — every problem of it, obligatory and not — and touches nothing on
+    the second.  He therefore has 3 of 6 obligatory over the cut, so the счётчик alone
+    would call him a debtor, which is exactly the hole the owner named.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    mir = seed_world(connection, students=3, sheets=(LISTOK, LISTOK))
+    pervyj = mir.sheet_ids[0]
+    for zadacha in mir.problems_by_sheet[pervyj]:
+        otmetit(marking, mir.student_ids[0], zadacha)
+    # The second pupil closes the obligatory HALF of the first листок and no more: not a
+    # whole листок, not the whole cut — no tick.
+    for zadacha in mir.problems_by_sheet[pervyj][:3]:
+        otmetit(marking, mir.student_ids[1], zadacha)
+    connection.commit()
+    god = panel(konduit.razdel(kontekst(connection)), "vse8")
+    assert galki(god) == [True, False, False]
+    assert schyotchiki(god)[0] == (3, 6), "по обязательным разреза он ещё не закрыл всё"
+
+
+def test_on_a_listok_tab_closing_that_listok_whole_is_not_a_second_criterion(
+    connection, marking
+):
+    """The disjunction of O5 belongs to the year cut and stays there.
+
+    On one листок «закрыл этот листок целиком» and «закрыл всё обязательное этого листка»
+    are two answers about the SAME листок, and taking the weaker one would quietly change
+    what the tick means on that tab.  Here the pupil takes the two `обязательная` problems
+    and NOT the `письменная` — obligatory too — so he has closed neither.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    mir = seed_world(connection, students=2, sheets=(LISTOK,))
+    zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
+    for zadacha in (zadachi[0], zadachi[1], zadachi[3], zadachi[4]):
+        otmetit(marking, mir.student_ids[0], zadacha)
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    assert galki(kusok) == [False, False]
+    assert schyotchiki(kusok)[0] == (2, 3), "письменная не сдана, и она обязательная"
+
+
+def test_the_year_tick_says_in_words_which_of_the_two_facts_lit_it(
+    connection, marking
+):
+    """The tooltip is the only place where the meaning of the column is written out.
+
+    Two different facts light the same tick on the year tab, and «закрыл все обязательные»
+    printed over a pupil who closed one листок instead would be the screen making a claim
+    the база does not support.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    mir = seed_world(connection, students=2, sheets=(LISTOK, LISTOK))
+    for zadacha in mir.problems_by_sheet[mir.sheet_ids[0]]:
+        otmetit(marking, mir.student_ids[0], zadacha)
+    connection.commit()
+    god = panel(konduit.razdel(kontekst(connection)), "vse8")
+    podskazka = re.search(r'<td class="gt gt-da" title="([^"]*)"', god).group(1)
+    assert "листок" in podskazka and "целиком" in podskazka, podskazka
+
+
 # ------------------------------------------------- величина 3: сколько сдало задачу
 
 

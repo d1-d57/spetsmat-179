@@ -159,8 +159,16 @@ ZAGOLOVOK_SCH = ('<th class="sch" title="сдано обязательных з�
 #: Шапка столбца крупной зелёной галочки.  Значок в шапке — тот же, что в клетках под ней:
 #: столбец, подписанный словом, отобрал бы у решётки ширину, которой владелец уже дважды
 #: просил не разбрасываться, а объяснение живёт в подсказке — ровно как у столбца счётчика.
+#:
+#: 🔴 ПОДСКАЗОК ДВЕ, ПОТОМУ ЧТО ВОПРОСОВ ДВА.  На вкладке листка галочка значит «закрыл всё
+#: обязательное этого листка»; на «Весь год» — «долгов нет» (`O5`: все обязательные ИЛИ один
+#: листок целиком, потому что листки даны на выбор).  Одна подпись на оба разреза называла бы
+#: годовую галочку тем, чем она не является, — а подсказка тут единственное место, где смысл
+#: столбца написан словами.
 ZAGOLOVOK_GT = ('<th class="gt" title="крупная зелёная галочка — школьник закрыл '
-                'всё обязательное этого разреза">✓</th>')
+                'всё обязательное этого листка">✓</th>')
+ZAGOLOVOK_GT_GOD = ('<th class="gt" title="крупная зелёная галочка — долгов нет: закрыты '
+                    'все обязательные задачи года или хотя бы один листок целиком">✓</th>')
 
 
 def _galka(est: bool, podskazka: str) -> str:
@@ -607,9 +615,12 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, i
     for u in na_uchyote:
         schyot = obyazatelnyh_sdano(obyaz_razreza, sostoyaniya, u.id)
         kletki = []
+        listok_celikom = None       # номер листка, закрытого целиком, — для галочки (O5)
         for sh in listki:
             zad = zadachi[sh.id]
             vzyato = sum(1 for p in zad if sostoyaniya[(u.id, p.id)].is_credited)
+            if zad and vzyato == len(zad) and listok_celikom is None:
+                listok_celikom = sh.number
             if not zad:
                 kletki.append('<td></td>')
             elif vzyato == len(zad):
@@ -622,18 +633,37 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, i
         # 07.09 он стоял только там, и на общей вкладке свои не выделялись вовсе —
         # владелец увидел это раньше, чем я.
         klass = _klass_stroki(u, chuzhoj)
+        # 🔴 ГАЛОЧКА ГОДОВОГО ОБЗОРА ОТВЕЧАЕТ НА ВОПРОС «ЕСТЬ ЛИ ДОЛГИ», А НЕ «СДАЛ ЛИ
+        # ВСЁ ОБЯЗАТЕЛЬНОЕ» — ПРАВКА ВЛАДЕЛЬЦА 10.09 (`TZ-DOBOR-10-09.md` O5), и это
+        # СОДЕРЖАТЕЛЬНАЯ разница, а не смягчение условия.  Листки даны НА ВЫБОР: «школьник
+        # закрыл один и не закрывал второй — это норма, а не долг», а по кондуиту такого
+        # не различить.  Владелец на своём примере: «у Бочаровой Анны 17 из 21.  Вряд ли
+        # там 21 обязательная задача.  Скорее всего, их меньше и она всё закрыла».
+        # Поэтому здесь ДИЗЪЮНКЦИЯ: все обязательные разреза ИЛИ хотя бы один листок
+        # целиком.  Оба факта разрез уже посчитал сам — `schyot` для первого, клетки
+        # `vsyo` для второго; второго запроса и второй службы не заводится.
+        #
+        # 🔴 ЭТО ТОЛЬКО ГОДОВОЙ ОБЗОР, И РАЗНИЦА МЕЖДУ ВКЛАДКАМИ НАМЕРЕННА.  На вкладке
+        # ОДНОГО листка «закрыл один листок целиком» и «закрыл всё обязательное этого
+        # листка» — вопросы про один и тот же листок, и дизъюнкция там просто ослабила бы
+        # признак.  Вопрос «есть ли у школьника долги» задают году, а не листку.
+        dolgov_net = schyot.zakryl or listok_celikom is not None
+        if schyot.zakryl:
+            podskazka = "закрыл все %d обязательных этого разреза" % schyot.vsego
+        else:
+            podskazka = "закрыл листок %s целиком" % listok_celikom
         stroki.append(
             f'<tr{klass}><td class="kto">'
             f'<label for="k-u{u.id}">'
             f'<b>{e(u.surname)}</b> {e(u.name)}</label></td>'
             f'{_stolbec_prin(prinimayushchie, u.id)}'
             f'<td class="sch">{_schyotchik(schyot)}</td>'
-            f'{_galka(schyot.zakryl, "закрыл все %d обязательных" % schyot.vsego)}'
+            f'{_galka(dolgov_net, podskazka)}'
             f'{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
             f'<table class="kond" style="max-width:{25 + len(listki) * 5.5:.1f}em">'
             f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_PRIN}{ZAGOLOVOK_SCH}'
-            f'{ZAGOLOVOK_GT}{shapka}</tr></thead>'
+            f'{ZAGOLOVOK_GT_GOD}{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
