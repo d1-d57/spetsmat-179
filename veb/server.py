@@ -1605,15 +1605,25 @@ class Handler(BaseHTTPRequestHandler):
         школьника перекрытия нет по построению, и попасть в этот список он не может.
         Лишний порт здесь означал бы лишний повод разойтись с тем, что считает служба.
         """
-        from core.services.sostav_na_den import SostavService, perekrytiya_k_snyatiyu
+        from core.services.sostav_na_den import (SostavService, perekrytiya_k_snyatiyu,
+                                                  slot_of)
         from veb.razdely.zanyatie import otsutstvuyushchie_prepodavateli
+        from infra.prepodavatel_den_repo import dni as dni_prepodavatelej
         from infra.room_repo import SqliteAttendance, SqliteSessions
         sostav = SostavService(
             enrollment=SqliteEnrollmentRepo(conn),
             sessions=SqliteSessions(conn),
             attendance=SqliteAttendance(conn),
         ).sostav(den)
-        return perekrytiya_k_snyatiyu(sostav, otsutstvuyushchie_prepodavateli(conn, den))
+        # 🔴 ДВЕ ТАБЛИЦЫ ОТСУТСТВИЯ, И СКЛАДЫВАЮТСЯ ОНИ ЗДЕСЬ, В ОДНОМ МЕСТЕ.
+        # `teacher_attendance` — «сегодня заболел»; `prepodavatel_ne_prihodit` —
+        # «по четвергам не хожу вообще». Отказ 2 службы должен знать обе: без второй
+        # кнопка возвращала ребёнка человеку, которого в этот день не бывает никогда.
+        dni_p = dni_prepodavatelej(conn)
+        slot = slot_of(den)
+        net_v_zdanii = set(otsutstvuyushchie_prepodavateli(conn, den))
+        net_v_zdanii |= {tid for tid, sloty in dni_p.items() if slot not in sloty}
+        return perekrytiya_k_snyatiyu(sostav, net_v_zdanii)
 
     def _chisla_dnya(self, conn, den: str) -> dict:
         """Три числа, которыми судят кнопку: строк всего · из них с принимающим ·
@@ -1621,7 +1631,13 @@ class Handler(BaseHTTPRequestHandler):
         число, посчитанное тем же кодом, который правил, подтверждает само себя.
         """
         from core.services.sostav_na_den import OTSUTSTVUET
-        ryad = conn.execute("select id from sessions where held_on = ?", (den,)).fetchone()
+        # 🔴 `order by id` — ТОТ ЖЕ ПОРЯДОК, ЧТО У `SqliteSessions.for_day`, И БЕЗ НЕГО
+        # ЭТИ ЧИСЛА МОГУТ ОТНОСИТЬСЯ К ДРУГОМУ ЗАНЯТИЮ, ЧЕМ СНЯТЫЕ СТРОКИ.
+        # `sessions.held_on` не уникален, репозиторий это знает и берёт МЛАДШИЙ id
+        # (`infra/room_repo.py`); голый `where held_on = ?` полагался на порядок
+        # обхода rowid, то есть на совпадение. Находка верификатора этого захода.
+        ryad = conn.execute(
+            "select id from sessions where held_on = ? order by id", (den,)).fetchone()
         if ryad is None:
             return {"strok": 0, "s_prepodavatelem": 0, "otmetok_otsutstvia": 0}
         sid = ryad["id"]
@@ -1692,7 +1708,8 @@ class Handler(BaseHTTPRequestHandler):
 
         conn = self._connection()
         do = self._chisla_dnya(conn, den)
-        ryad = conn.execute("select id from sessions where held_on = ?", (den,)).fetchone()
+        ryad = conn.execute(
+            "select id from sessions where held_on = ? order by id", (den,)).fetchone()
         if ryad is None:
             # Занятия нет — значит и отклонений нет. Заводить его здесь нечем и незачем:
             # кнопка не создаёт день, она разбирает то, что на нём лежит.
@@ -1702,6 +1719,11 @@ class Handler(BaseHTTPRequestHandler):
         session_id = ryad["id"]
 
         ids = self._perekrytiya_dnya(conn, den)
+        # 🔴 СЧИТАЕМ СДЕЛАННОЕ, А НЕ ЗАДУМАННОЕ. Здесь стояло `len(ids)` — число
+        # НАМЕРЕНИЙ, при том что цикл ниже умеет пройти строку мимо. Сегодня мимо не
+        # проходит ни одна, и именно поэтому подмену было не увидеть: число совпадало
+        # бы всегда, пока в один прекрасный день не перестало. Находка верификатора.
+        snyato = []
         for student_id in ids:
             stroka = conn.execute(
                 "select status, gruppa from attendance "
@@ -1716,11 +1738,12 @@ class Handler(BaseHTTPRequestHandler):
                 conn.execute("update attendance set teacher_id = null "
                              "where session_id = ? and student_id = ?",
                              (session_id, student_id))
+            snyato.append(student_id)
         conn.commit()
         posle = self._chisla_dnya(conn, den)
         self._peresobrat_tiho()
-        self._send_json(200, {"ok": True, "den": den, "snyato": len(ids),
-                              "id": list(ids), "do": do, "posle": posle})
+        self._send_json(200, {"ok": True, "den": den, "snyato": len(snyato),
+                              "id": snyato, "do": do, "posle": posle})
 
     def _post_enrollment(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")
