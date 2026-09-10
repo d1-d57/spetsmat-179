@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
-# TOOL-CONTRACT: called-by-code — rendered by `veb.obshchee.karkas.obolochka`
-# whenever the role being served has the capability `videt-svoyo`.
-"""The personal page: what one named person sees about themselves.
+# TOOL-CONTRACT: called-by-code — `kabinet_na_datu` and `deti_na_datu` are called by
+# `veb/razdely/kabinet.py`, `veb/razdely/konduit.py`, `veb/razdely/glavnaya.py` and
+# `veb/priyom.py`; `segodnya` by the first three.
+"""The two personal queries: WHERE AM I on a date, and WHO COMES TO ME on it.
 
-Two questions, and nothing else on it: WHERE AM I TODAY and WHO IS COMING TO ME
-TODAY. A teacher who has entered by their personal password must get both answers
-without reading the whole distribution — that is the clause this section exists to
-close, and it is why the two queries below take a `teacher_id` and a DATE rather
-than filtering a screenful of everybody in memory the way `veb/server.py:718`,
-`:764` and the pupil tabs do.
+A teacher who has entered by their personal password must get both answers without
+reading the whole distribution, and that is why the two queries below take a
+`teacher_id` and a DATE rather than filtering a screenful of everybody in memory
+the way `veb/server.py:718`, `:764` and the pupil tabs do.
+
+🔴 THIS FILE NO LONGER DRAWS ANYTHING, AND THAT IS THE ПЕРЕДЕЛКА OF 2026-09-10, NOT
+A LOSS. It used to render `#s-lich`, an in-shell tab labelled «Моё». Personal
+content now has ONE home — the standalone page `/kabinet` — reachable by the menu
+item «Кабинет» that `veb/obshchee/karkas.py` puts second, after «Класс», which is
+what the owner asked for (`TZ-DOBOR-10-09.md` H1.1, H2.1, H2.2) and which the
+докстринг of `veb/razdely/kabinet.py` had been carrying as a debt since 09.09. What
+survives here is what four callers need and nobody else answers: `/kabinet`, the
+кондуит, `veb/priyom.py` and the card on the front page all ask these two functions
+and never the база directly.
 
 🔴 THE SECTION OWNS ITS QUERIES, AND THAT IS THE HOUSE RULE, NOT AN EXCEPTION.
 `veb/razdely/shkolniki.py` owns "who counts as a pupil at all" for the same
@@ -53,7 +62,6 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 import config
-from veb.obshchee.karkas import e
 
 
 def segodnya() -> str:
@@ -154,78 +162,3 @@ def deti_na_datu(c, teacher_id: int, den: str) -> list:
         """,
         (teacher_id, den, den),
     ).fetchall()
-
-
-def _imya_prepoda(kt, teacher_id: int) -> Optional[str]:
-    """The name to put in the heading, asked of the база when the context is silent.
-
-    `kt.prep` holds the ACTIVE teachers only. Somebody deactivated between minting
-    a password and using it would otherwise get a page with an empty heading, so
-    the база is asked directly before giving up.
-    """
-    svoj = kt.prep.get(teacher_id)
-    if svoj:
-        return svoj["name"]
-    ryad = kt.c.execute(
-        "select name from teachers where id = ?", (teacher_id,)).fetchone()
-    return ryad["name"] if ryad else None
-
-
-def _stolbcy(deti) -> str:
-    """The names in two columns, read down each column — as on the pupils tab."""
-    pol = (len(deti) + 1) // 2
-    def para(r):
-        return (f'<div class="para"><span class="kto">'
-                f'<b>{e(r["surname"])}</b> {e(r["name"])}</span></div>')
-    return ('<div class="dva">'
-            f'<div class="kol">{"".join(para(r) for r in deti[:pol])}</div>'
-            f'<div class="kol">{"".join(para(r) for r in deti[pol:])}</div></div>')
-
-
-def razdel(kt) -> str:
-    """The personal section, ready to hang in the shell.
-
-    🔴 `data-org="videt-svoyo"` ON THE SECTION IS LOAD-BEARING, NOT DECORATION.
-    This element sits inside the window the frame gate compares — from
-    `id="s-rasp"` to the first `\\n<script>` — and `_snyat_organy` in
-    `tools/sobrat_stranicu.py` removes it by that attribute before comparing what
-    is left with the guest page. Take the attribute off and the gate reports the
-    personal page as a frame that has drifted; leave the section unmarked outside
-    a capability check and it appears on the public page.
-
-    Nothing personal is shown when the entry could not say WHO came in: the two
-    common passwords belong to nobody in particular (`veb/vhod.py::proverit_parol`
-    answers `uid = None` for them), and a page that guessed at that point would be
-    showing one teacher another teacher's children.
-    """
-    den = segodnya()
-    zag = f'<p class="zag2">{e(kt.po_russki(den))}</p>'
-
-    if kt.prepod_id is None:
-        telo = ('<h1>Личная страница</h1>'
-                '<p class="net">Вход по общему паролю: система не знает, кто именно '
-                'вошёл. Свой кабинет и своих школьников показывает личный пароль.</p>')
-        return (f'<section class="str holst" id="s-lich" data-org="videt-svoyo">'
-                f'{zag}{telo}</section>')
-
-    imya = _imya_prepoda(kt, kt.prepod_id)
-    if imya is None:
-        telo = ('<h1>Личная страница</h1>'
-                '<p class="net">Такого преподавателя нет в базе.</p>')
-        return (f'<section class="str holst" id="s-lich" data-org="videt-svoyo">'
-                f'{zag}{telo}</section>')
-
-    kab = kabinet_na_datu(kt.c, kt.prepod_id, den)
-    deti = deti_na_datu(kt.c, kt.prepod_id, den)
-    # Кабинет — ОДИН и на эту дату. Чип тот же, что и везде на сайте; пусто —
-    # честное «не назначен», а не выдуманный номер (то же правило, что в
-    # `Kontekst.kab_html`, только источник здесь личный, а не групповой).
-    kab_html = (f'<span class="kab">{e(kab)}</span>' if kab
-                else '<span class="net">кабинет не назначен</span>')
-    deti_html = (_stolbcy(deti) if deti
-                 else '<p class="net">на этот день школьников нет</p>')
-    return (f'<section class="str holst" id="s-lich" data-org="videt-svoyo">'
-            f'{zag}'
-            f'<h1>{e(imya)}</h1>'
-            f'<p class="data">кабинет {kab_html}</p>'
-            f'{deti_html}</section>')

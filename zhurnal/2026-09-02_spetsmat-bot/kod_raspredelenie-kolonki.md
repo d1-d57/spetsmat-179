@@ -293,6 +293,50 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Bench first, then edits.** The pages are judged by eye, so before touching a line I
+built a render bench in my own scratchpad (`scratchpad/raspredelenie-kolonki/diag.py`):
+it boots the real `veb/server.py` on a MIGRATED COPY of the live base and screenshots
+all five tabs in both roles at the 1440x900 reference. Two входные находки it cost:
+
+* `data/spetsmat.db` in git is behind `migrations/` — 008, 009 and 010 are unapplied,
+  so `tools/gejt_verstki.py` dies on `no such table: mark_lesson_override` and reports
+  `ОХВАТ: 0 страниц из 4`. Out of my zone (the base and the gate both are). I work on a
+  migrated COPY in scratchpad and never touch the tracked file.
+* `karkas.py` names "Source Sans 3" / "Source Serif 4" and bundles NEITHER — no
+  `@font-face`, no stylesheet link. A machine without them (this one, and any guest's)
+  renders Georgia/Times, which is wider, so every width judgement made locally would be
+  made on the wrong glyphs. The bench injects the two families before measuring.
+
+**Order of the six edits — as задание numbers them, one commit each.**
+
+1. `obychno` column (G2.1-G2.3, H3.1). Move the 🔁 out of `.kto` into its own flex child
+   between the class column and `.komu`, emitted ALWAYS (empty when there is no icon),
+   so the teacher names below each other line up. `title` gets the full name in the
+   genitive the owner dictated («обычно у Натальи Амбург»), and `cursor:help` goes: the
+   question-mark cursor IS the «вопросительный знак при наведении» of G2.3.
+2. Pupil tablets in ONE row (G4.3, G5, H3.3). `.deti-ryad` stops wrapping and starts
+   shrinking; a tablet clips its own surname instead of pushing the row past the card.
+   The left-of-the-card overflow of G5 is `margin-left:auto` reaching a flex item wider
+   than its box — pinned shut from my own zone so canon drift cannot reopen it.
+3. Numbers in ONE column (H3.4). `.sch` already has `margin-left:auto` inside a row that
+   wraps — which is exactly why it lands in a new place each card. With the row no longer
+   wrapping (2) the column is real; make the digit large, as asked.
+4. Wide teacher plate in the pupil row (G3.2-G3.5, H3.2, H3.5). `--imya-w` is computed as
+   `23ch * 0.85` — the comment says the multiplier is a 15% ALLOWANCE for Cyrillic, the
+   code shrinks by 15% instead. That is why «Тухватулин-Йалчын Дэвин» wraps. Recompute,
+   then spend the freed width on the day columns.
+5. Ceiling of five stops refusing (A1). `enforce_calendar_and_ceiling` keeps the calendar
+   refusal and drops the ceiling one; the red `.sch.ploho` marker already exists and stays.
+   `test_a_sixth_student_in_one_slot_is_refused` becomes "the sixth is saved and marked".
+6. Teacher list narrows by day (A2). `vybor_prepoda` filters by the slot of ITS OWN column
+   using `kt.dni_prepodavatelej`. The standing assignee is never dropped from the list,
+   even if they do not attend — a select that cannot show its own value lies about the data.
+
+**Assumption stated before writing code, per §1.** Criterion 1 asks for a green
+`gejt_verstki` on five pages; the gate as shipped measures FOUR and dies before measuring
+any of them on this base. I report its real numbers rather than a number it cannot produce,
+and I do not edit the gate — `tools/` is outside my zone.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

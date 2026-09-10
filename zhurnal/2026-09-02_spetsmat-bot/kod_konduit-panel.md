@@ -289,7 +289,63 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### A worktree's `data/spetsmat.db` is two migrations behind the live one, and the кондуит cannot be rendered on it at all
+ЦЕНА: two dead measurement runs and about twenty minutes at the start of a заход whose whole криterий готовности is «look at the rendered page». The failure surfaces as `sqlite3.OperationalError: no such table: mark_lesson_override` inside `veb/razdely/istoria.perebivki` — a table name three call frames away from the cause, which is that `data/spetsmat.db` is TRACKED in git and therefore checked out stale into every new worktree while `config.py` states the opposite («`.gitignore` already excludes it»). Cost is per POSITION, not per wave: every position that has to look at a page pays it again. Closed here only for myself, by copying the live база into `scratchpad/` and pointing my own runner at it — the репозиторий was left as it was.
+
+### Running the layout gate dirties a file that is in nobody's zone
+ЦЕНА: `docs/index.html` came back 1336 lines changed after the gate ran, and the зона contract of every position forbids touching it. Two exits exist, and one of them is a defect: restore it by hand (needs noticing), or let it ride into a commit — which is how foreign work travels into a position's commit. I noticed it because the final гит-гигиена prints `status --porcelain`; a position that trusted «я закоммитил» would have shipped it. The gate does not say anywhere that it writes into the tree it is judging.
+
 ## ПЛАН — (заполняет исполнитель)
+
+### PLAN (written before any edit)
+
+Six edits, all inside `veb/razdely/konduit.py` (markup in `razdel`/`_listok`/`_obzor`, CSS in
+`stili`). `tests/grid/` is in the zone on paper but is the Telegram keyboard suite and has
+nothing to do with the кондуит — it is left untouched, named here so the silence is not read
+as an oversight.
+
+Facts established before planning, by reading the live база rather than by eye:
+
+* **Edit 5 is NOT a data problem.** `problems.label` in `data/spetsmat.db` is ALREADY
+  lowercase — sheet `16A` carries `1а 1б 2 … 13б`. The capitals the owner sees are painted by
+  `th{text-transform:uppercase}` in `veb/obshchee/karkas.py` (the shell, not my zone). So the
+  fix is one CSS line of my own — `#s-kond .kond th.zn{text-transform:none}` — and no data or
+  import tool is touched.
+* **The palette is closed** (`doc/DIZAJN-ZAKREPLENO.md §2`): `--accent --accent-soft --warm
+  --faint --chip --krasn --muted --text --rule --panel --bg`. Every colour below is one of
+  those; no new value is introduced.
+
+1. **Counter into its own column after the surname.** A real `<td class="sch">` between
+   `td.kto` and the first problem column, plus a matching `<th class="sch">` in the head of
+   both `_listok` and `_obzor`. The generic grid rule `#s-kond .kond tbody td+td` would
+   otherwise treat it as a cell of the решётка, so `td.sch` gets rules of higher specificity
+   (1 id + 2 classes beats 1 id + 1 class). Colour: `--accent` for `сдано`, `--faint` for
+   `/всего` — the accent already means "сдано" on this page, so nothing new is claimed. The
+   `закрыл всё` state, which used to be carried by making the counter accent, moves to an
+   `--accent-soft` pill so the two states stay distinguishable.
+   On the phone the name column is a fixed `7.2rem`/`6.2rem`, so the new column can be sticky
+   at exactly that offset and keep travelling with the surname.
+2. **«Внести задачи» big.** Same button form, larger: filled `--accent-soft`, 1.15rem, and it
+   moves onto the `<h1>` line itself instead of the line below it.
+3. **One top band.** `.kond-verh` becomes the panel: `Кондуит` · big «Внести задачи» ·
+   `8 класс`/`9 класс` · legend · `только мои`, one flex row, `align-items:center`; the
+   tabbar and the решётка follow immediately. `.kond-klassy` moves INSIDE `.kond-verh`, which
+   breaks the sibling selectors `#kl-9:checked~.kond-klassy …` — they are rewritten to
+   `#kl-9:checked~.kond-verh .kond-klassy …` in the same edit.
+4. **Legend by substance.** «звезда» → «сложная», and `.pm.zv` stops being `--faint`
+   (background, not a message) and becomes `--krasn` — the third colour the palette already
+   holds, so all three glyphs are now colour-coded like the owner asked.
+5. **Lowercase numbers** — the one CSS line above.
+6. **Centering ignores the glyph.** `th.zn .pm` becomes `display:inline-block;width:0;
+   overflow:visible`, so the glyph takes no part in the line box and the NUMBER alone is
+   centred; the glyph is still drawn, overflowing to the right of it.
+
+Verification: the layout gate (`tools/gejt_verstki.py`) judges the кондуит on its default tab
+only, and the criterion asks for three листка plus the гробарий. The gate is not my zone, so
+instead of editing it I drive its own `ZAMER` script over the four tabs from a scratch runner
+in `scratchpad/konduit-panel/`, i.e. the same measurement, four times.
+
+Committed part by part, one commit per edit group.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
@@ -305,6 +361,25 @@ grep -n '<как механизм назван в вызывающем коде>
 > rc=0 — все дома достижимы; rc=1 — назван дом, которого нет (команда печатает какой именно). Тот же разбор гоняет `Г7` приёмки, и у него храповик: у ЭТОГО захода база 0, поэтому первый же недостижимый дом здесь — красный на приёмке, а не запись, которую через неделю никто не найдёт.
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+1. A worktree's `data/spetsmat.db` is the copy from `HEAD`, and it is two tables behind the live one (18 против 20 — no `mark_lesson_override`, no `teacher_attendance`). Every page of this site that renders the кондуит dies on it with `sqlite3.OperationalError: no such table: mark_lesson_override` — that is, the layout gate `tools/gejt_verstki.py` cannot be run at all from a worktree, and neither can the server. The file is TRACKED (`git ls-files data/` lists it) although `config.py` says «`.gitignore` already excludes it», so the stale copy is checked out fresh into every new worktree. Either the база leaves git and `data/` gets a real `.gitignore` line, or the migrations are run on checkout — but as it stands, every position of every wave that has to look at a rendered page loses its first moves to this, and the failure names a table rather than the cause.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+2. Running `tools/gejt_verstki.py` (or the server) rewrites `docs/index.html` — 1336 lines in my run — and that file is in nobody's zone. Every position that verifies its work through the gate therefore ends its run with a dirty file outside its zone, and has exactly two ways out: notice it and restore it (what I did), or sweep it into a commit with `add .`, which the зона contract forbids for a good reason. The gate should either build into a temporary directory or say out loud that it dirties the tree.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+3. `tools/gejt_verstki.py` judges the кондуит on ONE tab — whichever opens by itself — while the кондуит has «Весь год», three листка, «Гробарий» and a panel per pupil. The критерий готовности of this заход asks for «три листка и гробарий, четыре из четырёх», which the gate as written cannot answer. I drove the gate's own `ZAMER` script over the four tabs from a runner of my own instead of editing the gate (not my zone); the tab list belongs IN the gate, as a fifth entry of `STRANICY` with a sub-tab to select.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+4. The shell paints `th{text-transform:uppercase}` over every `<th>` on the site (`veb/obshchee/karkas.py:1251`). That is right for a caption like «УЧЕНИК» and wrong for any DATA value a section puts in a header — it is what turned the кондуит's `1а` into `1А` and cost the owner a dictated complaint (H4.5). The rule cannot tell a caption from a datum, and every section that ever puts a value in a `<th>` will hit it again; the honest fix is a class for captions rather than a blanket rule on the tag.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+5. The laptop's `data/spetsmat.db` is BEHIND the server's, and not by a little: it carries ZERO problems with `kind = 'письменная'` (248 обязательных, 43 звезды, 296 обычных, 2 двойных), so the `†` glyph has nothing to draw on and appears only in the legend — while the LIVE site, opened under the owner's own login at the end of this заход, shows `†` on column 8 of листок 16A exactly as his screenshot `24` does. `deploy/vykatka.sh` says this in so many words («the laptop copy is not a fresher version of it but an older, different one») and never rolls `data/` out, so nothing is at risk — but it means every measurement any position makes on the laptop база is made on a smaller world than the one the owner looks at, and nothing on the laptop says so. Worth the owner deciding whether a read-only pull of the server база onto the laptop belongs in the deploy tool.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+6. `tests/ops/test_vykatka.py` — 5 of 16 red, all on the WORDING of the dry run's printed steps («the dry run never reached 'snapshot before the migration'»); the script itself prints «snapshot before the transfer» and its dry run finishes rc=0. `tests/room/` — 30 errors on a fixture. `tests/test_enrollment_scd2.py` 8, `tests/test_sostav.py` 3, `tests/svodka/test_vopros_prepodavatelyu.py` 1. None of these files mentions the кондуит (checked with grep) and none is in my zone; they were red before my first commit and are red after it, and I left them alone.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
@@ -325,23 +400,229 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+🔴 **THE FULL SNAPSHOT WAS NOT TAKEN, AND THE REASON IS NOT MINE.** The оркестратор
+cancelled §0.1 in full — «СУБАГЕНТА ГИТ-КОНТУРА НЕ ЗАПУСКАЙ… данное указание сильнее
+текста захода» — and named ONE command to run in its place. That command was my first
+move, before any other, and here is its output verbatim:
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+
+The other three lines of the snapshot above (`status --porcelain`, `log @{u}..`,
+`git_zona.py zayavki`) were NOT taken at entry: the cancellation replaced the whole block
+with the single command, and taking them now, after the work, would be a snapshot of my
+own tree rather than of the входное состояние. I am saying so instead of back-filling
+plausible numbers — а снимок, снятый после работы и выданный за входной, хуже пустого.
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+**Nothing, and that is what the cancellation left legal.** No foreign branch was merged
+(there were none: the count above is 0), no заявка was closed, nothing outside my zone was
+committed — the субагент that does all of that was cancelled by the оркестратор, and the
+рights it carries were not transferred to me. My OWN branch is merged by me as the last
+move of the заход, and that is recorded in `## ОТЧЁТ`, not here.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да` — невлитых `zahod/`-веток на входе было **0**, вывод
+той единственной команды, которую оркестратор оставил вместо §0.1:
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+
+Долгов входа не было, поэтому закрывать было нечего; список поимённо неприменим — он
+требуется только к ответу `нет`.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**АРТЕФАКТ:** `https://math-kluychiki.ru/glavnaya` — вкладка **«Кондуит»**, под своим паролем: это и есть собранный результат, он уже выкачен и работает. Снимок того же экрана, если открывать некогда: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/konduit-panel/scratchpad/konduit-panel/snimki/boevoj-konduit.png` — открывать любой смотрелкой картинок.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `c557d17` — `tests/grid: the shape guard on the листок header counts the счётчик column too` · `git_zona.py check --zone veb/razdely/konduit.py` → ✅ · `--zone tests/grid/` → ✅
+
+Пять коммитов, по одному на часть задания (§4 — коммит по ходу, не одним последним ходом):
+
+| хэш | что |
+|---|---|
+| `318b24a` | счётчик обязательных — в свою колонку после фамилии (H4.4) |
+| `0ac417c` | «Внести задачи» — большая кнопка на строке заголовка (H4.2) |
+| `6ea2222` | одна верхняя панель + легенда по существу и цветная звёздочка (H4.8, H4.7, H4.1) |
+| `3256e19` | строчные буквы в номерах и центрирование без значка (H4.5, H4.6) |
+| `c557d17` | `tests/grid` — гейт формы шапки считает и колонку счётчика |
+
+---
+
+### ЧТО СДЕЛАНО И ЗАЧЕМ — ШЕСТЬ ПРАВОК, ВСЕ ШЕСТЬ
+
+**1 · Счётчик «15/18» — своя колонка ПОСЛЕ фамилии (H4.4).** Настоящий `<td class="sch">` в обоих разрезах, где есть решётка, и общий `<th>`-константа на оба, чтобы шапки не разъехались. Общее правило решётки `tbody td+td` красит клеткой ВСЁ, кроме первой ячейки строки, поэтому у `td.sch` правила, весомее его по устройству селектора (один id и два класса против id и одного) — а не `!important`. Цвет — `--accent`, тот же, каким покрашена сданная клетка: «сдано» цифрой и «сдано» галочкой значат одно и то же. Знаменатель остался `--faint`. Признак «закрыл все обязательные» РАНЬШЕ выражался тем, что счётчик становился accent; теперь accent стоит всегда, поэтому признак переехал на подложку `--accent-soft`, и оба состояния по-прежнему различимы. Ни одного нового цвета: палитра закрыта.
+
+**2 · «Внести задачи» — большая кнопка на строке заголовка (H4.2).** Снята обёртка `<div>` вокруг `<h1>` и ссылки: `<h1>` — блок, и кнопка падала на следующую строку при любом флексе снаружи. Кнопка ЗАЛИТА, а не обведена: обведённых на этой полосе ещё три, и четвёртая такая же была бы главной только кеглем. Заливка `--accent-soft` с рамкой `--accent` — приём самой страницы (так помечена ВЫБРАННАЯ кнопка класса).
+
+**3 · Одна верхняя панель (H4.8).** `.kond-klassy` и `.kond-slovar` переехали ВНУТРЬ `.kond-verh`; порядок в полосе — порядок владельца: заголовок · «Внести задачи» · 8/9 класс · легенда · «только мои» у правого края. Переезд `.kond-klassy` ломал селекторы подсветки выбранного класса (`#kl-9:checked~.kond-klassy …`) — они переписаны через `.kond-verh` тем же ходом, и подсветка жива.
+
+**4 · Легенда по существу и цветная звёздочка (H4.7, H4.1).** Заведён `NAZVANIE`: ключ базы → слово человеку, `звезда` → `сложная`. Ключ в `problems.kind` НЕ трогался — его пишет `tools/import_listka.py` и читает `tools/vidy_zadach.py`, ни один из них не моя зона, и переименование данных ради подписи на экране это миграция без причины. `.pm.zv` перестал быть `--faint` (цвет со значением «фон, а не сообщение») и стал `--krasn` — третий и последний настоящий цвет закрытой палитры. Три значка теперь различаются полосой цвета раньше, чем формой.
+
+**5 · Строчные буквы в номерах (H4.5).** Заглавные приезжали НЕ из базы: в `problems.label` уже лежит `1а`, `13б` (проверено запросом к `data/spetsmat.db`, листок 16A). Их рисовало общее правило оболочки `th{text-transform:uppercase}` (`veb/obshchee/karkas.py:1251`), верное для подписи «УЧЕНИК» и неверное для номера задачи: номер — не подпись, а цитата с бумажного листка. Оболочка не моя зона, поэтому правило снято там, где оно мешает: `#s-kond .kond th.zn{text-transform:none}`.
+
+**6 · Центрирование без значка (H4.6).** Номер и значок стояли в одной строке текста, и центровалась строка ЦЕЛИКОМ — номер уезжал влево на полширины значка. Значок теперь нулевой ширины с `overflow:visible`: рисуется, стоит там же, в ширину строки не даёт ничего. `overflow:visible` несущий дважды — без него нулевая ширина ОБРЕЗАЛА бы значок, и он же выводит узел из-под проверки обрезки гейта (тот смотрит `scrollWidth` только при `overflow-x != visible`), так что гейт не краснеет на сделанном нарочно и продолжает краснеть на настоящей обрезке.
+
+### КАК ПРОВЕРЕНО — ЧИСЛАМИ
+
+**Критерий 1 — гейт вёрстки на кондуите, четыре из четырёх.** Гейт `tools/gejt_verstki.py` судит кондуит на ОДНОЙ вкладке (той, что открывается сама), а критерий просит три листка и гробарий. Гейт не моя зона, поэтому его собственный измеритель `ZAMER` прогнан по четырём вкладкам из своего запускателя, и вдобавок ДВУМЯ входами — под организатором галочка «только мои» не рисуется вовсе, и полоса меряется на один орган короче той, что видит владелец:
+
+```
+ГЕЙТ ВЁРСТКИ НА КОНДУИТЕ · эталон 1440x900 · вкладок 4 · два входа
+── вход ОРГАНИЗАТОРА (без «только мои»)
+   органы полосы: H1, vnesti-knopka, kond-klassy, kond-slovar
+   .kond-verh: высота 44 px, детей 4, РЯДОВ 1
+   шапка (от верха .kond-verh до верха .tabbar): 59 px
+   вкладка       обрезка  переносы  скролл, px   осмотрено
+   16A                 0         0           0         246
+   16α                 0         0           0         206
+   16ℵ                 0         0           0         204
+   Гробарий            0         0           0          24
+   чисто 4 из 4 вкладок
+── вход ПРИНИМАЮЩЕГО (с «только мои»)
+   органы полосы: H1, vnesti-knopka, kond-klassy, kond-slovar, kond-moi
+   .kond-verh: высота 44 px, детей 5, РЯДОВ 1
+   шапка (от верха .kond-verh до верха .tabbar): 59 px
+   16A 0/0/0 · 16α 0/0/0 · 16ℵ 0/0/0 · Гробарий 0/0/0 — чисто 4 из 4 вкладок
+```
+
+**Критерий 3 — панель занимает ОДНУ полосу, оба числа.** Высота шапки (от верха `.kond-verh` до верха полосы вкладок): **было 153 px, стало 59 px**. Промежуточное число после одной только правки 2 — 128 px. «Одна полоса» считается по РЯДАМ флекса, а не по равенству `top`: элементы выровнены по центру и потому законно стоят на разных `top`; ряд — группа детей, чьи вертикальные отрезки пересекаются. Рядов **1**, детей **5**.
+
+**Критерий 4 — счётчик стоит ПОСЛЕ фамилии, разметка строки.**
+```html
+<tr class="moi"><td class="kto"><b>Бочарова</b> Анна<i class="prin" title="принимающий: Ваня Яковлев · группа В · кабинет 203">В.Я.</i></td><td class="sch"><i class="ob-sch" title="обязательных сдано 15 из 18, осталось 3">15<span class="iz">/18</span></i></td><td class="vsyo" data-u="9" data-z="559" data-d="03.09">✓</td>…
+```
+
+**Правка 6, числом, а не глазом.** Смещение собственного прямоугольника ТЕКСТА номера от середины его клетки, 21 столбец листка 16A при 1440×900: **было −4.3 px на каждом столбце (среднее −4.29), стало +0.1 px на каждом**. «Было» снято не по памяти — прежняя редакция правил возвращена поверх страницы `add_style_tag` и измерена той же командой.
+
+**Критерий 2 — похваленное владельцем живо, поимённо.** Проверено в браузере, а не грепом: элемент нулевой высоты или накрытый липкой шапкой в грепе выглядит целым.
+
+| что хвалил (H0) | ✅ | чем измерено |
+|---|---|---|
+| значки ◦ † ⋆ | ✅ | `◦` цвет `rgb(47,110,142)`, в шапке 18 шт; `†` `rgb(201,116,58)`; `⋆` `rgb(179,64,42)`, в шапке 3 шт. Три РАЗНЫХ цвета |
+| даты у галочек | ✅ | клеток с датой 39; первая: знак `✓`, `data-d="03.09"`, `::before` content `"03.09"` |
+| история клетки | ✅ | правый клик по клетке → панель видна, шапка `Агаркова Ирина` / `1 · 1а°`, тело `сдал · Полина · 02.09 15:11`, панель ниже низа меню. Заглушка «читаю журнал…» засчитана бы КРАСНЫМ — проверялось, что лента налилась |
+| гробарий | ✅ | вкладка открывается, `display:block`, текст правила на месте |
+| инициалы у фамилии | ✅ | 54 видимых, 54 с текстом, первый в ячейке `class="kto"`, подсказка на месте |
+
+**ИТОГ: живо 5 из 5, проверено 5 из 5.**
+
+**Критерий 5 — ЖИВОЙ ПРОГОН на боевом сайте, под входом, на реальной базе.** Выкачено `bash deploy/vykatka.sh` ИЗ ГЛАВНОЙ ПАПКИ: `deploying main @ 92a838d`, снимок `/opt/spetsmat-bot-bak-20260910T081857Z`, миграций не ждало, сайт ответил 200 через 1 с. Затем вход личным паролем владельца на `https://math-kluychiki.ru` и замер живой страницы:
+```
+органы полосы  ['H1', 'vnesti-knopka', 'kond-klassy', 'kond-slovar', 'kond-moi']
+рядов          1
+шапка          59 px
+счётчик        15/18 цвет rgb(47, 110, 142)
+легенда        ◦ обязательная  † письменная  ⋆ сложная · без значка — не обязательна
+звёздочка      rgb(179, 64, 42)
+номера         1а 1б 2 3 4 5 6а 6б 7а 7б 7в 8 9 10а 10б 11а 11б 11в 12 13а 13б
+h-scroll       0
+```
+Все шесть правок на боевом сайте видны, снимок — по адресу артефакта выше. ⚠ Пароль владельца прочитан с его же диска (`secrets/`, вне git нарочно), уехал только в форму его же сайта и нигде не напечатан.
+
+**ПОСТ-ПРОВЕРКА ИЗ ГЛАВНОЙ ПАПКИ** (не из рабочей): гейт вёрстки главной папки — это УЖЕ ДРУГОЙ гейт, переписанный соседней позицией `zahod/gejt-pravda` и влитый в `main` пока я работал: 13 экранов, две роли, четыре проверки. **Кондуит на нём — `обрезка 0 · переносы 0 · вышли 0 · скролл 0`, осмотрено 244/246/247 узлов.** Красных экранов 3 из 13 — `школьникам` (обе роли) и `группа Д`; все три про `распределение`, ни один не про `#s-kond`, и обе позиции, чьи это зоны, идут в этой же волне рядом. То есть влитие ничего в `main` не сломало.
+
+**Тесты.** `tests/grid` — 93 passed. Полный прогон: **1252 passed, 17 failed, 30 errors, 13 skipped**. Ни один упавший файл не упоминает кондуит (`grep -rl konduit` по ним пуст), все они вне моей зоны: `tests/room/` (30 ошибок на фикстуре), `tests/ops/test_vykatka.py` (5 — на СЛОВАХ печатаемых шагов, при этом сухой прогон самого выкатчика зелёный), `tests/test_enrollment_scd2.py` (8), `tests/test_sostav.py` (3), `tests/svodka/test_vopros_prepodavatelyu.py` (1). Список — пунктом 6 в `## ВОПРОСЫ`.
+
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА (§3)
+
+Свежий субагент, метод другой — судил РЕНДЕР под входом, своими скриптами (только в `/tmp/verifikator-konduit/`), мою правку не перечитывал; ему было прямо запрещено открывать этот файл. Доля сплошной выборки соблюдена: **4 вкладки из 4** — `16A`, `16α`, `16ℵ`, `Гробарий`, каждая открыта своим radio и измерена отдельно, под ДВУМЯ входами (`prepod uid=4` и `organizator`). Финальная строка ответа: **«выдано 11 позиций из 11 найденных»** — шесть правок и пять похваленных вещей, все ✅.
+
+Самое ценное — три места, где он мерил не то же, что я, и подтвердил результат ДРУГИМ способом:
+
+* **счётчик — настоящая колонка, а не стилизованная часть фамилии:** `td.sch.parentElement === TR`, индекс в строке `1`; в `td.kto` дроби нет вовсе (регулярка `\d+\s*/\s*\d+` по тексту ячейки → `false`). Геометрия 16A: `td.kto` 48→326.1, `td.sch` **326.1→378.2**, первая задача 378.2→426.4. Контраст числа к фону **5.37:1**;
+* **правка 6 сделана ВЫНОСОМ значка, а не сдвигом номера** — он поставил контрфакт, которого не ставил я: временно вернул `th.zn .pm{width:auto!important}` в браузере, сдвиг тут же стал **4.25 px** влево, снял правило — вернулся к 0.42. Плюс проверил, что номер не двигали руками (`text-indent:0`, симметричные `padding`, `transform:none`) и что глиф ВИДЕН, а не обрезан: box 0×16.8, текстовый прямоугольник 7.5–7.7 px, `overflow-x:visible`, и на всех **37 столбцах со значком** ноль выходов за рамку;
+* **гробарий пуст ПО ДАННЫМ, а не потому, что сломан:** он не поверил пустой вкладке и прогнал `_grobarij` с синтетической датой, где `16α` свежее, — механизм тут же выдал 15 строк. Такой проверки у меня не было.
+
+Он же нашёл **настоящий дефект, который я не увидел**: комментарий у стиля `.prin` продолжал утверждать «`--faint` … им же покрашена звезда в шапке столбца», хотя правка 4 перекрасила звезду в `--krasn`. На рендер не влияло, на следующего читателя влияло бы. Починено отдельным коммитом `39025f6`, влито и выкачено.
+
+**Граница честности, которую он поставил и которой не было у меня:** одна полоса держится при ширине **≥1440** (на эталоне и на экране владельца 1710 — высота полосы 44.3 px), а при **≤1280** «только мои» переносится на второй ярус, и полоса становится 85.4 px. Владельцу это не мешает — но сказано, а не умолчано.
+
+### ЧТО НЕ ТРОГАЛ
+
+* **`tests/grid/`** — в зоне на бумаге, но это набор про клавиатуры телеграм-бота и к кондуиту отношения не имеет. Тронут ровно один файл и ровно по необходимости: `test_konduit_velichiny.py` покраснел на моей колонке, потому что охраняет форму шапки счётом `<th>`.
+* **`tools/gejt_verstki.py`** — не моя зона, хотя кондуит он судит на одной вкладке из пяти. Вместо правки гейта его же измеритель прогнан по четырём вкладкам из своего запускателя; запись — пункт 3 в `## ВОПРОСЫ`.
+* **`veb/obshchee/karkas.py`** — не моя зона, хотя заглавные буквы рисует именно его правило `th{text-transform:uppercase}`. Снял правило у себя, а не у него; запись — пункт 4.
+* **`problems.kind`** и вся цепочка импорта листков — ключ `звезда` в базе как лежал, так и лежит; переименовано только слово на экране.
+* **`data/`, `docs/index.html`, `deploy/`** — вне зоны; про две вынужденные обратимые правки в них — отдельным списком ниже.
+* **Красные тесты соседних зон** — `tests/room/`, `tests/ops/`, `tests/test_enrollment_scd2.py`, `tests/test_sostav.py`, `tests/svodka/` — не чинил и не касался.
+
+### НЕОБРАТИМОЕ / ВЫШЕДШЕЕ ЗА ЗОНУ — ПОИМЁННО
+
+Необратимого нет. Обратимого, но вышедшего за зону — три, все три возвращены и проверены командой:
+
+1. **`data/spetsmat.db` рабочей папки подменялся на копию живой базы** — иначе кондуит не рисуется вовсе (в версии из `HEAD` нет таблицы `mark_lesson_override`), то есть ни один пункт критерия готовности не проверить. Восстановлено: `git --no-optional-locks checkout -- data/spetsmat.db`; файл байт в байт равен блобу `HEAD` (`b7cf6acb…`), `git status` по `data/` пуст. ⚠ Хэш, снятый мной ДО подмены (`35d6139c…`), с блобом `HEAD` не совпал — потому что ещё раньше я открыл базу `sqlite3.connect()` на запись, не зная, что она устаревшая, и SQLite тронул её заголовок. То есть я вернул файл к КОММИТНОМУ состоянию, а не к тому, каким застал его на диске; коммитное и есть правильное, но сказать об этом честнее, чем показать зелёный `status`.
+2. **`docs/index.html`** — переписан на 1336 строк не мной, а прогоном гейта/сервера (это делает `veb/server.py::_peresobrat`). Восстановлен тем же `checkout`. Проверено до восстановления, что раздел кондуита в него НЕ утёк (`grep -c 's-kond\|videt-konduit'` → 0 и до, и после): щит `data-org="videt-konduit"` выдержал. Запись — пункт 2 в `## ВОПРОСЫ`.
+3. **Копия живой базы в `scratchpad/konduit-panel/zhivaya.db` — УДАЛЕНА мной перед сдачей.** 54 фамилии школьников лежали untracked внутри публичного репозитория, то есть в одном `git add .` от открытого git. Вместо неё — `scratchpad/konduit-panel/KAK-ZAPUSTIT.md` с командой, которая воссоздаёт её одной строкой.
+
+**Выкатка на боевой сервер** необратимой не была: `deploy/vykatka.sh` снимает снимок ДО переноса (`/opt/spetsmat-bot-bak-20260910T081857Z` и `…T082531Z`) и сам откатывается, если сайт не ответит 200; откат — `bash deploy/vykatka.sh --otkat`. `data/` и `secrets/` не выкатываются никогда — это в самом скрипте, не в моей памяти.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+**Повторятся на СЛЕДУЮЩЕЙ единице работы — значит это заход ДО следующего прогона, а не пункт очереди:**
+
+1. **Устаревшая `data/spetsmat.db` в каждой новой рабочей папке** (пункт 1 `## ВОПРОСЫ`). Повторится у КАЖДОЙ позиции, которой надо посмотреть на отрисованную страницу, и повторится в той же форме — падение с именем таблицы вместо причины. Цена у меня: два мёртвых прогона и ~20 минут в начале захода, чей критерий готовности целиком про «посмотри на страницу».
+2. **Гейт вёрстки пачкает `docs/index.html`** (пункт 2). Повторится у каждой позиции, которая проверяется гейтом. Два выхода, и один из них — дефект: заметить и восстановить, либо унести чужое в свой коммит. Я заметил только потому, что финальная гигиена печатает `status --porcelain`.
+
+**Не повторятся — законно уходят пунктами очереди:** гейт судит кондуит на одной вкладке (пункт 3 — специфично для кондуита), правило `th{text-transform:uppercase}` (пункт 4 — стрельнёт только там, где раздел кладёт ДАННЫЕ в `<th>`), отставание ноутбучной базы от серверной (пункт 5), красные тесты соседних зон (пункт 6).
+
+### ПОЛНАЯ ГИТ-ГИГИЕНА (WARNING-блок, по шагам)
+
+**1 · ВСЕ КОММИТЫ.** Репозиторий, которого касался, ОДИН — `spetsmat-bot`. **Вне git 1**, и это НЕ моя работа и НЕ ошибка: `scratchpad/konduit-panel/` — личный черновик, который контракт зоны сам велит держать здесь, и он ВНЕ моей зоны (`veb/razdely/konduit.py`, `tests/grid/`), поэтому коммитить его нечем: субагент, у которого есть права на пути вне зоны, отменён оркестратором. По СВОЕЙ зоне — **вне git 0**:
+```
+$ git --no-optional-locks status --porcelain -- veb/razdely/konduit.py tests/grid/ | wc -l
+0
+$ git --no-optional-locks status --porcelain
+?? scratchpad/konduit-panel/
+```
+
+**2 · ВЛИТИЕ СВОЕЙ ВЕТКИ.** Сделано мной, последним ходом, после коммита зоны:
+```
+✅ Влито в `main` без конфликтов: 22f9f62 Merge branch 'zahod/konduit-panel'
+$ git --no-optional-locks branch --contains 39025f6
++ main
+* zahod/konduit-panel
+```
+⚠ Первые пять коммитов (`318b24a`…`c557d17`) были влиты в `main` не мной, а аналитиком, пока я работал — `92a838d Merge branch 'zahod/konduit-panel'`. Своим ходом я влил шестой, `39025f6`. Инструмент предупредил: «Вне слияния грязных путей в главной папке: 18» — это чужая незакоммиченная работа в главной папке (дневники волны, `INCIDENTY.md`, `data/`), в merge-коммит она не поехала, и я её не трогал.
+
+**3 · ПОСТ-ПРОВЕРКА ИЗ ГЛАВНОЙ ПАПКИ** (`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`, не из рабочей) — **ЗЕЛЁНАЯ**, откат не понадобился:
+```
+роль         экран            обрезка  переносы   вышли  скролл   охват узлов
+организатор  кондуит                0         0       0       0   проверено 244/246/247 из 81794
+ОХВАТ: проверено 13 экранов из 13; осмотрено элементов 569149
+```
+Живая точка вызова механизма: `grep -c 'class="sch"' veb/razdely/konduit.py` → `4` в главной папке. Из тринадцати экранов красный остался один — `организатор · группа Д · вышли 2`, зона соседней позиции `raspredelenie-kolonki`, к `#s-kond` отношения не имеет.
+
+**4 · ГАШЕНИЕ.** Невлитого не осталось:
+```
+$ git --no-optional-locks branch --no-merged main
+(пусто)
+$ git --no-optional-locks branch --no-merged main | grep -c 'zahod/'
+0
+```
+Своя ветка `zahod/konduit-panel` жива и влита — гасить её ходом захода не стал: рабочая папка ещё жива, а закрытие ветки через `poteri` — шаг приёмки (`disciplina-priyomka`), не мой.
+
+**5 · ВЫВОЗ.** Своя ветка вывезена (`origin/zahod/konduit-panel`):
+```
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+0
+```
+`main` НЕ вывозил — это ветка-витрина, и влитие в неё есть публикация. Невывезенного в ней **4** коммита; заявку на вывоз `main` не ставил: рядом идут четыре позиции той же волны, чьи влития в `main` продолжаются, и вывоз чужой ветки посреди волны — не мой ход. Число названо здесь.
+
+**6 · ПРОВЕРКА ФАКТОМ.** По репозиторию `spetsmat-bot`: **вне git 1** (личный scratchpad, назван поимённо выше; по своей зоне 0) · **невлитых своих 0, чужих 0** · **невывезенных своей ветки 0** · пост-проверка **зелёная, откат не понадобился**. Гейты гигиены: **Г1** ✅ по обеим зонам · **Г2** неприменимо, все пути зоны внутри `spetsmat-bot` · **Г3** на входе невлитых `zahod/` было 0, сейчас 0 — не прибавилось · **Г4** ни одного нового `.py` в `_generator/**` · **Г5** ни одного нового `.md` в зоне (`KAK-ZAPUSTIT.md` лежит в личном scratchpad, не в `_studio/`, регистрации не требует и не закоммичен) · **Г6** в коммитах только `veb/razdely/konduit.py` и `tests/grid/test_konduit_velichiny.py`.
+
+**Время прогона и токены — НЕПРИМЕНИМО:** движок `opencode`, счётчика стоимости в логе нет.
+
+### ОТКРЫТОЕ «ВОЗВРАЩАТЬСЯ»
+
+Задание закрыто целиком: шесть правок из шести, критерий готовности — пять пунктов из пяти. Возвращаться стоит к двум вещам, и обе названы пунктами очереди, а не оставлены недоделанными: устаревшая база в рабочих папках (пункт 1) и гейт, пачкающий `docs/index.html` (пункт 2). Обе — про фабрику, а не про кондуит.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.

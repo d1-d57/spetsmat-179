@@ -1611,14 +1611,18 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
 
         repo = SqliteEnrollmentRepo(conn)
-        # The interactive form is the ONLY caller wired with both hard refusals: a
-        # day the teacher does not attend, and a sixth student in one slot.  Import
-        # tools and the bot's own correction paths build ``EnrollmentService``
-        # without either (see ``core.services.enrollment.EnrollmentService``) — they
-        # write historical or already-corrected data that predates both rules, and
-        # are out of this заход's zone to change.
+        # The interactive form keeps the CALENDAR refusals — a day the teacher does
+        # not attend is a statement about reality and stays hard.
+        #
+        # 🔴 ПОТОЛОК БОЛЬШЕ НЕ ОТВЕРГАЕТ ЗАПИСЬ (A1, решение владельца 10.09):
+        # «семерых человек она может дать сохранить — это нормально», «должно
+        # сохраняться с любым количеством». Отказ на шестом родился из неверной
+        # формулировки критерия: владелец говорил про ВИДИМОСТЬ («светиться
+        # жёстко-красным»), а было сделано про ЗАПРЕТ. Перегруз остаётся ВИДИМЫМ —
+        # красный признак у принимающего, — но запись проходит всегда и без вопросов.
+        # ``TEACHER_CEILING`` живёт дальше как порог ПОКАЗА, а не как запрет.
         service = EnrollmentService(
-            repo, calendar=_PrepodavatelDenAdapter(conn), ceiling=TEACHER_CEILING,
+            repo, calendar=_PrepodavatelDenAdapter(conn), ceiling=None,
             presence=_OtsutstvieNaDatuAdapter(conn),
         )
         try:

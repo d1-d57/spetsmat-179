@@ -85,6 +85,21 @@ ZNACHKI = {"обязательная": "◦", "письменная": "†", "з
 #: The class the glyph is drawn with, one per kind.  Latin, short and stable: it is
 #: repeated once per column header of every листок.
 ZNACHOK_KLASS = {"обязательная": "ob", "письменная": "pi", "звезда": "zv"}
+#: Как вид задачи ЗОВЁТСЯ ЧЕЛОВЕКУ, который смотрит на легенду.
+#:
+#: 🔴 ЛЕГЕНДА ПИСАЛАСЬ КЛЮЧАМИ БАЗЫ, И ОДИН ИЗ НИХ НИЧЕГО НЕ ЗНАЧИТ.  Владелец 10.09
+#: (`TZ-DOBOR-10-09.md` H4.7): «написано „звёздочка — звезда“.  Звёздочка — это СЛОЖНАЯ.
+#: Переписать словами, которые что-то значат».  Он прав буквально: «⋆ звезда» объясняет
+#: значок значком, то есть не объясняет ничего.
+#:
+#: 🔴 КЛЮЧ `звезда` В БАЗЕ НЕ ТРОГАЕТСЯ, И ЭТО НЕ ЛЕНЬ.  Он лежит в `problems.kind` у
+#: 43 строк, его пишет `tools/import_listka.py` и читает `tools/vidy_zadach.py` — ни один
+#: из этих файлов не зона этой позиции, и все они говорят о ДАННЫХ.  Здесь же вопрос
+#: только о том, каким словом вид назван на экране, и словарь ровно на один шаг: ключ
+#: базы → слово преподавателю.  Переименование данных ради подписи на экране — это
+#: миграция, у которой нет причины.
+NAZVANIE = {"обязательная": "обязательная", "письменная": "письменная",
+            "звезда": "сложная"}
 
 
 def znachok(kind: str) -> str:
@@ -102,7 +117,14 @@ def znachok(kind: str) -> str:
 
 
 def _schyotchik(schyot) -> str:
-    """Слева от школьника: сколько обязательных он сдал и сколько ему осталось.
+    """Содержимое СВОЕЙ КОЛОНКИ, стоящей сразу ПОСЛЕ фамилии: сколько обязательных сдано.
+
+    🔴 КОЛОНКА, А НЕ ПРИСТАВКА К ФАМИЛИИ — ПРАВКА ВЛАДЕЛЬЦА 10.09 (`TZ-DOBOR-10-09.md`
+    H4.4).  До неё число стояло ЛЕВЕЕ фамилии, внутри той же ячейки, и владелец назвал это
+    «очень плохо, некрасиво и непонятно»: «фамилия — первое, что важно, а второе — этот
+    параметр».  Поэтому число уехало в отдельный `<td class="sch">` между фамилией и первой
+    задачей, и порядок чтения строки стал тем, который он назвал.  Сама разметка числа при
+    этом не изменилась ни на знак — переехала ячейка, а не счётчик.
 
     🔴 ОБА ЧИСЛА ВЛАДЕЛЬЦА СТОЯТ НА ЭКРАНЕ, А НЕ ОДНО ИЗ НИХ.  09.09: «сколько он
     обязательных задач сдал.  Ещё ему осталось сдать».  Сданное и всего видны цифрами
@@ -125,6 +147,14 @@ def _schyotchik(schyot) -> str:
                      % (schyot.sdano, schyot.vsego, schyot.ostalos))
     return ('<i class="ob-sch" title="%s">%d<span class="iz">/%d</span></i>'
             % (e(podskazka), schyot.sdano, schyot.vsego))
+
+
+#: Шапка колонки счётчика — одна на оба разреза, где эта колонка есть (`_obzor` и `_listok`).
+#: Слово сокращено не для красоты: колонка узкая нарочно, а полное «обязательных» раздвинуло
+#: бы её втрое и отобрало ширину у самой решётки.  Что именно сокращено, говорит подсказка,
+#: и она же называет оба числа словами — то же устройство, что и у самого счётчика.
+ZAGOLOVOK_SCH = ('<th class="sch" title="сдано обязательных задач этого разреза '
+                 'из общего их числа">Обяз.</th>')
 
 
 def _klass_stroki(u, chuzhoj, schyot) -> str:
@@ -432,13 +462,14 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, i
         # владелец увидел это раньше, чем я.
         klass = _klass_stroki(u, chuzhoj, schyot)
         stroki.append(
-            f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
+            f'<tr{klass}><td class="kto">'
             f'<label for="k-u{u.id}">'
             f'<b>{e(u.surname)}</b> {e(u.name)}</label>'
-            f'{_prin(prinimayushchie, u.id)}</td>{"".join(kletki)}</tr>')
+            f'{_prin(prinimayushchie, u.id)}</td>'
+            f'<td class="sch">{_schyotchik(schyot)}</td>{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
-            f'<table class="kond" style="max-width:{16 + len(listki) * 5.5:.1f}em">'
-            f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
+            f'<table class="kond" style="max-width:{19 + len(listki) * 5.5:.1f}em">'
+            f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
@@ -507,12 +538,14 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie) ->
             # у организатора и у общего пароля своих нет вовсе (`chuzhoj` пуст),
             # и правило `tr:not(.chuzh)` покрасило бы им всех до одного.
             klass = _klass_stroki(u, chuzhoj, schyot)
-            stroki.append(f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
+            stroki.append(f'<tr{klass}><td class="kto">'
                           f'<b>{e(u.surname)}</b> {e(u.name)}'
-                          f'{_prin(prinimayushchie, u.id)}</td>{"".join(kletki)}</tr>')
-        potolok = 16 + len(zad) * 5.5
+                          f'{_prin(prinimayushchie, u.id)}</td>'
+                          f'<td class="sch">{_schyotchik(schyot)}</td>'
+                          f'{"".join(kletki)}</tr>')
+        potolok = 19 + len(zad) * 5.5
         telo = (f'<table class="kond" style="max-width:{potolok:.1f}em">'
-                f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
+                f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{shapka}</tr></thead>'
                 f'<tbody>{"".join(stroki)}</tbody></table>')
     return (f'<section class="vid" id="n-{sh.id}">'
             f'<p class="zag2">{e(sh.title or sh.number)}</p>{telo}</section>')
@@ -889,13 +922,13 @@ def stili(kt) -> str:
    ни строки JS. Вкладки чужого класса не прячутся `display:none` у меток,
    а именно снимаются из потока — иначе полоса вкладок держала бы пустое
    место там, где стояли восемнадцать листков восьмого класса. */
-#s-kond .kond-klassy{{display:flex;gap:.4rem;margin:.2rem 0 .9rem}}
+#s-kond .kond-klassy{{display:flex;gap:.4rem;margin:0}}
 #s-kond .kond-klassy label{{cursor:pointer;font-family:var(--sans);font-weight:600;
   font-size:1.05rem;color:var(--muted);padding:.35em 1.1rem;border-radius:8px;
   border:1px solid var(--rule)}}
 #s-kond .kond-klassy label:hover{{color:var(--text);background:var(--accent-soft)}}
-#kl-9:checked~.kond-klassy label[for=kl-9],
-#kl-8:checked~.kond-klassy label[for=kl-8]{{color:var(--accent);
+#kl-9:checked~.kond-verh .kond-klassy label[for=kl-9],
+#kl-8:checked~.kond-verh .kond-klassy label[for=kl-8]{{color:var(--accent);
   background:var(--accent-soft);border-color:var(--accent)}}
 #kl-9:checked~.tabbar .kl8{{display:none}}
 #kl-8:checked~.tabbar .kl9{{display:none}}
@@ -935,18 +968,40 @@ def stili(kt) -> str:
    которых фон тоже накрашен. */
 #s-kond .kond tbody tr.gotov td{{background:var(--chip)}}
 #s-kond .kond tbody tr.gotov:hover td{{background:var(--chip)}}
-#s-kond .kond td.kto .ob-sch{{display:inline-block;width:2.6em;margin-right:.45rem;
-  text-align:right;font-style:normal;font-family:var(--sans);font-size:.8rem;
-  font-weight:600;color:var(--muted)}}
-#s-kond .kond td.kto .ob-sch.net{{color:var(--faint);font-weight:400}}
-/* Закрыл — счётчик берёт «твоё, важное»; это тот же `--accent`, которым покрашена
-   сданная клетка, и он значит здесь ровно то же самое. */
-#s-kond .kond tbody tr.gotov td.kto .ob-sch{{color:var(--accent)}}
+/* 🔴 СЧЁТЧИК СТОИТ В СВОЕЙ КОЛОНКЕ ПОСЛЕ ФАМИЛИИ — ПРАВКА ВЛАДЕЛЬЦА 10.09 (H4.4).
+   Три вещи, каждая из которых чинит названную им претензию:
+   1. Это НАСТОЯЩИЙ столбец (`td.sch`), а не отступ внутри ячейки фамилии. Общее
+      правило решётки `tbody td+td` считает клеткой ВСЁ, кроме первой ячейки строки,
+      и покрасило бы счётчик как задачу; поэтому у `td.sch` своя пара правил, и она
+      весомее по устройству селектора (один id и ДВА класса против id и одного).
+   2. Цвет — `--accent`, тот самый, которым на этой странице покрашена сданная
+      клетка: число «сдано» и галочка «сдано» говорят одно и то же и потому красятся
+      одинаково. Прежний `--muted` и был тем «непонятно», о котором он сказал.
+      Знаменатель остаётся `--faint`: он не сообщение, а рамка для числа.
+   3. «Закрыл все обязательные» РАНЬШЕ выражался тем, что счётчик становился
+      accent — теперь accent стоит всегда, и признак переехал на подложку
+      `--accent-soft`. Ни одного нового цвета: обе переменные страница уже объявила,
+      а строка целиком по-прежнему светится `--chip`, как её принял владелец. */
+#s-kond .kond thead th.sch{{text-align:center;white-space:nowrap;font-size:.72rem;
+  padding:.5rem .3rem;border-bottom:2px solid var(--rule);
+  border-left:1px solid var(--rule)}}
+#s-kond .kond tbody td.sch{{text-align:center;white-space:nowrap;padding:.3rem .4rem;
+  min-width:0;border-left:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  background:var(--bg)}}
+#s-kond .kond td.sch .ob-sch{{font-style:normal;font-family:var(--sans);
+  font-size:.92rem;font-weight:700;color:var(--accent)}}
+#s-kond .kond td.sch .ob-sch.net{{color:var(--faint);font-weight:400}}
+#s-kond .kond tbody tr.gotov td.sch .ob-sch{{background:var(--accent-soft);
+  border-radius:6px;padding:.05em .4em}}
 /* ── ИНИЦИАЛЫ ПРИНИМАЮЩЕГО У ФАМИЛИИ ──────────────────────────────────────
    Надстрочно и мелко: это подпись к фамилии, а не второе имя. Курсор `help`
    обещает подсказку, которая есть, — иначе о наведении никто не догадается.
    Ни одного нового цвета: `--faint` уже значит «фон, а не сообщение» по всей
-   странице, и им же покрашена звезда в шапке столбца. */
+   странице. ⚠ Прежняя редакция этой строки добавляла «и им же покрашена звезда в
+   шапке столбца» — с 10.09 это НЕВЕРНО: звезда перекрашена в `--krasn` (H4.1,
+   «все три значка должны быть выделены цветом»), и `--faint` здесь остался только
+   у инициалов. Расхождение нашёл верификатор захода; на рендер оно не влияло, а на
+   следующего читателя влияло бы. */
 #s-kond .kond td.kto .prin{{font-style:normal;font-family:var(--sans);font-size:.62rem;
   font-weight:600;color:var(--faint);vertical-align:super;margin-left:.3em;cursor:help;
   white-space:nowrap}}
@@ -957,14 +1012,24 @@ def stili(kt) -> str:
 #s-kond .kond td[data-u]{{cursor:pointer}}
 #s-kond .kond td[data-u]:hover{{background:var(--accent-soft)}}
 #s-kond .kond td[data-u].zhdyot{{opacity:.5}}
-#s-kond .kond-verh{{display:flex;align-items:baseline;justify-content:space-between;
-  gap:1.5rem;flex-wrap:wrap}}
-/* Та же кнопочная форма, что и у «только мои» — новый цвет не заводится. */
-#s-kond .vnesti-knopka{{display:inline-block;margin-left:1rem;font-family:var(--sans);
-  font-weight:600;font-size:.95rem;color:var(--accent);padding:.35em 1rem;
-  border:1px solid var(--accent);border-radius:8px;text-decoration:none}}
-#s-kond .vnesti-knopka:hover{{background:var(--accent-soft)}}
-#s-kond .kond-moi{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1rem;
+#s-kond .kond-verh{{display:flex;align-items:center;gap:.5rem 1rem;flex-wrap:wrap;
+  margin:0 0 .9rem}}
+/* 🔴 «ВНЕСТИ ЗАДАЧИ» — САМАЯ БОЛЬШАЯ КНОПКА СТРАНИЦЫ. Владелец 10.09: «это самая
+   важная кнопка, она не должна ютиться где-то в рандомном месте» (H4.2). Поэтому
+   она ЗАЛИТА, а не обведена: обведённых кнопок на этой полосе ещё три — «8 класс»,
+   «9 класс», «только мои», — и четвёртая такая же не была бы главной ни на чём,
+   кроме кегля. Заливка `--accent-soft` и рамка `--accent` — ровно то, чем на этой
+   же полосе помечена ВЫБРАННАЯ кнопка класса, то есть приём страницы, а не новый.
+   Ни одного нового цвета. */
+#s-kond .vnesti-knopka{{display:inline-block;font-family:var(--sans);
+  font-weight:700;font-size:1.2rem;color:var(--accent);padding:.45em 1.3rem;
+  background:var(--accent-soft);border:2px solid var(--accent);border-radius:10px;
+  text-decoration:none;white-space:nowrap}}
+#s-kond .vnesti-knopka:hover{{color:var(--panel);background:var(--accent)}}
+/* «Только мои» уходит к правому краю полосы: это фильтр, а не действие, и место
+   действий — слева, у заголовка. */
+#s-kond .kond-moi{{margin-left:auto;cursor:pointer;font-family:var(--sans);
+  font-weight:600;font-size:1rem;
   color:var(--muted);padding:.35em 1rem;border:1px solid var(--rule);border-radius:8px;
   white-space:nowrap}}
 #s-kond .kond-moi::before{{content:"☐\\00a0"}}
@@ -985,7 +1050,15 @@ def stili(kt) -> str:
    а клеток тридцать одна тысяча. */
 #s-kond table.kond{{font-size:.95rem;width:100%;border-collapse:separate;
   border-spacing:0}}
+/* 🔴 НОМЕР ЗАДАЧИ ПИШЕТСЯ ТАК, КАК ОН НАПИСАН НА ЛИСТКЕ: `1а`, а не `1А`.
+   Правка владельца 10.09 (H4.5).  Заглавные буквы не приезжали из базы — там уже
+   лежит `1а` и `13б`, проверено запросом, — их рисовало общее правило оболочки
+   `th{{text-transform:uppercase}}` (`veb/obshchee/karkas.py`), которое верно для
+   подписей вроде «УЧЕНИК» и неверно для номера задачи: номер это НЕ подпись, это
+   цитата с бумажного листка, и школьник сверяет её посимвольно.  Оболочка не зона
+   этой позиции, и трогать её незачем: правило снимается там, где оно мешает. */
 #s-kond .kond th.zn{{padding:.5rem .2rem;text-align:center;font-size:.78rem;
+  text-transform:none;letter-spacing:0;
   min-width:3em;border-bottom:2px solid var(--rule);border-left:1px solid var(--rule)}}
 /* 🔴 ШАПКА ЛИПНЕТ К НИЗУ МЕНЮ, И ВЫСОТУ МЕНЮ СООБЩАЕТ САМО МЕНЮ.
    `--vysota-menu` ставит скрипт кондуита (`veb/obshchee/karkas.py`), измеряя живой
@@ -1054,11 +1127,32 @@ def stili(kt) -> str:
    по всему сайту, `--warm` — «внимание» (им же покрашено снятое), `--faint` —
    «фон, а не сообщение». Разные ЦВЕТА, а не только разные символы: четыре десятка
    значков в строке различаются полосой цвета раньше, чем формой. */
+/* 🔴 ЗНАЧОК НЕ УЧАСТВУЕТ В ЦЕНТРИРОВАНИИ НОМЕРА — ПРАВКА ВЛАДЕЛЬЦА 10.09 (H4.6):
+   «кружок и крестик — это индекс, при центрировании учитываться не должен; из-за
+   этого номер выглядит левее, чем должен».  Он описывает ровно то, что делал браузер:
+   `1а` и `◦` стояли в одной строке текста, строка центровалась ЦЕЛИКОМ, и номер уезжал
+   влево на полширины значка.  Чинится нулевой шириной: значок остаётся в потоке (то
+   есть по-прежнему рисуется сразу за номером и наследует его строку), но в ширину
+   строки не даёт ничего, и центруется один номер.
+   `overflow:visible` здесь обязателен и не декоративен: без него нулевая ширина
+   ОБРЕЗАЛА бы значок, а не выпустила его наружу.  Он же выводит узел из-под проверки
+   обрезки гейта вёрстки (`tools/gejt_verstki.py` смотрит `scrollWidth > clientWidth`
+   только при `overflow-x != visible`) — то есть гейт не краснеет на том, что здесь
+   сделано нарочно, и продолжает краснеть на настоящей обрезке. */
 #s-kond .kond th.zn .pm{{font-style:normal;font-size:1.05rem;line-height:1;
-  vertical-align:super;margin-left:.05em}}
+  vertical-align:super;margin-left:.05em;
+  display:inline-block;width:0;overflow:visible;white-space:nowrap}}
 #s-kond .pm.ob{{color:var(--accent)}}
 #s-kond .pm.pi{{color:var(--warm);font-weight:700}}
-#s-kond .pm.zv{{color:var(--faint)}}
+/* 🔴 ЗВЁЗДОЧКА ВЫДЕЛЕНА ЦВЕТОМ НАРАВНЕ С КРУЖКОМ И КРЕСТИКОМ — ПРАВКА 10.09 (H4.1):
+   «все три значка должны быть выделены цветом».  До неё `⋆` стоял в `--faint`, то есть
+   в цвете, который на этой странице значит «фон, а не сообщение», — и в шапке из сорока
+   столбцов сложная задача не отличалась от никакой.  `--krasn` — третий и последний
+   настоящий цвет закрытой палитры (`--accent` уже занят обязательной, `--warm`
+   письменной), нового не заводится.  Насыщенность у него как у соседей, поэтому три
+   значка теперь читаются полосой цвета раньше, чем формой, — тем же способом, каким
+   этот файл уже различал два первых. */
+#s-kond .pm.zv{{color:var(--krasn);font-weight:700}}
 /* ── СКОЛЬКО ЧЕЛОВЕК СДАЛО ЗАДАЧУ ─────────────────────────────────────────
    Число стоит ПОД номером задачи отдельной строкой: в шапке шириной 3em оно рядом
    с номером и значком не помещается, а перенос сделал бы высоту шапки прыгающей от
@@ -1070,10 +1164,10 @@ def stili(kt) -> str:
 #s-kond .kond th.zn .sdalo.zakr{{color:var(--accent);font-weight:700}}
 /* Словарь значков — один раз на странице, между кнопками классов и полосой
    вкладок, то есть до первой решётки и после выбора класса. */
-#s-kond .kond-slovar{{margin:.1rem 0 .7rem;font-family:var(--sans);font-size:.85rem;
-  color:var(--muted)}}
+#s-kond .kond-slovar{{margin:0;font-family:var(--sans);font-size:.82rem;
+  color:var(--muted);flex:0 1 auto;min-width:0}}
 #s-kond .kond-slovar .pm{{font-style:normal;font-size:1.15rem;line-height:1}}
-#s-kond .kond-slovar .iz{{color:var(--faint);font-size:.85rem}}
+#s-kond .kond-slovar .iz{{color:var(--faint);font-size:.82rem}}
 #s-kond .kond-lich i .pm{{font-style:normal;vertical-align:super;font-size:.75rem;
   line-height:1}}
 #s-kond .kond-imya{{font-family:var(--sans);font-size:1.5rem;font-weight:600;margin:0 0 1rem}}
@@ -1119,18 +1213,19 @@ def stili(kt) -> str:
     display:block;overflow:hidden;text-overflow:ellipsis}}
   #s-kond .kond tbody tr.moi td.kto{{padding-left:.55rem}}
   #s-kond .kond td.kto label{{display:block;overflow:hidden;text-overflow:ellipsis}}
-  /* 🔴 НА ТЕЛЕФОНЕ СЧЁТЧИК СТОИТ СТРОКОЙ ВЫШЕ ФАМИЛИИ, А НЕ ПЕРЕД НЕЙ. Столбец
-     фамилии здесь 7.2rem, и 2.6em счётчика — это больше трети его: фамилия ушла бы
-     в многоточие ровно на том экране, ради которого её и не режут (см. правило
-     выше). `<b>` и `<label>` в этом запросе и так `display:block`, поэтому счётчик
-     оказывается над ними сам; правило ниже только прижимает его к правому краю
-     ячейки, чтобы числа стояли столбиком и читались друг под другом. */
-  #s-kond .kond td.kto .ob-sch{{display:inline;width:auto;margin:0 .35rem 0 0;
-    font-size:.7rem;line-height:1.1}}
-  /* Счётчик и инициалы стоят ПЕРВОЙ строкой ячейки, фамилия — второй: `<b>` и
-     `<label>` в этом запросе `display:block`, поэтому строка делится сама. На
-     ноутбуке всё это остаётся одной строкой и десктопный вид не меняется. */
-  #s-kond .kond td.kto .prin{{vertical-align:baseline;margin-left:0;font-size:.62rem}}
+  /* 🔴 НА ТЕЛЕФОНЕ КОЛОНКА СЧЁТЧИКА ЕДЕТ ВМЕСТЕ С ФАМИЛИЕЙ, А НЕ УХОДИТ ПОД НЕЁ.
+     Столбец фамилии здесь ровно 7.2rem (правило выше), поэтому липкость счётчика
+     ставится на то же самое число: прокручивая решётку вбок, видно и чья строка,
+     и сколько обязательных у этого школьника. Число снято с той же ячейки, а не
+     подобрано на глаз, — разъедутся они только вместе.
+     Порядок наложения: фамилия (4) поверх счётчика (3) поверх клеток задач, у
+     которых `position:relative` и своего слоя нет. Иначе при прокрутке счётчик
+     накрыл бы фамилию — то есть ровно то, от чего владелец её и уводил. */
+  #s-kond .kond thead th.sch{{left:7.2rem;padding:.4rem .25rem}}
+  #s-kond .kond tbody td.sch{{position:sticky;left:7.2rem;z-index:3;
+    padding:.2rem .25rem}}
+  #s-kond .kond td.sch .ob-sch{{font-size:.72rem}}
+  #s-kond .kond td.kto .prin{{vertical-align:super;font-size:.62rem}}
   /* Клетка — цель пальца: 44 точки в высоту, компактнее в ширину. */
   #s-kond .kond tbody td+td{{min-width:2.5em;height:44px;padding:.2rem;
     font-size:1.05rem}}
@@ -1145,6 +1240,8 @@ def stili(kt) -> str:
   #s-kond .kond td.kto{{width:6.2rem;max-width:6.2rem}}
   #s-kond .kond td.kto b,#s-kond .kond td.kto label{{font-size:.76rem}}
   #s-kond .kond tbody td+td{{min-width:2.2em}}
+  /* Столбец фамилии сузился — вместе с ним переезжает и липкий счётчик. */
+  #s-kond .kond thead th.sch,#s-kond .kond tbody td.sch{{left:6.2rem}}
 }}
 #s-kond .kond-lich i{{display:inline-block;font-style:normal;font-family:var(--sans);
   font-size:.85rem;background:var(--chip);border-radius:6px;padding:.05em .45em;
@@ -1283,15 +1380,22 @@ def razdel(kt) -> str:
               '<label for="kl-8">8 класс</label>'
               '<label for="kl-9">9 класс</label></div>')
 
+    # 🔴 ЛЕГЕНДА НАЗЫВАЕТ ЗНАЧКИ СЛОВАМИ, А НЕ КЛЮЧАМИ БАЗЫ — ПРАВКА 10.09 (H4.7).
+    # `NAZVANIE` переводит `problems.kind` в слово для человека; ключ `звезда`
+    # остаётся в базе как есть, потому что переименовать его значило бы править
+    # `problems`, `tools/import_listka.py` и `vidy_zadach.py` — ни один из них не зона
+    # этой позиции, и все они говорят о ДАННЫХ, а не о том, что читает преподаватель.
+
     # 🔴 СЛОВАРЬ ЗНАЧКОВ ПОДПИСАН ОДИН РАЗ НА СТРАНИЦЕ, А НЕ В КАЖДОЙ КЛЕТКЕ.  Ровно то,
     # что просил владелец: значки обязаны быть различимы, когда их четыре десятка в
     # строке, а объяснение — стоять один раз и не мешать.  Подпись в каждой ячейке
     # (`title="обязательная"`) не годится дважды: на телефоне её нечем вызвать, и она
     # выросла бы в тридцать одну тысячу повторов одного и того же слова.
     slovar = ('<p class="kond-slovar">'
-              + "".join(f'{znachok(vid)}\u2009{vid}' + ("  " if vid != "звезда" else "")
+              + "".join(f'{znachok(vid)}\u2009{NAZVANIE[vid]}'
+                        + ("  " if vid != "звезда" else "")
                         for vid in ("обязательная", "письменная", "звезда"))
-              + '<span class="iz"> · без значка — обычная, сдавать не обязательно</span>'
+              + '<span class="iz"> · без значка — не обязательна</span>'
               + '</p>')
     vkladki = ('<div class="tabbar">'
                '<label class="kl9" for="k-vse9">Весь год</label>'
@@ -1330,13 +1434,26 @@ def razdel(kt) -> str:
 
     return (f'<section class="str holst" id="s-kond" data-org="videt-konduit">'
             f'{galka}{radio}'
-            f'<div class="kond-verh"><div>'
+            f'<div class="kond-verh">'
             f'<h1>Кондуит</h1>'
             # 🔴 КНОПКА «ВНЕСТИ ЗАДАЧИ» — САМЫЙ ДОРОГОЙ ЗАХОД ВОЛНЫ (владелец 09.09):
             # текст/фото/голос → гипотеза → подтверждение → запись. Ссылка, а не форма
             # тут же, по той же причине, по которой кондуит не несёт своего JS
             # (`razdel.__doc__`): раздел целиком снимается со страницы гостя по
             # `data-org`, и второй, пишущий, механизм внутри него — не его дело.
+            # 🔴 КНОПКА СТОИТ НА СТРОКЕ ЗАГОЛОВКА, А НЕ ПОД НИМ — ПРАВКА 10.09 (H4.2).
+            # Раньше `<h1>` и ссылка лежали в общей обёртке `<div>`, а `<h1>` —
+            # блок: кнопка неизбежно падала на следующую строку и оказывалась
+            # «где-то в рандомном месте», как владелец и сказал. Обёртка снята,
+            # и оба стали элементами одной флекс-полосы.
             f'<a class="vnesti-knopka" href="/vnesti">Внести задачи</a>'
-            f'</div>{metka_galki}</div>'
-            f'{klassy}{slovar}{vkladki}{panely}{istoria}</section>')
+            # 🔴 ОДНА ВЕРХНЯЯ ПАНЕЛЬ — ПРАВКА ВЛАДЕЛЬЦА 10.09 (H4.8): «одна полоска
+            # панели, а ниже уже сразу видно всё, что нужно.  Сейчас это проблема,
+            # когда ты наслаиваешь много строк».  Кнопки классов и словарь значков
+            # стояли отдельными полосами под заголовком — вместе с заголовком и
+            # полосой вкладок это было четыре яруса до первой строки решётки.
+            # Теперь всё, кроме вкладок, лежит в ОДНОМ флекс-ряду `.kond-verh`, и
+            # порядок в нём — порядок владельца: заголовок, действие, выбор класса,
+            # подпись к значкам, фильтр у правого края.
+            f'{klassy}{slovar}{metka_galki}</div>'
+            f'{vkladki}{panely}{istoria}</section>')
