@@ -118,7 +118,16 @@ def deti_prepoda(kt, x, ego, sl):
                    f' data-gruppa="{e(x["gruppa"] or "")}"')
             krest = ('<span class="x" data-org="pravit-raspredelenie"'
                      ' title="открепить">\u00d7</span>')
-        kuski.append(f'<span class="tabl"{atr}>{e(r["surname"])}{krest}</span>')
+        # 🔴 ФАМИЛИЯ В СВОЁМ SPAN, И ЭТО НЕ УКРАШЕНИЕ. Ряд таблеток перестал
+        # переноситься (`STILI_KOLONKI`, §2), значит на узкой карточке таблетка
+        # обязана ужать себя сама. `text-overflow:ellipsis` работает только на
+        # блочном контейнере с текстом; сама `.tabl` — `inline-flex`, и её
+        # текстовый узел был бы анонимным флекс-элементом, который многоточием
+        # не режется. Обёртка ОДНА И ТА ЖЕ в обеих ролях — разница между гостем
+        # и организатором остаётся ровно крестиком, как и обещает шапка файла,
+        # и `proverit_karkas()` продолжает сверять сравнимое.
+        kuski.append(f'<span class="tabl"{atr}>'
+                     f'<span class="det-f">{e(r["surname"])}</span>{krest}</span>')
     return "".join(kuski)
 
 
