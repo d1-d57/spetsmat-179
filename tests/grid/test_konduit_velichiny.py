@@ -338,3 +338,118 @@ def test_a_one_word_name_keeps_its_word():
     """«Надя» и «Наталья Амбург» — двое живых принимающих, и «Н.» слило бы их в одно."""
     assert konduit.initsialy("Надя") == "Надя"
     assert konduit.initsialy("Наталья Амбург") == "Н.А."
+
+
+# --------------------------------------------------------- величина 5: гробарий
+
+
+def grobarij(html: str) -> str:
+    return panel(html, "grob")
+
+
+def devyatyj(connection, listki):
+    """Мир, чьи листки кондуит относит к ДЕВЯТОМУ классу.
+
+    Признак класса кондуит берёт из `veb.razdely.listki.L9` — «номер начинается на 16», —
+    и другого признака в базе нет вовсе. Поэтому листки здесь называются `16…`: тест
+    обязан спрашивать ровно тем же способом, каким спрашивает страница, иначе он проверит
+    вкладку восьмого класса, у которой гробария нет по решению этого захода.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    mir = seed_world(connection, students=5, sheets=listki)
+    for poryadok, sheet_id in enumerate(mir.sheet_ids):
+        connection.execute(
+            "update sheets set number = ?, issued_at = ? where id = ?",
+            ("16%s" % "ABCD"[poryadok], "2026-09-%02d" % (3 + poryadok * 7), sheet_id))
+    return mir
+
+
+def test_with_one_listok_issued_the_grobarij_says_it_is_empty_and_why(connection):
+    """Сегодняшнее состояние боевой базы, воспроизведённое: роздан один листок."""
+    devyatyj(connection, (LISTOK,))
+    connection.commit()
+    kusok = grobarij(konduit.razdel(kontekst(connection)))
+    assert "Гробарий пуст" in kusok
+    assert "исторических листков пока нет" in kusok
+    assert "наполнится сам" in kusok, "пустая вкладка обязана сказать, чего она ждёт"
+    assert "меньше 3" in kusok, "правило написано во вкладке всегда, а не только когда есть строки"
+
+
+def test_the_previous_listok_falls_in_by_itself_when_the_next_one_is_issued(
+    connection, marking
+):
+    """🔴 ГЛАВНАЯ ПРОВЕРКА ЭТОЙ ВЕЛИЧИНЫ.
+
+    Владелец: «гробарий наполнится сам в понедельник, когда 16-й листок станет
+    историческим». Вкладка, которая пуста потому, что в неё вписана пустота, выглядит
+    сегодня ТОЧНО ТАК ЖЕ, как эта, — и в понедельник разница станет видна на занятии.
+    Здесь второй листок раздаётся прямо в тесте, и первый обязан появиться в гробарии
+    без единой правки кода.
+    """
+    mir = devyatyj(connection, (LISTOK, LISTOK))
+    staryj, novyj = mir.sheet_ids
+    zadachi = mir.problems_by_sheet[staryj]
+    # Первую задачу взяли четверо — она за порогом и в гробарий не идёт.
+    for uchenik in mir.student_ids[:4]:
+        marking.set_state(uchenik, zadachi[0], CellState.SOLVED, source="кнопка")
+    # Вторую — двое, и это ровно случай гробария.
+    for uchenik in mir.student_ids[:2]:
+        marking.set_state(uchenik, zadachi[1], CellState.SOLVED, source="кнопка")
+    connection.commit()
+
+    kusok = grobarij(konduit.razdel(kontekst(connection)))
+    assert "Гробарий пуст" not in kusok
+    zadachi_v_grobarii = re.findall(r'<td class="kto">([^<]*)', kusok)
+    assert "1.1" not in zadachi_v_grobarii, "четверо сдали — не гробарий"
+    assert "1.2" in zadachi_v_grobarii, "двое сдали — гробарий"
+    # Задачи ТЕКУЩЕГО листка в гробарий не попадают, даже если их не сдал никто.
+    assert not any(z.startswith("2.") for z in zadachi_v_grobarii), zadachi_v_grobarii
+
+
+def test_the_graveyard_names_the_first_solvers_in_order(connection, marking):
+    mir = devyatyj(connection, (LISTOK, LISTOK))
+    zadacha = mir.problems_by_sheet[mir.sheet_ids[0]][1]
+    marking.set_state(mir.student_ids[2], zadacha, CellState.SOLVED,
+                      source="кнопка", valid_at="2026-09-03T10:10:00Z")
+    marking.set_state(mir.student_ids[0], zadacha, CellState.SOLVED,
+                      source="кнопка", valid_at="2026-09-07T11:15:00Z")
+    connection.commit()
+    kusok = grobarij(konduit.razdel(kontekst(connection)))
+    imena = re.findall(r'<i>([^<]*)</i>', kusok)
+    assert imena == ["surname-2 name-2", "surname-0 name-0"], "раньше сдал — раньше в списке"
+
+
+def test_a_problem_nobody_took_says_so_instead_of_showing_an_empty_cell(
+    connection, marking
+):
+    mir = devyatyj(connection, (("обязательная",), ("обязательная",)))
+    connection.commit()
+    kusok = grobarij(konduit.razdel(kontekst(connection)))
+    assert ">никто<" in kusok, "«никто не сдал» — самое сильное, что говорит гробарий"
+
+
+def test_versions_of_one_listok_do_not_make_each_other_historical(connection):
+    """`16A`, `16α` и `16ℵ` — один листок в трёх силах и один `issued_at`.
+
+    Сравнение по `ord` объявило бы два из них историческими в день выдачи, и гробарий
+    открылся бы на задачах текущего листка. Это и есть сегодняшняя боевая база.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    mir = seed_world(connection, students=3, sheets=(LISTOK, LISTOK, LISTOK))
+    for nomer, sheet_id in zip(("16A", "16α", "16ℵ"), mir.sheet_ids):
+        connection.execute("update sheets set number = ?, issued_at = ? where id = ?",
+                           (nomer, "2026-09-03", sheet_id))
+    connection.commit()
+    assert "Гробарий пуст" in grobarij(konduit.razdel(kontekst(connection)))
+
+
+def test_a_listok_row_without_problems_does_not_bury_the_current_one(connection):
+    """Ряд следующего листка, чьи задачи ещё не внесены, — это ещё не розданный листок."""
+    mir = devyatyj(connection, (LISTOK,))
+    connection.execute(
+        "insert into sheets (number, title, issued_at, ord) values (?, ?, ?, ?)",
+        ("16Z", "следующий, задачи ещё не внесены", "2026-09-14", 99))
+    connection.commit()
+    assert "Гробарий пуст" in grobarij(konduit.razdel(kontekst(connection)))

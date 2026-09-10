@@ -558,6 +558,87 @@ def _uchenik(u, listki, zadachi, sostoyaniya, daty) -> str:
             f'<table class="kond-lich"><tbody>{"".join(stroki)}</tbody></table></section>')
 
 
+def _istoricheskie(listki, zadachi) -> list:
+    """Листки класса, после которых УЖЕ роздан следующий, — от свежего к старому.
+
+    🔴 «СТАЛ ИСТОРИЧЕСКИМ» — ЭТО ФАКТ О БАЗЕ, А НЕ ДАТА, ВПИСАННАЯ В КОД.  Владелец 09.09:
+    «задачи, которые не сданы на момент, когда раздали следующий листок».  Значит
+    исторический — это листок, чей `issued_at` СТРОГО раньше самого свежего `issued_at`
+    этого класса; вписать сюда «16-й станет историческим в понедельник» значило бы, что
+    во вторник кто-то обязан прийти и это поправить.
+
+    ВЕРСИИ ОДНОГО ЛИСТКА ИСТОРИЧЕСКИМИ ДРУГ ДРУГА НЕ ДЕЛАЮТ.  `16A`, `16α` и `16ℵ` — один
+    листок в трёх силах, у них ОДИН `issued_at` (2026-09-03) и разные `ord`; сравнение по
+    `ord` объявило бы `16A` и `16α` историческими в тот же день, когда их раздали, и
+    гробарий открылся бы на задачах текущего листка.  Ровно по этой причине `_samyj_novyj`
+    выше тоже считает свежесть датой, а не порядком.
+
+    ЛИСТОК БЕЗ ЗАДАЧ НЕ СЧИТАЕТСЯ НИ САМЫМ СВЕЖИМ, НИ ИСТОРИЧЕСКИМ — тот же критерий, что
+    и у `_samyj_novyj`: ряд в `sheets`, задачи которого ещё не внесены, — это не листок, на
+    который кто-то смотрел.  Иначе заведённая заранее строка следующего листка отправила бы
+    текущий в гробарий за сутки до того, как его действительно раздали.
+    """
+    s_zadachami = [sh for sh in listki if zadachi[sh.id]]
+    if len(s_zadachami) < 2:
+        return []
+    svezhaya = max(sh.issued_at for sh in s_zadachami)
+    return sorted((sh for sh in s_zadachami if sh.issued_at < svezhaya),
+                  key=lambda sh: (sh.issued_at, sh.ord), reverse=True)
+
+
+def _grobarij(listki, zadachi, na_uchyote, sostoyaniya, daty) -> str:
+    """Вкладка «Гробарий»: задачи исторических листков, которые сдали меньше трёх.
+
+    🔴 ПУСТАЯ ВКЛАДКА ОБЯЗАНА СКАЗАТЬ, ЧТО ОНА ПУСТА И КОГДА НАПОЛНИТСЯ.  Сегодня она
+    пуста ПО ПРАВИЛУ, а не потому, что её не написали: у девятого класса роздан ровно один
+    листок, исторических нет.  Вкладка, которая в этом состоянии просто ничего не рисует,
+    неотличима от сломанной — а посмотрит на неё преподаватель на занятии, без возможности
+    спросить.  Поэтому правило написано в ней ВСЕГДА, и пустая она говорит, чего ждёт.
+    """
+    imena = {u.id: "%s %s" % (u.surname, u.name) for u in na_uchyote}
+    ids = [u.id for u in na_uchyote]
+    istoricheskie = _istoricheskie(listki, zadachi)
+
+    pravilo = (
+        '<p class="grob-pravilo">Сюда попадают задачи листка, ставшего историческим — '
+        'то есть такого, после которого раздали следующий, — если их сдали меньше '
+        f'{config.GRAVEYARD_THRESHOLD}\u00a0человек. Рядом — имена тех, кто их всё-таки '
+        f'сдал: не больше {config.GRAVEYARD_THRESHOLD}, дальше имена не записываются.</p>')
+
+    if not istoricheskie:
+        svezhie = ", ".join(e(sh.number) for sh in listki if zadachi[sh.id]) or "ни одного"
+        telo = ('<p class="net">Гробарий пуст, и это не ошибка: исторических листков пока '
+                f'нет. Роздан{"ы" if len([s for s in listki if zadachi[s.id]]) > 1 else ""} '
+                f'{svezhie} — и пока следующий листок не раздан, в гробарий попадать нечему. '
+                'Он наполнится сам в тот день, когда выйдет следующий листок.</p>')
+        return (f'<section class="vid" id="n-grob">'
+                f'<p class="zag2">Гробарий</p>{pravilo}{telo}</section>')
+
+    bloki = []
+    for sh in istoricheskie:
+        zapisi = zapisi_grobaria(zadachi[sh.id], ids, sostoyaniya,
+                                 lambda u, z: daty.get((u, z)), imena.get)
+        if not zapisi:
+            bloki.append(f'<p class="zag2">{e(sh.title or sh.number)}</p>'
+                         '<p class="net">ни одна задача этого листка не осталась '
+                         'за порогом — в гробарий с него ничего не пошло</p>')
+            continue
+        stroki = "".join(
+            f'<tr><td class="kto">{e(z.problem.label)}{znachok(z.problem.kind)}</td>'
+            f'<td class="skolko">{z.sdalo}</td>'
+            f'<td class="fishki">'
+            + ("".join(f'<i>{e(p)}</i>' for p in z.pervye)
+               if z.pervye else '<span class="net">никто</span>')
+            + '</td></tr>'
+            for z in zapisi)
+        bloki.append(f'<p class="zag2">{e(sh.title or sh.number)}</p>'
+                     f'<table class="kond-lich grob"><thead><tr><th>Задача</th>'
+                     f'<th>Сдало</th><th>Кто сдал</th></tr></thead>'
+                     f'<tbody>{stroki}</tbody></table>')
+    return (f'<section class="vid" id="n-grob">'
+            f'<p class="zag2">Гробарий</p>{pravilo}{"".join(bloki)}</section>')
+
+
 #: Панель истории клетки и жест, которым она открывается.
 #:
 #: 🔴 ВИДИМОЙ МЕТКИ НА КЛЕТКЕ НЕТ — решение владельца 09.09: «правый клик на десктопе,
@@ -793,7 +874,7 @@ def stili(kt) -> str:
     the база.
     """
     _c, _p, na_uchyote, _v, listki, _z = _sobrat(kt)
-    klyuchi = ["vse9", "vse8"] + [str(sh.id) for sh in listki]
+    klyuchi = ["vse9", "vse8", "grob"] + [str(sh.id) for sh in listki]
     vkladki = "".join(
         f"#k-{k}:checked~#n-{k}{{display:block}}"
         f"#k-{k}:checked~.tabbar label[for=k-{k}]"
@@ -1066,6 +1147,20 @@ def stili(kt) -> str:
 #s-kond .kond-lich i.vsyo{{color:var(--accent)}}
 #s-kond .kond-lich i.snyato{{color:var(--warm)}}
 
+/* ── ГРОБАРИЙ ─────────────────────────────────────────────────────────────
+   Ни одного нового приёма: правило набрано как служебная подпись (`--muted`,
+   sans, мелко), таблица — та же `kond-lich`, что и в личной карточке школьника,
+   имена — те же фишки на `--chip`. Отличие ровно одно: у гробария есть шапка,
+   потому что три столбца тут не читаются без подписи. */
+#s-kond .grob-pravilo{{font-family:var(--sans);font-size:.9rem;color:var(--muted);
+  max-width:44rem;margin:.2rem 0 1.1rem;line-height:1.45}}
+#s-kond .kond-lich.grob{{border-collapse:collapse}}
+#s-kond .kond-lich.grob thead th{{font-family:var(--sans);font-size:.8rem;
+  font-weight:600;color:var(--muted);text-align:left;padding:0 1.2rem .35rem 0;
+  border-bottom:1px solid var(--rule)}}
+#s-kond .kond-lich.grob td{{padding-top:.35rem}}
+#s-kond .kond-lich.grob .skolko{{text-align:left}}
+
 /* ═══ ИСТОРИЯ КЛЕТКИ. Открывается жестом — правый клик на ноутбуке, долгое зажатие
    на телефоне; видимой метки на клетке НЕТ (решение владельца 09.09). Ни одного
    нового цвета: всё из переменных, которые эта страница уже объявила. ═══ */
@@ -1176,6 +1271,7 @@ def razdel(kt) -> str:
              + "".join(f'<input class="rd" type="radio" name="knd" id="k-{sh.id}"'
                        f'{" checked" if sh.id == otkryt else ""}>'
                        for sh in listki)
+             + '<input class="rd" type="radio" name="knd" id="k-grob">'
              + "".join(f'<input class="rd" type="radio" name="knd" id="k-u{u.id}">'
                        for u in na_uchyote))
     klassy = ('<div class="kond-klassy">'
@@ -1199,6 +1295,13 @@ def razdel(kt) -> str:
                          for sh in listki_9)
                + "".join(f'<label class="kl8" for="k-{sh.id}">{e(sh.number)}</label>'
                          for sh in listki_8)
+               # 🔴 ВКЛАДКА ТОЛЬКО У ДЕВЯТОГО КЛАССА, И ЭТО НЕ НЕДОДЕЛКА.  Гробарий —
+               # механизм живого курса: он держит задачи, которые ещё можно добрать.
+               # Восемнадцать листков восьмого класса розданы 2025-09-01, следующего за
+               # ними не будет никогда, и гробарий по ним открылся бы сразу сотнями строк
+               # прошлогодних задач — то есть ровно НЕ пустой вкладкой, о которой просил
+               # владелец, и не тем, на что кто-то станет смотреть.  Назван вопросом.
+               + '<label class="kl9" for="k-grob">Гробарий</label>'
                + "</div>")
     panely = (_obzor(na_uchyote, listki_9, zadachi, sostoyaniya, chuzhoj,
                      prinimayushchie, "vse9")
@@ -1207,6 +1310,7 @@ def razdel(kt) -> str:
               + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj,
                                 daty, prinimayushchie)
                         for sh in listki)
+              + _grobarij(listki_9, zadachi, na_uchyote, sostoyaniya, daty)
               + "".join(_uchenik(u, listki, zadachi, sostoyaniya, daty)
                         for u in na_uchyote))
 
