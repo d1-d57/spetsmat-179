@@ -292,7 +292,8 @@ ZAMER = r"""
 () => {
   const out = {obrezka: [], perenos: [], vyshli: [], centr: [], skroll: 0,
                osmotreno: 0, vsego: 0, na_obrezku: 0, na_vyhod: 0,
-               na_centr: 0, isklyucheno: 0, bez_sdviga: 0};
+               na_centr: 0, isklyucheno: 0, bez_sdviga: 0,
+               pravil: 0, pravila_zhivye: [], pravila_pustye: [], pravil_nechitaemyh: 0};
 
   out.skroll = Math.max(0,
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -752,6 +753,76 @@ ZAMER = r"""
         gde: k === el ? '' : put(el)});
   }
   out.centr = [...nayden.values()];
+
+  // ── 6. ПРАВИЛО CSS, НЕ СОВПАВШЕЕ НИ С ОДНИМ УЗЛОМ ───────────────────────────
+  // 🔴 ЭТО ТА САМАЯ ПРОВЕРКА, БЕЗ КОТОРОЙ УМЕРЛА ИСТОРИЯ.  Правило
+  // `#iv-shk:checked~#is-shk{display:block}` требует, чтобы панель была СЕСТРОЙ
+  // радиокнопки, а она племянница: `#is-shk,#is-prep{display:none}` действует,
+  // второе правило не совпадает НИ С ЧЕМ НИКОГДА, обе таблицы невидимы навсегда.
+  // 321 строка кода, 29 зелёных тестов, пустой экран.  Правило, не попавшее ни во
+  // что, неотличимо от правила верного — пятое лицо класса «ноль находок значит
+  // не смотрел» за сутки.
+  //
+  // 🔴 СОСТОЯНИЕ СНИМАЕТСЯ, СТРУКТУРА ОСТАЁТСЯ.  `:checked`, `:hover`, `::before`
+  // и прочее описывают МОМЕНТ, а гейт меряет покой; судить селектор по ним значит
+  // объявить мёртвым всё, что ждёт своего состояния.  Снимаем состояние и
+  // спрашиваем СТРУКТУРУ: `#iv-shk~#is-shk` — ноль узлов, и это не «сейчас не
+  // включено», а «так не бывает».
+  //
+  // 🔴 ЧТО ЗДЕСЬ НЕ РЕШАЕТСЯ.  Один лист стилей обслуживает весь сайт, поэтому
+  // «ноль совпадений на ЭТОМ экране» не значит ничего: `.kond th.zn` законно
+  // пуст на распределении.  Экран отдаёт ДВА списка — что здесь ожило и что
+  // здесь пусто, — а мёртвым правило объявляет уже инструмент, собрав все
+  // экраны вместе.  Решение, принятое на одном экране, было бы ложным по
+  // построению.
+  const SOSTOYANIE = new RegExp(
+      '::?(' + ['file-selector-button', 'placeholder-shown', 'first-letter',
+                'focus-within', 'focus-visible', 'indeterminate', 'read-write',
+                'read-only', 'first-line', 'placeholder', 'selection', 'backdrop',
+                'autofill', 'disabled', 'optional', 'required', 'any-link',
+                'visited', 'enabled', 'checked', 'invalid', 'default', 'marker',
+                'active', 'before', 'target', 'after', 'focus', 'hover', 'valid',
+                'link'].join('|') + ')\\b(\\([^)]*\\))?', 'g');
+  const bez_sostoyaniya = (s) => s.replace(SOSTOYANIE, '').replace(/\s+/g, ' ').trim();
+  // Составные части селектора: то, что стоит между комбинаторами.  Каждая из них
+  // — самостоятельный вопрос «есть ли такой узел вообще».
+  const chasti = (s) => s.split(/\s*[>+~]\s*|\s+/).filter(Boolean);
+  const skolko = (s) => { try { return document.querySelectorAll(s).length; }
+                          catch (e) { return -1; } };
+
+  const obhod_pravil = (rules) => {
+    for (const r of rules) {
+      if (r.cssRules && !r.selectorText) { obhod_pravil(r.cssRules); continue; }
+      if (!r.selectorText) continue;              // @font-face, @keyframes: судить нечего
+      out.pravil++;
+      let vsego_uzlov = 0, chitaemo = false, nesobiraemo = false;
+      for (const kusok of r.selectorText.split(',')) {
+        const s = bez_sostoyaniya(kusok);
+        if (!s) continue;
+        const n = skolko(s);
+        if (n < 0) continue;                      // браузер не понял — не наше дело
+        chitaemo = true;
+        vsego_uzlov += n;
+        if (n === 0) {
+          // 🔴 ВСЕ ЧАСТИ НА МЕСТЕ, А СВЯЗЬ НЕВОЗМОЖНА — вот это и есть «написано,
+          // но не подключено».  Отличие от «класса сегодня нет на странице»
+          // измеримо, а не на глаз: там отсутствует САМ УЗЕЛ, здесь узлы есть все
+          // до единого и не складываются в то, что просит правило.
+          const ch = chasti(s);
+          if (ch.length > 1 && ch.every(c => skolko(c) > 0)) nesobiraemo = true;
+        }
+      }
+      if (!chitaemo) { out.pravil_nechitaemyh++; continue; }
+      const imya = r.selectorText.slice(0, 120);
+      if (vsego_uzlov > 0) out.pravila_zhivye.push(imya);
+      else out.pravila_pustye.push([imya, nesobiraemo]);
+    }
+  };
+  for (const list of document.styleSheets) {
+    // Чужой лист (CDN, шрифты) не отдаёт правил из-за политики источника — это
+    // не находка и не поломка, это отдельное число.
+    try { obhod_pravil(list.cssRules); } catch (e) { out.pravil_nechitaemyh++; }
+  }
 
   return out;
 }
@@ -1236,6 +1307,47 @@ def main() -> int:
           f"осмотрено элементов {uzlov}")
     print("        четыре числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
           "на ВЫХОД ЗА КОНТЕЙНЕР / на ЦЕНТР, из общего числа элементов страницы.")
+    # ── ПРАВИЛА CSS: РЕШЕНИЕ ПРИНИМАЕТСЯ ПО ВСЕМ ЭКРАНАМ СРАЗУ ────────────────
+    # 🔴 И ТОЛЬКО ЗДЕСЬ, А НЕ В СТРАНИЦЕ.  Лист стилей один на весь сайт: правило,
+    # не совпавшее ни с чем на распределении, может законно жить на кондуите.
+    # Каждый экран отдаёт два списка — что ожило и что осталось пустым, — а
+    # мёртвым правило становится, только если пусто ВЕЗДЕ.
+    zhivye: set = set()
+    pustye: dict = {}
+    for _r, _i, _p, z, _o in itogi:
+        if not z:
+            continue
+        zhivye.update(z.get("pravila_zhivye", ()))
+        for sel, nesobiraemo in z.get("pravila_pustye", ()):
+            pustye[sel] = pustye.get(sel, False) or bool(nesobiraemo)
+    mertvye = {s: n for s, n in pustye.items() if s not in zhivye}
+    nesobiraemye = sorted(s for s, n in mertvye.items() if n)
+    prosto_pustye = sorted(s for s, n in mertvye.items() if not n)
+    pravil_vsego = len(zhivye) + len(mertvye)
+    nechitaemyh = sum(z.get("pravil_nechitaemyh", 0) for _r, _i, _p, z, _o in itogi if z)
+
+    print()
+    print(f"ПРАВИЛА CSS: селекторов всего {pravil_vsego} · ожили хотя бы на одном "
+          f"экране {len(zhivye)} · не совпали НИ С ЧЕМ ни на одном {len(mertvye)}, "
+          f"из них НЕСОБИРАЕМЫХ {len(nesobiraemye)}"
+          + (f" · листов, не отдавших правил: {nechitaemyh}" if nechitaemyh else ""))
+    for sel in nesobiraemye:
+        print(f"   🔴 ПРАВИЛО НИ ВО ЧТО НЕ ПОПАЛО: {sel}")
+        print(f"      все части селектора на странице ЕСТЬ, а связь между ними "
+              f"невозможна — это «написано, но не подключено», а не «ждёт своего "
+              f"состояния»")
+    if prosto_pustye:
+        print(f"   ⚠ ещё {len(prosto_pustye)} селекторов не совпали ни с чем, но "
+              f"у них ОТСУТСТВУЕТ САМ УЗЕЛ, а не связь: класс, который сегодня "
+              f"никто не выставил (состояние ставится скриптом, ветка данных не "
+              f"случилась), от мёртвого кода здесь неотличим, и красное на них "
+              f"было бы криком волком на {len(prosto_pustye)} строк. "
+              f"Печатаются числом и первыми пятью, красным не считаются:")
+        for sel in prosto_pustye[:5]:
+            print(f"      · {sel}")
+    if nesobiraemye:
+        krasnyh += 1
+
     isk = sum(z["isklyucheno"] for _r, _i, _p, z, _o in itogi if z)
     bez = sum(z["bez_sdviga"] for _r, _i, _p, z, _o in itogi if z)
     if isk:
@@ -1332,7 +1444,18 @@ def main() -> int:
           "при том, что уехал весь экран. Падение числа не значит починки, "
           "починку показывает НОЛЬ."
           "\n · центрирование, приходящее ТОЛЬКО в состоянии, которого нет в "
-          "покое (`:hover`, раскрытый список, окно входа): гейт меряет покой.")
+          "покое (`:hover`, раскрытый список, окно входа): гейт меряет покой."
+          "\n · ПРАВИЛО CSS, у которого не совпала ни одна часть: узла нет вовсе, "
+          "и «мёртвый код» здесь неотличим от «класс выставляется скриптом» или "
+          "«ветка данных сегодня не случилась». Такие считаются числом и "
+          "печатаются пятью примерами, но КРАСНЫМИ не объявляются. Красное — "
+          "только НЕСОБИРАЕМОЕ правило: все части на месте, связь невозможна."
+          "\n · правило из листа, который браузер не отдал (чужой источник): "
+          "считается отдельным числом, содержимое недоступно."
+          "\n · правило, живущее в состоянии, до которого гейт не доходит "
+          "(раскрытый список, окно входа): состояние снимается ПЕРЕД проверкой, "
+          "поэтому такое правило судится по структуре и мёртвым не станет — но "
+          "и разметка, появляющаяся только в этом состоянии, не измеряется.")
 
     if args.slomat:
         # 🔴 «КРАСНЫЙ» ЕЩЁ НЕ ЗНАЧИТ «ВСЕ ЧЕТЫРЕ РАБОТАЮТ», А «13 ИЗ 13» НЕ ЗНАЧИТ

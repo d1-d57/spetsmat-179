@@ -849,3 +849,114 @@ def test_centr_boksom_flexom(server, brauzer):
     assert any(d["chem"] == "justify-content:center" for d in posle["centr"]), (
         "нашли, но не назвали, ЧЕМ центрировано — чинить нечего")
     assert len(chisto["centr"]) == len(do["centr"]), "не зеленеет обратно"
+
+
+# ── 6. правило CSS, не совпавшее ни с одним узлом ─────────────────────────────
+#
+# 🔴 ЭТО ТОТ САМЫЙ ДЕФЕКТ, ОТ КОТОРОГО УМЕРЛА `/istoria`, И ОН ПРОВЕРЯЕТСЯ ПАРОЙ:
+# правило внесено — гейт называет его; правило убрано — молчит.
+
+def _pravila(p):
+    z = _zamer(p)
+    return ({s for s in z["pravila_zhivye"]},
+            {s: bool(n) for s, n in z["pravila_pustye"]})
+
+
+def test_nesobiraemoe_pravilo_krasneet_i_zeleneet(server, brauzer):
+    """Дефект истории, воспроизведённый дословно: радиокнопка и панель существуют
+    обе, а правило требует, чтобы панель была СЕСТРОЙ радио, тогда как она
+    племянница.  Правило не совпадает ни с чем НИКОГДА, и до 11.09 это было
+    неотличимо от правила верного."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        _zhivye, do = _pravila(p)
+        p.evaluate("""() => {
+            const rodit = document.createElement('div');
+            rodit.id = 'proba-rodit';
+            const dyadya = document.createElement('input');
+            dyadya.type = 'radio'; dyadya.id = 'proba-radio';
+            const plem = document.createElement('span');
+            plem.id = 'proba-panel'; plem.textContent = 'панель';
+            rodit.append(plem);
+            document.body.append(dyadya, rodit);
+            const st = document.createElement('style');
+            st.id = 'proba-stil';
+            // племянница, а не сестра: связь невозможна при живых обеих частях
+            st.textContent = '#proba-radio:checked ~ #proba-panel{display:block}';
+            document.head.append(st);
+        }""")
+        _zh, s_porchey = _pravila(p)
+        klyuch = "#proba-radio:checked ~ #proba-panel"
+        assert klyuch in s_porchey, (
+            f"несобираемое правило не названо; пустых стало "
+            f"{len(s_porchey) - len(do)}")
+        assert s_porchey[klyuch] is True, (
+            "правило названо пустым, но НЕ несобираемым — а обе его части на "
+            "странице есть, и именно это отличает «не подключено» от «ждёт "
+            "своего состояния»")
+
+        p.evaluate("""() => {
+            document.getElementById('proba-stil').remove();
+            document.getElementById('proba-radio').remove();
+            document.getElementById('proba-rodit').remove();
+        }""")
+        _zh2, posle = _pravila(p)
+        assert klyuch not in posle, "правило убрано, а гейт всё ещё его называет"
+    finally:
+        ctx.close()
+
+
+def test_pravilo_zhdushchee_sostoyaniya_ne_nazyvaetsya_nesobiraemym(server, brauzer):
+    """🔴 ГРАНИЦА, БЕЗ КОТОРОЙ ПРОВЕРКА КРИЧАЛА БЫ ВОЛКОМ НА СТО ТРИДЦАТЬ СТРОК.
+    `:checked`, `:hover` и прочее описывают МОМЕНТ, а гейт меряет покой: правило,
+    ждущее своего состояния, обязано судиться по СТРУКТУРЕ — снимаем состояние и
+    спрашиваем, бывает ли такая связь вообще.  Здесь связь законная, и правило
+    не должно попасть ни в пустые, ни тем более в несобираемые."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        p.evaluate("""() => {
+            const a = document.createElement('input');
+            a.type = 'checkbox'; a.id = 'proba-fl';
+            const b = document.createElement('span');
+            b.id = 'proba-ryadom'; b.textContent = 'сосед';
+            document.body.append(a, b);          // настоящие СЁСТРЫ, не выключено
+            const st = document.createElement('style');
+            st.id = 'proba-stil2';
+            st.textContent = '#proba-fl:checked ~ #proba-ryadom{color:red}';
+            document.head.append(st);
+        }""")
+        zhivye, pustye = _pravila(p)
+        klyuch = "#proba-fl:checked ~ #proba-ryadom"
+        assert klyuch in zhivye, (
+            "правило, которое ждёт `:checked`, объявлено пустым — так проверка "
+            "объявит мёртвым весь сайт, и её выключат")
+        assert klyuch not in pustye
+    finally:
+        p.evaluate("""() => { for (const i of ['proba-stil2','proba-fl','proba-ryadom'])
+            { const e = document.getElementById(i); if (e) e.remove(); } }""")
+        ctx.close()
+
+
+def test_pravilo_zhivoe_na_sosednem_ekrane_ne_mertvoe(server, brauzer):
+    """🔴 РЕШЕНИЕ ПРИНИМАЕТСЯ ПО ВСЕМ ЭКРАНАМ, А НЕ ПО ОДНОМУ, И ЭТО ИЗМЕРИМО.
+    Лист стилей один на весь сайт, поэтому «ноль совпадений на ЭТОМ экране» не
+    значит ничего.  Здесь показано живьём: есть селекторы, пустые на
+    распределении и ожившие на кондуите.  Проверка, судящая по одному экрану,
+    объявила бы их мёртвыми — и была бы неправа ровно столько раз, сколько на
+    сайте разделов."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/raspredelenie", "t-shk")
+    try:
+        zh_rasp, pu_rasp = _pravila(p)
+    finally:
+        ctx.close()
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        zh_kond, _pu_kond = _pravila(p)
+    finally:
+        ctx.close()
+    voskresli = set(pu_rasp) & zh_kond
+    assert voskresli, (
+        "не нашлось ни одного правила, пустого на распределении и живого на "
+        "кондуите — значит эта проверка испытана не была")
+    assert not (zh_rasp & set(pu_rasp)), (
+        "один экран объявил селектор и живым, и пустым одновременно")
