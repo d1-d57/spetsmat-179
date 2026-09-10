@@ -824,6 +824,74 @@ def verh_prava(kt) -> str:
 #: 🔴 КНОПКА НЕСЁТ ЦЕЛЕВОЕ СОСТОЯНИЕ, А НЕ «ПЕРЕКЛЮЧИ». Того требует устройство
 #: сервиса: два тапа, пришедшие в любом порядке, оставляют одну и ту же клетку и
 #: один ряд в журнале, а не два.
+
+PRIMENIT_SKRIPT = r"""
+<script>
+/* ── «ПРИМЕНИТЬ ПОСТОЯННОЕ К ЭТОМУ ДНЮ» ────────────────────────────────────────
+   Кнопка в верхней строке дня рождается СКРЫТОЙ и пустой. Этот скрипт спрашивает
+   сервер, есть ли что применять, и только тогда её показывает — с числом.
+
+   🔴 ЧИСЛО СПРАШИВАЕТСЯ У СЕРВЕРА, А НЕ СЧИТАЕТСЯ ЗДЕСЬ. Сколько на дне ручных
+   перекрытий — знает тот же слой, что их снимает; посчитай их браузер по разметке,
+   и правил стало бы двое. Ровно та болезнь, от которой лечится вся эта страница
+   (см. PRAVKA_SKRIPT).
+
+   Ноль перекрытий — кнопки НЕТ ВОВСЕ, а не серая: владелец 10.09 дословно «не
+   заводить орган, который ничего не делает». */
+(function(){
+  const knopka = document.getElementById('primenit-post');
+  if (!knopka) return;                 // гость, или постоянное распределение
+  const den = knopka.dataset.den;
+  if (!den) return;
+
+  function slovo(n){                   // «правку · правки · правок» — по-русски
+    const d = n % 10, dd = n % 100;
+    if (d === 1 && dd !== 11) return 'правку';
+    if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return 'правки';
+    return 'правок';
+  }
+
+  function sprosit(){
+    fetch('/api/den/perekrytiya?den=' + encodeURIComponent(den), {credentials:'same-origin'})
+      .then(function(o){ return o.ok ? o.json() : null; })
+      .then(function(d){
+        if (!d || !d.n) { knopka.hidden = true; return; }   // ноль — кнопки нет
+        knopka.textContent = 'Применить постоянное · ' + d.n;
+        knopka.title = 'снимет ' + d.n + ' ручн' + (d.n === 1 ? 'ую ' : 'ых ')
+                     + slovo(d.n) + ' за этот день'
+                     + (d.shkolniki && d.shkolniki.length ? ': ' + d.shkolniki.join(', ') : '');
+        knopka.dataset.skolko = d.n;
+        knopka.hidden = false;
+      })
+      .catch(function(){ knopka.hidden = true; });
+  }
+
+  knopka.addEventListener('click', function(){
+    const n = Number(knopka.dataset.skolko || 0);
+    if (!n) return;
+    if (!confirm('Снять ' + n + ' ручн' + (n === 1 ? 'ую ' : 'ых ') + slovo(n)
+                 + ' за этот день и вернуть постоянное распределение?')) return;
+    knopka.disabled = true;
+    fetch('/api/den/primenit-postoyannoe', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({den: den})
+    }).then(function(o){
+      if (!o.ok) throw new Error('otkaz');
+      /* Страница ПЕРЕЧИТЫВАЕТСЯ, а не правится на месте: что стало с распределением
+         после снятия перекрытий, считает сервер — здесь этого знания нет. */
+      location.reload();
+    }).catch(function(){
+      knopka.disabled = false;
+      alert('Не удалось применить постоянное. Попробуйте ещё раз.');
+    });
+  });
+
+  sprosit();
+})();
+</script>
+"""
+
 KONDUIT_SKRIPT = """
 <script>
 (function () {
@@ -1014,7 +1082,7 @@ def skripty(kt, drakon_skript: str) -> str:
     # immediately; standing before it, the address-driven switch would be overwritten
     # by yesterday's choice and `/raspredelenie/postoyannoe` would open on «Класс».
     return (drakon_skript + VHOD_SKRIPT
-            + (PRAVKA_SKRIPT if kt.ADMIN else "")
+            + (PRAVKA_SKRIPT + PRIMENIT_SKRIPT if kt.ADMIN else "")
             + (KONDUIT_SKRIPT if kt.mozhno("videt-konduit") else "")
             + VKLADKA_SKRIPT)
 
@@ -1068,6 +1136,32 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
             f'<a class="strelka" href="/raspredelenie?den={e(sosednee_zanyatie(den, +1))}"'
             f' title="следующее занятие" aria-label="следующее занятие">›</a>'
             f'<a class="k-drugomu" href="/raspredelenie/postoyannoe">Постоянное</a>'
+            # 🔴 «ПРИМЕНИТЬ ПОСТОЯННОЕ К ЭТОМУ ДНЮ» — КНОПКА, КОТОРАЯ ЗНАЕТ, ЕСТЬ ЛИ
+            # ЧТО ПРИМЕНЯТЬ. Владелец 10.09: правки постоянного не видны там, где
+            # поверх лежит ручное перекрытие, и снимать их по одному через пустое
+            # значение — работа руками. Требования его же, дословно: кнопка стоит на
+            # экране «Распределение» НА ЛЮБОЙ вкладке; перекрытий ноль — кнопки НЕТ
+            # ВОВСЕ, а не серая («не заводить орган, который ничего не делает»); есть
+            # — на кнопке ЧИСЛО, чтобы не нажимать наугад.
+            #
+            # Здесь она рождается СКРЫТОЙ и без числа: сколько перекрытий на этом дне,
+            # знает только `GET /api/den/perekrytiya`, и спрашивать его надо в момент
+            # ПОКАЗА, а не сборки — страница стоит открытой весь урок, пока день правят
+            # с телефонов. Показывает и наполняет её `PRIMENIT_SKRIPT`.
+            #
+            # `data-org` обязателен: кнопка ПИШЕТ в базу, у гостя её нет, и гейт
+            # каркаса сверяет гостевой остаток побайтово — без метки он покраснеет.
+            # Ветка `elif kt.ADMIN` ниже — постоянное распределение, и кнопки там нет
+            # по построению: применять к «всегда» нечего (требование 6).
+            # 🔴 РИСУЕТСЯ ТОЛЬКО ВОШЕДШЕМУ, И `data-org` ЭТОГО НЕ ДЕЛАЕТ. Метка —
+            # для СВЕРКИ каркасов (`_snyat_organy` убирает помеченное у роли и
+            # сравнивает остаток с гостевым побайтово), а не запрет рисовать.
+            # Кнопка, отданная гостю, осталась бы у него и исчезла у организатора —
+            # ровно то расхождение, которое гейт каркаса ловит и на котором
+            # страница перестаёт собираться.
+            + (f'<button type="button" class="k-drugomu primenit-post"'
+               f' id="primenit-post" data-org="pravit-raspredelenie"'
+               f' data-den="{e(den)}" hidden></button>' if kt.ADMIN else "")
             + panel_vybora(den) +
             "</span>")
     elif kt.ADMIN:
