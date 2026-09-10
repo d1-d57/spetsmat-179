@@ -364,8 +364,19 @@ window.OCHERED = (function () {
       : "<b>Связи с сервером нет дольше " + (STARYJ / 60000) + " минут.</b> На экране"
         + " данные от " + kogda + " — за это время их мог изменить кто-то другой. " + hvost;
   }
+  /* 🔴 ЗАПИСИ, КОТОРЫЕ УЖЕ НАЖАТЫ, НО ЕЩЁ НЕ ЛЕГЛИ В ХРАНИЛИЩЕ, СЧИТАЮТСЯ ТОЖЕ.
+     `dobavit` асинхронна, и между нажатием и записью в IndexedDB есть окно, в котором
+     хранилище честно отвечает «пусто». Счётчик, спросивший в этот момент, показывал бы
+     НОЛЬ при непустой очереди — то есть говорил бы человеку «всё уехало» ровно тогда,
+     когда не уехало ничего. Поймано живым прогоном под полным набором: проверка
+     дожидалась нуля, которого ещё никто не отменял, и падала следующей же строкой. */
+  var v_puti = 0;
   function obnovit() {
-    return vse().then(function (z) { narisovat_organy(z.length); return z.length; });
+    return vse().then(function (z) {
+      var n = z.length + v_puti;
+      narisovat_organy(n);
+      return n;
+    });
   }
 
   /* ── ОТПРАВКА ─────────────────────────────────────────────────────────────── */
@@ -499,9 +510,15 @@ window.OCHERED = (function () {
 
   function postavit(zapis) {
     zapis.kogda = new Date().toISOString();   /* справочное поле, и только оно */
+    v_puti += 1;                              /* нажато — значит уже в очереди */
+    obnovit();
     return dobavit(zapis).then(function () {
+      v_puti -= 1;
       soobshchit({rod: "postavlena", zapis: zapis});
       return obnovit();
+    }, function (beda) {
+      v_puti -= 1;
+      return obnovit().then(function () { throw beda; });
     }).then(function () { vyvezti(); });
   }
 
