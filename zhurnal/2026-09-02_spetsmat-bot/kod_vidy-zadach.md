@@ -278,6 +278,61 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### The zone of this заход did not contain the file the task could not be done without
+ЦЕНА: the task said «вид `письменная` в модели и в схеме»; the zone was
+`core/ seed/ tools/ veb/razdely/ migrations/ tests/sheets/`. The enumeration of problem
+kinds lives in **`config.py` at the repository root**, and `tests/test_schema_matches_config.py`
+asserts that the CHECK list of the LIVE schema equals `config.PROBLEM_KINDS`. So "widen the
+schema" and "stay inside the zone" cannot both be obeyed: a migration without that one line
+turns a green test red. Paid with two departures from the zone — `config.py`, and
+`tests/import/test_seeding.py`, which builds its dict by iterating `config.PROBLEM_KINDS`
+and went red on a count of ZERO. Both are named in the report and in the commit messages,
+but gate Г6 will see foreign paths in my commits and will be right to. The fix belongs at
+ASSEMBLY time: if a задание names an enumeration, the zone must contain the file that
+declares it — otherwise the executor chooses between breaking a neighbour and not doing the
+task, and both choices are брак.
+
+### `pytest tests` rewrites two TRACKED files that lie outside every zone
+ЦЕНА: `python3 -m pytest tests -q` silently overwrites `docs/index.html` (a 1177-line diff —
+the guest redirect page becomes a full dump of the site) and `data/spetsmat.db`. Both are
+under git. I reverted them twice in one pass; a заход that commits with `-A` or `.` after a
+test run publishes a test artefact into the project's own guest page, and the first person to
+notice is outside the project. The rule "never `-A` / `.`" in §4 covers half of it. The other
+half is that nobody is warned WHAT gets dirtied, so a non-empty `git status` after a green
+run reads as one's own mistake and gets investigated from scratch every time.
+
+### `vykatka.sh` has no lock, and twelve заходы share one server
+ЦЕНА: the first deploy came back green — «deployed; the site answered 200 after 1s» — and a
+minute later the server was carrying the OLD `veb/razdely/konduit.py` (md5 `f566395e…`
+against my `646309117f…`): no glyphs on the live conduit, no dictionary, the default tab
+still «Весь год». A second, byte-identical deploy carried the same five modules across
+(`veb/server.py`, `veb/obshchee/karkas.py`, `veb/razdely/glavnaya.py`, `konduit.py`,
+`shkolniki.py`) and everything appeared. The one plausible reading is that a neighbouring
+заход of this wave deployed from its own branch straight after mine and overwrote it. The
+door has nothing to say about that: it checks the lesson window, the cleanliness of the tree
+and a 200 — it never checks that what it SENT is what is now lying on the server. A green
+deploy report over old code on the server is indistinguishable from an honest one, and I
+caught it only because I went to read the live page with my eyes instead of believing the
+exit code.
+
+
+
+### One shared checkout, a shared stash, and twelve sessions writing into it
+ЦЕНА: three minutes after my branch was merged into `main`, the shared checkout
+`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` was rolled back ON DISK to a tree older
+than that merge: `migrations/010_vid_pismennaya.sql`, `tools/vidy_zadach.py` and
+`tests/sheets/test_pometki_listkov.py` were staged as DELETED and physically gone, and three
+more of my files were staged back to their previous contents. It was not aimed at me — the
+same movement removed `veb/razdely/kartochka.py` and `tests/veb/test_kartochka.py`, the NEW
+files of the neighbouring заход. Nothing durable was lost (`main`'s HEAD, `origin`, and the
+live server all still carried my work, checked one by one), but the acceptance gate `Г0`
+reads the WORKING TREE, so a заход can be judged red for a rollback another session did after
+it finished. I restored my own eight paths from `HEAD` and deliberately left the neighbour's
+three alone, which is what the zone contract requires and which leaves `Г0` red on foreign
+paths — a red I have to spend a paragraph of the report explaining instead of it being
+impossible. The environment warns that the stash stack is shared; the checkout itself is
+shared the same way and has no such warning anywhere in the заход.
+
 ## ПЛАН — (заполняет исполнитель)
 
 > Rewritten 2026-09-10 on RESTART AFTER AN INTERRUPTION. The previous pass stopped
@@ -359,9 +414,85 @@ reporting step 4 as fully done.
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
-1. Should kind "письменная" be added as new enum to seed/sheets.json and replaced for "двойная" or kept alongside?
-   DОМ: seed/sheets.json / core/models.py / владелец
+1. The tab «Гробарий» that step 4 of the task asks for BETWEEN «Весь год» and the sheets
+   does not exist in this tree, and building it here would collide with the neighbour it is
+   assigned to. `grep -rn 'робарий'` finds it only as a worksheet of last year's workbook in
+   `tools/import_konduit.py` and in `README.md:331`, which gives «пустая вкладка гробария» to
+   заход `kod_statistiki-i-grobarij.md`. I delivered «Весь год» → sheets and left the slot free.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/kod_statistiki-i-grobarij.md
    ДОСТАВЛЕНО: нет
+
+2. `двойная` is still in the schema, still on two cells (sheets 4 and 7), and still means
+   nothing anybody can state. The task said to leave it, and I left it; `tools/vidy_zadach.py`
+   now prints it in `прочие` on every run instead of folding it into a bucket, so it stops
+   being invisible. Somebody has to decide what `**` meant in last year's workbook before the
+   next кондуит feature has to guess.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. The zone of a заход must contain the file that declares any enumeration the задание orders
+   changed. Here it did not, and both possible obediences were брак. Written up with its price
+   in `## УРОКИ ФАБРИКЕ` above.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+4. `python3 -m pytest tests -q` rewrites the TRACKED files `docs/index.html` and
+   `data/spetsmat.db`. Every заход of this wave that runs the suite meets it; a заход that
+   commits with `-A` publishes a test artefact into the project's guest page. Written up with
+   its price in `## УРОКИ ФАБРИКЕ` above.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
+5. `deploy/vykatka.sh` reports a green deploy without checking that what it sent is what now
+   lies on the server, and twelve заходы of this wave deploy to one machine with no lock
+   between them. Measured live: my first deploy returned 200 and the server kept the previous
+   `veb/razdely/konduit.py`. Written up with its price in `## УРОКИ ФАБРИКЕ` above.
+   ДОМ: deploy/README.md
+   ДОСТАВЛЕНО: нет
+
+6. The repository's own `data/spetsmat.db` stands at migration `005` while the code needs
+   `010`. That is why `tests/veb/test_kanon_verstki.py` (13 errors) and `tools/gejt_verstki.py`
+   go red on a fresh checkout — `no such table: mark_lesson_override` — and they go red on
+   `main` too, not only here: I checked `main` out into a throwaway worktree and got the same
+   32 failed / 43 errors. Whoever owns that file has to decide whether it is migrated in place
+   or stops being tracked; it is outside my zone and I did not touch it.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/PLAN.md
+   ДОСТАВЛЕНО: нет
+
+7. ANSWERED, kept for the record — the question the interrupted pass left here («should
+   `письменная` be added to `seed/sheets.json` and should it replace `двойная`?»). No, on both
+   counts, and the seed is the wrong place to look: `16A`, `16α` and `16ℵ` are not in
+   `seed/sheets.json` at all (18 sheets, 544 problems, none of them number 16). The kind is
+   read out of the served PDFs by `tools/import_listka.py` and written to `problems.kind`;
+   `seed/sheets.json` is last year's workbook and its vocabulary has no dagger in it, which
+   `tests/import/test_seeding.py` now asserts as an explicit zero.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+8. `spetsmat-storozh-sajta.service` on the live server is in state `failed` — found by the §3
+   verifier while proving he was looking at the live thing. The site's own watchdog is not
+   running. Nothing to do with this заход and outside its zone; named because nobody else is
+   looking at that unit tonight.
+   ДОМ: deploy/README.md
+   ДОСТАВЛЕНО: нет
+
+9. Two columns now answer "is this problem starred?" and nothing goes red when they disagree.
+   `sheet_blocks.star` is set only when a WHOLE block is starred (16A №12, №13; 16ℵ №0;
+   16α №15), while `16α` №14 carries `star=0` on the block and the star on the CELL `14в` via
+   `problems.kind`. The page draws from `problems.kind` and is right today; the drift has no
+   carrier. Found by the §3 verifier.
+   ДОМ: migrations/006_listok_kak_baza.sql
+   ДОСТАВЛЕНО: нет
+
+
+10. The main checkout `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` is written into by
+    every session of this wave at once, and one of them rolled it back on disk under my merge
+    and under the neighbour's — three of my files and two of his were staged as deleted while
+    `main`'s HEAD still held them. Acceptance gate `Г0` reads that working tree, so it judges
+    a заход on a state its neighbours can change after it has finished. Written up with its
+    price in `## УРОКИ ФАБРИКЕ` above.
+    ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+    ДОСТАВЛЕНО: нет
 
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
@@ -382,48 +513,601 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+**СНИМОК ВХОДА, СНЯТЫЙ ЭТИМ ПРОГОНОМ (это ПЕРЕЗАПУСК, и снимок взят заново — числа
+интерпретированного пасса ниже устарели уже на момент моего первого хода).**
+
+🔴 **§0.1 НЕ ИСПОЛНЯЛСЯ: субагент гит-контура ОТМЕНЁН оркестратором**, и вместо всего блока
+предписана одна команда. Её вывод, дословно:
 ```
-git --no-optional-locks branch --no-merged main | grep -c 'zahod/' → 0 (grep exit 1 = count 0)
-git --no-optional-locks status --porcelain | wc -l → 0 (inside worktree, clean)
-git --no-optional-locks log --oneline @{u}.. | wc -l → 0 (nothing unpushed on zahod/vidy-zadach)
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki → ✅ заявок нет (open 0)
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
 ```
+Единица — ЭТО МОЯ СОБСТВЕННАЯ ветка `zahod/vidy-zadach` и ничья больше
+(`git branch --no-merged main` печатает ровно одну строку, `* zahod/vidy-zadach`). Чужого
+невлитого на входе не было; вливать было нечего, и я ничего чужого не вливал.
+
+Остальные три числа входа, снятые тем же ходом:
+```
+$ git --no-optional-locks status --porcelain | wc -l
+0
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+0
+$ python3 .../git_zona.py zayavki
+Охват: заявок открыто 5, переадресовано 28, постоянных исключений 0, сторож краснеет на 0
+```
+🔴 Пять открытых заявок — ЧУЖИЕ и УНАСЛЕДОВАННЫЕ: все пять поставлены до этого прогона
+(самая свежая — 2026-09-08), ни одна не про эту зону, и закрыть их моими правами нечем —
+две из них адресованы в репозиторий `disciplina`, которого эта рабочая папка не касается.
+Своих заявок я не ставил ни одной.
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-- Self-check commands executed (no new commit needed — zone already clean).
-- Worktree entered: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vidy-zadach, branch zahod/vidy-zadach.
-- No unmerged zahod/* branches; no open claims; zone check ✅ for all six prefixes.
-- File edited: this entry only (plan/questions/report appended; no code paths touched).
+- Снимок входа снят ПЕРВЫМ ходом, до всякой работы (числа выше).
+- Рабочая папка уже существовала — вошёл в неё, `git rev-parse --abbrev-ref HEAD` →
+  `zahod/vidy-zadach`. Не пересоздавал.
+- Работа зоны закоммичена ПО ХОДУ, семью коммитами: `dfd1ac8` `b13c169` `341603b`
+  `301f7bb` `bb6af86` `a0c8311` `55ad7a4`.
+- `main` (23 коммита вперёд) влит в мою ветку мною же — `a0c8311`, один конфликт разрешён.
+- Ветка выложена: `git push -u origin zahod/vidy-zadach` → `* [new branch]`.
+- Влитие моей ветки в `main` — последним ходом, оно ниже в `## ОТЧЁТ`.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** да
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** нет — и вот список поимённо, как того требует форма.
+На ВХОДЕ невлитой была ровно одна ветка, моя собственная, и я её влил последним ходом
+(`ee3922c`). Долг входа этим закрыт. Но `git branch --no-merged main`, прогнанный ПОСЛЕ,
+печатает две ветки, поэтому честный ответ здесь — `нет`, а не `да`:
+* **`zahod/vidy-zadach`** — моя. Была влита; чужая сессия сняла влитие командой
+  `git reset` уже после моего последнего хода (рефлог `main@{0}: reset: moving to 542e10f`
+  над `main@{1}: merge zahod/vidy-zadach`). Повторно не вливаю сознательно: моя ветка
+  несёт в себе слияние с `main` на `cba0a77`, и повторное влитие воскресит слияние соседа,
+  снятое тем же `reset`. Заявка стоит: `2026-09-10T0346-zahod-vidy-zadach-main-reset-git`,
+  срочность `blokiruet`, с инструкцией «как вливать». Разбор — в `## ОТЧЁТ`.
+* **`zahod/pravila-raspredeleniya`** — чужая, на входе её в этом списке не было; вливать
+  чужую ветку заход не вправе и не может знать, готова ли она.
+Незакоммиченного по моей зоне 0, невывезенного по моей ветке 0. Пять открытых заявок на
+входе — чужие и унаследованные; одну из них, носившую имя МОЕЙ зоны и потому читаемую как
+мой сорванный коммит, я разобрал и закрыл
+(`2026-09-10T0319-otkaz-core-seed-tools-veb-razdely-migrations`).
+
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** нет — work not started, no build produced; only file modified is this entry itself (no new .md, no collectable artifact).
-**РОД АРТЕФАКТА:** исходник (this file is the work-product entry, not a built artifact).
-**КОММИТ:** нет — zone clean in HEAD (git_zona.py check --zone core/.../tests/sheets/ → ✅); no code changes to commit yet; commit will be done by parts per §4 when content work starts.
 
-Content work NOT performed this pass (deliberately limited): kinds / PDF parsing / conduit / tabs / registers. Only git-contour §0.1 executed.
 
-SELF-CHECK OUTPUT (dosed verbatim):
-- git --no-optional-locks branch --no-merged main | grep -c 'zahod/' → 0 (no unmerged zahod/ branches; exit 1 from grep means count 0)
-- python3 .../git_zona.py check --zone core/ --zone seed/ --zone tools/ --zone veb/razdely/ --zone migrations/ --zone tests/sheets/ → ✅ зона доехала в git, вне git ничего нет (exit 0)
-- python3 .../git_zona.py zayavki → ✅ заявок нет (open claims 0)
-- Worktree folder: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vidy-zadach exists; current branch: zahod/vidy-zadach (verified git rev-parse --abbrev-ref HEAD)
+**WHERE THE PREVIOUS PASS STOPPED AND WHERE I PICKED IT UP.** The interrupted pass got
+through §0.1 (the git contour) and stopped there: it wrote ПЛАН / ВОПРОСЫ / ОТЧЁТ into this
+file, touched no code file, produced no artefact and made no commit — its own report says so
+(«Content work NOT performed this pass»), and `git log --oneline -20` on `zahod/vidy-zadach`
+confirmed it, showing only the wave's commits and none of mine. So I continued from the
+first line of the actual task — the kind `письменная` in the schema — and did all four steps.
+Nothing was redone, because nothing had been done.
 
-WHAT WAS NOT TOUCHED (per "nothing beyond task"):
-- No edits to seed/sheets.json, core/services/sheets.py, core/models.py, docs/listki/*.pdf, veb/razdely/*.py.
-- No register_doc.py call (no new .md artifact).
-- No pytest run, no live site check, no PDF parsing, no conduit edit.
+**ПРАВКИ ПРОЧИТАНЫ:** неприменимо — `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` carries `<правок нет>`.
 
-IRREVERSIBLE: none (no deletions, no resets, no overwrites outside this file; this edit is reversible by revert).
-REPEATABILITY: finding of 0 unmerged zahod/ branches and 0 open claims is repeatable on next check; no non-repeatable states introduced.
-TIME / TOKENS: N/A — opencode engine, no cost counter in log.
+**КОММИТ:** `dfd1ac8` · `b13c169` · `341603b` · `301f7bb` · `bb6af86` · `a0c8311` (merge of
+`main`) · `55ad7a4` — seven commits made along the way, one per finished part, none of them
+kept back to a last move. Branch `zahod/vidy-zadach` = `ee3922c`, pushed to
+`origin/zahod/vidy-zadach`, and merged into `main` by me as the last move — 🔴 **after which
+another session ran `git reset` on `main` and the merge is no longer there.** Read the section
+«🔴 И ТО ЖЕ САМОЕ СЛУЧИЛОСЬ С САМИМ ВЛИТИЕМ» at the end of this report before judging the
+branch: the work is on `origin` and on the live server, `main` is the one place it is missing,
+and a blocking claim with merge instructions stands —
+`2026-09-10T0346-zahod-vidy-zadach-main-reset-git`.
 
-FINISH LINE (required for subagent answers): выдано 3 позиции из 3 найденных (ПЛАН / ВОПРОСЫ / ОТЧЁТ written in this file, git-contour executed fully, nothing beyond task touched).
+**АРТЕФАКТ:** /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vidy-zadach/tools/vidy_zadach.py
+**РОД АРТЕФАКТА:** исходник — a tool, run by hand, that prints the answer this заход was
+asked to produce. The thing the owner will actually look at is not a file but a page:
+**http://math-kluychiki.ru/ → вкладка «Кондуит»**, where the marks now stand beside the
+problem numbers; it is served from the live database and has no path on disk to copy.
+### WHAT WAS DONE, AND WHY
+
+**1. The kind `письменная` — in the schema and in the model** (`dfd1ac8`).
+`migrations/010_vid_pismennaya.sql` widens the CHECK on `problems.kind`.  SQLite cannot
+widen a CHECK in place, so the table is rebuilt by the procedure in the SQLite manual; every
+`id` is COPIED rather than regenerated, which is what keeps `marks` pointing where it
+pointed.  `006_listok_kak_baza` had refused to rebuild this table, and its reasoning still
+holds where it was made — that change needed a COLUMN, and `alter table add column` gives one
+for free.  A CHECK list has no such door, and a kind the database refuses is not a kind.
+`двойная` is left exactly as it was, on both of its two rows.
+`config.PROBLEM_KINDS` gains it, and so does `OBLIGATORY_KINDS`: `письменная` is an
+obligation that differs from `обязательная` only in HOW it is handed in.
+
+**2. The marks carried out of the PDF into `problems.kind`** (`b13c169`).
+`tools/import_listka.py` was already parsing `◦ † ⋆` and throwing two of the three away —
+`_vid_yachejki` asked `blok["star"]` and answered `звезда` or `обычная`.  Now
+`vid_po_pometke` is the one place the reading is made, both parsers (PDF text layer, TeX
+macros) hand it the same alphabet, and a sub-item's own mark wins over the problem's ONLY
+when it has one.  Both shapes are on these sheets and mean opposite things: `7◦ … а) б) в)`
+puts the obligation on the problem and all three cells inherit it, `14 … а)◦ б)◦ в)⋆` puts
+it on each sub-item.  Either half-rule alone gets one of the two wrong and leaves the other
+looking right.  An existing cell is still never rebuilt — `update … where id` — and this tool
+still neither reads nor writes `marks`.
+
+**3. The counting command** (`341603b`) — `tools/vidy_zadach.py`, described below under the
+критерий готовности.
+
+**4–5. The кондуит** (`301f7bb`, `55ad7a4`) — the glyph beside the problem number, drawn from
+`problems.kind`, one per COLUMN (not per cell: the grid holds 31 000 of those), three kinds
+separated by colour as well as by shape, no new colour introduced.  The dictionary is written
+ONCE on the page, between the class buttons and the tab strip — `title=` on every cell would
+have failed twice, since a phone cannot summon a tooltip and it would be 31 000 repeats of
+one word.  An unknown kind draws NOTHING rather than a question mark, `двойная` being the
+live case.  Tabs: «Весь год» first, then the sheets; the default sheet is ASKED OF THE БАЗА
+at draw time by `_samyj_novyj` (`order by issued_at desc, ord asc`, first one that has cells)
+and is not a number in the code; class buttons 8 then 9, 9 open.
+
+**6. The gate** (`bb6af86`) — eleven tests in `tests/sheets/test_pometki_listkov.py`, run
+against the PDFs the site actually serves.
+
+**7. The merge and the renumber** (`a0c8311`) — see «WHAT I FOUND THAT WAS NOT MINE» below.
+
+### КРИТЕРИЙ ГОТОВНОСТИ — SEVEN POINTS, EACH WITH THE COMMAND THAT ANSWERED IT
+
+**1. The per-sheet counts and their sum.**  `python3 tools/vidy_zadach.py`, run ON THE
+SERVER against the live database after the import:
+```
+листок ячеек  ◦ обязательная   † письменная     ⋆ звезда           обычная
+16A       21  ◦ 17             † 1              ⋆ 3                0
+16α       17  ◦ 7              † 4              ⋆ 2                4
+16ℵ       13  ◦ 4              † 0              ⋆ 1                8
+```
+17+1+3+0 = 21, 7+4+2+4 = 17, 4+0+1+8 = 13.  Every sum equals its cell count; `rc=0`.  The
+gate can fail: a kind outside the four goes to `прочие` and breaks the sum on purpose, and
+the same run finds both `двойная` rows, on sheets 4 and 7.
+
+**2. The dagger counts against the PDF: 16A → 1, 16α → 4, 16ℵ → 0.**  They match, and they
+match from two directions.  Forward: the counts above.  Independently: for `16A` there is a
+second source, `materials/spetsmat-2026/listki/16-derevya.tex`, where the author wrote
+`\nomer{8}{\dag}` outright — `python3 tools/import_listka.py 16A --сверить-с-tex` → `сошлось`,
+and cell by cell the TeX gives the same 21 labels AND the same 21 kinds, `письменная` on 8
+and nowhere else.  🔴 About the zero on `16ℵ`, which the задание warned about specifically: a
+grep proves presence and never absence, so I did not stop at the zero.  I read the PDF text
+line by line and printed every line carrying a mark — `16ℵ` shows `-1 а)◦ б)◦ в)◦`, `0⋆` and
+`7◦`, and no dagger anywhere; the three sheets between them yield 10 + 7 + 4 circles and
+1 + 4 + 0 daggers, which is a parser that is plainly reading the dagger and simply not
+finding one there.  The §3 verifier then counted all three sheets by EYE, off the PDF pages
+themselves, as an independent check — its answer is quoted below.
+
+**3. The verdict carries охват, and Y was counted BEFORE the work.**  Y, measured on the live
+server before anything was written: `16A` 21 cells, `16α` 17, `16ℵ` 13 — **51 cells**, of
+which **0 письменных** and 595 cells in the database overall.  After: **проставлено 51 задача
+из 51** on the three sheets (every cell of the three had its kind reconciled), of which **5
+cells changed value** — `16A` №8 and `16α` №2, 3, 5, 7, all `обязательная → письменная`.  Of
+the whole `problems` table: **размечено импортом 51 ячеек из 595**.
+
+**4. What the parse does NOT check — printed by the tool, not left to this report.**
+`tools/vidy_zadach.py` ends every run with it, on the live server:
+```
+  • ячеек мимо импорта (block_id is null): 544 — вид у них тот, что вписан руками или
+    засеян из seed/sheets.json, и сверить его не с чем
+  • листков, не тронутых импортом вовсе: 18 — 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+    15, 1д, 2д, 3д, 4д
+  • правильность самой разметки в PDF: этот разбор сверяет базу с разбором, а не разбор с
+    бумагой — глазами смотрит человек
+```
+
+**5. Seen on the live кондуит.**  Fetched from the running service on the server as an
+authorised organiser (`curl` on `127.0.0.1:8765/`, the cookie made and used on the server and
+never carried out of it), then rendered in a headless Chromium at 1440×900 and looked at:
+**задача 8 листка 16А несёт крестик `†`, задачи 1а…7в несут кружки `◦`, задачи 12, 13а, 13б
+несут звёзды `⋆`** — читается глазами, цветом и формой, на боевой странице.  The markup
+behind it, verbatim from the live response:
+`<th class="zn">7в<i class="pm ob">◦</i></th><th class="zn">8<i class="pm pi">†</i></th>` …
+`<th class="zn">12<i class="pm zv">⋆</i></th>`.  The dictionary stands once above the grid.
+Also looked at 375 px: the legend wraps to two lines, the glyphs stay legible, the grid keeps
+scrolling with the page as it did before.
+
+**6. The default tab, by a live request with no parameters.**  Same live response: the only
+`checked` radio in the `knd` group is `k-19`, and `n-19` is `16A. Деревья` — so the кондуит
+opens on `16A` and not on «Весь год».  Class buttons render `8 класс` then `9 класс`, with
+`kl-9` checked.
+
+**7. `python3 -m pytest tests/sheets -q` — 33 passed.**  The entry number, taken by command
+before any work: **22 passed**.  Up eleven, none lost.
+
+### ЖИВОЙ ПРОГОН, AND WHAT IT COST THE LIVE SITE
+
+Backup first: `/opt/spetsmat-bot/data/backups/spetsmat-20260910T002616Z-ruchnoj.db.gz`, made
+by `ops/rezervnaya_kopia.py --metka ruchnoj` before a single byte moved.
+Then, in this order and no other — migration by hand, code by the door, data last:
+`rsync migrations/` → `apply_migrations()` on the server → `['010_vid_pismennaya']` →
+`bash deploy/vykatka.sh` → `deployed; the site answered 200 after 1s` →
+`tools/import_listka.py` for each of the three sheets → `tools/vidy_zadach.py`.
+The importer reported `ячеек переразмечено: 1` on `16A`, `4` on `16α`, `0` on `16ℵ`, and
+`изменений 0` on `16ℵ` — the third sheet needed nothing, which is itself the check that the
+tool is not rewriting what already agrees.
+
+🔴 **NOTHING WAS LOST, AND IT IS MEASURED ON THE LIVE DATABASE, NOT ASSUMED.**  Before the
+migration: `marks` 16 188, `problems` 595.  After the migration, and again after the import:
+`marks` **16 188**, orphaned marks **0**, `pragma foreign_key_check` **empty**,
+`pragma integrity_check` **ok**.  The site answered **200** at every step.
+
+🔴 **THE DEBT COUNT DID NOT MOVE EITHER, AND THAT WAS THE POINT OF PUTTING `письменная` INTO
+`OBLIGATORY_KINDS`.**  `core/services/progress.py` counts a debt on any kind in that tuple.
+Before: 16A 18 debt-cells, 16α 11, 16ℵ 4.  After: 17+1 = 18, 7+4 = 11, 4+0 = 4.  Identical.
+Leaving `письменная` out of that tuple would have silently cancelled the debt on exactly the
+five cells this заход was written to mark.
+
+### WHAT I DID NOT DO, AND WHY — SAY IT PLAINLY
+
+🔴 **The tab «Гробарий» is NOT delivered, and step 4 is therefore delivered in part.**  The
+task asks the order «Весь год» → «Гробарий» → листки.  There is no Гробарий tab in this tree:
+`grep -rn 'робарий'` finds it only as a worksheet of last year's workbook inside
+`tools/import_konduit.py`, and in `README.md:331`, which assigns «пустая вкладка гробария» to
+the NEIGHBOURING заход `kod_statistiki-i-grobarij.md`.  Building it here would be doing my
+neighbour's work in his zone and colliding with him.  Delivered: «Весь год» → листки, with
+the slot between them free.  In `## ВОПРОСЫ` as item 1.
+
+**Not touched, deliberately:** `seed/sheets.json` (sheets `16*` are not in it at all — 18
+sheets, 544 problems, none of them number 16, so the kinds of these sheets have never had
+anything to do with the seed); `двойная`; `marks` (never read, never written); the eighteen
+sheets of last year; `data/spetsmat.db` in the repository; anything in `veb/` outside
+`razdely/konduit.py`; statistics of «сколько сдал» — that is заход `statistiki-i-grobarij`,
+and its input is the column this заход filled.
+
+### WHAT I FOUND THAT WAS NOT MINE
+
+🔴 **`main` had moved 23 commits ahead of my branch, and carried its own `migrations/009`.**
+`009_perebivka_zanyatia.sql` — a neighbour's, already applied on the live server — collided
+with my `009_vid_pismennaya.sql` on the number.  Two migrations wearing one number read fine
+on a laptop and turn into «which 009 is applied here?» on the server at the moment somebody
+needs an answer fast.  I merged `main` into my branch and RENUMBERED mine to `010`, with
+`depends: 009_perebivka_zanyatia` so the order is stated rather than left to a sort, and said
+so in the file's own header.  One conflict, in `konduit.py`, on the single line that assembles
+the section: `main` had appended the cell-history panel where I had inserted the glyph
+dictionary.  Both belong there; the resolution carries both.
+**The merge broke nothing, and that is measured:** `main` was checked out into a throwaway
+worktree and the whole suite run there — `main` 32 failed / 1079 passed / 43 errors, this
+branch 32 failed / **1090** passed / 43 errors.  The same red, eleven more green.
+
+🔴 **The first deploy came back green over old code on the server.**  Detail and price in
+`## УРОКИ ФАБРИКЕ`; a second identical deploy fixed it, and I only caught it because I went
+to read the live page instead of believing the exit code.
+
+**The inherited red is inherited.**  `tests/room` (30 errors) and `tests/veb/test_kanon_verstki`
+(13 errors, `no such table: mark_lesson_override`) are red on `main` as well; the second family
+is red because the repository's own `data/spetsmat.db` stands at migration `005` while the code
+needs `010`.  Outside my zone; in `## ВОПРОСЫ` as item 6.
+
+### НЕОБРАТИМОЕ — ОТДЕЛЬНЫМ СПИСКОМ
+
+1. **`problems` rebuilt on the live database** (`migrations/010`, applied 2026-09-10 00:26 UTC).
+   Restored by: `/opt/spetsmat-bot/data/backups/spetsmat-20260910T002616Z-ruchnoj.db.gz`, taken
+   minutes earlier.  Verified after: 595 problems, 16 188 marks, 0 orphans, fk_check empty,
+   integrity ok.
+2. **Five cells of the live database changed kind** (`16A` №8; `16α` №2, 3, 5, 7 —
+   `обязательная → письменная`).  Restored by: the same backup, or by hand — the five labels
+   are named here.  No mark was touched.
+3. **`git checkout --` over `docs/index.html` and `data/spetsmat.db` in my worktree, twice.**
+   Both had been dirtied by `pytest`, not by me, and both are tracked and outside my zone.
+   Restored by: they were restored TO `HEAD`, which is the undo; copies of the discarded test
+   artefacts are in
+   `/private/tmp/claude-501/-Users-ivanyakovlev-Documents-GitHub-spetsmat-bot-wt-vidy-zadach/af58905c-3003-4ae0-87fc-bc43991d3423/scratchpad/vidy-zadach-bak/`.
+4. **Two files changed OUTSIDE the zone**, both forced and both named in their commit
+   messages: `config.py` (`dfd1ac8`) and `tests/import/test_seeding.py` (`b13c169`).  Restored
+   by: `git revert` of those commits — the change is one line in each.  Why it was unavoidable
+   is the first entry of `## УРОКИ ФАБРИКЕ`.
+5. **A throwaway worktree was created and removed** (`git worktree add --detach` on `main`,
+   then `git worktree remove --force`).  Detached, so no branch was created and none remains.
+6. **`git checkout HEAD --` over eight paths in the SHARED main checkout**, after another
+   session had rolled that checkout back on disk under my finished merge (three of my files
+   were staged as deleted and physically gone).  Restored TO `HEAD`, which is the undo, and
+   `HEAD` is what `main` says those files are.  The neighbour's three paths in the same state
+   were deliberately NOT touched.  Full account in the section «ПОСЛЕ ВЛИТИЯ» below.
+
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК — WHAT WILL HAPPEN AGAIN ON THE NEXT ЗАХОД
+
+**Repeats — these are заходы before the next run, not queue items:**
+* **The deploy door reporting green over old code.**  Twelve заходы of this wave deploy to one
+  machine with no lock.  It will repeat on every position that deploys, and it costs a live
+  site that looks unchanged while its report says it changed.
+* **`pytest tests` dirtying `docs/index.html` and `data/spetsmat.db`.**  Every position that
+  runs the suite meets it; the one that commits with `-A` publishes a test dump into the
+  project's guest page.
+* **The shared main checkout being rolled back under a finished заход.** Twelve sessions
+  write into one working tree; it happened to me and to my neighbour in the same movement,
+  and it costs a red `Г0` on somebody else's paths.
+* **A zone that does not contain the file the task names.**  It will repeat wherever a задание
+  orders an enumeration changed, because the enumerations of this project live in `config.py`
+  at the root and no zone drawn so far includes it.
+
+**Does NOT repeat — legitimately a queue item:** the Гробарий tab (one неighbour owns it), the
+meaning of `двойная` (one decision by the owner), the stale repository `data/spetsmat.db` (one
+file, one decision).
+
+**Found by the trial run and fixed BEFORE it was finished, not filed:** the glyphs were too
+small.  At `.9rem` the circle and the star separated only by colour on a live 1440×900 render.
+Screenshotted, measured, raised to `1.05rem`, screenshotted again, layout gate re-run green
+(`55ad7a4`).  A trial after which nothing is repaired is spent tokens.
+
+**ВРЕМЯ ПРОГОНА + ТОКЕНЫ:** неприменимо — движок `opencode`, счётчика стоимости в логе нет.
+
+### ВЕРИФИКАТОР §3 — ПОСЛЕ-типа, свежий субагент, другим методом
+
+Method, as §3 requires — not a re-reading of my own edit: he counted the marks **by eye off
+the PDF pages themselves** (rendered as images, zoomed on the number column), read the **live
+database by direct read-only SQL**, and read the **render of the live page** through `curl`
+with the cookie made and used on the server.  He states outright that he never opened
+`tools/import_listka.py`.  Coverage is сплошная: **3 sheets of 3, all 51 cells**.
+
+His three columns agreed cell by cell on every sheet:
+
+| листок | глазами по PDF | боевая БД | живая страница |
+|---|---|---|---|
+| 16A | 17 ◦ / 1 † / 3 ⋆ / 0 — 21 ячейка | то же | то же, `ob=17 pi=1 zv=3` |
+| 16α | 7 ◦ / 4 † / 2 ⋆ / 4 — 17 ячеек | то же | то же, `ob=7 pi=4 zv=2` |
+| 16ℵ | 4 ◦ / 0 † / 1 ⋆ / 8 — 13 ячеек | то же | то же, `ob=4 zv=1` |
+
+He read `16ℵ` on both of its pages, where the numbering is mirrored (the number stands to the
+right of the margin), and independently found no dagger on it — which is the point the задание
+warned about, answered by eyes rather than by grep.
+
+Tabs and dictionary: `k-19` is the only checked radio in the `knd` group and `k-19` is the
+`16A` label, so `16A` opens and «Весь год» does not; `kond-slovar` occurs **exactly once** on
+the page; the class labels render `8 класс` then `9 класс` with `kl-9` checked.  He noted that
+the hidden `input`s are ordered 9 then 8 and that this is the CSS-selector plumbing, not the
+visible order — correct, and it is why the `checked` sits where it does.
+
+Integrity: `marks` **16 188** rows exactly, 527 distinct problems, **zero** orphans on all
+four foreign keys, `foreign_key_check` empty, `integrity_check` ok, and not one of the 51
+cells has a NULL `block_id`.  Live marks on these sheets survive: 16A 159, 16α 151, 16ℵ 31.
+He also proved it was the LIVE thing: `math-kluychiki.ru` answers 200 from `159.194.254.52`,
+`spetsmat-veb.service` runs `--bind 127.0.0.1 --port 8765` out of `/opt/spetsmat-bot`, so the
+render he read and the database he queried are the process and the file the public site serves.
+
+**Его вердикт, дословно:** «заявленное подтверждено полностью — по всем 51 ячейке трёх листков
+PDF, боевая база и живая страница совпадают, вкладка 16A открыта по умолчанию, словарь один,
+классы 8→9 с открытой 9, marks целы (16188, сирот нет, foreign_key_check пуст)».
+**Финальная строка его ответа, дословно:** «выдано 59 позиций из 59 найденных».
+
+**Two things he found BESIDE what he was asked, and neither is mine to fix:**
+1. **`spetsmat-storozh-sajta.service` is in state `failed` on the live server.**  Nothing to
+   do with this заход — but the site's watchdog is not running right now, and that is worth
+   somebody's attention tonight rather than tomorrow.  In `## ВОПРОСЫ` as item 8.
+2. **Two parallel sources of "starness" now exist.**  `sheet_blocks.star` is set only when a
+   WHOLE block is starred (16A №12 §13, 16ℵ №0, 16α №15), while `16α` №14 has `star=0` on the
+   block and the star living on the cell `14в` through `problems.kind`.  The page draws from
+   `problems.kind`, so it shows the right thing — but the two columns can disagree and nothing
+   goes red when they do.  In `## ВОПРОСЫ` as item 9.
+
+
+
+### ГИТ-ГИГИЕНА ПОСЛЕДНЕГО ХОДА — ЧИСЛА КОМАНДОЙ, НЕ ПАМЯТЬЮ
+
+**1 · ВСЕ КОММИТЫ.**
+```
+$ git -C /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/vidy-zadach --no-optional-locks status --porcelain
+(пусто)
+$ git -C /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot --no-optional-locks status --porcelain | wc -l
+20
+```
+**Вне git по МОЕЙ зоне — 0.** Двадцать грязных путей в главной папке — ЧУЖАЯ живая работа
+соседей по волне (`zhurnal/…` оркестратора, `_INFRA-git/INCIDENTY.md`, `docs/index.html`,
+чужие заявки, `doc/TZ-*.md`) плюс ЭТОТ файл-заход, который по контракту зоны коммитит
+аналитик, а не я. Я не тронул ни одного из них: число до моего последнего хода — **20**,
+после — **20**, снято командой с обеих сторон. Шесть ворот зоны:
+```
+$ git_zona.py check --zone core/ | seed/ | tools/ | veb/razdely/ | migrations/ | tests/sheets/
+✅ ✅ ✅ ✅ ✅ ✅   (все шесть: «работа доехала в git, вне git ничего нет»)
+```
+
+**2 · ВЛИТИЕ СВОЕЙ ВЕТКИ В ОСНОВНУЮ — СДЕЛАНО МНОЮ, ПОСЛЕДНИМ ХОДОМ.**
+```
+$ git_zona.py vlit-v-osnovnuyu zahod/vidy-zadach --zone … --vsyo-ravno "своя рабочая
+      папка ещё жива — влитие последним ходом захода, штатно"
+✅ Влито в `main` без конфликтов: ee3922c
+   Затронет путей: 8 — config.py · core/services/sheets.py ·
+   migrations/010_vid_pismennaya.sql · tests/import/test_seeding.py ·
+   tests/sheets/test_pometki_listkov.py · tools/import_listka.py · tools/vidy_zadach.py ·
+   veb/razdely/konduit.py
+   Новых исполняемых файлов: 2 — оба со встроенной точкой вызова.
+```
+Ровно восемь путей, все мои, ни одного чужого. `main` успел уйти вперёд ещё дважды за
+прогон (`542e10f` → `cba0a77`); оба раза я втягивал его в свою ветку и разрешал у себя,
+чтобы влитие в общую папку прошло без конфликта — оно и прошло.
+🔴 **И было снято чужим `reset` через несколько минут.** Разбор, рефлог и заявка — в конце
+отчёта, в секции «🔴 И ТО ЖЕ САМОЕ СЛУЧИЛОСЬ С САМИМ ВЛИТИЕМ». Строки выше описывают
+влитие таким, каким оно прошло, и не переписаны задним числом нарочно: приёмка должна
+видеть оба факта, а не только последний.
+
+**3 · ПОСТ-ПРОВЕРКА ИЗ ГЛАВНОЙ ПАПКИ — ЗЕЛЁНАЯ.** Не «коммит виден», а «механизм встал».
+Прогон из `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`:
+```
+$ python3 tools/import_listka.py 16A --proba
+источник: /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/docs/listki/16A-derevya.pdf
+виды: обязательная 17, письменная 1, звезда 3, обычная 0          rc=0
+$ python3 tools/vidy_zadach.py 16A 16α 16ℵ --db <копия боевой>
+16A 21 ◦17 †1 ⋆3 0 · 16α 20 ◦10 †4 ⋆2 4 · 16ℵ 13 ◦4 †0 ⋆1 8      rc=0
+$ python3 -c "import config; from veb.razdely.konduit import znachok; …"
+PROBLEM_KINDS  ('обязательная','обычная','звезда','двойная','письменная')
+OBLIGATORY_KINDS ('обязательная','письменная')
+znachok: <i class="pm ob">◦</i> <i class="pm pi">†</i> <i class="pm zv">⋆</i> ''  rc=0
+$ python3 -m pytest tests/sheets -q
+33 passed
+```
+ЖИВАЯ ТОЧКА ВЫЗОВА того, что я менял:
+```
+$ grep -n 'konduit' veb/obshchee/karkas.py
+1193:  from veb.razdely.konduit import razdel as konduit_razdel, stili as konduit_stili
+1194:  konduit = konduit_razdel(kt)
+```
+Откатывать нечего: пост-проверка зелёная по всем пяти командам.
+
+**4 · ГАШЕНИЕ — И ЗДЕСЬ ЧИСЛО ИЗМЕНИЛОСЬ ПОД РУКОЙ, ПОЭТОМУ ОНО ЗДЕСЬ ДВАЖДЫ.**
+Сразу после влития:
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+После чужого `reset` (разбор — в конце отчёта), то есть НА МОМЕНТ СДАЧИ:
+```
+$ git --no-optional-locks branch --no-merged main
++ zahod/pravila-raspredeleniya
++ zahod/vidy-zadach
+```
+Обе названы поимённо с причиной, почему живы: моя — влита и снята чужим `reset`, заявка
+`2026-09-10T0346-zahod-vidy-zadach-main-reset-git` стоит; `zahod/pravila-raspredeleniya` —
+чужая, появилась по ходу ночи, вливать её заход не вправе. Саму ветку `zahod/vidy-zadach`
+я НЕ удаляю сознательно вдвойне: она сейчас ЕДИНСТВЕННОЕ место в git, где эта работа
+собрана, — `main` её больше не несёт.
+
+**5 · ВЫВОЗ.**
+```
+$ git --no-optional-locks log --oneline @{u}.. | wc -l        # своя ветка
+0
+$ git -C …/spetsmat-bot --no-optional-locks log --oneline @{u}.. | wc -l   # main
+14
+```
+Своя ветка вывезена целиком (`origin/zahod/vidy-zadach` = `ee3922c`). `main` НЕ вывожу —
+ветка-витрина, вывоз туда есть публикация и решение владельца. Заявка поставлена:
+**`2026-09-10T0340-main-main-14-zahod-vidy-zadach`**, род `git-operaciya`, число 14 названо
+в ней и здесь. Родственная заявка соседа `2026-09-10T0233-main-zahod-data-i-istoria-kletki`
+на те же коммиты (когда их было 10) уже стояла открытой — моя уточняет число, а не дублирует.
+
+**ЗАЯВКИ.** Открытых на входе — **5**, все чужие и унаследованные; закрыть их моими правами
+нечем (две адресованы в репозиторий `disciplina`, одна — про застрявшее слияние соседа в
+главной папке, которое к моему последнему ходу уже рассосалось: `.git/MERGE_HEAD` нет).
+Своих я поставил **одну** — ту, что выше, про вывоз `main`.
+🔴 Отдельной строкой, потому что она носит имя МОЕЙ зоны и введёт приёмку в заблуждение:
+заявка **`2026-09-10T0319-otkaz-core-seed-tools-veb-razdely-migrations`** — не моя работа и
+не мой отказ. Она заведена автоматически предполётным диагнозом `git_zona.py` в тот момент,
+когда ГЛАВНАЯ папка стояла в незавершённом слиянии соседа (`MERGE_HEAD = 8249a44`, заход
+`poisk-i-kartochka`, см. заявку `…T0256`). Ни одного коммита я через `git_zona.py commit` не
+делал — все семь сделаны прямыми `add` + `commit -- <пути>`, как велит §4, и все семь прошли.
+
+**6 · ПРОВЕРКА ФАКТОМ.** Итоговые числа, каждое командой:
+`вне git по своей зоне 0` · `невлитых своих и чужих zahod/*-веток 0` · `невывезенных своей
+ветки 0` · `невывезенных main 14 (заявка стоит)` · `пост-проверка зелёная` ·
+`pytest tests/sheets 33 passed при входных 22` · `весь прогон: 32 failed / 1090 passed /
+43 errors против 32 / 1079 / 43 у main — та же краснота, одиннадцать новых зелёных`.
+
+🔴 **И ПОСЛЕДНЕЕ, УЖЕ ПОСЛЕ ВСЕХ СЛИЯНИЙ: НА СЕРВЕРЕ ЛЕЖИТ ИМЕННО МОЁ.** После истории с
+зелёной выкаткой поверх старого кода я не верю коду возврата и сверил байты:
+```
+$ ssh … md5sum veb/razdely/konduit.py migrations/010_vid_pismennaya.sql tools/vidy_zadach.py config.py
+646309117f6dc571cd6fa890bbc08699  veb/razdely/konduit.py
+82de0eb5c32a9e340b179bc6cc736b41  migrations/010_vid_pismennaya.sql
+b81741b873b9d77dccd590b483ddb1e4  tools/vidy_zadach.py
+979f308d4a13a8cb0b2723899f02a5f3  config.py
+$ md5 -q <те же четыре локально>      — все четыре совпали
+$ curl -s -o /dev/null -w '%{http_code}' http://math-kluychiki.ru/     200
+```
+`main` после моего влития ушёл вперёд ещё на чужую работу (заход `poisk-i-kartochka`); её на
+сервер выкатывает её владелец, а не я — мои четыре файла на сервере не зависят от неё и
+совпадают побайтно.
+
+
+### ПОСЛЕ ВЛИТИЯ: ЧУЖАЯ СЕССИЯ ОТКАТИЛА ОБЩУЮ ГЛАВНУЮ ПАПКУ, И ЧАСТЬ ЭТОГО Я ВЕРНУЛ
+
+🔴 Минуты через три после моего влития `ee3922c` главная папка
+`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` оказалась откачена НА ДИСКЕ к состоянию
+ДО него: `git status --porcelain` показал `D migrations/010_vid_pismennaya.sql`,
+`D tools/vidy_zadach.py`, `D tests/sheets/test_pometki_listkov.py` — застейдженные удаления —
+и обратные правки в `core/services/sheets.py`, `tools/import_listka.py`,
+`veb/razdely/konduit.py`. Три моих файла физически исчезли с диска главной папки. За минуту
+до этого я гонял из неё же пост-проверку, и все три были на месте.
+
+**Это не моя работа и не целенаправленный откат меня.** Тем же движением снесло
+`veb/razdely/kartochka.py` и `tests/veb/test_kartochka.py` — НОВЫЕ файлы СОСЕДА (заход
+`poisk-i-kartochka`), которых до `cba0a77` в `main` не было вовсе. Значит, чужая сессия
+поставила в главной папке дерево старее и моего влития, и своего собственного — похоже на
+`checkout`/`stash` по общему на всех индексу, о чём предупреждает и сама среда («git stash
+stack is shared… other sessions may push or pop it concurrently»).
+
+**НИЧЕГО ДОЛГОВЕЧНОГО НЕ ПОСТРАДАЛО, и это проверено, а не предположено.** `main` в git
+по-прежнему держит `ee3922c` со всеми восемью моими путями
+(`git ls-tree HEAD` находит все три «удалённых» файла); `origin/zahod/vidy-zadach` = `ee3922c`;
+на сервере лежат мои байты (md5 всех четырёх файлов совпали, см. выше). Пострадала ровно
+РАБОЧАЯ КОПИЯ общей папки.
+
+**Что я сделал и чего НЕ сделал.** Вернул из `HEAD` РОВНО ВОСЕМЬ СВОИХ путей —
+`git checkout HEAD -- config.py core/services/sheets.py migrations/010_vid_pismennaya.sql
+tests/import/test_seeding.py tests/sheets/test_pometki_listkov.py tools/import_listka.py
+tools/vidy_zadach.py veb/razdely/konduit.py`. Это не перезапись чужого решения: `HEAD` и есть
+то, что `main` про эти файлы говорит. Грязных путей в главной папке стало 36 → 28.
+🔴 **Три чужих пути — `veb/razdely/glavnaya.py`, `veb/razdely/kartochka.py`,
+`veb/razdely/shkolniki.py` — я НЕ ТРОГАЛ**, хотя мог бы вернуть их той же командой и получить
+зелёный Г0. Контракт зоны говорит прямо: «Чужая содержательная работа — НЕ твоя: называешь
+строкой в отчёте и оставляешь». Называю строкой.
+
+**ПОЭТОМУ Г0 ПРИЁМКИ БУДЕТ КРАСНЫМ, И КРАСНЫМ РОВНО НА ЧУЖОМ.** Пять префиксов зоны из
+шести — зелёные (`core/ seed/ tools/ migrations/ tests/sheets/`). Шестой, `veb/razdely/`,
+красен на трёх файлах, ни один из которых мой:
+```
+$ git -C …/spetsmat-bot status --porcelain -- veb/razdely/konduit.py
+(пусто — мой файл в git)
+$ git -C …/spetsmat-bot status --porcelain -- veb/razdely/
+M  veb/razdely/glavnaya.py
+D  veb/razdely/kartochka.py
+M  veb/razdely/shkolniki.py
+```
+
+**ПРОГОН `priyomka.py` ПО СЕБЕ, ЧТОБЫ ПРИЁМКА НЕ ИСКАЛА ЭТО САМА.** Из 18 ворот красных 4,
+и ни одни из них не про содержание работы:
+* `Г0` — разобран абзацем выше: три ЧУЖИХ пути в `veb/razdely/`.
+* `Г15` — 2 незакрытых отказа git-операции, оба чужие:
+  `2026-09-10T0157-otkaz-veb-razdely-veb-static-tests-veb` и
+  `2026-09-10T0252-otkaz-zahod-poisk-i-kartochka-main-1` (конфликт влития соседа).
+  🔴 Третий, `2026-09-10T0319-otkaz-core-seed-tools-veb-razdely-migrations`, носил имя МОЕЙ
+  зоны и был бы прочитан как мой сорванный коммит — **я его разобрал и закрыл**
+  (`git_zona.py zayavka-zakryt … --rezultat`): это был автоматический предполётный диагноз,
+  поднявшийся в тот момент, когда главная папка стояла в незавершённом слиянии соседа
+  (`MERGE_HEAD = 8249a44`); ни одного моего коммита он не остановил — все семь сделаны
+  прямыми `add` + `commit -- <пути>`, как велит §4, и все семь прошли.
+* `Г13` — `## ФАЗА ПРИЁМКИ` пуста, и она не моя: её заполняет аналитик.
+* `Г10` — судит РЕПОЗИТОРИЙ, а не исполнителя, и сам это печатает; по моей ветке метрика
+  зелёная («содержимое ветки никуда не пропадёт»).
+Все четырнадцать остальных зелёные, включая `Г1` (семь хэшей, каждый найден), `Г3` (артефакт
+найден в дереве коммита `341603b`), `Г7` (9 пунктов очереди, недостижимых домов 0), `Г9`
+(охват субагента на месте), `Г12` (гигиена входа подтверждена прогоном) и `Г14` (ветка
+`zahod/vidy-zadach` ВЛИТА в `main`, проверено `git branch --merged`).
+
+
+### 🔴 И ТО ЖЕ САМОЕ СЛУЧИЛОСЬ С САМИМ ВЛИТИЕМ: ЧУЖОЙ `reset` СНЯЛ ЕГО С `main`
+
+Пока я дописывал этот отчёт, `main` уехал назад. Не «конфликт», не «мой откат» — **чужой
+`git reset`**, и рефлог главной папки говорит это дословно:
+```
+$ git -C …/spetsmat-bot reflog main -n 4
+542e10f main@{0}: reset: moving to 542e10f
+ee3922c main@{1}: merge zahod/vidy-zadach: Fast-forward
+cba0a77 main@{2}: merge zahod/poisk-i-kartochka: Fast-forward
+542e10f main@{3}: commit: волна НОЧЬ круг 11 …
+$ git merge-base --is-ancestor ee3922c main   →  НЕТ
+```
+Тем же движением снято и слияние СОСЕДА `zahod/poisk-i-kartochka` (`cba0a77`) — то есть это
+не про меня, а, судя по всему, разбор застрявшего слияния из заявки `…T0256`. Оно же
+объясняет и откат рабочей копии, описанный абзацем выше: это была одна и та же операция.
+
+🔴 **ПОВТОРНО Я НЕ ВЛИВАЮ, И ЭТО РЕШЕНИЕ, А НЕ ЛЕНЬ.** Моя ветка содержит В СЕБЕ слияние с
+`main` на `cba0a77`; любое её повторное влитие ВОСКРЕСИТ слияние соседа, которое кто-то снял
+намеренно. §4 захода на этот случай прям: «чужое состояние репозитория НЕ чини: зафиксируй
+файлы и напиши в отчёт отдельной строкой». Фиксирую и пишу.
+
+**ЧТО ПРИ ЭТОМ НЕ ПОТЕРЯНО — по одной команде на утверждение:**
+* `origin/zahod/vidy-zadach` = `ee3922c`, невывезенных 0 — вся работа на GitHub.
+* Боевой сервер несёт ИМЕННО ЭТИ байты: md5 `veb/razdely/konduit.py`,
+  `migrations/010_vid_pismennaya.sql`, `tools/vidy_zadach.py`, `config.py` совпали с
+  локальными все четыре; `curl http://math-kluychiki.ru/` → `200`.
+* Боевая база несёт разметку: `16A` ◦17 †1 ⋆3, `16α` ◦7 †4 ⋆2 4, `16ℵ` ◦4 †0 ⋆1 8,
+  `marks` 16 188, сирот 0.
+* Потерян ровно один факт: **`main` этой работы сейчас НЕ несёт**.
+
+🔴 **ЭТО ПРОТИВОРЕЧИВОЕ СОСТОЯНИЕ, И СНЯТЬ ЕГО ДОЛЖЕН ЧЕЛОВЕК: боевой сайт работу этого
+захода НЕСЁТ, а `main` — НЕТ.** Заявка поставлена, срочность `blokiruet`, с инструкцией
+«как вливать» внутри:
+**`2026-09-10T0346-zahod-vidy-zadach-main-reset-git`**.
+Поэтому же `Г14` приёмки зелёный не потому, что ветка влита, а потому, что она названа в
+открытой заявке — и это ровно тот случай, ради которого у гейта есть вторая ветка условия.
+
+**И ПОЭТОМУ ЖЕ ГАЛОЧКА В `## ГИГИЕНА ВХОДА` СМЕНЕНА С `да` НА `нет` СО СПИСКОМ.** На входе
+невлитой была одна ветка — моя, — и я её влил; на выходе `git branch --no-merged main` снова
+печатает две, и обе не мой долг входа:
+* `zahod/vidy-zadach` — моя, была влита (`ee3922c`), снята чужим `reset`, заявка стоит;
+* `zahod/pravila-raspredeleniya` — чужая, на входе её в этом списке не было, появилась по
+  ходу ночи; вливать чужое заходу нечем и незачем.
+Галочка не источник истины — приёмка гоняет ту же команду и обязана увидеть то же самое.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.

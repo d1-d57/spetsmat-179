@@ -355,45 +355,49 @@ Exit: a `✕` link back to `/raspredelenie`, per the owner's explicit ask.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 
-1. BLOCKING: merging `zahod/poisk-i-kartochka` into `main` conflicts in `veb/razdely/shkolniki.py`
+1. RESOLVED (this continuation, see `## ОТЧЁТ` addendum below). BLOCKING: merging
+   `zahod/poisk-i-kartochka` into `main` conflicts in `veb/razdely/shkolniki.py`
    — main moved since this branch's worktree was created (queue position, expected per
    this заход's own "ТЫ В ОЧЕРЕДИ ИЗ ДВЕНАДЦАТИ ЗАХОДОВ" clause). Ticket already opened
    by the tool itself.
    ДОМ: владелец
    ДОСТАВЛЕНО: нет
 
-2. BLOCKING, MORE URGENT: the follow-up `vlit-v-osnovnuyu --abort` (the tool's own prescribed
-   recovery when a conflict cannot be judged) ALSO failed — `error: Entry
-   tests/veb/test_server.py not uptodate. Cannot merge. fatal: Could not reset index file to
-   revision 'HEAD'.` (rc=128). Nothing was destroyed (git refused safely), but the MAIN
-   checkout is now stuck mid-merge (`MERGE_HEAD` present) on top of the 16 already-dirty
-   paths that were there before I touched it. I did not attempt any further remedy (no
-   forced reset/stash of paths I do not have context for) — this needs a human or the
-   git-контур subagent with full context of the wave's concurrent state in that folder. A
-   dedicated ticket was filed for this specific failure (separate from #1's).
+2. RESOLVED (this continuation). BLOCKING, MORE URGENT: the follow-up `vlit-v-osnovnuyu
+   --abort` (the tool's own prescribed recovery when a conflict cannot be judged) ALSO
+   failed — `error: Entry tests/veb/test_server.py not uptodate. Cannot merge. fatal: Could
+   not reset index file to revision 'HEAD'.` (rc=128). Nothing was destroyed (git refused
+   safely), but the MAIN checkout was stuck mid-merge (`MERGE_HEAD` present) on top of the
+   16 already-dirty paths that were there before I touched it. The orchestrator (per
+   `ПРАВКА 1` below) resolved this directly on `main` (`git merge --abort`, restored to
+   `ff8fafb`) before this continuation started; this continuation's own merge (into ITS OWN
+   worktree first, then via `git_zona.py vlit-v-osnovnuyu` from the worktree, never
+   `cd`-ing into the main folder) went through cleanly with 0 conflicts against the
+   then-current `main` tip.
    ДОМ: владелец
    ДОСТАВЛЕНО: нет
 
-3. Because of #1/#2, the mandated order (commit → merge own branch into main → post-check
-   FROM THE MAIN FOLDER → deploy → live check) could not proceed past step 2. Deployment to
-   the production server (`bash deploy/vykatka.sh`) and живой прогон were NOT attempted —
-   deploying an unmerged branch's state ahead of a stuck merge seemed like exactly the kind
-   of "работа поверх неслучившегося влития" the tool's own stop message warns against. SSH
-   reachability to the production host was confirmed as a read-only diagnostic
-   (`ssh ... true` → rc 0) but no deploy command was run.
+3. RESOLVED (this continuation). Because of #1/#2, the mandated order (commit → merge own
+   branch into main → post-check FROM THE MAIN FOLDER → deploy → live check) could not
+   proceed past step 2 in the crashed run. This continuation completed the full chain — see
+   `## ОТЧЁТ` addendum for the merge, post-check, deploy and live-check results.
    ДОМ: владелец
    ДОСТАВЛЕНО: нет
 
-4. The layout gate `tests/veb/test_kanon_verstki.py` cannot run live in this environment
-   TODAY, for a reason unrelated to this заход: the tracked `data/spetsmat.db` is missing
-   the table `mark_lesson_override` (from `migrations/009_perebivka_zanyatia.sql`, never
-   applied to that file — confirmed with `sqlite3 data/spetsmat.db "select name from
-   sqlite_master..."` before touching anything). Any page that reaches `veb/razdely/
-   konduit.py::_daty` (which the gate's four measured pages all do, since it always renders
-   the whole shell) crashes the server outright (`net::ERR_EMPTY_RESPONSE` under Playwright).
-   Verified this is pre-existing and not caused by my changes: applied migrations to a
-   throwaway COPY of the база (never wrote to the tracked file) and confirmed `sobrat_html`
-   for gost/admin/prepod all build and `proverit_karkas()` passes with my changes present.
+4. STILL PRESENT, reproduced again this continuation, root cause unchanged and still
+   unrelated to this заход's own code: the layout gate `tests/veb/test_kanon_verstki.py`
+   (and `tools/gejt_verstki.py` run live) cannot run against the TRACKED `data/spetsmat.db`
+   — it is missing the table `mark_lesson_override` (`migrations/009_perebivka_zanyatia.sql`
+   was never applied to that specific tracked file). Any page reaching
+   `veb/razdely/konduit.py::_daty` crashes the server outright. Re-verified this continuation
+   is not the cause the same way as before, PLUS additionally ran the real
+   `tools/gejt_verstki.py` machinery itself (not just `proverit_karkas()`) against a scratch
+   copy of the tracked база with migrations applied (`veb.obshchee.karkas.DATA` monkeypatched
+   to the copy for the duration of the check only, tracked file never touched): all 4 pages
+   measured, all three numbers zero, "ОХВАТ: проверено 4 страниц из 4". This gap will keep
+   blocking every future заход that touches `konduit.py::_daty` until someone applies
+   migration 009 to the tracked file — still a заход-worthy fix, unrelated to this queue
+   position.
    ДОМ: владелец
 
 5. Factory-level observation, not about this task: commit `9272809 автосохранение
@@ -567,10 +571,11 @@ fix, filed as ДОМ: владелец.
   - `8249a44` — veb: the pupil card, /kartochka/<id>
   `git_zona.py check --zone` → ✅ for `veb/razdely/`, `veb/server.py`, `veb/obshchee/`,
   `tests/veb/` (checked individually; the tool refuses more than one `--zone` per call).
-  **NOT merged into `main`** — see `## ВОПРОСЫ` #1/#2; branch intentionally left unmerged
-  per this заход's own instruction ("не понимаешь — abort, ветка остаётся невлитой").
+  **UPDATE (this continuation): now MERGED into `main`.** See the addendum below —
+  this superseded status line is kept for history, not as the current truth.
 
-**INCOMPLETE, NAMED PLAINLY (a legal outcome per this заход's own rules):**
+**INCOMPLETE AS OF THE CRASH (superseded — see the continuation addendum right below for
+what actually happened to each item):**
 - Merge into `main` — stopped on a real content conflict in `veb/razdely/shkolniki.py`;
   the recovery abort then also failed on `main`'s own pre-existing dirty state.
 - Deploy to the boevoy server (`deploy/vykatka.sh`) and the eyeballed live check.
@@ -581,6 +586,142 @@ fix, filed as ДОМ: владелец.
   via the sandboxed scratch-база build instead.
 - The §3 verifier subagent — its brief is to judge a LIVE render against the boevoy база;
   with no deploy, there is nothing live yet for it to judge, so it was not called.
+
+### CONTINUATION AFTER `ПРАВКА 1` (this session, 2026-09-10)
+
+**ПРАВКИ ПРОЧИТАНЫ: 1**
+
+**Where the previous run stopped, and where this one picked up:** the previous executor
+process died mid-merge, standing in the MAIN folder, leaving `MERGE_HEAD` and conflict
+markers in `veb/razdely/shkolniki.py` there. The orchestrator (`ПРАВКА 1`) aborted that
+merge, restored `main` to `ff8fafb`, and diagnosed WHY the conflict's naive resolution
+(their own combination of `data-sid` from this branch + the `{klass}` position from
+`main`) still broke `_karkas_prepoda_sovpadaet()` (HTTP 500 on `/api/enrollment`), without
+fixing it — that was left for this continuation. This session did NOT redo any of the
+already-committed Part 1/2/3 work; it picked up exactly at ПРАВКА 1's step 1.
+
+1. **Merged fresh `main` into the WORKTREE** (`git merge main` from
+   `.../spetsmat-bot-wt/poisk-i-kartochka`, never `cd`-ing into the main folder), resolved
+   the one conflict in `veb/razdely/shkolniki.py` exactly as instructed: `{klass}`'s
+   position from `main`, `data-shk-id` (see below) kept on the row `<div>`.
+
+2. **Found and fixed the actual root cause of the karkas divergence** — reproduced it first
+   (sandboxed: copied `data/spetsmat.db` to a scratch file, applied migrations to the COPY,
+   monkeypatched `veb.obshchee.karkas.DATA` to the copy for the duration of the check only,
+   never touching the tracked file), then read `tools/sobrat_stranicu.py`'s
+   `ATRIBUTY_ORGANA` (outside this заход's zone). `data-sid` was ALREADY a member of that
+   closed list — a pre-existing, unrelated, org-only attribute on OTHER elements of the
+   same row (the per-day teacher `<select data-sid=...>`, the absence `<input data-sid=...>`
+   checkbox). `_snyat_organy()` strips every `data-sid="..."` attribute on the page before
+   comparing the `prepod` render to `gost`, so my new, role-identical `data-shk-id`... er,
+   `data-sid` (as first written) was being silently stripped from the `prepod` render only,
+   producing exactly the byte divergence ПРАВКА 1 reported at position 7611. Fix (within
+   zone): renamed the new attribute from `data-sid` to **`data-shk-id`** everywhere it is
+   produced or read — `veb/razdely/shkolniki.py::para_shk` (with a comment explaining why,
+   for the next reader), `veb/razdely/glavnaya.py`'s highlight script, and the regex
+   assertion in `tests/veb/test_server.py`. Re-verified `_karkas_prepoda_sovpadaet()`
+   directly (same sandboxed scratch-база technique) → `OK`.
+
+3. **Full `python3 -m pytest -q`**, not just the enrollment tests: 32 failed, 1084 passed,
+   13 skipped, 1 xfailed, 43 errors. ПРАВКА 1 quoted a baseline of "17 failing" — that
+   number is now STALE (main kept moving under the wave; the local `main` ref advanced
+   from `ff8fafb` to `542e10f` — a journal-only commit — even between reading this file and
+   merging). To get an honest comparison, this continuation built a throwaway DETACHED
+   worktree at `ff8fafb` (`git worktree add --detach <scratch>/baseline-check ff8fafb`,
+   force-removed afterwards — a read-only diagnostic, no branch or content touched) and ran
+   the same full suite there: **identical 32 failed + 43 errors, same exact test names**
+   (diffed the two `FAILED`/`ERROR` line lists — 0 lines of difference), plus 5 fewer passing
+   (1079 vs 1084 — exactly this заход's own new `tests/veb/test_kartochka.py`). So: zero
+   regressions from this заход's code, confirmed by diff rather than by re-deriving a
+   number from memory. `tests/room/*`, `test_zhest_istorii.py`, `test_vizualnaya_shema.py`
+   and the `test_kanon_verstki.py` errors are ALL pre-existing on `main` at `ff8fafb`
+   already — not something this заход, or even this wave's later merges, introduced.
+
+4. **Layout gate `tools/gejt_verstki.py`** — cannot run live against the tracked
+   `data/spetsmat.db` for the same pre-existing `mark_lesson_override` gap as
+   `test_kanon_verstki.py` (see `## ВОПРОСЫ` #4, re-verified still present). Ran the REAL
+   gate machinery (not a reimplementation) against the sandboxed scratch copy instead
+   (`veb.obshchee.karkas.DATA` monkeypatched for the duration only): **4 pages measured, all
+   three numbers (obrezka/perenosy/skroll) zero on every page, "ОХВАТ: проверено 4 страниц
+   из 4"**. Matches ПРАВКА 1 step 4's exact success bar.
+   *(Both `pytest` and this gate run left a schema-ensure byte diff on the tracked
+   `data/spetsmat.db` each time they touched it live — `git checkout -- data/spetsmat.db`
+   immediately after each, confirmed clean before proceeding; see НЕОБРАТИМОЕ below.)*
+
+5. **Merged into `main`** via the door, from the worktree (never `cd`-ing into the main
+   folder): `git_zona.py vlit-v-osnovnuyu zahod/poisk-i-kartochka --zone veb/razdely/ --zone
+   veb/server.py --zone veb/obshchee/ --zone tests/veb/ --vsyo-ravno "своя рабочая папка
+   ещё жива — влитие последним ходом захода, штатно"`. **0 conflicts** (main had only moved
+   by the one journal commit, `542e10f`, since this branch's last `main` merge — no path
+   overlap). The tool flagged `veb/razdely/kartochka.py` as "влито, но не встроено" (no
+   `_generator/**`-style live call point or `# TOOL-CONTRACT` marker) — checked by hand:
+   it IS wired, `veb/server.py:839-840` does `from veb.razdely import kartochka` /
+   `kartochka.stranica(...)` from the `/kartochka/<id>` route added in this заход's Part 3;
+   `tests/veb/test_kartochka.py` exercises that exact route end to end. Naming this
+   explicitly rather than silently treating the tool's warning as satisfied, per its own
+   ask — it is a false positive for an application route module, not a `_generator/tools`
+   script, not a real gap.
+
+6. **Post-check FROM THE MAIN FOLDER** (never `cd`, used a subshell): `python3 -m pytest
+   tests/veb/test_kartochka.py tests/veb/test_server.py -q` → **17 passed**, including the
+   two enrollment tests that were HTTP 500 before the fix. Confirmed the live call point
+   with `grep` there too. Green — no rollback needed.
+
+7. **Deployed** (`bash deploy/vykatka.sh --proba --svobodnyj-chas` first as a dry run, then
+   for real, both from the main folder): no lesson window at deploy time
+   (2026-09-10 03:2x Moscow, next lesson is today 13:10 — hours away), rolled-out paths
+   clean, snapshot taken (`/opt/spetsmat-bot-bak-20260910T002743Z`), no pending migration,
+   `veb/`, `tools/`(unchanged names but re-synced), `config.py`, `core/services/sheets.py`
+   rsynced, both `spetsmat-veb.service` and `spetsmat-bot.service` restarted (bot restarted
+   because `core/` changed, per the script's own rule — unrelated to this заход but the
+   script's own contract, not something I chose), **site answered 200 after 1s**.
+
+8. **Live check on the boevoy server**, unauthenticated (`curl`, no cookie, exactly the
+   "проверяется не глазами, а запросом без куки" requirement):
+   - `http://159.194.254.52/` → 200; `/raspredelenie` → 200.
+   - `data-shk-id="…"` attributes present live on the distribution page (deploy landed).
+   - `Фефелов Иван` found live at `data-i="фефелов иван" data-shk-id="49"`, and the page's
+     own `UCHENIKI` search map carries `"Фефелов Иван":{"id":49,"g":"В"}` — group В, exactly
+     the owner's own example ("нашёл Фефелова… перевести меня на страницу с распределением
+     группы В"). The client-side highlight script (read earlier, unchanged by the merge)
+     reads `sid`/`g` from the URL and does exactly `document.getElementById('t-'+g).checked
+     = true` + `querySelector('[data-shk-id="'+sid+'"]')` — both pieces it depends on are
+     confirmed present and consistent live; this environment has no headless browser to
+     click through the JS itself, so the end-to-end click was not watched with eyes, only
+     assembled from confirmed-present, confirmed-matching server-rendered pieces.
+   - `GET /kartochka/1` with NO cookie → 200, body has ZERO occurrences of
+     `otmetka`/`priyom`/`checkbox` (grep-level, not inference) — guest sees no tick markup,
+     matching the readiness criterion. Shows `<h1>Агаркова Ирина</h1>`.
+   - Authenticated (organiser/teacher) live behaviour on the card was NOT re-checked with
+     real production credentials — I do not have the owner's login, and would not attempt
+     to guess or forge one; `tests/veb/test_kartochka.py`'s 5 tests already cover both
+     authenticated roles end to end (tick via `/api/priyom`, re-GET, see the ticked state)
+     against a synthetic база, and are unaffected by anything in this continuation.
+
+9. **Гашение**: `git_zona.py poteri --branch zahod/poisk-i-kartochka` → "потерь нет" (dry
+   run first), then `git_zona.py zakryt-vetku --branch zahod/poisk-i-kartochka` (no
+   `--snyt-papku` — worktree folder deliberately left for приёмка per the tool's own
+   default) → closed, tombstoned `mogila/zahod/poisk-i-kartochka → cba0a778`. **Вывоз**:
+   `git log --oneline @{u}..` → 0 both before and after (autosave had already pushed).
+   `git branch --no-merged main` after the merge → exactly one line, `zahod/vidy-zadach` —
+   a sibling заход, not mine, not touched.
+
+**FULL GIT HYGIENE, PRINTED (WARNING block, this continuation):**
+```
+1 · вне git на своих путях: 0 (git_zona.py check --zone × 4 → ✅ each)
+2 · невлитых своих веток: 0 (merged into main, 0 conflicts, tombstoned)
+   невлитых чужих: 1 (zahod/vidy-zadach — named, not touched)
+3 · пост-проверка из главной: зелёная (17 passed, tests/veb/test_kartochka.py +
+    test_server.py, включая обе бывшие HTTP-500 enrollment-проверки)
+4 · гашение: done (mogila/zahod/poisk-i-kartochka)
+5 · вывоз своей ветки: 0 commits ahead of @{u}
+6 · deploy: done, site answered 200 after 1s; live curl checks above
+```
+
+**NECESSARY UPDATE to the earlier НЕОБРАТИМОЕ note below:** the git-контур incident it
+names (main stuck mid-merge) is now CLOSED — the orchestrator resolved it before this
+continuation started, and this continuation's own merge went through cleanly with no
+repeat of that failure mode.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
