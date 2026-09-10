@@ -497,7 +497,7 @@ def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
         # самого `LOMKA` — и проверка без поломки проедет молча, а это ровно то,
         # ради чего файл написан.
         assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll", "centr",
-                               "pole", "kletka"}, (
+                               "pole", "kletka", "vniz"}, (
             "поломка не отчитывается о том, села ли она")
         p.wait_for_timeout(200)
         z = _zamer(p)
@@ -1262,5 +1262,178 @@ def test_spisok_v_kletke_schitaetsya_no_ne_nahodka(server, brauzer):
         assert z["kletki"] == [], f"ложная находка в клетке: {z['kletki'][:2]}"
         assert z["kletok_so_znachkom"] > 0, (
             "клетки со вторым элементом, у которого свой фон, не посчитаны вовсе")
+    finally:
+        ctx.close()
+
+
+# ── 10. всё на один экран (ПРАВКА 1, требование владельца В003) ───────────────
+
+def test_ne_vlezlo_na_ekran_krasneet_i_zeleneet(server, brauzer):
+    """🔴 «ЖЁСТКОЕ — С ГЕЙТОМ», сказал владелец дословно (реплика В003, ночь
+    10.09), и слово «с гейтом» сказал он, а не аналитик.  Причина не
+    косметическая и названа им же (J3): «из-за этого надо пролистывать вниз…
+    удобно, когда они помещаются все на одну строку» — прокрутка вниз посреди
+    занятия, стоя, с телефона.
+
+    Такого счёта в файле не было ни одного: `skroll` и его двойник в самопроверке
+    считают только ШИРИНУ, а проверка 4 ловит вертикальный выход У ЭЛЕМЕНТА —
+    это про контейнер, а не про то, влезли ли строки на экран."""
+    ctx, p = _stranica(brauzer, server, "гость", "/vhod", None)
+    try:
+        do = _zamer(p)
+        assert do["ne_vlezlo"] <= gejt.DOPUSK_VYSOTY, (
+            f"экран входа не помещается и БЕЗ поломки ({do['ne_vlezlo']} px) — "
+            "испытывать нечего, возьми другой экран")
+
+        p.evaluate("""(h) => {
+            const d = document.createElement('div'); d.id = 'proba-vysota-t';
+            d.style.height = (h + 300) + 'px';
+            (document.querySelector('main') || document.body).append(d);
+        }""", gejt.ETALON["height"])
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        assert posle["ne_vlezlo"] > gejt.DOPUSK_VYSOTY, (
+            "строк добавили на 300 px больше окна, а гейт говорит, что всё влезло")
+        assert posle["ne_vlezlo"] >= 300, (
+            f"число не то: вниз ушло {posle['ne_vlezlo']} px, а добавили минимум 300")
+
+        p.evaluate("""() => { const e = document.getElementById('proba-vysota-t');
+            if (e) e.remove(); }""")
+        p.wait_for_timeout(120)
+        chisto = _zamer(p)
+        assert chisto["ne_vlezlo"] == do["ne_vlezlo"], (
+            f"строки убрали, а число не вернулось: {do['ne_vlezlo']} → "
+            f"{chisto['ne_vlezlo']}")
+    finally:
+        ctx.close()
+
+
+def test_dopusk_vysoty_nazvan_chislom_i_ne_pryachet_nahodok(server, brauzer):
+    """Допуск обязан быть числом с причиной, а не «на глаз».  Ноль дал бы ложные
+    красные на округлениях: `scrollHeight`/`clientHeight` целые, раскладка
+    дробная.  Один пиксель — ровно эта разница; замерено живьём по всем экранам,
+    у КАЖДОГО помещающегося разница ровно 0, у непомещающегося минимум 22 px, то
+    есть допуску ни разу не пришлось работать."""
+    assert gejt.DOPUSK_VYSOTY == 1
+    ctx, p = _stranica(brauzer, server, "гость", "/vhod", None)
+    try:
+        assert _zamer(p)["ne_vlezlo"] == 0, (
+            "помещающийся экран даёт не ровный ноль — тогда допуск действительно "
+            "что-то прячет, и его надо пересчитать по замеру, а не по памяти")
+    finally:
+        ctx.close()
+
+
+def test_perenos_ne_krasneet_na_otstupah(server, brauzer):
+    """🔴 НАХОДКА ВЕРИФИКАТОРА: `dostupno()` возвращал `clientWidth`, а он включает
+    внутренние отступы, тогда как текст живёт в content box.  У блока с боковым
+    padding проверка считала доступным на два отступа больше и объявляла ЗАКОННЫЙ
+    перенос лишним — красное на здоровой странице, а такой гейт обходят."""
+    ctx, p = _stranica(brauzer, server, "гость", "/privacy", None)
+    try:
+        do = _zamer(p)
+        p.evaluate("""() => {
+            for (const e of document.querySelectorAll('p, li'))
+                e.style.setProperty('padding', '0 30%', 'important');
+        }""")
+        p.wait_for_timeout(150)
+        posle = _zamer(p)
+        assert len(posle["perenos"]) == len(do["perenos"]), (
+            f"боковой отступ 30 % сделал законные переносы «лишними»: "
+            f"{len(do['perenos'])} → {len(posle['perenos'])}; первые: "
+            f"{posle['perenos'][:2]}")
+    finally:
+        ctx.close()
+
+
+def test_centr_setkoy_justify_items(server, brauzer):
+    """🔴 НАХОДКА ВЕРИФИКАТОРА: третий способ поставить по середине — свой у
+    СЕТКИ. `justify-content` двигает всю дорожку, `justify-items` — каждый
+    элемент внутри своей ячейки, и текст встаёт ровно туда же."""
+    ctx, p = _stranica(brauzer, server, "гость", "/privacy", None)
+    try:
+        do = _zamer(p)
+        p.evaluate("""() => {
+            const h = document.querySelector('h1') || document.querySelector('p');
+            const o = document.createElement('div'); o.id = 'proba-setka';
+            o.style.display = 'grid'; o.style.justifyItems = 'center';
+            h.parentElement.insertBefore(o, h); o.append(h);
+        }""")
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        assert len(posle["centr"]) > len(do["centr"]), (
+            f"`justify-items:center` не пойман: {len(do['centr'])} → "
+            f"{len(posle['centr'])}")
+        nash = [d for d in posle["centr"] if "justify-items" in d["chem"]]
+        assert nash, (f"находка есть, но названа не тем свойством: "
+                      f"{[d['chem'] for d in posle['centr']][:3]}")
+        assert "у детей бокса" in nash[0]["sdvig"], (
+            "сдвиг назван не тот: центрируется не текст бокса, а его дети, и "
+            "отчёт обязан говорить именно это — иначе чинить по нему нечего")
+        p.evaluate("""() => { const o = document.getElementById('proba-setka');
+            if (o) o.style.removeProperty('justify-items'); }""")
+        p.wait_for_timeout(120)
+        chisto = _zamer(p)
+        assert len(chisto["centr"]) == len(do["centr"]), (
+            f"центрирование сняли, а находка осталась: {len(do['centr'])} → "
+            f"{len(chisto['centr'])}")
+    finally:
+        ctx.close()
+
+
+def test_pripiska_ryadom_s_kontrolom_v_kletke(server, brauzer):
+    """🔴 НАХОДКА ВЕРИФИКАТОРА: там, где сайт кладёт фамилию в `<select>`,
+    собственный текст клетки пуст — и правило «нельзя смешивать» молчало ровно на
+    тех строках, где смешение и происходит.  Значение контрола — такой же
+    кусочек информации, как текст рядом."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        do = _zamer(p)
+        p.evaluate("""() => {
+            const td = document.createElement('td');
+            const s = document.createElement('select');
+            const o = document.createElement('option'); o.textContent = 'Настя Вахрина';
+            s.append(o); s.selectedIndex = 0;
+            const sup = document.createElement('sup'); sup.textContent = 'Н.В.';
+            td.append(s, sup);
+            const tr = document.createElement('tr'); tr.append(td);
+            const tb = document.createElement('table'); tb.id = 'proba-kontrol';
+            tb.append(tr);
+            (document.querySelector('main') || document.body).append(tb);
+        }""")
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        nashli = [d for d in posle["kletki"] if "поле:" in d["svoy"]]
+        assert nashli, (
+            f"приписка рядом с контролом в клетке не поймана: было "
+            f"{len(do['kletki'])}, стало {len(posle['kletki'])}")
+    finally:
+        p.evaluate("""() => { const e = document.getElementById('proba-kontrol');
+            if (e) e.remove(); }""")
+        ctx.close()
+
+
+def test_uzly_pod_klipom_schitayutsya(server, brauzer):
+    """🔴 ДЫРА ВЕРИФИКАТОРА, КОТОРУЮ ЗАКРЫТЬ НЕЛЬЗЯ, НО ПРОМОЛЧАТЬ О НЕЙ — МОЖНО
+    БЫЛО.  `clip-path:inset(0 55% 0 0)` режет буквы, оставляя `overflow:visible`,
+    и прямоугольники текста при этом никуда не выходят: разобрать такую обрезку
+    значит разобрать язык `clip-path`.  Проверка её не судит — но число таких
+    узлов печатается, потому что молчаливое слепое пятно неотличимо от чистой
+    страницы."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        do = _zamer(p)
+        p.evaluate("""() => {
+            for (const e of [...document.querySelectorAll('#v-shk .kto')].slice(0, 20))
+                e.style.setProperty('clip-path', 'inset(0 55% 0 0)', 'important');
+        }""")
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        assert posle["pod_klipom"] >= do["pod_klipom"] + 20, (
+            f"узлы под `clip-path` не посчитаны: {do['pod_klipom']} → "
+            f"{posle['pod_klipom']}")
+        assert len(posle["obrezka"]) == len(do["obrezka"]), (
+            "обрезка `clip-path` вдруг стала находкой — тогда границу надо "
+            "пересмотреть и переписать объявление, а не радоваться")
     finally:
         ctx.close()
