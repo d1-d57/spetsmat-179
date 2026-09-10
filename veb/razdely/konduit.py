@@ -48,6 +48,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import config
 
@@ -66,6 +67,7 @@ from veb.obshchee.karkas import e
 from veb.sobrat_fajl import SOKR_DNYA
 from veb.razdely.istoria import perebivki
 from veb.razdely.lichnaya import deti_na_datu, kabinet_na_datu, segodnya
+from veb.razdely import ochered
 
 
 # ── ЗНАЧКИ ЛИСТКА ──────────────────────────────────────────────────────────
@@ -1123,7 +1125,6 @@ def stili(kt) -> str:
    обычным текстом — там столбец это ЛИСТОК, а не задача, и отмечать нечего. */
 #s-kond .kond td[data-u]{{cursor:pointer}}
 #s-kond .kond td[data-u]:hover{{background:var(--accent-soft)}}
-#s-kond .kond td[data-u].zhdyot{{opacity:.5}}
 /* «Отменить» — рядом с «Внести задачи», но тише её: это ход назад, а не главное
    действие экрана. Цвет предупреждающий, а не тревожный: ошибка тапа — мелочь. */
 #s-kond .otmenit-knopka{{font-family:var(--sans);font-size:.82rem;cursor:pointer;
@@ -1430,7 +1431,8 @@ def stili(kt) -> str:
   #s-kond .kl-ist{{left:0!important;right:0;top:auto!important;bottom:0;
     max-width:none;border-radius:12px 12px 0 0;padding-bottom:1.2rem}}
   #s-kond .kl-ist-telo{{max-height:55vh}}
-}}"""
+}}
+{ochered.stili()}"""
 
 
 def razdel(kt) -> str:
@@ -1560,6 +1562,14 @@ def razdel(kt) -> str:
     istoria = ISTORIA_SKRIPT.replace("%(segodnya)s",
                                      sejchas.isoformat() if sejchas else "")
 
+    # 🔴 «ДАННЫЕ ОТ ТАКОГО-ТО ВРЕМЕНИ» СТАВИТ СЕРВЕР, И ЭТО ЕДИНСТВЕННОЕ МЕСТО, ГДЕ
+    # ЭТО ВРЕМЯ БЕРЁТСЯ. Баннер деградации печатает его, когда связи не стало: страница
+    # на экране в этот момент — снимок, и её возраст считается ОТ МОМЕНТА РЕНДЕРА.
+    # Часы браузера сюда не годятся вовсе: на телефоне они переводятся и врут, а заказ
+    # (`NADEZHNOST-zakaz-na-resyorch.md` §2) прямо запрещает закладывать их во что-либо,
+    # кроме справочного поля. Зона отображения — та же, что у всех остальных дат сайта.
+    snyato = datetime.now(ZoneInfo(config.TZ_DISPLAY)).strftime("%H:%M")
+
     return (f'<section class="str holst" id="s-kond" data-org="videt-konduit">'
             f'{galka}{radio}'
             f'<div class="kond-verh">'
@@ -1592,5 +1602,15 @@ def razdel(kt) -> str:
             # Теперь всё, кроме вкладок, лежит в ОДНОМ флекс-ряду `.kond-verh`, и
             # порядок в нём — порядок владельца: заголовок, действие, выбор класса,
             # подпись к значкам, фильтр у правого края.
-            f'{klassy}{slovar}{metka_galki}</div>'
+            # 🔴 СЧЁТЧИК ОЧЕРЕДИ СТОИТ В ТОЙ ЖЕ ОДНОЙ ПОЛОСЕ, А БАННЕР — ПОД НЕЙ.
+            # Полоса одна (правка владельца 10.09, H4.8), и заводить под транспорт
+            # второй ярус было бы ровно тем наслоением строк, которое он просил
+            # убрать. Счётчик — короткая фишка в конце полосы и появляется только
+            # тогда, когда в очереди есть что везти. Баннер деградации не фишка:
+            # он про ВСЮ страницу, а не про один орган, и потому лежит отдельной
+            # строкой сразу под полосой — там, где его читают, не ища глазами.
+            # Время рендера отдаётся ему СЕРВЕРОМ: часы телефона в это не
+            # закладываются (`NADEZHNOST-zakaz-na-resyorch.md` §2).
+            f'{klassy}{slovar}{metka_galki}{ochered.schyotchik()}</div>'
+            f'{ochered.banner(snyato)}{ochered.otkazy()}'
             f'{vkladki}{panely}{istoria}</section>')
