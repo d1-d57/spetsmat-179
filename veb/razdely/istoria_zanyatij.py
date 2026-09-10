@@ -24,7 +24,20 @@ this заход's zone. The exact same conflict already happened for those two s
 codebase's own resolution is on record in `veb/razdely/kartochka.py`: build a standalone page
 (own `<!doctype html>`, `_obshchij_stil()`) and record the missing menu link as a debt for
 whoever owns `karkas.py`/`tools/sobrat_stranicu.py` next (see `## ВОПРОСЫ` of the заход this
-file was written in). Reached today by its own URL, `/istoria`, not by a menu label.
+file was written in).
+
+🔴 ТОТ ДОЛГ ЗАКРЫТ 11.09, И СТРАНИЦА БОЛЬШЕ НЕ БЕЗ МЕНЮ. Она несла его НОЛЬ:
+`grep -n 'menyu\|ssyl'` по этому файлу давал пусто, и рендер подтверждал — 0 пунктов
+меню на 1440×900. Отсюда слова владельца «пропадает всё остальное меню» и «человек
+попадает туда и не понимает, куда попал». Меню рисует `karkas.menyu_ssylkami("/istoria")`
+— та же одна функция, что уже стоит на `/kabinet`; своего списка пунктов здесь нет и
+заводить его нельзя. Страница по-прежнему самостоятельный документ, а не шестая вкладка
+оболочки: меню — строка ссылок, а не переключатель разделов.
+
+🔴 СЛОВО «ЖУРНАЛ» ВМЕСТО «ИСТОРИИ» — предложение владельца 10.09: «может, гораздо лучше
+так писать». Поменялось то, что читает человек: подпись в меню, `<h1>` и `<title>`. Адрес
+`/istoria` и имя модуля прежние — переименование маршрута задело бы `veb/server.py` и
+каждую ссылку сайта, то есть чужую зону, а читателю не дало бы ничего.
 
 WHAT "был" MEANS, AND WHY IT IS NOT RE-DECIDED HERE. A student is present at a past lesson
 unless an `attendance` row names them absent — no row at all is the DEFAULT and means "as
@@ -37,17 +50,19 @@ model into HTML.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 
 import config
+from core.services.history import nachalo_zanyatia_iso, zanyatie_po_iso
 from core.services.istoria_poseshchenij import IstoriyaService
 from core.services.sostav_na_den import SostavService
 from infra.enrollment_repo import SqliteEnrollmentRepo
 from infra.room_repo import SqliteAttendance, SqliteSessions
 from infra.sessions_repo import SqliteSessionBook
 from veb import vhod
-from veb.obshchee.karkas import e
+from veb.obshchee.karkas import e, menyu_ssylkami
 from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
 
@@ -129,8 +144,11 @@ def _shapka_dnya(den: str) -> str:
 
 
 def _sostavit(c: sqlite3.Connection):
-    """Читает базу один раз и складывает решётку — то, что нужно и странице, и стилям
-    (число колонок для ширины таблицы), одним и тем же вызовом."""
+    """Читает базу один раз и отдаёт `(решётка, строки sessions)`.
+
+    Один вызов на страницу: и решётка, и род занятия, и число столбцов берутся из
+    одного чтения, а не из трёх.
+    """
     sostav = SostavService(
         enrollment=SqliteEnrollmentRepo(c),
         sessions=SqliteSessions(c),
@@ -145,11 +163,186 @@ def _sostavit(c: sqlite3.Connection):
         active_teacher_ids=[r["id"] for r in teachers_all],
     )
     vse_sessii = SqliteSessionBook(c).recent(GLUBINA_ZANYATIJ)
-    return service.sostavit(vse_sessii, seichas=datetime.now(timezone.utc))
+    # 🔴 СЕССИИ ВОЗВРАЩАЮТСЯ ВМЕСТЕ С РЕШЁТКОЙ, А НЕ ЧИТАЮТСЯ ВТОРОЙ РАЗ. Род занятия
+    # (`sessions.kind`) уже приехал в этих же строках — `SqliteSessionBook` берёт его
+    # каждой строкой. `IstoriyaService` его не несёт: его `dni` — кортеж дат, и добавить
+    # туда род значило бы править `core/services/istoria_poseshchenij.py`, файл вне зоны
+    # этого захода. Поэтому род собирается здесь, из списка, который уже в руках.
+    return (service.sostavit(vse_sessii, seichas=datetime.now(timezone.utc)), vse_sessii)
 
 
-def _tablitsa_shkolnikov(students, teachers_by_id, istoriya) -> str:
-    shapka = "".join(f'<th class="ist-zn">{e(_shapka_dnya(d))}</th>' for d in istoriya.dni)
+# --------------------------------------------------------------- что сдано на занятии
+
+
+#: Что кладётся в клетку сверх знака присутствия. Пусто СЕГОДНЯ и по решению
+#: владельца («оценки и комментарии сейчас не вводим — оставить им место»), и
+#: заполняется тем заходом, который оценки заводит: клетка уже несёт для них
+#: отдельные ячейки, и таблицу для этого переделывать не придётся.
+PUSTYE_MESTA = ('<span class="kl-ocenka" data-mesto="оценка"></span>'
+                '<span class="kl-komm" data-mesto="комментарий"></span>')
+
+
+def _sdachi_po_zanyatiyam(c: sqlite3.Connection, dni) -> dict:
+    """`{(день, школьник): ((задача, листок, кто принял), …)}` — что сдано в этот день.
+
+    🔴 ДЕНЬ ОТМЕТКИ НЕ ВЫВОДИТСЯ ЗДЕСЬ ЗАНОВО. Какому занятию принадлежит галочка,
+    отвечает ровно одно место — `core.services.history.zanyatie_po_iso` (правило
+    владельца 09.09: «галочка относится к последнему прошедшему занятию»), и
+    перебивка человека живёт в `mark_lesson_override`, которую то же правило
+    подставляет ВМЕСТО `valid_at` (`history.istoria_kletki`). Здесь та же пара:
+    `coalesce(перебивка, valid_at)` уходит в `zanyatie_po_iso`, и второго мнения о
+    дне не заводится. SQL ниже только СУЖАЕТ выборку по сырому времени — это
+    граница, а не отнесение к занятию.
+
+    🔴 ИМПОРТ ИСКЛЮЧЁН, И ЭТО НЕ ВКУС. Все 15 847 строк прошлогодней книги несут
+    один и тот же `valid_at`: бумажная книга дат занятий не хранит вовсе
+    (`core/services/spiski.py` открывается разбором этой же ловушки). Пущенные в
+    решётку, они превратились бы в один фантомный «день», на котором сдал каждый.
+
+    🔴 ПАРА ТЕХНИЧЕСКИХ НАЖАТИЙ ЗДЕСЬ НЕ ОТСЕИВАЕТСЯ, и это сказано вслух, а не
+    умолчано: её признак считает `history.tehnicheskie` по ПОЛНОЙ ленте одной
+    клетки, а этот запрос ленту не поднимает. Показывается то, что стоит: события
+    `assert`. Отсев — заход, который будет вводить оценку, и он поднимет ленту.
+    """
+    if not dni:
+        return {}
+    try:
+        granica = nachalo_zanyatia_iso(dni[0])
+    except ValueError:
+        # День занятия, заведённый руками вне пн/чт: расписание для него часа не
+        # знает. Тогда границей берётся полночь этого дня — шире, чем нужно, и это
+        # честнее, чем отбросить день целиком.
+        granica = dni[0] + "T00:00:00Z"
+    ryady = c.execute(
+        """
+        select m.student_id            as student_id,
+               m.teacher_id            as teacher_id,
+               coalesce(o.valid_at, m.valid_at) as kogda,
+               p.label                 as zadacha,
+               s.number                as listok
+        from marks m
+        join problems p on p.id = m.problem_id
+        join sheets   s on s.id = p.sheet_id
+        left join (
+            select mark_id, valid_at,
+                   row_number() over (partition by mark_id order by id desc) as svezhest
+            from mark_lesson_override
+        ) o on o.mark_id = m.id and o.svezhest = 1
+        where m.event = 'assert' and m.source <> 'импорт'
+          and coalesce(o.valid_at, m.valid_at) >= ?
+        order by s.ord, p.ord
+        """,
+        (granica,),
+    ).fetchall()
+    nuzhnye = set(dni)
+    itog: dict = {}
+    for r in ryady:
+        den = zanyatie_po_iso(r["kogda"])
+        if den not in nuzhnye:
+            continue
+        itog.setdefault((den, r["student_id"]), []).append(
+            (r["zadacha"], r["listok"], r["teacher_id"]))
+    return {k: tuple(v) for k, v in itog.items()}
+
+
+def _otmenennye(sessii, dni) -> tuple:
+    """Дни, отменённые целиком, — их в решётке НЕТ И НЕ БУДЕТ, и молчать об этом нельзя.
+
+    🔴 РЕШЁТКА ИХ НЕ СОДЕРЖИТ ПО УСТРОЙСТВУ, А НЕ ПО НЕДОСМОТРУ.
+    `IstoriyaService.sostavit` отбирает занятия условием `s.kind != "отменённое"` —
+    и это верно для решётки: столбец отменённого дня был бы столбцом крестиков,
+    то есть сказал бы «никто не пришёл» там, где занятия не было вовсе.
+    Но владелец просил ровно этот факт: «когда был праздник и урок отменился… Всю
+    эту историю курса важно где-то документировать». Между «столбцом, который врёт»
+    и «фактом, которого нет на экране» есть третье, и оно здесь: отменённые дни
+    названы отдельной строкой под журналом, поимённо.
+    Перенести их в саму решётку нельзя внутри этой зоны — отбор живёт в
+    `core/services/istoria_poseshchenij.py`, а зона захода до него не достаёт;
+    пункт очереди стоит в `## ВОПРОСЫ`.
+    """
+    v_reshetke = set(dni)
+    return tuple(sorted(s.held_on for s in sessii
+                        if s.kind == "отменённое" and s.held_on not in v_reshetke))
+
+
+def _rod_zanyatiya(c: sqlite3.Connection, sessii) -> dict:
+    """`{день: род}` из тех же строк `sessions`, которые уже прочитаны для решётки.
+
+    🔴 РОД ЖИВОЙ, И ЭТО ПРОВЕРЕНО НА БОЕВОЙ БАЗЕ, А НЕ ПРЕДПОЛОЖЕНО: колонка
+    `sessions.kind` заведена `migrations/001_init.sql:83`, `SqliteSessionBook`
+    читает её каждой строкой (`_SESSION_COLUMNS = "id, held_on, kind"`), и на
+    копии боевой базы 11.09 она несла значение `обычное` на единственном занятии
+    10.09. Второго запроса за ней не нужно — строки уже в руках.
+
+    🔴 РОДОВ В СХЕМЕ ТРИ, А ВЛАДЕЛЕЦ НАЗВАЛ ЧЕТЫРЕ, И ЧЕТВЁРТЫЙ НЕ ВЫДУМЫВАЕТСЯ.
+    `check (kind in ('обычное', 'зачёт', 'отменённое'))` — база откажет на любом
+    другом слове. Слова владельца переводятся на то, что схема ДЕРЖИТ:
+    «контрольная» это `зачёт`, «отменено» это `отменённое`. «Дополнительное»
+    держать нечем: это миграция, а `migrations/` — вне зоны этого захода. Пункт
+    очереди стоит в `## ВОПРОСЫ`; показывать несуществующий род было бы
+    сообщением о данных, которых в базе нет.
+    """
+    return {s.held_on: s.kind for s in sessii}
+
+
+#: Как род занятия называется на экране. Слева — то, что ДЕРЖИТ схема, справа —
+#: слово владельца (10.09). Ключа «дополнительное» здесь нет ровно потому, что
+#: его нет и в базе: см. разбор у `_rod_zanyatiya`.
+IMYA_RODA = {"обычное": "обычное", "зачёт": "контрольная", "отменённое": "отменено"}
+
+#: Обычное занятие — норма, и подпись под ним приглушена; всё остальное владелец
+#: ищет глазами («когда были контрольные, когда был праздник и урок отменился») и
+#: потому выделено. Род печатается у КАЖДОГО столбца, а не только у исключений:
+#: столбец без подписи неотличим от столбца, у которого род не прочитался.
+ROD_OBYCHNYJ = "обычное"
+
+
+def _imya_shkolnika(u: dict) -> str:
+    return "%s %s" % (u["surname"], u["name"])
+
+
+def _shapka(dni, rody, pervyj_stolbec: str) -> str:
+    """Шапка решётки: день недели, дата и — если он не обычный — РОД занятия.
+
+    Владелец 10.09: «когда были контрольные, когда был праздник и урок отменился,
+    когда был дополнительный урок… Всю эту историю курса важно где-то
+    документировать». Документируется она здесь, в шапке столбца, а не отдельной
+    страницей: столбец И ЕСТЬ занятие.
+    """
+    stolbcy = []
+    for d in dni:
+        syroj = rody.get(d)
+        rod = IMYA_RODA.get(syroj, syroj or "род не назван")
+        tiho = " ist-rod-tiho" if syroj == ROD_OBYCHNYJ else ""
+        stolbcy.append(f'<th class="ist-zn">{e(_shapka_dnya(d))}'
+                       f'<span class="ist-rod{tiho}">{e(rod)}</span></th>')
+    return f'<th>{e(pervyj_stolbec)}</th>' + "".join(stolbcy)
+
+
+def _kletka(klass: str, znak: str, vsplyv: str, den: str, vid: str, kto_id) -> str:
+    """🔴 КЛЕТКА — МЕСТО, А НЕ ГАЛОЧКА, и это единственное место захода, где что-то
+    сделано на шаг вперёд (владелец: «в неё позже пойдут ОЦЕНКА и КОММЕНТАРИЙ»).
+
+    Что здесь ради будущего и почему это НЕ новый функционал:
+      * клетка — контейнер с ИМЕНОВАННЫМИ ячейками (`kl-znak`, `kl-ocenka`,
+        `kl-komm`), а не голый символ. Две последние сегодня пусты и ничего не
+        рисуют; заходу, который заведёт оценку, останется положить в них текст —
+        ни один `<td>`, ни одна строка, ни один селектор не переписываются.
+      * клетка называет СЕБЯ (`data-den`, `data-vid`, `data-kto`) — по этим трём
+        значениям её находит и раскрытие, и будущая правка. Без них редактор
+        оценки был бы вынужден считать координаты по позиции столбца, то есть
+        зависеть от порядка колонок.
+    САМОЙ ОЦЕНКИ ЗДЕСЬ НЕТ И НЕ ЗАВОДИТСЯ: ни поля ввода, ни двери записи, ни
+    колонки в базе — владелец сказал прямо, что сейчас их не вводим.
+    """
+    return (f'<td class="ist-kl {klass}" title="{vsplyv}" '
+            f'data-den="{e(den)}" data-vid="{vid}" data-kto="{kto_id}" tabindex="0">'
+            f'<span class="kl-znak">{znak}</span>{PUSTYE_MESTA}</td>')
+
+
+def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody) -> str:
+    if not istoriya.dni:
+        return '<p class="ist-pusto">прошедших занятий пока нет</p>'
     stroki = []
     for u in students:
         po_dnyam = istoriya.shkolniki.get(u["id"], {})
@@ -157,26 +350,27 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya) -> str:
         for den in istoriya.dni:
             yacheika = po_dnyam.get(den)
             if yacheika is None or not yacheika.prisutstvoval:
-                kletki.append('<td class="ist-net" title="не был">✕</td>')
+                kletki.append(_kletka("ist-net", "✕", "не был", den, "shk", u["id"]))
             elif yacheika.nekuda_det:
-                kletki.append(
-                    '<td class="ist-def" title="был, но принимающий не назначен">?</td>')
+                kletki.append(_kletka("ist-def", "?", "был, но принимающий не назначен",
+                                      den, "shk", u["id"]))
             else:
                 prep = teachers_by_id.get(yacheika.prepodavatel_id)
                 initsialy = _initsialy(prep) if prep else "?"
                 polnoe = e(prep["name"]) if prep else "принимающий неизвестен"
-                kletki.append(f'<td class="ist-byl" title="{polnoe}">{e(initsialy)}</td>')
+                kletki.append(_kletka("ist-byl", e(initsialy), polnoe,
+                                      den, "shk", u["id"]))
         stroki.append(
             f'<tr><td class="ist-kto"><b>{e(u["surname"])}</b> {e(u["name"])}</td>'
             f'{"".join(kletki)}</tr>')
-    if not istoriya.dni:
-        return '<p class="ist-pusto">прошедших занятий пока нет</p>'
-    return (f'<table class="ist-tabl"><thead><tr><th>Школьник</th>{shapka}</tr></thead>'
+    return (f'<table class="ist-tabl"><thead><tr>'
+            f'{_shapka(istoriya.dni, rody, "Школьник")}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table>')
 
 
-def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya) -> str:
-    shapka = "".join(f'<th class="ist-zn">{e(_shapka_dnya(d))}</th>' for d in istoriya.dni)
+def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody) -> str:
+    if not istoriya.dni:
+        return '<p class="ist-pusto">прошедших занятий пока нет</p>'
     stroki = []
     for t in teachers:
         po_dnyam = istoriya.prepodavateli.get(t["id"], {})
@@ -184,18 +378,70 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya) -> str:
         for den in istoriya.dni:
             yacheika = po_dnyam.get(den)
             if yacheika is None or not yacheika.prisutstvoval:
-                kletki.append('<td class="ist-net" title="не был">✕</td>')
+                kletki.append(_kletka("ist-net", "✕", "не был", den, "prep", t["id"]))
             else:
                 imena = ", ".join(
-                    "%s %s" % (students_by_id[sid]["surname"], students_by_id[sid]["name"])
+                    _imya_shkolnika(students_by_id[sid])
                     for sid in yacheika.ucheniki if sid in students_by_id)
-                kletki.append(f'<td class="ist-byl" title="{e(imena)}">✓</td>')
+                kletki.append(_kletka("ist-byl", "✓", e(imena) or "принимал: никого",
+                                      den, "prep", t["id"]))
         stroki.append(
             f'<tr><td class="ist-kto"><b>{e(t["name"])}</b></td>{"".join(kletki)}</tr>')
-    if not istoriya.dni:
-        return '<p class="ist-pusto">прошедших занятий пока нет</p>'
-    return (f'<table class="ist-tabl"><thead><tr><th>Преподаватель</th>{shapka}</tr></thead>'
+    return (f'<table class="ist-tabl"><thead><tr>'
+            f'{_shapka(istoriya.dni, rody, "Преподаватель")}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table>')
+
+
+def _chto_raskryvaetsya(students, teachers, istoriya, sdachi) -> dict:
+    """Содержимое раскрытия каждой клетки — одним словарём, а не в самих клетках.
+
+    🔴 ПОЧЕМУ ОТДЕЛЬНЫМ БЛОКОМ, А НЕ СПРЯТАННЫМ `<div>` В КАЖДОЙ КЛЕТКЕ. Решётка
+    это школьники × занятия: 57 × N. К маю N около семидесяти, то есть четыре
+    тысячи клеток, и спрятанная разметка в каждой удвоила бы документ ради того,
+    что читатель откроет три раза. Словарь несёт то же самое один раз.
+
+    🔴 И ПОЧЕМУ РАСКРЫТИЕ — КЛИК, А НЕ ЧЕКБОКС НА КЛЕТКУ. Чисто-CSS раскрытие
+    требует `<input>` на каждую клетку — те же четыре тысячи узлов. Наведение
+    (`title`) при этом остаётся на месте и работает без JS: страница без скриптов
+    по-прежнему называет, у кого школьник был.
+    """
+    imena_prepov = {t["id"]: t["name"] for t in teachers}
+    imena_detej = {u["id"]: _imya_shkolnika(u) for u in students}
+    itog: dict = {}
+    for u in students:
+        po_dnyam = istoriya.shkolniki.get(u["id"], {})
+        for den in istoriya.dni:
+            ya = po_dnyam.get(den)
+            sdal = sdachi.get((den, u["id"]), ())
+            itog["shk|%s|%s" % (den, u["id"])] = {
+                "kto": imena_detej[u["id"]],
+                "byl": bool(ya is not None and ya.prisutstvoval),
+                "komu": (imena_prepov.get(ya.prepodavatel_id)
+                         if ya is not None and ya.prisutstvoval else None),
+                "sdal": [{"zadacha": z, "listok": l,
+                          "prinyal": imena_prepov.get(tid)} for z, l, tid in sdal],
+            }
+    for t in teachers:
+        po_dnyam = istoriya.prepodavateli.get(t["id"], {})
+        for den in istoriya.dni:
+            ya = po_dnyam.get(den)
+            deti = []
+            if ya is not None and ya.prisutstvoval:
+                for sid in ya.ucheniki:
+                    if sid not in imena_detej:
+                        continue
+                    deti.append({
+                        "kto": imena_detej[sid],
+                        "sdal": [{"zadacha": z, "listok": l}
+                                 for z, l, tid in sdachi.get((den, sid), ())
+                                 if tid is None or tid == t["id"]],
+                    })
+            itog["prep|%s|%s" % (den, t["id"])] = {
+                "kto": t["name"],
+                "byl": bool(ya is not None and ya.prisutstvoval),
+                "deti": deti,
+            }
+    return itog
 
 
 SVOI_STILI = """
@@ -229,6 +475,35 @@ SVOI_STILI = """
 .ist-tabl td.ist-byl{color:var(--accent);font-weight:600}
 .ist-tabl td.ist-net{color:var(--faint)}
 .ist-tabl td.ist-def{color:var(--warm);font-weight:700}
+/* Род занятия — второй строкой в шапке столбца, и только когда он НЕ обычный:
+   владелец ищет глазами исключения (контрольная, отменённый урок), а подпись
+   «обычное» над каждым столбцом была бы шумом ровно поверх них. */
+.ist-tabl th.ist-zn .ist-rod{display:block;font-size:.68rem;font-weight:600;
+  letter-spacing:.02em;color:var(--warm);text-transform:none}
+.ist-tabl th.ist-zn .ist-rod-tiho{color:var(--faint);font-weight:400}
+.ist-otmeneno{font-family:var(--sans);font-size:.92rem;color:var(--warm);margin:.8rem 0 0}
+/* Клетка — МЕСТО: знак и два пустых, поимённо названных гнезда под оценку и
+   комментарий. Пустые гнёзда ничего не рисуют и ничего не занимают. */
+.ist-tabl td.ist-kl{cursor:pointer}
+.ist-tabl td.ist-kl:hover,.ist-tabl td.ist-kl:focus-visible{outline:2px solid var(--accent);
+  outline-offset:-2px;border-radius:4px}
+.ist-tabl td.ist-kl.ist-otkryta{background:var(--accent-soft)}
+.kl-ocenka:empty,.kl-komm:empty{display:none}
+.kl-ocenka{font-weight:700;margin-left:.25em}
+.kl-komm{color:var(--muted);margin-left:.2em}
+/* Раскрытие клетки — одна панель на страницу, снизу; таблица под ней не прыгает. */
+.ist-raskrytie{position:sticky;bottom:0;z-index:30;margin:1.2rem 0 0;
+  background:var(--panel);border:1px solid var(--rule);border-radius:14px;
+  padding:1rem 1.3rem;font-family:var(--sans);box-shadow:0 -2px 14px rgba(0,0,0,.06)}
+.ist-raskrytie[hidden]{display:none}
+.ist-raskrytie h2{font-size:1.1rem;margin:0 0 .5rem;font-family:var(--sans)}
+.ist-raskrytie .ist-zakryt{float:right;cursor:pointer;border:1px solid var(--rule);
+  background:none;color:var(--muted);border-radius:8px;padding:.2em .7em;font:inherit}
+.ist-raskrytie ul{margin:.3rem 0 0;padding-left:1.2rem}
+.ist-raskrytie li{padding:.12rem 0}
+.ist-raskrytie .ist-nichego{color:var(--muted)}
+.ist-zhurnal{margin:0 0 .2rem;font-family:var(--sans);font-size:1.15rem;font-weight:600}
+.ist-zachem{color:var(--muted);font-family:var(--sans);font-size:.92rem;margin:0 0 .8rem}
 @media(max-width:760px){
   .istoria{padding-left:1.1rem;padding-right:1.1rem}
   .ist-tabl td.ist-kto{width:7rem;max-width:7rem;overflow:hidden;text-overflow:ellipsis;
@@ -237,24 +512,122 @@ SVOI_STILI = """
 """
 
 
+#: 🔴 ДВА ЖУРНАЛА — ЭТО ДВЕ РАЗНЫЕ ВЕЩИ, И ВЛАДЕЛЕЦ ПОПРАВИЛ ЗА ИХ СМЕШЕНИЕ.
+#: Преподавательский — кто в какой день был; ПО НЕМУ СЧИТАЕТСЯ ЗАРПЛАТА, и неверная
+#: клетка стоит денег живому человеку. Школьный — посещения и сколько сдал, и туда же
+#: пойдут оценки: «это прообраз будущего личного кабинета». До этой правки они были
+#: двумя безымянными вкладками «Школьники»/«Преподаватели» — то есть выглядели как
+#: два вида одного списка. Названия и подписи ниже — единственное, чем экран говорит,
+#: что это разные документы с разной ценой ошибки.
+ZACHEM_ZHURNAL = {
+    "shk": ("Журнал школьников",
+            "посещения и сдача. Сюда же пойдут оценки — прообраз личного кабинета"),
+    "prep": ("Журнал преподавателей",
+             "кто в какой день был. По нему считается зарплата — цена ошибки в клетке "
+             "не в отображении, а в деньгах"),
+}
+
+#: Раскрытие клетки. Одна панель на страницу и один обработчик на таблицу: клетка
+#: называет себя тремя значениями (`data-den`, `data-vid`, `data-kto`), панель по ним
+#: находит своё содержимое в блоке `ist-dannye`. Наведение (`title`) остаётся и без
+#: скрипта — страница без JS по-прежнему называет, у кого школьник был.
+SKRIPT = """
+<script>
+(function(){
+  var uzel = document.getElementById('ist-dannye');
+  var dannye = uzel ? JSON.parse(uzel.textContent) : {};
+  var panel = document.getElementById('ist-raskrytie');
+  var telo = document.getElementById('ist-raskrytie-telo');
+  var zag = document.getElementById('ist-raskrytie-zag');
+  var otkryta = null;
+
+  function spisok(punkty, pusto){
+    if (!punkty.length) return '<p class="ist-nichego">' + pusto + '</p>';
+    return '<ul>' + punkty.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul>';
+  }
+  function zadachi(sdal){
+    return sdal.map(function(z){
+      return 'листок ' + z.listok + ' · задача ' + z.zadacha
+             + (z.prinyal ? ' — принял ' + z.prinyal : '');
+    });
+  }
+  function zakryt(){
+    panel.hidden = true;
+    if (otkryta) { otkryta.classList.remove('ist-otkryta'); otkryta = null; }
+  }
+  function pokazat(kletka){
+    var klyuch = kletka.dataset.vid + '|' + kletka.dataset.den + '|' + kletka.dataset.kto;
+    var d = dannye[klyuch];
+    if (!d) return;
+    if (otkryta) otkryta.classList.remove('ist-otkryta');
+    otkryta = kletka; kletka.classList.add('ist-otkryta');
+    zag.textContent = d.kto + ' · ' + kletka.dataset.den;
+    if (kletka.dataset.vid === 'shk') {
+      telo.innerHTML = !d.byl
+        ? '<p class="ist-nichego">на этом занятии не был</p>'
+        : '<p>принимал: <b>' + (d.komu || 'принимающий не назначен') + '</b></p>'
+          + '<p>сдал:</p>' + spisok(zadachi(d.sdal), 'в этот день ничего не сдал');
+    } else {
+      telo.innerHTML = !d.byl
+        ? '<p class="ist-nichego">в этот день не принимал</p>'
+        : '<p>принимал:</p>' + spisok(d.deti.map(function(r){
+            var z = zadachi(r.sdal);
+            return '<b>' + r.kto + '</b>' + (z.length ? ' — ' + z.join('; ') : ' — ничего не сдал');
+          }), 'в этот день никого');
+    }
+    panel.hidden = false;
+  }
+  document.addEventListener('click', function(sob){
+    var kletka = sob.target.closest ? sob.target.closest('td.ist-kl') : null;
+    if (kletka) { pokazat(kletka); return; }
+    if (sob.target.closest && sob.target.closest('#ist-raskrytie')) return;
+    zakryt();
+  });
+  document.addEventListener('keydown', function(sob){
+    if (sob.key === 'Escape') zakryt();
+    if ((sob.key === 'Enter' || sob.key === ' ')
+        && sob.target.classList && sob.target.classList.contains('ist-kl')) {
+      sob.preventDefault(); pokazat(sob.target);
+    }
+  });
+  document.getElementById('ist-zakryt').addEventListener('click', zakryt);
+})();
+</script>"""
+
+
 def stranica(c: sqlite3.Connection) -> str:
-    """Вся страница: обе решётки собраны один раз каждая, показывает CSS без JS."""
+    """Вся страница: два журнала, собранные по одному разу каждый."""
     students, teachers = _spravochniki(c)
     students_by_id = {u["id"]: u for u in students}
     teachers_by_id = {t["id"]: t for t in teachers}
-    istoriya = _sostavit(c)
+    istoriya, sessii = _sostavit(c)
+    rody = _rod_zanyatiya(c, sessii)
+    otmeneno = _otmenennye(sessii, istoriya.dni)
+    sdachi = _sdachi_po_zanyatiyam(c, istoriya.dni)
+    dannye = _chto_raskryvaetsya(students, teachers, istoriya, sdachi)
 
     podpis = ("прошедших занятий пока нет" if not istoriya.dni
               else "занятий: %d" % len(istoriya.dni))
     if istoriya.nekuda_det_vsego:
         podpis += " · без принимающего в этот день: %d" % istoriya.nekuda_det_vsego
 
+    stroka_otmen = (
+        '<p class="ist-otmeneno">отменённые занятия (в решётке их нет — занятия не '
+        'было): %s</p>' % e(", ".join(_shapka_dnya(d) for d in otmeneno))
+        if otmeneno else "")
+
+    def zagolovok(vid: str) -> str:
+        imya, zachem = ZACHEM_ZHURNAL[vid]
+        return (f'<p class="ist-zhurnal">{e(imya)}</p>'
+                f'<p class="ist-zachem">{e(zachem)}</p>')
+
     return f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>История занятий — Ключики</title>
+<title>Журнал — Ключики</title>
 <style>{_obshchij_stil(put_bazy(c))}{SVOI_STILI}</style></head>
 <body>
+{menyu_ssylkami("/istoria")}
 <main class="istoria">
   <!-- 🔴 ПЕРЕКЛЮЧАТЕЛИ СТОЯТ ЗДЕСЬ, ВНУТРИ `<main>`, И ЭТО НЕ ОФОРМЛЕНИЕ — ЭТО
        ПРИЧИНА, ПО КОТОРОЙ СТРАНИЦА БЫЛА МЕРТВА. Два `<input>` лежали в `<body>`,
@@ -272,16 +645,25 @@ def stranica(c: sqlite3.Connection) -> str:
        Ни одно правило CSS при этом не изменилось — изменилось РОДСТВО узлов. -->
   <input class="rd" type="radio" name="ist-vid" id="iv-shk" checked hidden>
   <input class="rd" type="radio" name="ist-vid" id="iv-prep" hidden>
-  <h1>История</h1>
-  <p class="podpis">{e(podpis)} · галочка — инициалы принимавшего, наведение — полное имя;
-    у преподавателя наведение показывает, кого он в этот день принимал</p>
+  <h1>Журнал</h1>
+  <p class="podpis">{e(podpis)}</p>
   <nav class="ist-vkladki" id="ist-vkladki">
     <label for="iv-shk">Школьники</label>
     <label for="iv-prep">Преподаватели</label>
   </nav>
-  <section id="is-shk">{_tablitsa_shkolnikov(students, teachers_by_id, istoriya)}</section>
-  <section id="is-prep">{_tablitsa_prepodavatelej(teachers, students_by_id, istoriya)}</section>
+  <section id="is-shk">{zagolovok("shk")}
+    {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody)}</section>
+  <section id="is-prep">{zagolovok("prep")}
+    {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody)}</section>
+  {stroka_otmen}
+  <div class="ist-raskrytie" id="ist-raskrytie" hidden>
+    <button class="ist-zakryt" id="ist-zakryt" type="button">закрыть</button>
+    <h2 id="ist-raskrytie-zag"></h2>
+    <div id="ist-raskrytie-telo"></div>
+  </div>
 </main>
+<script type="application/json" id="ist-dannye">{json.dumps(dannye, ensure_ascii=False)}</script>
+{SKRIPT}
 </body></html>"""
 
 

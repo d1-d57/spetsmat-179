@@ -120,7 +120,8 @@ def running_server(tmp_path):
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
-        yield {"baza": f"http://127.0.0.1:{port}", "s1": s1, "s2": s2, "t1": t1, "t2": t2}
+        yield {"baza": f"http://127.0.0.1:{port}", "db": str(db_path),
+               "s1": s1, "s2": s2, "t1": t1, "t2": t2}
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -151,7 +152,7 @@ def test_signed_in_organizer_sees_the_page(running_server):
     status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
-    assert "История" in telo
+    assert "Журнал" in telo, "владелец 10.09 предложил слово «журнал» вместо «истории»"
     assert "Фефелов" in telo and "Агаркова" in telo
     assert "Иванова" in telo or "ИМ" in telo
     assert "Сидоров" not in telo, "уволенный преподаватель не должен появиться"
@@ -163,9 +164,9 @@ def test_absence_is_a_krestik_and_default_is_a_present_checkmark(running_server)
     assert status == 200
     telo = body.decode("utf-8")
     # Иван отсутствовал в понедельник: хотя бы один крестик в его строке.
-    assert 'class="ist-net"' in telo
+    assert "ist-net" in telo
     # Ирина ни разу явно не отмечена, но стоит в enrollment -- должна получить инициалы.
-    assert 'class="ist-byl"' in telo
+    assert "ist-byl" in telo
     assert "ИМ" in telo or "ПО" in telo
 
 
@@ -189,7 +190,7 @@ def test_teacher_marked_absent_reads_as_absent_even_with_a_students_override(run
     status, body = _get(f'{running_server["baza"]}/istoria', _kuka("prepod"))
     assert status == 200
     telo = body.decode("utf-8")
-    assert 'class="ist-net"' in telo
+    assert "ist-net" in telo
 
 
 # --------------------------------------------------------------------------- родство
@@ -239,3 +240,117 @@ def test_the_tab_switches_and_the_panels_are_siblings(running_server):
             f"{rod[pereklyuchatel]} и {rod[panel]}: правило `~` не совпадёт никогда")
     # И метки тоже: подсветка выбранной кнопки — тот же комбинатор.
     assert rod["iv-shk"] == rod.get("ist-vkladki"), "метки вкладок — тоже сёстры"
+
+
+# ------------------------------------------------------------------------------- меню
+
+
+def _podpisi_menyu(telo: str) -> list:
+    """Подписи пунктов меню в том порядке, в каком они стоят в разметке."""
+    import re
+    nav = re.search(r'<nav class="menu">(.*?)</nav>', telo, re.S)
+    if nav is None:
+        return []
+    return [re.sub(r"<[^>]+>", "", x).strip()
+            for x in re.findall(r'<a class="ssyl[^"]*"[^>]*>.*?</a>|'
+                                r'<label for="p-[^"]*"[^>]*>.*?</label>',
+                                nav.group(1), re.S)]
+
+
+def test_the_page_carries_the_menu_and_the_journal_item_is_last(running_server):
+    """Владелец 10.09: страница не несла меню вовсе, и порядок назван дословно.
+
+    «кабинет · листки · распределение · кондуит · журнал В САМОМ КОНЦЕ»; журнал
+    стоял третьим. Проверяется ПОРЯДОК, а не наличие: список, в котором все пункты
+    есть, но журнал второй, — это ровно то состояние, которое чинит эта правка.
+    """
+    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    assert status == 200
+    podpisi = _podpisi_menyu(body.decode("utf-8"))
+    assert podpisi, "страница обязана нести верхнее меню"
+    assert podpisi[-1] == "Журнал", f"журнал последним, а меню такое: {podpisi}"
+    for imya in ("Кабинет", "Листки", "Распределение", "Кондуит"):
+        assert imya in podpisi, f"пункт {imya} пропал из меню: {podpisi}"
+    poryadok = [podpisi.index(x) for x in
+                ("Кабинет", "Листки", "Распределение", "Кондуит", "Журнал")]
+    assert poryadok == sorted(poryadok), f"порядок владельца нарушен: {podpisi}"
+
+
+# ------------------------------------------------- два журнала, клетка-место, род
+
+
+def test_the_two_journals_are_named_and_say_what_each_is_for(running_server):
+    """Владелец поправил аналитика за смешение: это ДВА журнала, а не две вкладки.
+
+    Преподавательский — по нему считается зарплата; школьный — прообраз личного
+    кабинета. Пока обе вкладки назывались «Школьники»/«Преподаватели», экран не
+    говорил, что это разные документы с разной ценой ошибки.
+    """
+    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    assert status == 200
+    telo = body.decode("utf-8")
+    assert "Журнал школьников" in telo
+    assert "Журнал преподавателей" in telo
+    assert "зарплат" in telo, "цена ошибки преподавательского журнала названа"
+
+
+def test_the_cell_is_a_place_with_empty_slots_for_a_mark_and_a_comment(running_server):
+    """Оценка и комментарий сейчас НЕ вводятся — им оставлено место.
+
+    Проверяется ровно это: гнёзда есть, они пустые, и клетка называет себя тремя
+    значениями, по которым её найдёт будущий редактор оценки. Появление РЕАЛЬНОЙ
+    оценки в разметке сегодня — тоже красное: владелец сказал их не вводить.
+    """
+    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    assert status == 200
+    telo = body.decode("utf-8")
+    assert '<span class="kl-ocenka" data-mesto="оценка"></span>' in telo
+    assert '<span class="kl-komm" data-mesto="комментарий"></span>' in telo
+    assert 'data-vid="shk"' in telo and 'data-vid="prep"' in telo
+    assert f'data-den="{MONDAY}"' in telo, "клетка называет свой день"
+    # Ни одного заполненного гнезда: оценок в этом заходе не вводится.
+    assert '<span class="kl-ocenka" data-mesto="оценка">' not in telo.replace(
+        '<span class="kl-ocenka" data-mesto="оценка"></span>', "")
+
+
+def test_the_kind_of_the_lesson_is_visible_in_every_column(running_server):
+    """`sessions.kind` живой и показан. Столбец без подписи неотличим от нечитанного."""
+    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    assert status == 200
+    telo = body.decode("utf-8")
+    assert telo.count('class="ist-rod') >= 2 * 2, "род у каждого столбца обоих журналов"
+    assert "обычное" in telo
+
+
+def test_a_zachyot_reads_as_kontrolnaya_and_a_cancelled_day_is_named_apart(running_server):
+    """Слова владельца ложатся на то, что ДЕРЖИТ схема, и отменённый день не пропадает.
+
+    `check (kind in ('обычное','зачёт','отменённое'))` — «контрольная» это `зачёт`.
+    Отменённое занятие `IstoriyaService` в решётку не берёт (столбец крестиков сказал
+    бы «никто не пришёл» там, где занятия не было), поэтому оно обязано быть названо
+    отдельной строкой — иначе факт, который владелец просил документировать, с экрана
+    исчезает совсем.
+    """
+    import sqlite3
+
+    db = running_server["db"]
+    conn = sqlite3.connect(db)
+    otmenennyj = (date.fromisoformat(MONDAY) - timedelta(days=7)).isoformat()
+    conn.execute("update sessions set kind = 'зачёт' where held_on = ?", (MONDAY,))
+    conn.execute("insert into sessions (held_on, kind) values (?, 'отменённое')",
+                 (otmenennyj,))
+    conn.commit()
+    conn.close()
+
+    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    assert status == 200
+    telo = body.decode("utf-8")
+    assert "контрольная" in telo, "«зачёт» в базе читается как «контрольная» на экране"
+    assert "отменённые занятия" in telo, "отменённый день назван отдельной строкой"
+    assert _shapka_dnya_kak_na_stranice(otmenennyj) in telo
+
+
+def _shapka_dnya_kak_na_stranice(den: str) -> str:
+    from veb.razdely.istoria_zanyatij import _shapka_dnya
+
+    return _shapka_dnya(den)

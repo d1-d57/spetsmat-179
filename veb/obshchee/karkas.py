@@ -1327,7 +1327,15 @@ MENYU_PUNKT_KABINETA = '<a class="ssyl ssyl-kab" href="/kabinet">Кабинет<
 #: страница, которой для пользователя не существовало.
 #: Условие показа — то же `prepod_id`, что у «Кабинета»: страница за входом
 #: (`pokazat_istoriyu` не пускает гостя), и гостю пункт был бы дверью в отказ.
-MENYU_PUNKT_ISTORII = '<a class="ssyl ssyl-ist" href="/istoria">История</a>' 
+#:
+#: 🔴 СЛОВО — «ЖУРНАЛ», И МЕСТО — САМОЕ ПОСЛЕДНЕЕ. Владелец 10.09 предложил слово
+#: сам: «может, гораздо лучше так писать» — вместо «истории». Порядок пунктов он
+#: назвал дословно: кабинет · листки · распределение · кондуит · журнал В САМОМ
+#: КОНЦЕ; до этой правки журнал стоял ТРЕТЬИМ. Меняется ПОДПИСЬ и МЕСТО пункта;
+#: адрес `/istoria` и имя модуля остаются прежними — их переименование задело бы
+#: `veb/server.py` и каждую ссылку сайта, то есть чужую зону, и стоило бы ровно
+#: ничего для читателя, который видит только эту подпись.
+MENYU_PUNKT_ZHURNALA = '<a class="ssyl ssyl-ist" href="/istoria">Журнал</a>'
 
 
 def menyu_ssylkami(tut: str = "") -> str:
@@ -1353,19 +1361,26 @@ def menyu_ssylkami(tut: str = "") -> str:
 
     return ('<nav class="menu">\n'
             '  <span class="im">Ключики</span>\n  '
-            # 🔴 «ИСТОРИЯ» СТОИТ ЗДЕСЬ ЖЕ, А НЕ ОТДЕЛЬНОЙ ПРАВКОЙ В `kabinet.py`
+            # 🔴 «ЖУРНАЛ» СТОИТ ЗДЕСЬ ЖЕ, А НЕ ОТДЕЛЬНОЙ ПРАВКОЙ В `kabinet.py`
             # (H5.1). Эта функция — ОДНО место, где записаны названия и адреса
             # пунктов для страниц вне оболочки; добавить пункт в кабинете отдельно
             # значило бы завести второй список пунктов, который разойдётся с первым
             # на следующей же правке. Страница `/istoria` существовала и работала
             # (321 строка, 29 зелёных тестов, 200 и 81 238 байт), а входа на неё не
             # было НИ ОДНОГО: `grep -c 'href="/istoria'` давал ноль везде.
+            #
+            # 🔴 ПОРЯДОК — ТРЕБОВАНИЕ ВЛАДЕЛЬЦА 10.09, ДОСЛОВНО: кабинет · листки ·
+            # распределение · кондуит · журнал В САМОМ КОНЦЕ. Журнал стоял третьим.
+            # Тот же порядок повторён в `obolochka()` ниже — не потому, что список
+            # записан дважды, а потому что это ДВА РЕНДЕРА одного списка: оболочка
+            # рисует свои пункты метками радиокнопок, эта функция — ссылками, и
+            # разойтись им нельзя.
             + "\n  ".join((punkt("/", "Класс"),
                            punkt("/kabinet", "Кабинет"),
-                           punkt("/istoria", "История"),
                            punkt("/#s-list", "Листки"),
                            punkt("/raspredelenie", "Распределение"),
-                           punkt("/#s-kond", "Кондуит")))
+                           punkt("/#s-kond", "Кондуит"),
+                           punkt("/istoria", "Журнал")))
             + '\n</nav>')
 
 
@@ -1413,8 +1428,13 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
     lichnaya = lich_vhod = lich_stili = ""
     start_vybran = " checked"
     # Пункт «Кабинет» — по `prepod_id`, разбор условия у `MENYU_PUNKT_KABINETA`.
-    kab_metka = ('\n  ' + MENYU_PUNKT_KABINETA + '\n  ' + MENYU_PUNKT_ISTORII) \
-        if kt.prepod_id is not None else ""
+    # 🔴 «ЖУРНАЛ» ОТЦЕПЛЁН ОТ «КАБИНЕТА» И УЕХАЛ В КОНЕЦ СТРОКИ. Оба появляются по
+    # одному условию (`prepod_id`), но стоят в разных местах меню: владелец 10.09
+    # назвал порядок дословно — кабинет · листки · распределение · кондуит ·
+    # журнал В САМОМ КОНЦЕ. Пока они склеены в одну метку, журнал физически не
+    # может оказаться последним, потому что «Кабинет» обязан быть вторым.
+    kab_metka = ('\n  ' + MENYU_PUNKT_KABINETA) if kt.prepod_id is not None else ""
+    zhurnal_metka = ('\n  ' + MENYU_PUNKT_ZHURNALA) if kt.prepod_id is not None else ""
     if tolko_raspredelenie:
         # Раздел на этой странице один; открывать нечего, кроме него.
         start_vybran, rasp_vybran = "", " checked"
@@ -2280,7 +2300,7 @@ body{{padding-bottom:2rem}}
 <nav class="menu">
   <span class="im">Ключики</span>
   {punkty}
-  <a class="ssyl ssyl-rasp{rasp_aktivna}" href="{rasp_adres}">Распределение</a>{kond_metka}
+  <a class="ssyl ssyl-rasp{rasp_aktivna}" href="{rasp_adres}">Распределение</a>{kond_metka}{zhurnal_metka}
   <div class="podskazki poisk-verh">
     <input class="poisk" id="poisk" placeholder="Поиск — школьник, принимающий, листок" autocomplete="off">
     <div class="spisok" id="spisok" hidden></div>

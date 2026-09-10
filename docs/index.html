@@ -1,36 +1,1560 @@
 <!doctype html>
 <html lang="ru">
-<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Спецмат</title>
-<!-- This page used to be a full mirror of the live site's schedule; it went stale (the two
-     never agree once you touch either one) and carried a dead login link into nowhere (it
-     pointed at the login path without this site's own path segment in front of it). GitHub
-     Pages only serves static files — there is no server-side config here to put a real 301
-     on — so this page now carries no data of its own at all and exists solely to send a
-     visitor to the live site. -->
-<meta http-equiv="refresh" content="0;url=http://math-kluychiki.ru/">
-<link rel="canonical" href="http://math-kluychiki.ru/">
+<title>Спецмат · 9 класс</title>
 <style>
-:root{--bg:#fbfaf6;--text:#211f1b;--muted:#726c60;--accent:#2f6e8e;
-  --sans:system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1b1e22;--text:#dcd8d0;
-  --muted:#9a948a;--accent:#7fb6d2}}
+:root{--bg:#fbfaf6;--panel:#fffdf8;--text:#211f1b;--muted:#726c60;--rule:#e7e2d6;
+  --accent:#2f6e8e;--accent-soft:#e8f0f4;--warm:#c9743a;--faint:#b7ae9c;--chip:#e7e0d2;
+  --krasn:#b3402a;--krasn-fon:rgba(179,64,42,.08);
+  /* 🔴 ЗЕЛЁНЫЙ ЗАВЕДЁН ЗДЕСЬ, РЯДОМ С КРАСНЫМ, И БОЛЬШЕ НИГДЕ. Полоса занятий в
+     кабинете красит «был» и «не был», и второго цвета для «был» в палитре не
+     было вовсе. `doc/DIZAJN-ZAKREPLENO.md` §2 запрещает не новый цвет, а ВТОРОЕ
+     МЕСТО, где он записан: страница `/kabinet` берёт таблицу стилей отсюда
+     целиком (`list_odin._obshchij_stil`), так что запись остаётся одна. Пара
+     построена по образцу красной: тон и та же полупрозрачная подложка. */
+  --zel:#3d7a4e;--zel-fon:rgba(61,122,78,.10);
+  --sans:"Source Sans 3",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1b1e22;--panel:#23272c;
+  --text:#dcd8d0;--muted:#9a948a;--rule:#343a41;--accent:#7fb6d2;--accent-soft:#22333d;
+  --warm:#e0946a;--faint:#6b6f75;--chip:#333a41;
+  --krasn:#e8836a;--krasn-fon:rgba(232,131,106,.12);
+  --zel:#7cc08e;--zel-fon:rgba(124,192,142,.14)}}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-  background:var(--bg);color:var(--text);font-family:var(--sans);text-align:center;padding:2rem}
-p{font-size:1.1rem;line-height:1.5;margin:.4rem 0}
-.muted{color:var(--muted);font-size:.95rem}
-a{color:var(--accent)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--serif);font-size:20px}
+/* Меню — строка сверху: три пункта помещаются, ничего выезжать не должно (§1). */
+.menu{position:sticky;top:0;z-index:40;display:flex;gap:.3rem;align-items:baseline;
+  padding:.9rem 3rem;background:var(--panel);border-bottom:1px solid var(--rule);
+  font-family:var(--sans);flex-wrap:wrap}
+.menu .im{font-weight:600;font-size:1.05rem;margin-right:1.6rem;white-space:nowrap}
+.menu label,.menu a.ssyl{cursor:pointer;font-weight:600;font-size:1.05rem;color:var(--muted);
+  padding:.35em 1rem;border-radius:8px;text-decoration:none}
+.menu label:hover,.menu a.ssyl:hover{color:var(--text);background:var(--accent-soft)}
+.holst{padding:1.3rem 3rem 2rem;max-width:none}
+h1{font-family:var(--sans);font-size:2.1rem;font-weight:600;letter-spacing:-.02em;margin:0}
+.data{color:var(--muted);font-family:var(--sans);font-size:1rem;margin:0 0 1.6rem}
+.oblozhka p{font-size:1.3rem;line-height:1.5;max-width:52em;margin:0 0 .8em}
+.rasp-str{font-size:1.15rem;padding:.15em 0}
+.raspisanie{border:1px solid var(--rule);border-radius:10px;padding:1.1rem 1.4rem;
+  margin:1.6rem 0 0;background:var(--panel);max-width:52em}
+.zag2{font-family:var(--sans);font-size:.82rem;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);margin:0 0 .5em}
+/* 🔴 ЗАГОЛОВОК ЛИСТКА НЕ ПОДНИМАЕТСЯ В ВЕРХНИЙ РЕГИСТР, И ЭТО НЕ ВКУС.
+   Владелец 10.09: вкладка называется «16α», а заголовок под ней печатал
+   «16А. ДЕРЕВЬЯ» — и он читал это как расхождение в данных. Данные ЦЕЛЫ:
+   сверка на боевой базе дала НОЛЬ листков, где `title` не начинается с `number`.
+   Врало отображение: `text-transform:uppercase` переводит «α» (U+03B1) в «Α»
+   (U+0391) — ЗАГЛАВНУЮ ГРЕЧЕСКУЮ АЛЬФУ, которая на экране неотличима от русской
+   «А» (U+0410). Три листка одной темы называются 16A, 16α и 16ℵ, и различить их
+   можно ТОЛЬКО по этому знаку — то есть регистр стирал единственное различие.
+   Проверяется командой: python3 -c "print('16α'.upper())" → 16Α. */
+.zag-listok{text-transform:none;letter-spacing:.02em}
+.str,.vid{display:none}
+#p-start:checked~#s-start,#p-list:checked~#s-list,#p-rasp:checked~#s-rasp{display:block}
+#p-start:checked~.menu label[for=p-start],#p-list:checked~.menu label[for=p-list],
+#p-rasp:checked~.menu .ssyl-rasp{color:var(--accent);background:var(--accent-soft)}
+input.rd{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.tabbar{display:flex;gap:.25rem;border-bottom:2px solid var(--rule);margin:0 0 1rem;flex-wrap:wrap}
+.tabbar label{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1.1rem;
+  color:var(--muted);padding:.5rem 1.2rem;border:2px solid transparent;border-bottom:none;
+  border-radius:10px 10px 0 0;margin-bottom:-2px}
+.tabbar label:hover{color:var(--text)}
+#t-shk:checked~#v-shk{display:block}#t-shk:checked~.tabbar label[for=t-shk]{color:var(--accent);background:var(--panel);border-color:var(--rule) var(--rule) var(--panel)}#t-prep:checked~#v-prep{display:block}#t-prep:checked~.tabbar label[for=t-prep]{color:var(--accent);background:var(--panel);border-color:var(--rule) var(--rule) var(--panel)}#t-В:checked~#v-В{display:block}#t-В:checked~.tabbar label[for=t-В]{color:var(--accent);background:var(--panel);border-color:var(--rule) var(--rule) var(--panel)}#t-Д:checked~#v-Д{display:block}#t-Д:checked~.tabbar label[for=t-Д]{color:var(--accent);background:var(--panel);border-color:var(--rule) var(--rule) var(--panel)}#t-Н:checked~#v-Н{display:block}#t-Н:checked~.tabbar label[for=t-Н]{color:var(--accent);background:var(--panel);border-color:var(--rule) var(--rule) var(--panel)}
+#l-9:checked~#w-9{display:block}#l-9:checked~.tabbar label[for=l-9]{color:var(--accent);background:var(--panel);border-color:var(--rule) var(--rule) var(--panel)}#l-8:checked~#w-8{display:block}#l-8:checked~.tabbar label[for=l-8]{color:var(--accent);background:var(--panel);border-color:var(--rule) var(--rule) var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:1.05rem}
+th{font-family:var(--sans);font-size:.8rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--faint);text-align:left;padding:0 1.1rem .55rem 0;
+  border-bottom:1px solid var(--rule)}
+td{padding:.5rem 1.1rem .5rem 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+tr:hover td{background:var(--accent-soft)}
+.kl{color:var(--muted);font-family:var(--sans);font-size:.9rem}
+.kab.staryj{background:none;border:1px dashed var(--rule);color:var(--muted)}
+.kab{font-family:var(--sans);font-weight:600;background:var(--chip);border-radius:7px;
+  padding:.1em .55em;white-space:nowrap}
+.gr{font-family:var(--sans);font-weight:600;color:var(--accent)}
+.pr{white-space:nowrap}
+.deti{font-size:.95rem;color:var(--muted);line-height:1.45}
+.ch{font-family:var(--sans);color:var(--muted);text-align:right;white-space:nowrap}
+.net{color:var(--warm);font-family:var(--sans);font-size:.95rem}
+.redko{font-family:var(--sans);font-size:.85rem;color:var(--warm)}
+.shapka{font-family:var(--sans);font-size:1.15rem;color:var(--muted);margin:0 0 .8rem}
+.zhdut{border:1px solid var(--warm);border-radius:10px;padding:1rem 1.3rem;margin:0 0 1.8rem}
+.zhdut .zag2{color:var(--warm)}
+.poisk{width:100%;max-width:640px;padding:.65em .9em;font:inherit;font-size:1.1rem;
+  border:1px solid var(--rule);border-radius:9px;background:var(--panel);color:var(--text);margin:0 0 1.5rem}
+.poisk:focus{outline:none;border-color:var(--accent)}
+.podskazki{position:relative;max-width:640px}
+.podskazki.bolshoj{max-width:none;margin-top:2.2rem}
+.poisk-big{max-width:none;width:100%;font-size:1.6rem;padding:.85em 1.1em;border-radius:14px}
+.podskazki.bolshoj .spisok{top:5.2rem;font-size:1.3rem}
+.podskazki.bolshoj .spisok div{padding:.6em 1.1em}
+#nashli{max-width:none;font-size:1.5rem;line-height:1.45;margin-top:1.6rem}
+.otvet{width:100%;padding:1rem 1.2rem;border:1px solid var(--rule);border-radius:12px;
+  background:var(--panel);color:var(--text)}
+.spisok{position:absolute;left:0;right:0;top:3.1rem;z-index:20;background:var(--panel);
+  border:1px solid var(--rule);border-radius:0 0 9px 9px;max-height:18rem;overflow:auto}
+.spisok div{padding:.5em .9em;cursor:pointer}
+.spisok div:hover{background:var(--accent-soft);color:var(--accent)}
+/* Строка школьника, на которую привёл поиск (`?sid=` — `glavnaya.poisk_skript`). */
+.podsvechen{outline:2px solid var(--accent);border-radius:6px;background:var(--accent-soft)}
+/* ТРИ КОЛОНКИ ВО ВЕСЬ ЭКРАН. Слева и посередине — школьник и его преподаватель,
+   справа — преподаватель и его школьники. Разделены вертикальной линией.
+   Списками, а не квадратиками: человек ищет свою фамилию по алфавиту. */
+.dva{display:grid;grid-template-columns:1fr 1fr;gap:0 2.5rem;align-items:start}
+.odin{max-width:none}
+.kol{padding-right:2rem;border-right:1px solid var(--rule);min-width:0}
+.kol:last-child{border-right:none;padding-right:0}
+/* Крупнее и плотнее: пустой половины экрана быть не должно. */
+.para{display:flex;gap:.8rem;align-items:baseline;padding:.34rem 0;flex-wrap:wrap;
+  border-bottom:1px solid var(--rule);font-size:1.15rem}
+/* На вкладках групп места больше — там строки крупнее. */
+#v-В .para,#v-Д .para,#v-Н .para{font-size:1.6rem;padding:.48rem 0}
+#v-В .komu,#v-Д .komu,#v-Н .komu{font-size:1.5rem}
+/* На общей вкладке школьников, наоборот, чуть плотнее — там 54 строки. */
+#v-shk .para{font-size:1.08rem;padding:.26rem 0}
+#v-shk .komu{font-size:1rem}
+/* 🔴 СЖИМАЕТСЯ ИМЯ, А НЕ СТОЛБЕЦ. Раньше `.kto` не сжимался вовсе, и самая
+   длинная фамилия выталкивала поля за правый край колонки — страница получала
+   горизонтальную прокрутку (замер верификатора: `scrollWidth` 1444 при окне
+   1440, три строки за границей). Столбцы дней обязаны стоять ровно; имя,
+   которое не влезло, честнее обрезать многоточием — оно целиком есть в
+   подсказке поиска и в самой строке при наведении. */
+.para .kto{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.para .komu{margin-left:auto;text-align:right;color:var(--muted);font-family:var(--sans);
+  font-size:1.05rem}
+.para .komu.deti{white-space:normal;text-align:right}
+.para .komu.deti span{display:inline-block;margin-left:.55rem}
+/* 🔴 ИМЯ — СТРОКОЙ, ДЕТИ — РЯДОМ ПОД НИМ, ВО ВСЮ ШИРИНУ. Владелец 07.09:
+   «сбоку в углу школьники — они должны быть спокойно расположены в ряд на всю
+   ширину, а не сжаты к правой стороне… почему-то обрезалась Наталья Стрелкова,
+   хотя там куча места». Прижатые вправо, они делили строку с именем и толкали
+   его в многоточие; в столбик под именем места хватает обоим.
+   Имя здесь НЕ обрезается вовсе: строка отдана ему целиком. */
+/* 🔴 КАРТОЧКЕ ВЕРНУЛИ ВЫСОТУ. Владелец 07.09: «ты стал гораздо больше места
+   уделять на каждого преподавателя… сейчас ты её обратно случайно сжал. Сделай
+   обратно её широкой». Имя крупное, дни под ним, между строками воздух: этот
+   столбец читают издалека, стоя, посреди занятия. */
+.kol-pr .para{flex-direction:column;align-items:stretch;gap:.35rem;
+  padding:.85rem 0;font-size:1.5rem}
+.kol-pr .komu.deti{font-size:1.05rem}
+.kol-pr .para .kto{overflow:visible;text-overflow:clip;white-space:normal;
+  flex:0 0 auto}
+/* Дети идут СЛЕВА НАПРАВО во всю ширину карточки: `margin-left:auto` из общего
+   правила `.para .komu` прижимал их к правому краю, и последние фамилии уезжали
+   за границу колонки — ровно то, что владелец увидел как «сжаты к правой
+   стороне» и «обрезалась Наталья Стрелкова, хотя там куча места». */
+#s-rasp .kol-pr .komu.deti,.kol-pr .komu.deti{margin-left:0;margin-right:auto;
+  text-align:left;font-size:1rem;white-space:normal;display:flex;flex-wrap:wrap;
+  align-items:baseline;gap:.15rem .35rem;flex:1 1 100%;min-width:0}
+.kol-pr .komu.deti span{display:inline-flex;margin-left:0}
+#s-rasp .kol-pr .para{flex-wrap:wrap;flex-direction:column}
+#s-rasp .kol-pr .para .kto{white-space:normal;overflow:visible;
+  text-overflow:clip;flex:0 0 auto}
+/* Счётчик в карточке — в конце ряда детей, а не за краем. */
+.kol-pr .komu.deti .sch{margin-left:.3rem}
+/* День в карточке принимающего — своей строкой: подпись слева, дети за ней.
+   Так видно, что списков ДВА и они разные, — а слитый ряд читался как один. */
+.den-ryad{display:flex;align-items:baseline;gap:.5rem;flex:1 1 100%;min-width:0}
+.den-podpis{flex:0 0 1.7rem;color:var(--faint);font-family:var(--sans);
+  font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.deti-ryad{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2rem .35rem;
+  flex:1 1 auto;min-width:0}
+/* 🔴 ЧИСЛО СТОИТ СВОЕЙ КОЛОНКОЙ, А НЕ ТАМ, ГДЕ КОНЧИЛИСЬ ФАМИЛИИ. Владелец 07.09:
+   «почему съехали цифры? Почему цифры ни на одном уровне? Должно быть на одном
+   уровне, должна быть колонка, в которой цифры». Число, стоящее вплотную к
+   последней фамилии, каждую строку начинается в новом месте, и глазу приходится
+   искать его заново — а читают этот столбец сверху вниз, одним движением. */
+.den-ryad .sch{flex:0 0 2.2rem;margin-left:auto;text-align:right}
+/* Запятая между фамилиями рисуется CSS: у гостя и у организатора один и тот же
+   элемент `.det`, и разметка обоих режимов отличается ровно кнопкой-органом. */
+.zpt:not(:last-child)::after{content:", "}
+.tabl .zpt:not(:last-child)::after{content:none}
+/* Кнопка входа — справа в том же меню, тем же шрифтом, что и его пункты. */
+.vhod{margin-left:auto;font-family:var(--sans);font-weight:600;font-size:1.05rem;
+  color:var(--accent);text-decoration:none;padding:.35em 1rem;border:1px solid var(--accent);
+  border-radius:8px;white-space:nowrap}
+.vhod:hover{background:var(--accent);color:var(--panel)}
+.rezhim{font-family:var(--sans);font-weight:600;font-size:.95rem;color:var(--warm);
+  margin-left:auto;margin-right:.8rem;white-space:nowrap}
+.rezhim+.vhod{margin-left:0}
+/* ── ОРГАНЫ ПРАВКИ. Стоят там же, где у гостя текст, и больше нигде. ── */
+.org{font:inherit;font-family:var(--sans);font-size:.95rem;color:var(--text);
+  background:var(--panel);border:1px solid var(--rule);border-radius:7px;
+  padding:.12em .3em;margin-left:.4rem;max-width:11rem}
+.org:hover,.org:focus{border-color:var(--accent);outline:none}
+/* Столбец с числом: узкий, по правому краю, одинаковый во всех строках — по нему
+   читают нагрузку сверху вниз, а не ищут число в конце каждого списка. */
+.prep-tab td.tsch{font-family:var(--sans);font-weight:600;text-align:right;
+  width:2.4rem;padding-right:.9rem;white-space:nowrap;color:var(--accent)}
+/* Строки таблицы принимающих — просторнее: их читают издалека, стоя. */
+.prep-tab td{padding-top:.5rem;padding-bottom:.5rem}
+/* 🔴 ЧИСЛО НЕ КРАСНЕЕТ — КРАСНЕЕТ МЕСТО. Владелец 07.09: «цифра 5 плохо
+   выглядит. Лучше писать 5 синим, а красным подчёркивать, выделять поле — не
+   обязательно красным, каким-то менее ярким, красноватым». Красная цифра среди
+   серых читается как ошибка ЧИСЛА; подсвеченное поле читается как «здесь
+   перебор», а это и есть смысл. */
+/* 🔴 ПОДСВЕЧИВАЕТСЯ СТРОКА, А НЕ ЧИСЛО. Владелец 07.09: «я предлагал выделять не
+   цифру 5 красноватым цветом, а всю строчку… точно так же, если у школьника не
+   назначены преподаватели, это тоже должно подчёркиваться». Подсвеченное число —
+   это «неверное число»; подсвеченная строка — «здесь разберись», и разбираются
+   именно со строкой. */
+.tsch.ploho,.sch.ploho{color:var(--accent)}
+tr:has(.tsch.ploho),.para:has(.sch.ploho),.den-ryad:has(.sch.ploho){
+  background:var(--krasn-fon)}
+#s-rasp .para.krasn{background:var(--krasn-fon)}
+#s-rasp .para.krasn .kto b{color:var(--text)}
+/* Подсветка не должна обрывать строку по краям колонки: она идёт от края до края. */
+tr:has(.tsch.ploho) td:first-child,.para:has(.sch.ploho),#s-rasp .para.krasn{
+  border-radius:8px}
+.den-ryad:has(.sch.ploho){border-radius:8px;padding:.1rem .35rem;margin:0 -.35rem}
+.sch{font-family:var(--sans);font-weight:600;font-size:.8em;color:var(--accent)}
+
+/* Крестик = открепить. Появляется по клику на фамилии преподавателя, не раньше:
+   восемнадцать всегда видимых крестиков — это приглашение промахнуться. */
+/* ── ТАБЛЕТКА ФАМИЛИИ. Приём взят из рабочего файла распределения владельца:
+   мелкий шрифт и скруглённая пилюля, чтобы пять школьников влезали в строку
+   преподавателя и не переносились, оставляя дыру. Крестик занимает НОЛЬ ширины,
+   пока на таблетку не навели мышь, — поэтому у гостя и у организатора список
+   ровно одинаковой ширины. Элемент один и тот же; правку добавляет data-org. */
+/* ── БЛИЖАЙШЕЕ ЗАНЯТИЕ И КАБИНЕТ — В СТРОКЕ ВКЛАДОК, а не отдельной полосой. ── */
+.tabbar-rasp .zanyatie{margin-left:auto;align-self:center;display:flex;align-items:center;gap:.3rem}
+.skoro{font-family:var(--sans);font-size:1rem;color:var(--muted);white-space:nowrap}
+.kab-verh{display:none;align-self:center;margin-left:.9rem}
+#t-В:checked~.tabbar .kab-verh-В,#t-Д:checked~.tabbar .kab-verh-Д,
+#t-Н:checked~.tabbar .kab-verh-Н{display:inline-block}
+/* ── ГРУППА: преподаватели в рамке, служебное — под ними. ── */
+.prep-ramka{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  padding:.5rem 0}
+.gruppa-niz{margin-top:1rem;border:1px solid var(--rule);border-radius:11px;
+  padding:.7rem 1.1rem;background:var(--panel);display:flex;align-items:center;
+  gap:1.2rem;flex-wrap:wrap;font-family:var(--sans);font-size:.98rem;color:var(--muted)}
+.gruppa-niz b{color:var(--text)}
+.gruppa-cifry{white-space:nowrap}
+/* Строки списков подсвечиваются под мышкой — видно, на чём стоишь. */
+#s-rasp .para:hover{background:var(--accent-soft);border-radius:6px}
+.prep-tab tr:hover td{background:var(--accent-soft)}
+/* ── СТРАНИЦА КЛАССА. Ни одного повтора имени сайта: оно стоит наверху. ── */
+.klass{display:grid;grid-template-columns:minmax(0,1fr) 17rem;gap:0 3rem;align-items:start}
+@media(max-width:900px){.klass{grid-template-columns:1fr}}
+/* ── ЗАГЛАВНАЯ. Кривая — подложка во весь экран с выходом за края;
+   содержание лежит НА ней двумя потоками. Не колонка текста и колонка картинки:
+   так картинка не взаимодействует с текстом, а просто стоит рядом. ── */
+/* 🔴 ЗАГЛАВНАЯ РОВНО В ЭКРАН, БЕЗ ПРОКРУТКИ. Кривая выходит за края, и без
+   обрезки на самой секции это давало полосы прокрутки вбок и вниз: страница
+   становилась больше окна. Обрезаем по секции — она во всю ширину окна, поэтому
+   видимого шва не появляется, а прокрутка исчезает. */
+#s-start{overflow:hidden;padding-bottom:1rem}
+/* 🔴 НА ЗАГЛАВНОЙ СТРОКИ НЕ ПОДСВЕЧИВАЮТСЯ. Общая подсветка `tr:hover` создана
+   для таблиц, по строкам которых нажимают. На заглавной нажимать не по чему, и
+   бирюзовая полоса под мышкой обещает действие, которого нет. Владелец дважды:
+   «когда я навожу на понедельник… выделяется бирюзовая подсветка. Очень
+   странно». Гасим по всей секции, а не по одной таблице. */
+#s-start tr:hover td,#s-start tr:hover th{background:none}
+.glav{position:relative;min-height:calc(100vh - 9.5rem);display:flex;
+  flex-direction:column}
+/* 🔴 ЗАГЛАВНАЯ ДОХОДИТ РОВНО ДО НИЖНЕГО КРАЯ ОКНА. Секция обрезает холст по
+   себе (`overflow:hidden`), и пока она кончалась выше окна, кривая обрывалась
+   ровной горизонталью, а под ней лежала пустая полоса. Владелец: «у тебя опять
+   обрезалась картинка — нижней части нет, нет кривого дракона».
+   6.3rem = высота меню (4rem) + отступы секции сверху и снизу. Правило
+   включено только там, где меню стоит одной строкой: если оно переносится,
+   точная высота перестаёт сходиться и появилась бы полоса прокрутки. */
+@media(min-width:1100px){.glav{min-height:calc(100vh - 6.3rem)}
+  #s-start{margin-bottom:-2rem}}
+/* 🔴 ХОЛСТ ВЫХОДИТ ЗА КРАЯ ЭКРАНА, А НЕ ОБРЫВАЕТСЯ ВНУТРИ НЕГО. Раньше он был
+   меньше страницы, и кривая кончалась ровной вертикалью посреди экрана — прямая
+   линия там, где у фрактала её быть не может, и глаз цепляется именно за неё.
+   Владелец: «кривая обрезана… её нельзя так делать, надо её до конца пустить».
+   Отступы в vw/vh и отрицательные — чтобы холст перекрывал поля `.holst` и
+   уходил за границу окна со всех сторон. */
+/* Верхний край уходит ПОД панель меню — она непрозрачна и кривую скрывает.
+   Иначе под панелью оставалась ровная горизонталь: у фрактала прямых границ
+   не бывает, и глаз цепляется именно за неё. */
+.glav-risunok{position:absolute;left:-6vw;right:-6vw;top:-18vh;bottom:-10vh;
+  z-index:0;pointer-events:none;overflow:hidden}
+/* Тише, чем хочется: кривая обязана попадаться на глаза и не мешать читать.
+   Владелец: «должна быть незаметной, не сильно выбивать содержание». */
+#drakon{width:100%;height:100%;opacity:.20}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) #drakon{opacity:.24}}
+.glav-shapka,.glav-setka{position:relative;z-index:1}
+/* 🔴 ГАЛО ВОКРУГ ТЕКСТА, А НЕ ПОДЛОЖКА ПОД НИМ. Кривая набрана тем же
+   акцентным цветом, что и часть надписей, и на её плотных участках текст читался
+   «белым по белому». Плашка под текстом убила бы весь смысл фона; свечение
+   цветом фона отодвигает кривую ровно на толщину буквы и не рисует ни одной
+   лишней границы. Приём взят из скилла cinematic-longread — там же он назван
+   halo и применён по той же причине. */
+.glav-tekst,.glav-sboku{text-shadow:0 0 10px var(--bg),0 0 22px var(--bg),
+  0 0 3px var(--bg)}
+/* Имена принимающих — основным цветом, а не приглушённым: на фоне кривой
+   приглушённый сливался с ней. */
+.prep-spisok{color:var(--text)}
+.rasp .den-vremya{color:var(--text)}
+.glav-imya{font-size:clamp(2.6rem,6.2vw,5.6rem);font-weight:600;letter-spacing:-.03em;
+  line-height:1.02;margin:1.2rem 0 0}
+.glav-pod{font-family:var(--sans);font-size:clamp(1.05rem,1.8vw,1.4rem);
+  color:var(--muted);margin:.5rem 0 0}
+/* 🔴 ЛИСТОК ПОДНЯТ В ПУСТОТУ, А НЕ ПРИЖАТ К НИЗУ. Раньше вся сетка уезжала
+   вниз `margin-top:auto`, и над ней зияла треть экрана. Теперь колонка занимает
+   всю высоту и распределяет содержание по ней: листок сразу под заголовком,
+   «кто ведёт» — у нижнего края. Владелец: «вынести Деревья вверх на пустое
+   место и постараться заполнить большую часть пространства». */
+.glav-setka{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
+  gap:2.5rem 4rem;margin-top:2.5vh;padding:0;align-items:stretch;flex:1 1 auto}
+.glav-glavnoe{display:flex;flex-direction:column;justify-content:space-between;
+  gap:2rem;padding-bottom:.5rem}
+/* Карточка опускается отступом сверху в самом правиле `.blok-listok` ниже —
+   отдельным правилом здесь его гасило `margin:0` оттуда же: при равной силе
+   побеждает то, что стоит в файле ниже. */
+@media(max-width:940px){.glav-setka{grid-template-columns:1fr;align-items:start}}
+/* Главное — листок. Он и набран крупнее всего, что рядом. */
+/* ── 🔒 КАРТОЧКА БЛИЖАЙШЕГО ЛИСТКА — ЗАКРЕПЛЁННАЯ СХЕМА. НЕ УСЛОЖНЯТЬ.
+   Схему стережёт `proverit_shemu()`: страница не соберётся, если её нарушить.
+
+   ОДНА гарнитура, ОДИН кегль, ОДНА насыщенность, ОДИН цвет на всё содержание.
+   Серым набрана только подпись сверху — тем же служебным стилем, что и
+   подписи соседних блоков.
+
+   Так вышло не с первого раза. Сначала на карточке стояли две гарнитуры,
+   четыре кегля, четыре цвета и три плашки с фоном; владелец сосчитал:
+   «на одной карточке 10 разных визуальных элементов». Потом осталось
+   четыре цвета и смесь жирного с нежирным — и это оказалось той же ошибкой
+   помельче: «серый, желтовато-серый, белый и голубой… здесь должно быть
+   максимум два цвета. Либо всё жирное, либо всё нежирное. Нельзя смешивать
+   жирное и нежирное в одном месте — так не работает».
+
+   Отсюда три запрета, которые и проверяются на сборке:
+   ЗАПРЕЩЕНО жирное начертание внутри карточки;
+   ЗАПРЕЩЁН акцентный цвет — в том числе на ссылках версий;
+   ЗАПРЕЩЕНЫ приглушённые и служебные цвета в строках карточки. */
+/* `margin-top` опускает ОДНУ карточку: колонка разложена `space-between`, и
+   «кто ведёт» остаётся приколоченным к нижнему краю. Владелец: «сам блок
+   опустить вниз, не меняя ничего другого». */
+/* 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09, вторая: в карточке важно ОДНО СЛОВО, всё
+   остальное — служебное. Дата, время, уровни и кабинеты уходят на один общий
+   мелкий кегль, а название листка остаётся крупным. Блок сжимается по ширине
+   САМОЙ ШИРОКОЙ своей строки (`width:max-content`) — тем самым «прямоугольник
+   повторяет строчку с названием» и перестаёт вылезать за колонку. */
+.blok-listok{margin:4.5rem 0 0;width:max-content;max-width:min(34rem,100%);
+  font-family:var(--sans);font-size:clamp(1.02rem,1.15vw,1.24rem);
+  line-height:1.3;font-weight:400}
+.blok-listok p{margin:.15rem 0 0;color:var(--text);font-weight:400}
+.listok-kogda{margin-top:.4rem}
+/* Версии — ссылки того же цвета и веса, что и текст вокруг. Голубой на них
+   был четвёртым цветом на карточке из четырёх строк; подчёркивание под мышкой
+   показывает, что по ним нажимают, и не вводит ни одного нового цвета. */
+/* 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: в карточке доминирует НАЗВАНИЕ листка.
+   Различает только КЕГЛЬ: вес и цвет на карточке по-прежнему одни на всё
+   содержание, и замок схемы это подтверждает. Номер не выброшен — он ушёл
+   на второй план, потому что по нему всё ещё узнают листок в разговоре. */
+.listok-tema{font-size:2.55em;line-height:1.12;cursor:pointer}
+.listok-tema:hover{text-decoration:underline}
+.listok-nom{font-size:1em;margin-right:.4em;cursor:pointer;
+  vertical-align:.9em;opacity:.75}
+.listok-nom:hover{text-decoration:underline}
+/* 🔴 Преподаватель видит В КАРТОЧКЕ свой ОДИН кабинет и своих школьников,
+   а общая строка трёх кабинетов у него прячется. Прячется именно CSS-ом, а не
+   отсутствием в разметке: обе строки обязаны стоять в HTML, иначе побайтовая
+   сверка каркаса гостя с админом и с преподавателем разойдётся (разбор — в
+   `veb/razdely/glavnaya.py`, рядом с `moyo_html`). */
+.blok-listok:has(.listok-moyo) .listok-obshchij{display:none}
+.listok-moyo{white-space:normal;line-height:1.35}
+.listok-stroka{margin-top:.35rem !important;margin-bottom:.15rem !important;
+  white-space:nowrap}
+.listok-ver{font-size:1em}
+.blok-listok .zag2{margin-bottom:.1rem}
+.listok-ver{margin-left:.3rem;white-space:nowrap}
+.listok-ver a{color:inherit;text-decoration:none;padding:0 .28rem;
+  font-weight:inherit}
+.listok-ver a:hover{text-decoration:underline}
+.blok-listok .net{color:inherit}
+.vedut{border-collapse:collapse;font-size:clamp(1.6rem,2.5vw,2.5rem)}
+.vedut td{border:none;padding:.5rem 0;vertical-align:baseline}
+.vedut .predmet{color:var(--muted);padding-right:2.6rem;white-space:nowrap;
+  font-family:var(--sans);font-size:clamp(1.2rem,1.45vw,1.65rem)}
+.imya-celikom{white-space:nowrap}
+/* Боковое — поверх кривой, мельче, с воздухом между блоками. */
+.glav-sboku{display:flex;flex-direction:column;gap:2.4rem;justify-content:flex-end}
+.sboku-blok{}
+/* Боковая колонка набрана крупно нарочно: мелким она занимала нижнюю треть,
+   а верх оставался пустым. Владелец: «увеличить шрифт… за счёт этого меньше
+   будет пустого места». */
+.rasp{border-collapse:collapse;font-size:clamp(1.4rem,1.9vw,2.2rem)}
+.rasp td{border:none;padding:.45rem 0;vertical-align:baseline}
+.rasp .den-imya{font-weight:600;padding-right:2rem}
+.rasp .den-vremya{white-space:nowrap;color:var(--muted);font-family:var(--sans)}
+.prep-spisok{list-style:none;margin:.6rem 0 0;padding:0;
+  font-size:clamp(1.3rem,1.7vw,2rem);columns:2;column-gap:2.2rem}
+.prep-spisok li{padding:.28rem 0;break-inside:avoid}
+.prep-spisok.ranshe{columns:2;color:var(--muted);font-size:clamp(1.1rem,1.35vw,1.55rem)}
+.ranshe-zag{margin-top:1.4rem}
+.zag2{font-size:clamp(.82rem,.95vw,1rem)}
+.klass-sboku{border-left:1px solid var(--rule);padding-left:2rem}
+@media(max-width:900px){.klass-sboku{border-left:none;padding-left:0;margin-top:1.5rem}}
+.ranshe-zag{margin-top:1.4rem}
+/* ── ЛИСТКИ: восьмой класс двумя столбцами, чтобы не тянуться одной колонкой. ── */
+.dva-listka{display:grid;grid-template-columns:1fr 1fr;gap:0 3rem;align-items:start}
+@media(max-width:900px){.dva-listka{grid-template-columns:1fr}}
+/* Переключатель дня стоит в той же строке, что и вкладки, а не отдельной полосой. */
+/* ── СТРОКА НЕ ПЕРЕНОСИТСЯ. Перенос был не косметикой, а поломкой: список
+   переставал читаться колонкой, и на месте переноса зияла дыра. Причина —
+   раздутые выпадающие списки, съедавшие место у фамилии. Лечится тем же, чем
+   в рабочем файле распределения: фамилии отдаётся всё оставшееся место, а поля
+   получают фиксированную ширину и не растягиваются. */
+#s-rasp .para{flex-wrap:nowrap}
+#s-rasp .para .kto{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#s-rasp .para .komu{flex:0 0 auto;white-space:nowrap}
+#s-rasp .para .komu.deti{flex:1 1 auto;white-space:normal}
+.org.pr-sel{max-width:9.6rem;flex:0 0 auto}
+/* 🔴 НА ВКЛАДКАХ ГРУПП КОЛОНКА ВДВОЕ УЖЕ: там рядом стоит список принимающих.
+   Поля здесь компактнее ровно настолько, чтобы фамилия школьника помещалась
+   целиком — она в этой таблице главное, а имя преподавателя и так повторено
+   справа, в его карточке. */
+#v-В .org.pr-sel,#v-Д .org.pr-sel,#v-Н .org.pr-sel{max-width:8.6rem}
+#v-В .org.gr-sel,#v-Д .org.gr-sel,#v-Н .org.gr-sel{width:3.2rem;flex:0 0 3.2rem}
+#v-В .otsut,#v-Д .otsut,#v-Н .otsut{font-size:.76rem;padding:.12em .45em}
+/* 🔴 ИМЯ ПЕРЕНОСИТСЯ, А НЕ ОБРЕЗАЕТСЯ. Владелец 07.09: «посмотри, как обрезалась
+   вёрстка текста — это просто жесть. Слева в куче мест имена обрезались, хотя
+   место есть». На вкладках групп колонка вдвое уже (рядом стоит список
+   принимающих), и самая длинная фамилия в неё не влезает никогда — сколько ни
+   ужимай поля. Многоточие прячет то, ради чего в таблицу и смотрят; перенос
+   стоит одной лишней строки и не прячет ничего. */
+#v-В .kol .para,#v-Д .kol .para,#v-Н .kol .para{flex-wrap:wrap}
+#v-В .kol .kto,#v-Д .kol .kto,#v-Н .kol .kto{white-space:normal;overflow:visible;
+  text-overflow:clip;flex:1 1 9rem}
+#v-В .kol .komu,#v-Д .kol .komu,#v-Н .kol .komu{flex:0 0 auto}
+/* 🔴 ШИРИНА ФИКСИРОВАНА, А НЕ ОГРАНИЧЕНА СВЕРХУ. При `max-width` поле группы
+   мерилось по своему тексту — «нигде» шире, чем «В», — и на эту разницу ехали
+   ВЛЕВО оба столбца дня: замер верификатора, левый край поля «пн» гулял от 245
+   до 297 px в одной колонке, и таблица читалась лесенкой. */
+.org.gr-sel{width:3.8rem;flex:0 0 3.8rem}
+/* 🔴 НА ТЕЛЕФОНЕ ЗАПРЕТ ПЕРЕНОСА ПРЕВРАЩАЕТСЯ В ГОРИЗОНТАЛЬНУЮ ПРОКРУТКУ.
+   Фамилия и два выпадающих списка в 375 пикселей не помещаются никак, и строка
+   уезжает за край экрана — то есть лечение узкой колонки на большом экране
+   ломает маленький. Поэтому ниже 760 пикселей перенос возвращается: там колонка
+   всё равно одна, и разваливать ей нечего. Поймано прогоном в мобильном виде,
+   а не рассуждением: `scrollWidth > clientWidth` было истиной. */
+@media(max-width:760px){
+  #s-rasp .para{flex-wrap:wrap}
+  #s-rasp .para .kto{white-space:normal;overflow:visible;text-overflow:clip}
+  #s-rasp .para .komu{white-space:normal}
+  .org.pr-sel{max-width:100%}
+  .kab-polya{margin-left:0}
+}
+.tabl{display:inline-flex;align-items:center;gap:0;padding:.14em .55em;
+  border:1px solid var(--rule);border-radius:999px;background:var(--panel);
+  font-family:var(--sans);font-size:.85rem;line-height:1.25;color:var(--text);
+  white-space:nowrap;margin:.12em .3em .12em 0}
+.tabl[data-snyat]{cursor:pointer}
+.tabl[data-snyat]:hover,.tabl[data-snyat]:focus-visible{border-color:var(--krasn);
+  background:var(--krasn-fon);color:var(--krasn);outline:none}
+.tabl .x{width:0;overflow:hidden;color:var(--krasn);font-size:1rem;line-height:1;
+  transition:width .12s,margin-left .12s}
+.tabl[data-snyat]:hover .x,.tabl[data-snyat]:focus-visible .x{width:.7em;margin-left:.3em}
+/* Поля кабинета: два дня рядом, оба на одном экране. */
+.kab-polya{margin-left:auto;display:inline-flex;gap:.9rem;align-items:center;flex-wrap:wrap}
+.kab-pole{display:inline-flex;align-items:center;gap:.4rem;font-size:.95rem;
+  color:var(--muted)}
+.kab-pole input{width:5rem;text-align:center;font-weight:600;font-size:1.05rem}
+.shapka{display:flex;align-items:baseline;gap:1.2rem;flex-wrap:wrap}
+/* ── ВСПЛЫВАЮЩЕЕ ОКНО ВХОДА ── */
+.okno{position:fixed;inset:0;z-index:100;display:flex;align-items:center;
+  justify-content:center;padding:1rem}
+.okno[hidden]{display:none}
+.okno-fon{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.okno-telo{position:relative;background:var(--panel);border:1px solid var(--rule);
+  border-radius:14px;padding:1.6rem 1.8rem;min-width:min(22rem,92vw);
+  box-shadow:0 18px 50px rgba(0,0,0,.3);font-family:var(--sans)}
+.okno-telo h2{margin:0 0 1rem;font-size:1.35rem;font-weight:600}
+.okno-telo label{display:block;font-size:.95rem;color:var(--muted);margin:0 0 .35rem}
+.okno-telo input{width:100%;font:inherit;font-size:1.1rem;padding:.55em .7em;
+  border:1px solid var(--rule);border-radius:9px;background:var(--bg);color:var(--text)}
+.okno-telo input:focus{outline:none;border-color:var(--accent)}
+.okno-oshibka{color:var(--krasn);font-size:.95rem;margin:.7rem 0 0}
+.okno-knopki{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.3rem}
+button.glavnaya,button.vtoraya{font:inherit;font-family:var(--sans);font-weight:600;
+  padding:.5em 1.4em;border-radius:9px;cursor:pointer;border:1px solid var(--rule);
+  background:var(--panel);color:var(--text)}
+button.glavnaya{background:var(--accent);border-color:var(--accent);color:#fff}
+button.glavnaya:hover{opacity:.88}
+button.vtoraya{color:var(--muted)}
+button.vtoraya:hover{color:var(--text)}
+/* ── ПАНЕЛЬ НЕСОХРАНЁННЫХ ПРАВОК ── */
+/* ── ВЕРХНЯЯ ПАНЕЛЬ: имя, разделы, поиск, права. Одна строка на всё. ── */
+.menu .im{font-weight:600;font-size:1.05rem;margin-right:1.4rem;white-space:nowrap;
+  color:var(--text);padding:0;background:none;cursor:default}
+.menu .im:hover{background:none}
+/* 🔴 ШИРЕ, А НЕ ПРЕЖНИЕ 34REM. Владелец 09.09, дословно: «почему ты выбрал
+   какую-то очень узкую маленькую текстовую область? Хотя здесь места на
+   каждой странице много». `.menu` уже переносит строку по `flex-wrap:wrap`,
+   так что рост поля отодвигает соседей на вторую строку, а не режет их. */
+.poisk-verh{flex:3 1 24rem;max-width:56rem;margin:0 1.2rem;min-width:10rem}
+.poisk-verh .poisk{margin:0;font-size:1rem;padding:.42em .8em;width:100%;max-width:none}
+.poisk-verh .spisok{top:2.6rem}
+.poisk-verh #nashli{position:absolute;left:0;right:0;top:2.6rem;z-index:19}
+.verh-prava{display:flex;align-items:center;gap:.5rem;margin-left:auto;white-space:nowrap}
+.verh-prava button{padding:.38em 1em;font-size:.98rem}
+.schyot-pravok{font-variant-numeric:tabular-nums}
+.est-pravki .glavnaya{box-shadow:0 0 0 3px var(--accent-soft)}
+button.glavnaya[disabled],button.vtoraya[disabled]{opacity:.45;cursor:default}
+button.glavnaya[disabled]:hover{opacity:.45}
+/* Панель занимает низ экрана — страница не должна прятать под ней последние строки. */
+body{padding-bottom:2rem}
+/* Тронутое, но не сохранённое — видно глазом и не спутаешь с сохранённым. */
+.tronuto{background:rgba(201,116,58,.10);outline:2px solid rgba(201,116,58,.35);
+  outline-offset:2px;border-radius:6px}
+.tabl.snyato{text-decoration:line-through;opacity:.55}
+/* Ответ сервера человеку. Отказ виден внизу экрана и не пропускается. */
+.soob{position:fixed;left:0;right:0;bottom:0;z-index:60;font-family:var(--sans);
+  font-size:1.05rem;padding:.7rem 1.2rem;display:none}
+.soob.idet{display:block;background:var(--accent-soft);color:var(--text)}
+.soob.ploho{display:block;background:#c0392b;color:#fff;font-weight:600}
+/* Таблица преподавателей: колонки ровные, кабинет уходит вправо. */
+.prep-tab{width:100%;border-collapse:collapse}
+.prep-tab td{padding:.55rem .8rem .55rem 0;border-bottom:1px solid var(--rule);
+  vertical-align:baseline;font-size:1.75rem}
+.prep-tab .tp{white-space:nowrap;width:1%;padding-right:2rem}
+.prep-tab .td-deti{color:var(--muted);font-family:var(--sans);font-size:1.25rem;
+  width:auto;padding-right:2rem}
+.prep-tab tr.skryt{display:none}
+.prep-tab .tg{font-family:var(--sans);font-weight:600;color:var(--accent);
+  text-align:center;width:1%;white-space:nowrap}
+.prep-tab .tk{text-align:right;width:1%;white-space:nowrap;padding-right:0}
+.para.skryt{display:none}
+/* Переключатель дня — сверху справа, рядом с заголовком. */
+.shapka-str{display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap;margin:0 0 .7rem}
+/* ── ДВА ДНЯ В ОДНОЙ СТРОКЕ ───────────────────────────────────────────────────
+   Понедельник и четверг стоят рядом, столбцами равной ширины, и подписаны шапкой.
+   Ширина фиксирована и одинакова у обоих: столбец, который меряется по самому
+   длинному имени внутри себя, разъезжается от строки к строке, и глаз перестаёт
+   читать таблицу сверху вниз — а читают её именно так (`doc/TZ-raspredelenie-
+   dizajn-i-dva-sloya.md`: публичный вид читается ПО СТОЛБЦАМ). */
+#v-shk .para .komu,#v-prep .para .komu,#v-В .para .komu,#v-Д .para .komu,
+#v-Н .para .komu{display:flex;align-items:baseline;justify-content:flex-end;
+  gap:.4rem;min-width:0}
+/* 🔴 СТОЛБЕЦ ДНЯ НЕ СЖИМАЕТСЯ (`flex:0 0`), И ЭТО И ЕСТЬ «ОДНА ТАБЛИЧКА». Со
+   сжатием ширина столбца зависела бы от длины имени в СВОЕЙ строке, столбцы
+   разъезжались бы по вертикали, и таблицу нельзя было бы читать сверху вниз —
+   а читают её именно так. На узком экране раскладка и так уходит в одну колонку
+   (медиазапрос ниже), поэтому фиксированная ширина здесь ничего не ломает. */
+/* 🔴 КОЛОНКА ДНЯ — ФЛЕКС-РЯД ИЗ ДВУХ ЧАСТЕЙ, А НЕ ОДНА СТРОКА ТЕКСТА (ПРАВКА 1,
+   владелец: «на первом скриншоте с номерами кабинетов… они должны быть выравнены
+   в колонку»). Ширина ячейки фиксирована (`flex:0 0 9.6rem`), как и была; но
+   раньше имя преподавателя и плашка кабинета были СКЛЕЕНЫ в одну надпись внутри
+   неё — на длинных именах («Елена Мирошниченко», «Александр Тертерян», 18
+   символов, сняты запросом к живой базе) плашка выдавливалась за правую границу
+   колонки и налезала на соседнюю. Теперь `.prep-imya` — усекаемое многоточием
+   (`flex:1 1 auto`, отдаёт место соседу), `.kab-mesto` — несжимаемое
+   (`flex:0 0 auto`): плашка держит своё место у правого края ВСЕГДА, чем бы имя
+   ни было. */
+.para .komu .dv{flex:0 0 9.6rem;min-width:0;display:flex;align-items:baseline;
+  justify-content:flex-end;gap:.3rem}
+.para .komu .dv .prep-imya{flex:1 1 auto;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.para .komu .dv .kab-mesto{flex:0 0 auto}
+/* Ячейка без вложенных частей (например пустая ячейка заголовка `shapka_dnej`,
+   `.dv-gr`/`.dv-zam`) держит своё прежнее поведение: `justify-content:flex-end`
+   уже прижимает голый текстовый узел вправо без потребности в `.prep-imya`. */
+/* 🔴 ТА ЖЕ БОЛЕЗНЬ НА ВКЛАДКЕ «ПРИНИМАЮЩИМ» (ПРАВКА 1, второй скриншот владельца
+   — «с именами преподавателей»): плашка кабинета была последним элементом ВНУТРИ
+   `.deti-ryad` (список детей переносится по словам), и вставала там, где перенос
+   случайно кончился в конкретной строке — не колонкой. `.kab-mesto` здесь —
+   сосед `.deti-ryad` внутри `.den-ryad`, тем же приёмом, что уже решает эту
+   задачу для счётчика `.sch` двумя строками ниже. */
+.den-ryad .kab-mesto{flex:0 0 auto;margin-left:auto}
+/* Пустые ячейки шапки ровно под замком и полем группы — те же ширины, что у них. */
+.para .komu .dv-gr{flex:0 0 3.8rem}
+.para .komu .dv-zam{flex:0 0 1.7rem}
+/* Подпись дня — мелкая и ровно над своим столбцом; крупная подпись съедала
+   высоту строки и толкала последнего школьника за нижний край экрана. */
+.shapka-dnej{font-size:.72rem;padding:.1rem 0}
+.shapka-dnej .komu .dv{color:var(--faint)}
+.para .komu .dv .org{max-width:100%;width:100%}
+.shapka-dnej{border-bottom:2px solid var(--rule);color:var(--faint);
+  font-family:var(--sans);font-size:.85rem;letter-spacing:.06em;text-transform:uppercase}
+#v-shk .shapka-dnej,#v-В .shapka-dnej,#v-Д .shapka-dnej,#v-Н .shapka-dnej{font-size:.85rem}
+.shapka-dnej .komu .dv{color:var(--faint)}
+/* Шапка столбцов в таблице принимающих — та же роль, другой элемент. */
+.prep-shapka td{color:var(--faint);font-family:var(--sans);font-size:.85rem;
+  letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid var(--rule)}
+/* Ячейка дня в таблице принимающих: два столбца детей, потом галочки и группа;
+   у четверга своя граница слева — иначе он читается как продолжение понедельника. */
+.prep-tab td.dv-cht{border-left:1px solid var(--rule)}
+.tdni{white-space:nowrap;width:1%;padding-right:1.2rem}
+/* 🔴 ЭТО КНОПКИ, А НЕ ГАЛОЧКИ, И КВАДРАТИКА В НИХ НЕТ. Владелец 07.09: «там не
+   нужна галочка, нужна просто кнопка, на которую можно нажать. Квадратик не
+   нужен. Чем больше таких элементов, тем сложнее и хуже выглядит». На экране их
+   по одной на каждого из 54 школьников, и квадратик рядом с каждым словом даёт
+   вдвое больше предметов, чем ответов. Сам `input` остаётся — он и есть
+   состояние, и он же делает кнопку доступной с клавиатуры, — но его не видно. */
+.den-gal input,.otsut input,.zamok input{position:absolute;width:1px;height:1px;
+  opacity:0;pointer-events:none}
+.den-gal,.otsut,.zamok{display:inline-flex;align-items:center;cursor:pointer;
+  font-family:var(--sans);font-weight:600;line-height:1.2;white-space:nowrap;
+  border-radius:7px;border:1px solid transparent;transition:none}
+.den-gal{font-size:.88rem;color:var(--accent);border-color:var(--accent);
+  background:var(--accent-soft);padding:.16em .55em;margin-right:.3rem}
+.den-gal.pusto{color:var(--faint);border-color:var(--rule);background:none}
+.den-gal:hover{border-color:var(--accent)}
+/* Гостю — та же метка без органа: закрашена, если человек в этот день приходит. */
+.den-metka{display:inline-block;font-family:var(--sans);font-size:.9rem;font-weight:700;
+  color:var(--accent);border:1px solid var(--accent);border-radius:8px;
+  padding:.14em .5em;margin-right:.35rem;background:var(--accent-soft)}
+.den-metka.pusto{color:var(--faint);border-color:var(--rule);background:none}
+/* Вместо кнопки «Сохранить» на экране занятия — строка о том, что её нет и почему. */
+.srazu{font-family:var(--sans);font-size:.9rem;color:var(--muted);margin-right:.9rem}
+
+/* «Отсутствует» — одна и та же кнопка у школьника и у принимающего: тот же
+   орган, то же слово, тот же вид. Ненажатая — тихая, серая; нажатая — тёплая
+   заливка, потому что это состояние, в котором человек СЕГОДНЯ отсутствует, и
+   его надо видеть краем глаза, не читая. */
+.otsut{font-size:.82rem;color:var(--faint);border-color:var(--rule);
+  padding:.14em .6em;margin-left:.5rem}
+.otsut:hover{color:var(--warm);border-color:var(--warm)}
+.otsut:not(.pusto){color:var(--warm);border-color:var(--warm);
+  background:var(--krasn-fon)}
+/* Замок связки дней: зажат — дни правятся вместе, открыт — врозь. */
+.zamok{font-size:.95rem;padding:.06em .3em;margin:0 .15rem;border-color:transparent;
+  color:var(--accent)}
+.zamok.otkryt{color:var(--faint);opacity:.75}
+.zamok:hover{border-color:var(--rule)}
+/* Пока правка одного занятия едет в базу — строка приглушена. Она уезжает сразу,
+   без кнопки, и человеку нужен признак, что нажатие принято. */
+.para.idet,tr.idet{opacity:.45}
+/* Строка занятия: отмеченный отсутствующим — серым, а не вычеркнутым (он вернётся
+   сам); единственное красное — ребёнок, которого сегодня никто не ждёт. */
+#s-rasp .para.net .kto{color:var(--faint)}
+#s-rasp .para.krasn .kto b{color:var(--krasn)}
+/* Шапка страницы занятия: дата — орган, стрелки рядом, дверь в постоянное — справа. */
+.zan-navig{display:flex;align-items:center;gap:.35rem;margin-left:auto;
+  font-family:var(--sans);position:relative}
+/* 🔴 СТРЕЛКИ ОПИСАНЫ ЗДЕСЬ, И ИМЕННО ПОЭТОМУ ОНИ БОЛЬШЕ НЕ СИНЕ-ФИОЛЕТОВЫЕ.
+   Класс `.strelka` был описан в `veb/static/zanyatie.css` — файле СТАРОЙ
+   отдельной страницы занятия. Внутри сайта его нет, и ссылки красились
+   браузером по умолчанию: непосещённая синяя, посещённая фиолетовая. Владелец:
+   «почему загорается стрелочка неправильного цвета?.. превращают сайт в дизайн
+   из какого-то 1998 года». Цвет ссылки, заданный браузером, — всегда чужой. */
+.zan-navig .strelka{display:inline-flex;align-items:center;justify-content:center;
+  width:1.9rem;height:1.9rem;border-radius:8px;text-decoration:none;
+  color:var(--muted);font-size:1.05rem;line-height:1;border:1px solid var(--rule)}
+.zan-navig .strelka:hover{color:var(--accent);border-color:var(--accent);
+  background:var(--accent-soft)}
+/* Кнопка даты не выше строки вкладок: её рамка налезала на линию под вкладками,
+   и на наведении это читалось как сбой вёрстки (замечание владельца 07.09). */
+.data-zan{cursor:pointer;color:var(--text);font-size:1.02rem;font-weight:600;
+  white-space:nowrap;padding:.18em .65em;border:1px solid var(--rule);
+  border-radius:8px;line-height:1.35}
+.data-zan:hover{border-color:var(--accent);color:var(--accent)}
+/* 🔴 ПАНЕЛЬ ЗАНЯТИЙ ВМЕСТО СИСТЕМНОГО КАЛЕНДАРЯ. Владелец 07.09: «нам не нужен
+   календарь — у нас занятия два раза в неделю… нужна своя кастомная большая
+   панель, на которой легко достичь расписание года в кратком виде». Календарь
+   предлагает 365 дней, из которых годятся 64, и заставляет человека отсеивать
+   то, что система знает сама. Здесь весь год стоит месяцами, занятие — кнопкой
+   с числом и днём; прошедшие приглушены, сегодняшнее обведено. */
+/* 🔴 ПАНЕЛЬ ЗАНИМАЕТ МЕСТО, КОТОРОЕ У НЕЁ ЕСТЬ. Владелец 07.09: «у тебя огромное
+   пространство есть, которое ты можешь занять расписанием… сделай его шире —
+   кнопки больше, в два раза шире, чтобы всё было видно, удобная навигация,
+   ничего не вылезало в две строки». Узкая панель ломала каждый месяц на две
+   строки и превращала год в лестницу. */
+.kal-panel{display:none;position:absolute;top:calc(100% + .6rem);right:0;z-index:60;
+  max-height:76vh;overflow:auto;padding:1.1rem 1.4rem;border:1px solid var(--rule);
+  border-radius:14px;background:var(--panel);box-shadow:0 16px 40px rgba(0,0,0,.32);
+  width:min(64rem,92vw)}
+#p-kal:checked~.kal-panel{display:block}
+.zan-navig #p-kal:checked~.data-zan,.data-zan:has(~#p-kal:checked){
+  border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.kal-mesyac{display:flex;align-items:center;gap:.9rem;padding:.42rem 0}
+.kal-mesyac+.kal-mesyac{border-top:1px solid var(--rule)}
+.kal-imya{flex:0 0 7rem;color:var(--muted);font-size:.95rem}
+.kal-dni{display:flex;flex-wrap:wrap;gap:.4rem}
+.kal-den{display:inline-flex;align-items:baseline;gap:.25rem;text-decoration:none;
+  color:var(--text);font-size:1.02rem;font-weight:600;padding:.3em .75em;
+  border:1px solid var(--rule);border-radius:9px;min-width:4rem;
+  justify-content:center}
+.kal-den:hover{border-color:var(--accent);color:var(--accent);
+  background:var(--accent-soft)}
+.kal-den.bylo{color:var(--faint);border-color:transparent}
+.kal-den.tut{color:var(--panel);background:var(--accent);border-color:var(--accent)}
+.kal-sokr{font-size:.72rem;font-weight:400;opacity:.75}
+.k-drugomu{font-size:.92rem;text-decoration:none;color:var(--muted);
+  border:1px solid var(--rule);border-radius:9px;padding:.35em .8em;white-space:nowrap}
+.k-drugomu:hover{color:var(--accent);border-color:var(--accent)}
+.menu a.ssyl.ssyl-tut{color:var(--accent);background:var(--accent-soft)}
+.poisk-str{margin:0;max-width:32rem;flex:1 1 18rem}
+@media(max-width:900px){.dva{grid-template-columns:1fr}
+  .kol{border-right:none;padding-right:0}}
+/* Карточки группы: всё на один экран, колонками — преподаватель и его дети. */
+.karty{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:1rem}
+.kart{border:1px solid var(--rule);border-radius:10px;padding:.7rem .9rem;background:var(--panel)}
+.kart-z{display:flex;align-items:baseline;gap:.4rem;font-family:var(--sans);font-size:1rem;
+  padding-bottom:.4rem;margin-bottom:.4rem;border-bottom:1px solid var(--rule)}
+.kart-z .ch{margin-left:auto;color:var(--muted)}
+.kart ul{list-style:none;margin:0;padding:0}
+.kart li{font-size:.95rem;padding:.12rem 0}
+.kart.zhd{border-color:var(--warm)}
+.kart.zhd .kart-z b{color:var(--warm)}
+/* Листки: номер · название · версии в одну строку. */
+.listki{max-width:46em}
+.listki td{padding:.4rem 1rem .4rem 0}
+.listki .nom{font-family:var(--sans);font-weight:600;color:var(--faint);
+  width:3.5rem;white-space:nowrap}
+.listki a{color:var(--accent);text-decoration:none;font-size:1.05rem}
+.listki a:hover{text-decoration:underline}
+.verstroka{white-space:nowrap;text-align:right}
+.ver{display:inline-block;font-family:var(--sans);font-weight:600;background:var(--chip);
+  border-radius:7px;padding:.12em .6em;margin-left:.35rem;color:var(--text)!important;
+  text-decoration:none!important}
+.ver:hover{background:var(--accent);color:var(--panel)!important}
+.polug{font-family:var(--sans);font-size:.85rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--faint);margin:1.8rem 0 .5rem}
+.polug:first-child{margin-top:0}
+.menu label.im{font-weight:600;font-size:1.05rem;margin-right:1.6rem;color:var(--text);
+  padding-left:0}
+.fajly{list-style:none;margin:0;padding:0;columns:2;column-gap:3rem}
+.fajly li{padding:.4em 0;border-bottom:1px solid var(--rule);break-inside:avoid}
+.fajly a{color:var(--accent);text-decoration:none;font-size:1.05rem}
+@media(max-width:760px){.menu,.holst{padding-left:1.1rem;padding-right:1.1rem}.fajly{columns:1}}
+
+/* ═══ 🔴 ТЕЛЕФОН. ВСЁ НИЖЕ — ТОЛЬКО ВНУТРИ МЕДИАЗАПРОСОВ, ДЕСКТОП НЕ МЕНЯЕТСЯ.
+   Требование владельца 07.09: «твоя задача не менять ничего, кроме мобильной
+   версии, но её нужно довести до идеала на всех экранах, в первую очередь на
+   главном, во вторую на странице с приёмом/кондуитом».
+
+   ЧТО БЫЛО СЛОМАНО, ИЗМЕРЕНО НА ЖИВОЙ СТРАНИЦЕ ПРИ 375px, А НЕ НА ГЛАЗ:
+   страница переполнялась вбок на 145px — `.glav-glavnoe` занимала 502px при
+   экране 375. Виновата не сетка (она уже `minmax(0,1fr)` и с 940px в одну
+   колонку), а `.blok-listok{width:max-content}`: карточка растягивалась по
+   самой длинной своей строке — списку фамилий «302 · Бирюков, Будылин,
+   Искеева, Тухватулин-Йалчын» — и распирала колонку изнутри. Следом за ней
+   уезжал вправо весь блок «кто ведёт», и имена преподавателей обрезались
+   краем экрана: владелец видел «Ольга Р», «Даня Ма», «Ваня Яко».
+
+   Второе: кегли главной заданы `clamp(...vw...)`, и их НИЖНЯЯ граница считана
+   под ноутбук — `.vedut` держал 25.6px, `.rasp` 22.4px на экране в 375
+   пикселей. `vw` тут не спасает: при узком экране включается именно минимум.
+   Поэтому телефон получает свои размеры, а не масштабированные ноутбучные.
+
+   🔴 Ни одно правило отсюда не действует шире 760px: закреплённый десктопный
+   вид (`doc/DIZAJN-ZAKREPLENO.md`) остаётся ровно таким, каким владелец его
+   принял, и эталонные числа §5 снимаются при 1440×900 как раньше. ═══ */
+@media(max-width:760px){
+  /* Карточка ближайшего листка. Схема не трогается — те же гарнитура, кегли,
+     цвета и ноль плашек, что стережёт `proverit_shemu()`; меняется ТОЛЬКО то,
+     что карточка перестаёт быть шире экрана. */
+  .blok-listok{width:auto;max-width:100%;margin-top:2rem}
+  .listok-kogda,.listok-stroka,.listok-kab{white-space:normal;overflow-wrap:anywhere}
+  .listok-imya{font-size:2.1rem}
+
+  /* «Кто ведёт» — предмет и имя в одной строке, но кеглем, который помещается. */
+  .vedut{font-size:1.05rem;width:100%}
+  .vedut td{padding:.32rem 0}
+  .vedut .predmet{padding-right:.9rem;font-size:.95rem;white-space:normal}
+
+  /* Расписание и списки преподавателей: одна колонка вместо двух — на 375px
+     вторая колонка давала по два слова в строке. */
+  .rasp{font-size:1.05rem;width:100%}
+  .rasp .den-imya{padding-right:.9rem}
+  .rasp td{padding:.3rem 0}
+  .prep-spisok{columns:1;font-size:1rem}
+  .prep-spisok.ranshe{columns:1;font-size:.92rem}
+
+  /* Заголовок и воздух: на телефоне первый экран должен показывать не только
+     название, но и то, ради чего страницу открыли. */
+  .glav-imya{font-size:2.5rem;line-height:1.05}
+  .glav-pod{font-size:1rem}
+  .glav-setka{gap:1.5rem 0;margin-top:1rem}
+  /* На ноутбуке колонка растянута на всю высоту и раскладывает блоки
+     `space-between`; на телефоне высоты нет, и та же раскладка оставляла между
+     заголовком и карточкой пустую треть экрана. */
+  .glav-glavnoe{justify-content:flex-start;gap:1.5rem;padding-bottom:0}
+  .glav-sboku{gap:1.5rem}
+  .glav{min-height:0}
+
+  /* Шапка занимала 174px — почти четверть экрана, и это до всякого содержания.
+     Меню прокручивается вбок одной строкой вместо того, чтобы переноситься. */
+  .menu{padding:.55rem 1.1rem;gap:.2rem;flex-wrap:nowrap;overflow-x:auto;
+    -webkit-overflow-scrolling:touch}
+  .menu::-webkit-scrollbar{display:none}
+  .menu .im{font-size:.98rem;margin-right:.7rem}
+  .menu label,.menu a.ssyl{font-size:.98rem;padding:.3em .7rem;white-space:nowrap}
+  .poisk{font-size:1rem;padding:.5em .7em}
+}
+
+/* Совсем узкие телефоны (iPhone SE и ему подобные): на 320 точках заголовок в
+   2.5rem встаёт впритык к краю, и запаса не остаётся ни на что. */
+@media(max-width:380px){
+  .glav-imya{font-size:2.05rem}
+  .listok-imya{font-size:1.85rem}
+  .glav-pod{font-size:.95rem}
+}
 </style>
-</head>
-<body>
-<main>
-<p>Эта страница переехала.</p>
-<p><a href="http://math-kluychiki.ru/">Перейти на сайт спецмата</a></p>
-<p class="muted">Переход должен произойти автоматически.</p>
-</main>
-<script>location.replace("http://math-kluychiki.ru/");</script>
-</body>
-</html>
+<!-- 🔴 КАНОН КОЛОНОК СТОИТ ПОСЛЕ ВСТРОЕННОГО СТИЛЯ, И ПОРЯДОК ЗДЕСЬ — ЧАСТЬ
+     ПРАВИЛА, А НЕ ОФОРМЛЕНИЕ. The canon is the site's last word about columns:
+     where a rule of the stylesheet above contradicts it, the canon must win, and
+     between two rules of equal specificity the later one wins. Moved above the
+     `<style>` this link keeps its text and loses its force. The file itself says
+     what the canon is and who has yet to adopt it: `veb/static/kanon.css`. -->
+<link rel="stylesheet" href="/static/kanon.css">
+
+<input class="rd" type="radio" name="str" id="p-start" checked>
+<input class="rd" type="radio" name="str" id="p-list">
+<input class="rd" type="radio" name="str" id="p-rasp">
+
+<!-- ВЕРХНЯЯ ПАНЕЛЬ. Имя сайта стоит ОДИН раз и здесь; разделы больше не повторяют
+     своё название заголовком внутри себя. Поиск живёт тут же и работает на всех
+     разделах — искать надо там, где смотришь, а не там, где нашлось место.
+
+     🔴 «РАСПРЕДЕЛЕНИЕ» IS A LINK, NOT A TAB, AND IT LEADS TO THE LESSON.
+     Owner's решение 1 of 2026-09-07. The tab it used to be opened the STANDING
+     arrangement, so the page written for «кто у кого сегодня» was reachable by
+     nobody: the owner pressed «Распределение», landed in the editor of the
+     permanent layer and concluded the work had not been merged. The permanent
+     layer keeps its own address, `/raspredelenie/postoyannoe`, and the button
+     that says what it is stands on the lesson page — «чтобы ты случайно всё не
+     начинал править постоянное распределение».
+
+     The radio `p-rasp` below stays: it is what SHOWS the standing section, and
+     `/raspredelenie/postoyannoe` checks it (VKLADKA_SKRIPT). Removing it would
+     take the section off the site altogether. -->
+<nav class="menu">
+  <span class="im">Ключики</span>
+  <label for="p-start">Класс</label>
+  <label for="p-list">Листки</label>
+  <a class="ssyl ssyl-rasp" href="/raspredelenie">Распределение</a>
+  <div class="podskazki poisk-verh">
+    <input class="poisk" id="poisk" placeholder="Поиск — школьник, принимающий, листок" autocomplete="off">
+    <div class="spisok" id="spisok" hidden></div>
+    <div id="nashli"></div>
+  </div>
+  <span class="verh-prava"><a class="vhod" href="/vhod" data-otkryt-vhod>Вход</a></span>
+</nav>
+
+<section class="str holst" id="s-start">
+<style>
+/* Вдвое крупнее: канон держит карточку на `clamp(1.02rem,1.15vw,1.24rem)`,
+   здесь — вдвое от него, и все её строки набраны от этого одного кегля. */
+.blok-listok{margin:2.2rem 0 0;width:auto;max-width:100%;
+  font-size:clamp(2.04rem,2.3vw,2.48rem);
+  background:var(--panel);border:1px solid var(--rule);border-radius:18px;
+  padding:1.5rem 2rem 1.7rem}
+/* Подпись — та самая «большими буквами Следующий спецмат». Она набрана
+   служебным серым каркаса (`.zag2`), то есть тем же вторым цветом, который
+   схема карточки разрешала и раньше; растёт только кегль. */
+.blok-listok .zag2{font-size:.46em;letter-spacing:.13em;margin-bottom:.35rem}
+/* Название листка остаётся главным словом, но кратность к базе уменьшена:
+   прежние 2.55em от вдвое большего кегля вылезли бы за колонку. */
+.listok-tema{font-size:1.6em;line-height:1.1}
+.listok-nom{font-size:.5em;vertical-align:.55em}
+/* Строки «когда» и «кабинеты» — служебные, мельче названия, но крупнее, чем
+   были: их читают издалека, стоя. */
+.listok-kogda{font-size:.6em;margin-top:.2rem}
+.listok-kab{font-size:.55em;margin-top:.5rem}
+.listok-moyo{font-size:.5em}
+/* 🔴 ЛИЧНАЯ СТРОКА ЗАМЕНЯЕТ ОБЩУЮ, И ЭТО ОТМЕНА ПРАВИЛА, СТОЯВШЕГО ЗДЕСЬ С 09.09.
+   Тогда владелец просил в карточке «номера кабинетов для трёх групп», и строка
+   `.blok-listok:has(.listok-moyo) .listok-obshchij{display:block}` возвращала её
+   вошедшему поверх канонного правила каркаса. 10.09 он посмотрел на результат
+   своими глазами и отменил его (`TZ-DOBOR-10-09.md` H2.3, H2.4): «в карточке
+   дублируются кабинеты для всех групп … кабинеты для всех — не нужно», «это
+   абсурдно выглядит»; личное живёт в Кабинете. Правило снято — и работает то,
+   что канон каркаса и говорил: у вошедшего остаётся ЕГО кабинет и его школьники.
+   Гостю, у которого личной строки нет вовсе, три кабинета видны как и раньше.
+   Разметка не тронута ни на байт, значит и побайтовая сверка каркаса — тоже. */
+/* Канон запрещает этой строке переноситься (`white-space:nowrap`), а на вдвое
+   большем кегле «понедельник, 14 сентября · 14:15—15:55» в колонку не влезает
+   и даёт горизонтальную прокрутку всей странице — то, что гейт вёрстки считает
+   красным. Перенос по словам, а не сжатие кегля. */
+.listok-kogda,.listok-stroka{white-space:normal !important}
+/* Ссылка в свой кабинет. Стоит ПОД карточкой, а не в ней: внутри она была бы
+   вторым цветом на закреплённой схеме. */
+/* 🔒 ССЫЛКА НА СВОЮ ГРУППУ НАБРАНА ЦВЕТОМ КАРТОЧКИ, А НЕ СИНИМ. Замок схемы
+   (`proverit_shemu()`) держит карточку в одном цвете и одном весе; браузерная
+   синева ссылки была бы вторым цветом ровно там, где его быть не должно.
+   Ссылка видна подчёркиванием — оно из линейки каркаса (`--rule`), — и
+   акцентом при наведении, то есть только в тот момент, когда на неё смотрят. */
+.listok-moyo a{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule)}
+.listok-moyo a:hover{border-bottom-color:var(--accent);color:var(--accent)}
+@media(max-width:940px){.blok-listok{font-size:clamp(1.5rem,4.6vw,2rem);
+  padding:1.1rem 1.2rem 1.3rem}}
+</style>
+  <!-- 🔴 КРИВАЯ ЛЕЖИТ ПОД ВСЕЙ СТРАНИЦЕЙ И ВЫХОДИТ ЗА КРАЯ, а текст стоит НА ней.
+       Две колонки «слева текст, справа картинка» владелец назвал ужасной вёрсткой,
+       и он прав: так картинка не взаимодействует с текстом, а стоит рядом. Здесь
+       она заполняет собой весь экран, обрезается краями — и потому кажется больше
+       экрана, — а содержание разложено поверх неё в двух потоках: главное слева,
+       боковое справа. -->
+  <div class="glav">
+    <div class="glav-risunok"><canvas id="drakon" aria-hidden="true"></canvas></div>
+
+    <header class="glav-shapka">
+      <h1 class="glav-imya">Математический класс</h1>
+      <p class="glav-pod">9&nbsp;КЛ · школа №&nbsp;179</p>
+    </header>
+
+    <div class="glav-setka">
+      <div class="glav-glavnoe">
+        <!-- 🔴 АКЦЕНТ НА ЛИСТОК, А НЕ НА ДАТУ. Владелец: «сейчас ты даёшь акцент
+             на ближайшее занятие, а нужно на то, что мы сейчас решаем». Дата ушла
+             в строку под листком и набрана мелко: «7 сент» вместо «7 сентября»,
+             потому что длинная дата давила на то, ради чего блок существует. -->
+        <!-- 🔴 ТРИ УРОВНЯ, СВЕРХУ ВНИЗ: когда · что решаем · где. Прежний блок
+             владелец назвал разлапистым, и он им был: тема шла кеглем крупнее
+             заголовка страницы и спорила с ним, а версии висели отдельной
+             строкой сами по себе. Теперь тема набрана вровень с датой, версии
+             стоят в той же строке, что и она, и весь блок читается как одна
+             карточка, а не как четыре разных куска. -->
+        <div class="blok-listok">
+          <span class="zag2">следующий спецмат</span>
+          <p class="listok-kogda">понедельник, 14 сентября
+            · 14:15 — 15:55</p>
+          <p class="listok-stroka"><label for="p-list" class="listok-nom">16</label><label for="p-list" class="listok-tema">Деревья</label><span class="listok-ver"><a href="listki/16A-derevya.pdf">A</a><a href="listki/16α-derevya.pdf">α</a><a href="listki/16ℵ-derevya.pdf">ℵ</a></span></p>
+          <p class="listok-kab listok-obshchij">В&nbsp;303 · Д&nbsp;302 · Н&nbsp;203</p>
+        </div>
+
+        <div class="blok-vedut">
+          <span class="zag2">Кто ведёт</span>
+          <table class="vedut"><tbody>
+            <tr><td class="predmet">алгебра</td><td>Ольга Рыжая</td></tr>
+            <tr><td class="predmet">геометрия</td><td>Наталия Стрелкова</td></tr>
+            <tr><td class="predmet">спецмат</td><td>Даня Макаров, Ваня Яковлев</td></tr>
+            <tr><td class="predmet">классные руководители</td>
+                <td><span class="imya-celikom">Дарья Аракелова</span>,
+                    <span class="imya-celikom">Радий Скребцов</span></td></tr>
+          </tbody></table>
+        </div>
+      </div>
+
+      <aside class="glav-sboku">
+        <div class="sboku-blok">
+          <span class="zag2">Расписание спецмата</span>
+          <table class="rasp"><tbody>
+            <tr><td class="den-imya">понедельник</td><td class="den-vremya">14:15 — 15:55</td></tr><tr><td class="den-imya">четверг</td><td class="den-vremya">13:10 — 15:00</td></tr>
+          </tbody></table>
+        </div>
+        <div class="sboku-blok">
+          <span class="zag2">Принимающие</span>
+          <ul class="prep-spisok"><li>Александр Тертерян</li><li>Андрей Рябичев</li><li>Вася</li><li>Дима Елисеев</li><li>Елена Мирошниченко</li><li>Михаил Шнитке</li><li>Надя</li><li>Настя Вахрина</li><li>Наталья Амбург</li><li>Саша Оревкова</li></ul>
+          <div class="zag2 ranshe-zag">Принимали раньше</div><ul class="prep-spisok ranshe"><li>Вика</li><li>Полина</li><li>Ян Маршалл</li></ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="str holst" id="s-list">
+  <!-- Открывается девятый класс: он сейчас идёт. Владелец: «листки должны
+       открываться по умолчанию не с 8 класса, а сразу с 9». -->
+  <input class="rd" type="radio" name="lst" id="l-8">
+  <input class="rd" type="radio" name="lst" id="l-9" checked>
+  <div class="tabbar"><label for="l-8">8 класс</label><label for="l-9">9 класс</label></div>
+  <section class="vid" id="w-8">
+    <div class="dva-listka">
+      <div>
+        <p class="polug">первое полугодие</p>
+        <table class="listki"><tbody><tr><td class="nom">1</td><td><a href="listki-8kl/01_Постепенно, с первого шага.pdf">Постепенно, с первого шага</a></td></tr><tr><td class="nom">2</td><td><a href="listki-8kl/02_Правило суммы и произведения.pdf">Правило суммы и произведения</a></td></tr><tr><td class="nom">3</td><td><a href="listki-8kl/03_Пары и тройки.pdf">Пары и тройки</a></td></tr><tr><td class="nom">4</td><td><a href="listki-8kl/04_Еще раз про сложение и умножение.pdf">Ещё раз про сложение и умножение</a></td></tr><tr><td class="nom">5</td><td><a href="listki-8kl/05_Биекции.pdf">Биекции</a></td></tr><tr><td class="nom">6</td><td><a href="listki-8kl/06_Графы.pdf">Графы</a></td></tr><tr><td class="nom">7</td><td><a href="listki-8kl/07_Множества.pdf">Множества</a></td></tr><tr><td class="nom">8</td><td><a href="listki-8kl/08_Зоопарк теории графов.pdf">Зоопарк теории графов</a></td></tr><tr><td class="nom">9</td><td><a href="listki-8kl/09_Индукция.pdf">Индукция</a></td></tr><tr><td class="nom">10</td><td><a href="listki-8kl/10_Биномиальные коэффициенты.pdf">Биномиальные коэффициенты</a></td></tr><tr><td class="nom"></td><td><a href="listki-8kl/Программа зачета.pdf">Программа зачёта</a></td></tr><tr><td class="nom">Д1</td><td><a href="listki-8kl/д01_Информация.pdf">Информация</a></td></tr><tr><td class="nom">Д2</td><td><a href="listki-8kl/д02_Геометрическое суммирование.pdf">Геометрическое суммирование</a></td></tr></tbody></table>
+      </div>
+      <div>
+        <p class="polug">второе полугодие</p>
+        <table class="listki"><tbody><tr><td class="nom">11</td><td><a href="listki-8kl/11_Соответствия.pdf">Соответствия</a></td></tr><tr><td class="nom">12</td><td><a href="listki-8kl/12_Делимость.pdf">Делимость</a></td></tr><tr><td class="nom">13</td><td><a href="listki-8kl/13_Остатки.pdf">Остатки</a></td></tr><tr><td class="nom">14</td><td><a href="listki-8kl/14_ОТА.pdf">ОТА</a></td></tr><tr><td class="nom">15</td><td><a href="listki-8kl/15_Бесконечность.pdf">Бесконечность</a></td></tr><tr><td class="nom">Д3</td><td><a href="listki-8kl/д03_Игры.pdf">Игры</a></td></tr></tbody></table>
+      </div>
+    </div>
+  </section>
+  <section class="vid" id="w-9">
+    <table class="listki"><tbody><tr><td class="nom">16</td><td>Деревья</td><td class="verstroka"><a class="ver" href="listki/16A">A</a> <a class="ver" href="listki/16α">α</a> <a class="ver" href="listki/16ℵ">ℵ</a></td></tr></tbody></table>
+  </section>
+</section>
+
+<section class="str holst" id="s-rasp">
+  <!-- Ни заголовка «Распределение», ни отдельной строки под поиск: название
+       раздела уже стоит во вкладке наверху, повторять его нечем и незачем.
+       Вкладки — одной строкой; дней в ней больше нет, они внутри таблицы. -->
+  <input class="rd" type="radio" name="vk" id="t-shk" checked>
+  <input class="rd" type="radio" name="vk" id="t-prep">
+  <input class="rd" type="radio" name="vk" id="t-В">
+  <input class="rd" type="radio" name="vk" id="t-Д">
+  <input class="rd" type="radio" name="vk" id="t-Н">
+  <div class="tabbar tabbar-rasp">
+    <label for="t-shk">школьникам</label><label for="t-prep">принимающим</label>
+    <label for="t-В">В</label><label for="t-Д">Д</label><label for="t-Н">Н</label>
+    <span class="zanyatie"><span class="skoro" data-tolko-gost>14 сентября · понедельник · 14:15 — 15:55</span></span>
+    <span class="kab-verh kab-verh-В" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span><span class="kab-verh kab-verh-Д" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span><span class="kab-verh kab-verh-Н" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span>
+  </div>
+  <section class="vid" id="v-shk">
+<style>
+/* ── §3 «обычно у» — значок с подсказкой, а не голый текст встык с фамилией.
+   Канон вообще не содержит правила `.obychno` — этот span рисовался неотделённым
+   от фамилии. Разворачивается в полное имя через `title`; строка не растёт,
+   потому что значок — один символ той же высоты, что и текст рядом. */
+.obychno{margin-left:.35rem;font-size:.85em;cursor:help;flex:0 0 auto}
+
+/* ── §5 класс — своя колонка между ФИО и днями, узкая и по центру, вместо
+   хвоста, приклеенного к фамилии. */
+.kl-kol{flex:0 0 2.3rem;min-width:0;color:var(--muted);font-family:var(--sans);
+  font-size:.85rem;text-align:center;align-self:flex-start;margin-top:.15em}
+/* 🔴 НА ВКЛАДКАХ ГРУПП ИМЯ ПЕРЕНОСИТСЯ (канон, крупный шрифт 1.6rem), А
+   `.kto{{flex:0 0 auto;overflow:visible}}` СЧИТАЕТ СВОЮ ШИРИНУ ПО САМОЙ
+   КОРОТКОЙ СТРОКЕ ПЕРЕНОСА, А НЕ ПО САМОЙ ДЛИННОЙ — текст первой строки
+   («Верхошинский») визуально вылезал за рамку своего же флекс-бокса и
+   наезжал на соседний `.kl-kol`, вставший сразу за узкой рамкой (найдено
+   скриншотом: «Верхошинскийк»). До появления `.kl-kol` это было безвредно —
+   переполнение уходило в пустоту перед `.komu` (`margin-left:auto`). Разумный
+   минимум ширины даёт первой строке кому расти, не трогая сам перенос. */
+#v-В .kol .kto,#v-Д .kol .kto,#v-Н .kol .kto{min-width:13rem}
+
+/* ── §1/§2/§4 (владелец 09.09). Канон держит колонку дня фиксированной
+   `9.6rem` и прижимает имя к правому краю (`justify-content:flex-end`,
+   `text-align:right`) — на живых длинных именах («Дима Елисеев», «Наталия
+   Стрелкова») это и даёт обрезку многоточием ПРИ ПУСТОМ МЕСТЕ СПРАВА (владелец,
+   п.1), а на коротких («Надя») — имя, прижатое к разным точкам от строки к
+   строке, и оттого не читается колонкой (владелец, п.2, «Надя… не стоит в
+   одну линию с остальными»).
+   🔴 БЮДЖЕТ СЧИТАН ЗАМЕРОМ, А НЕ ПОДОБРАН НА ГЛАЗ (`diag.py`/`diag2.py` в
+   scratchpad этого захода). Канон пришпиливает `.komu` к
+   `#s-rasp .para .komu{flex:0 0 auto}` — ID-селектор, computed показал
+   `flexGrow:0,flexShrink:0` у `.komu` НЕЗАВИСИМО от того, что написано на
+   `.kto`/`.dv`: при таком якоре гибкий тяни-толкай между двумя вложенными
+   флекс-контейнерами (`.para` → `.komu` → `.dv`) даёт непредсказуемый результат
+   от прогона к прогону (замерено трижды, три разных числа на одних и тех же
+   правилах). Вместо гонки за флекс-долями — ФИКСИРОВАННЫЕ ширины по бюджету:
+   `.kol` под текст (за вычетом `padding-right:2rem`) — 619px на эталоне
+   1440×900.
+   🔴 РАСШИРЕНИЕ — ТОЛЬКО ДЛЯ ОДНОДНЕВНОЙ СТРОКИ (`.dv-den`: гостевая
+   `/raspredelenie` и админский вид ближайшего занятия — ИМЕННО ОТТУДА примеры
+   владельца «Дима Елисеев», «Наталия Стрелкова»). На ПОСТОЯННОМ виде в строке
+   ОБА дня разом (`.dv-pn` и `.dv-cht`) плюс замок плюс группа — тот же бюджет
+   на вдвое больше органов; первая попытка дать и `.dv-pn`, и `.dv-cht` те же
+   13/18rem каждой раздвинула строку почти на 800px при 619px места и вместо
+   обрезки дала НАЛОЖЕНИЕ текста (найдено скриншотом, не гейтом — `gejt_verstki`
+   на это конкретное наложение не заточен). `.dv-pn`/`.dv-cht` поэтому остаются
+   на каноновых `9.6rem`: та же боль обрезки, что была, но НЕ НОВАЯ строка,
+   зато выравнивание (лево вместо право, «ПН»/«ЧТ» по центру) чинится и там —
+   этого владелец и просил в пп.2/4, ширина не единственная причина жалобы. */
+/* 🔴 ТОЛЬКО `#v-shk`. На вкладках групп `.kto` и так ведёт себя иначе (канон:
+   `#v-В .kol .kto{white-space:normal;overflow:visible;...}` — имя ПЕРЕНОСИТСЯ
+   на карточке покрупнее, не обрезается) и никогда не было в списке жалоб
+   владельца — там уже было хорошо (см. скриншот `before_grV.png` этого
+   захода). Фиксированная ширина `--imya-w` туда же поверх переноса даёт
+   наложение «класс» на вторую строку длинного имени при 1.6rem (найдено
+   скриншотом: «Верхошинский» переносится, «9К» съезжает поверх «Марк»). */
+#v-shk .para:has(.dv-den) .kto{flex:0 0 var(--imya-w,16ch);min-width:0}
+.para .komu .dv-den{flex:0 0 13rem;min-width:0;justify-content:space-between}
+.para .komu .dv-den .org{min-width:0;max-width:100%}
+/* Гость — шире: у гостя в ячейке нет ни `<select>`, ни соседних органов
+   правки, ради которых колонка зажата до `13rem` у админа. */
+.para .komu .dv-den:not(:has(.org)){flex:0 0 18rem}
+/* На постоянном (два дня разом) ширину не трогаем — только выравнивание. */
+.para .komu .dv-pn,.para .komu .dv-cht{justify-content:space-between}
+.para .komu .dv-pn .prep-imya,.para .komu .dv-cht .prep-imya,
+.para .komu .dv-den .prep-imya{text-align:left}
+/* Компактнее в этой конкретной строке (не везде на сайте) — тем же приёмом,
+   что канон уже применяет на вкладках групп (`#v-В .otsut` и т.д.): освобождает
+   долю бюджета в пользу имени и выпадающего списка на однодневной строке. */
+#s-rasp .para .otsut{font-size:.76rem;padding:.1em .4em}
+#s-rasp .para .grd-sel,#s-rasp .para .gr-sel{width:3.6rem;flex:0 0 3.6rem}
+/* Шапка дней (только на постоянном — на занятии шапки нет вовсе) — то же
+   место, но текст без prep-imya, центр вместо левого края (владелец, п.4:
+   «буквы ПН и ЧТ… по центру своей колонки»). */
+.shapka-dnej .komu .dv-pn,.shapka-dnej .komu .dv-cht{justify-content:center}
+
+/* ── §8 карточки принимающих на вкладке группы — были прижаты к верху,
+   оставляя нижнюю половину экрана пустой (владелец, п.8). Канон уже делает их
+   широкими построчно (`.kol-pr .para`); не хватало вертикального воздуха и
+   зримой границы «полосы». Увеличенный внутренний отступ плюс отступ снизу —
+   пять-шесть карточек растягиваются на высоту экрана, а не жмутся к верху. */
+.kol-pr .para{padding:2.1rem 1.2rem;margin-bottom:.8rem;background:var(--panel);
+  border:1px solid var(--rule);border-radius:12px}
+.kol-pr .para:last-child{margin-bottom:0}
+
+/* ── §7 «принимающим»: кнопки пн/чт переехали внутрь своих же колонок дней
+   (см. `prepodavateli.vid_prepodavateli`) — небольшой отступ от списка
+   фамилий, чтобы кнопка не сливалась с последней таблеткой. */
+.td-deti .den-gal{margin-left:.5rem}
+</style>
+
+<style>
+/* ── §1 «обычно у» — СВОЯ КОЛОНКА ПЕРЕД ИМЕНЕМ ПРИНИМАЮЩЕГО, А НЕ ХВОСТ ФАМИЛИИ.
+   Владелец 10.09 дословно: «мы ничего не дописываем просто в конец». Колонка
+   стоит ВСЕГДА, пока экран однодневный, даже когда значка в строке нет: иначе
+   имена принимающих съезжают по вертикали ровно на ширину значка — ради чего
+   колонку и заводят. Ширина фиксирована и одна на все строки. */
+/* 🔴 ПО ЛЕВОМУ КРАЮ, НЕ ПО ЦЕНТРУ (J1, владелец 10.09: «центрирование на нашем
+   сайте надо прям где-то вставить в какой-то стандартный канон. НИКОГДА по
+   центру мы не центрируем»). Колонка шириной в один знак, и разница глазом не
+   видна, — тем меньше причин заводить в ней исключение из правила, которое
+   владелец назвал каноном и просил сделать КРАСНЕЮЩИМ. */
+.ob-kol{flex:0 0 1.35rem;min-width:0;text-align:left;font-size:.85em;
+  line-height:1;align-self:center}
+/* 🔴 `cursor:help` УБРАН, И ЭТО НЕ ВКУСОВЩИНА: он И ЕСТЬ «вопросительный знак»
+   из жалобы G2.3 («наведение даёт вопросительный знак, а нажатие — ничего»).
+   Курсор-вопрос читается как «нажми и узнаешь», а нажимать здесь нечего —
+   подсказка приходит сама. Обычная стрелка ничего не обещает. */
+.obychno{margin-left:0;cursor:default;flex:0 0 auto}
+
+/* ── §2 ШКОЛЬНИКИ У ПРИНИМАЮЩЕГО — В ОДИН РЯД, И РЯД НАЧИНАЕТСЯ ТАМ ЖЕ У ВСЕХ.
+   Владелец 10.09 (G4.3, G5, H3.3): «почему здесь абсолютно рандомно имена
+   школьников? Мне неудобно даже такое показывать»; таблетки при этом вылезали
+   ЛЕВЕЕ карточки.
+
+   🔴 ПРИЧИНА НАЙДЕНА ЗАМЕРОМ, А НЕ УГАДАНА, И ОНА ОДНА НА ОБЕ ЖАЛОБЫ. Канон
+   даёт `.kol-pr .komu.deti{margin-right:auto}`, а карточка принимающего —
+   флекс-КОЛОНКА (`.kol-pr .para{flex-direction:column}`). Горизонталь для неё
+   поперечная ось, и `auto`-поле на поперечной оси ОТМЕНЯЕТ `align-items:stretch`:
+   полоса таблеток перестаёт быть шириной с карточку и меряется по собственному
+   содержимому. Замер на живой базе: карточка 652 px, `.komu.deti` — 282 px, и
+   ширина эта РАЗНАЯ у разных принимающих, потому что содержимое разное. Отсюда
+   и «рандомно» (у каждого своя ширина, значит свой перенос), и выход за край
+   (`margin-left:auto` из `.para .komu` тянул ту же короткую полосу вправо, а
+   когда содержимое шире бокса, `auto`-поле выносит его ВЛЕВО за границу).
+   Лечится не подпоркой, а снятием поперечного `auto`. */
+/* 🔴 СЕЛЕКТОР ПОВТОРЯЕТ КАНОНОВЫЙ ЦЕЛИКОМ, ВКЛЮЧАЯ `#s-rasp`, И ЭТО НЕ
+   ПЕРЕСТРАХОВКА. Канон пишет это правило ДВУМЯ селекторами через запятую, и
+   старший из них — `#s-rasp .kol-pr .komu.deti` — весит идентификатор. Более
+   короткая запись здесь проиграла бы ему по весу молча: замер показал ту же
+   282-пиксельную полосу при УЖЕ ДОБАВЛЕННОМ правиле. Совпадая по весу, мы
+   выигрываем порядком — этот `<style>` идёт последним в документе. */
+#s-rasp .kol-pr .komu.deti,.kol-pr .komu.deti{margin-right:0;margin-left:0;
+  align-self:stretch;width:100%}
+#s-rasp .kol-pr .den-ryad,.kol-pr .den-ryad{flex:1 1 100%;min-width:0;
+  box-sizing:border-box}
+/* 🔴 КРАСНАЯ ПОДСВЕТКА ПЕРЕГРУЖЕННОГО БОЛЬШЕ НЕ ВЫЛЕЗАЕТ ЗА КАРТОЧКУ. Канон
+   красит ряд `.den-ryad:has(.sch.ploho){padding:.1rem .35rem;margin:0 -.35rem}` —
+   отрицательное поле, которым подсветка нарочно вылезала на ширину отступа. Пока
+   ряд был уже карточки (см. §2), вылезать было некуда и это не мешало; теперь ряд
+   ровно во всю карточку, и те же 0.35rem выносят его ЗА неё. Замерено новой,
+   четвёртой проверкой гейта («ВЫШЛО ЗА КОНТЕЙНЕР», её сделала соседняя позиция
+   `gejt-pravda`): три карточки группы Д, вправо на 6 px. Подсветке хватает
+   собственных внутренних отступов. */
+#s-rasp .kol-pr .den-ryad:has(.sch.ploho),
+.kol-pr .den-ryad:has(.sch.ploho){margin-left:0;margin-right:0;
+  padding-left:0;padding-right:0}
+/* 🔴 РЯД НЕ ПЕРЕНОСИТСЯ ВОВСЕ. Перенос и есть тот «разнобой»: две фамилии тут,
+   три там, и глазу негде зацепиться. Владелец приводит и доказательство, что
+   один ряд возможен: «семь школьников Филянина в одну строку помещаются».
+   Не влезло — таблетка ужимает СВОЮ фамилию многоточием, а не ломает ряд:
+   полное имя школьника стоит слева в его собственной строке, в двух сантиметрах. */
+/* 🔴 КОЛОНКА ПРИНИМАЮЩИХ ШИРЕ ПОЛОВИНЫ — РАЗРЕШЕНО ВЛАДЕЛЬЦЕМ ДОСЛОВНО (G4.4:
+   «колонки можно сделать гораздо шире, вплоть до всего экрана»). Ряд из шести
+   фамилий на карточке Натальи Амбург не влезал в 1440 ровно на 20 px суммарно, и
+   без этих процентов гейт вёрстки краснел шестью обрезками по 2–6 px. Слева при
+   этом список школьников группы — он короче общего и половину колонки не
+   выбирал. Только на вкладках групп: на вкладке «школьникам» колонки равны и
+   держат по половине школы каждая. */
+#v-В .dva,#v-Д .dva,#v-Н .dva{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+
+/* ── §7 ЛИНИЯ НЕ ПОСЕРЕДИНЕ (J3, рецензия 3 владельца, 11:36). Дословно: «нам
+   совершенно не обязательно вот эту линию проводить посередине, её можно
+   провести СИЛЬНО ПРАВЕЕ — на всех экранах… там справа только преподаватели, их
+   мало… их колонку чуть-чуть уменьшить, а эту расширить». И следствие, которое
+   он назвал целью: «из-за этого надо пролистывать вниз. А если раздвинешь —
+   пролистывать не надо».
+
+   🔴 ЭТО ОТМЕНЯЕТ МОЁ ЖЕ РЕШЕНИЕ ПАРОЙ ПРАВИЛ ВЫШЕ. По G4.4 («колонки можно
+   сделать гораздо шире, вплоть до всего экрана») я расширил ПРАВУЮ колонку до
+   1.16fr, чтобы ряд таблеток влез в карточку. J3 — рецензия ТОГО ЖЕ ВЛАДЕЛЬЦА
+   ЧАСОМ ПОЗЖЕ и требует обратного движения; поздняя рецензия старше. Ряд
+   таблеток при этом обязан остаться в один ряд и внутри карточки — за это
+   отвечает уменьшенный кегль таблетки ниже, а не ширина колонки.
+
+   🔴 КЕГЛЬ — НАЗВАННОЕ ВЛАДЕЛЬЦЕМ СРЕДСТВО, А НЕ МОЯ ВОЛЬНОСТЬ (G3.5:
+   «допустимое средство — где-то уменьшить шрифт»). На вкладках групп канон
+   ставит строку в 1.6rem — вдвое крупнее, чем на вкладке «школьникам», — и
+   именно этот кегль, а не число колонок, заставлял фамилии переноситься. */
+#v-В .kol .para,#v-Д .kol .para,#v-Н .kol .para{font-size:1.25rem}
+#v-В .kol .komu,#v-Д .kol .komu,#v-Н .kol .komu{font-size:1.05rem}
+#v-В .kol .kto,#v-Д .kol .kto,#v-Н .kol .kto{flex:1 1 auto;min-width:0}
+/* Внутри левой таблицы: колонка принимающего сужается, колонка школьника
+   расширяется — это J3 дословно. */
+#v-В .kol .org.pr-sel,#v-Д .kol .org.pr-sel,#v-Н .kol .org.pr-sel{max-width:7.6rem}
+#v-В .kol .kl-kol,#v-Д .kol .kl-kol,#v-Н .kol .kl-kol{flex:0 0 1.6rem}
+#v-В .kol .ob-kol,#v-Д .kol .ob-kol,#v-Н .kol .ob-kol{flex:0 0 1.2rem}
+/* Таблетки в карточке — мельче на ту же долю, что и строка слева: колонка
+   сузилась, ряд остаётся одним рядом. */
+#v-В .kol-pr .deti-ryad,#v-Д .kol-pr .deti-ryad,#v-Н .kol-pr .deti-ryad{gap:.2rem .25rem}
+/* Кегль ставится на самой таблетке: канон задаёт `.tabl{font-size:.85rem}`
+   абсолютной величиной, и наследование от родителя её не перебивает. */
+#v-В .kol-pr .tabl,#v-Д .kol-pr .tabl,#v-Н .kol-pr .tabl{font-size:.68rem;
+  padding:.12em .42em;margin:.1em .22em .1em 0}
+/* 🔴 У ОРГАНИЗАТОРА В КАРТОЧКЕ ЕСТЬ СТОЛБЕЦ ЧИСЛА, А У ГОСТЯ ЕГО НЕТ, И РЯД У
+   НЕГО ПОЭТОМУ КОРОЧЕ НА ЕГО ШИРИНУ. Замер после сужения колонки по J3: гость
+   зелёный, организатор режет те же шесть таблеток. Столбец числа не убрать — он
+   и есть требование §3; значит платят отступы карточки, которых у неё было
+   2.1rem сверху и снизу «ради воздуха», и полсантиметра ширины самого столбца. */
+#v-В .kol-pr .para,#v-Д .kol-pr .para,#v-Н .kol-pr .para{padding:1.35rem .85rem}
+#v-В .kol-pr .den-ryad .sch,#v-Д .kol-pr .den-ryad .sch,
+#v-Н .kol-pr .den-ryad .sch{flex:0 0 2.3rem}
+.kol-pr .deti-ryad{flex-wrap:nowrap;min-width:0}
+.kol-pr .deti-ryad .tabl{min-width:0;flex:0 1 auto}
+.kol-pr .deti-ryad .tabl .det-f{overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;min-width:0}
+
+/* ── §3 ЧИСЛА 4 5 7 3 — ОДНИМ СТОЛБЦОМ В ФИКСИРОВАННОМ МЕСТЕ, КРУПНО.
+   Владелец 10.09 (H3.4): «я просил давным-давно сделать один столбец в самом
+   конце… большую красивую цифру в фиксированном месте, вне зависимости от
+   преподавателя».
+
+   🔴 СТОЛБЕЦ ПОЯВИЛСЯ ОТ §2, А НЕ ОТ ЭТОГО ПРАВИЛА, И ЭТО СТОИТ СКАЗАТЬ ВСЛУХ.
+   Канон УЖЕ давал числу `flex:0 0 2.2rem;margin-left:auto` — то есть просил его
+   встать столбцом; но полоса, внутри которой оно вставало, была у каждого
+   принимающего своей ширины (см. §2), и «фиксированное место» получалось
+   фиксированным ОТНОСИТЕЛЬНО ПОЛОСЫ, а не экрана: замер до §2 давал число на
+   x=988 и x=994 в соседних карточках, после §2 — x=1356 во всех четырёх и на
+   всех трёх вкладках групп. Здесь остаётся только кегль: цифру читают издалека,
+   стоя посреди занятия, а `.8em` — размер сноски. `tabular-nums` держит ширину
+   одинаковой у «4» и у «7», иначе столбец дышит на единицу знака. */
+.kol-pr .den-ryad .sch{flex:0 0 3rem;font-size:1.5rem;line-height:1;
+  font-variant-numeric:tabular-nums;text-align:right;align-self:center}
+
+/* ── §4 ШИРОКАЯ ПЛАШКА ПРИНИМАЮЩЕГО И ЦЕЛАЯ ФАМИЛИЯ ШКОЛЬНИКА.
+   Владелец 10.09 (G3.2–G3.5, H3.2, H3.5): «„Дэвин" опять не влезает, хотя куча
+   же места по горизонтали»; «плашка принимающего в строке школьника — сделать
+   широкой. Это просто трэш. Место-то есть».
+
+   🔴 «МЕСТО ЕСТЬ» — ЭТО ПРО ЕГО ЭКРАН, И В ЭТОМ ВСЯ ЗАДАЧА. Скриншоты владельца
+   3420 px при удвоенной плотности, то есть окно 1710 CSS-пикселей; эталон гейта
+   и всех прошлых замеров — 1440. Прежняя вёрстка раздавала обеим колонкам
+   ФИКСИРОВАННЫЕ ширины, поэтому лишние 270 px его экрана уходили в пустоту
+   справа, а фамилия рядом резалась многоточием — ровно то, что он и увидел.
+   Поэтому здесь не «сделать шире на N», а `flex-grow`: базис держит колонки
+   ровными на узком экране, рост отдаёт широкому экрану всё лишнее ИМЕНИ и
+   ПЛАШКЕ, а не полю справа. Столбцы при этом не разъезжаются: набор детей у
+   всех строк один и тот же, и доля роста у них поэтому одинаковая. */
+/* 🔴 РОСТ РАЗДАЁТСЯ ТОЛЬКО НА ВКЛАДКЕ «ШКОЛЬНИКАМ» (`#v-shk`), А НЕ ПО ВСЕМУ
+   `#s-rasp`, И ЭТО ИСПРАВЛЕНИЕ УХУДШЕНИЯ, КОТОРОЕ Я ЖЕ И ВНЁС. Первая редакция
+   этого блока растила `.komu` на ВСЕХ вкладках раздела; на вкладках групп
+   колонка вдвое уже, и выросшая `.komu` забрала ширину у фамилии школьника.
+   Замер оркестратора на боевом, 11:44, вкладка Д: на две строки переносились
+   ВОСЕМЬ фамилий из одиннадцати против ОДНОЙ в 11:14. Два идентификатора в
+   селекторе — чтобы перебить каноновое `#s-rasp .para .komu{flex:0 0 auto}`,
+   которое иначе весит больше. */
+#s-rasp #v-shk .para .komu{flex:1 1 auto;min-width:0;margin-left:0}
+#s-rasp #v-shk .para .komu .dv-den{flex:1 1 8rem;min-width:0}
+#s-rasp #v-shk .para .komu .dv-den:not(:has(.org)){flex:1 1 12rem}
+#s-rasp #v-shk .para .komu .dv-den .pr-sel{max-width:100%}
+/* Постоянное распределение: те же две колонки дня, но их в строке ДВЕ, и рядом
+   ещё замок и группа. Базис оставлен каноновым, добавлен только рост — на
+   1440 строка выглядит как прежде, на экране владельца обе колонки дышат. */
+#s-rasp #v-shk .para .komu .dv-pn,#s-rasp #v-shk .para .komu .dv-cht{flex:1 1 9.6rem;
+  min-width:0}
+/* Освободить бюджет там, где он тратится ни на что: буква класса — два знака,
+   поле группы — один, а стояли они в 37 и 58 px. Отданное уходит имени. */
+#s-rasp #v-shk .para .kl-kol{flex:0 0 1.6rem}
+#s-rasp #v-shk .para .gr-sel,#s-rasp #v-shk .para .grd-sel{width:4.1rem;
+  flex:0 0 4.1rem}
+#s-rasp #v-shk .para .otsut{font-size:.7rem;padding:.1em .35em}
+#s-rasp #v-shk .para{gap:.55rem}
+/* Имя школьника: тот же приём — фиксированный минимум плюс рост.
+   🔴 `--imya-w` ПЕРЕСЧИТАН В `shirina_imeni_ch()`: множитель `0.85` УМЕНЬШАЛ
+   полосу на 15 % там, где комментарий рядом объявлял 15-процентный ЗАПАС на
+   кириллицу. Отсюда и «Тухватулин-Йалч…» при 23 знаках в самой длинной паре. */
+/* 🔴 ИМЯ НЕ РАСТЁТ, А ПЛАШКА РАСТЁТ, И ПОРЯДОК ЗДЕСЬ ОБРАТНЫЙ ОЖИДАЕМОМУ.
+   Имени нужна КОНЕЧНАЯ ширина — ровно самая длинная пара в базе, и ни пикселя
+   сверх: всё сверх неё было бы пустотой посреди строки. Плашке нужен рост:
+   лишнее место экрана владельца должно уходить в неё (H3.5, «место-то есть»).
+   Дать рост обоим — значит поделить лишнее пополам и не дать плашке ничего:
+   замер при `flex:1 1` на обоих дал плашку в 80 px при 1440. */
+#v-shk .para:has(.dv-den) .kto{flex:0 0 var(--imya-w,16ch);min-width:0}
+#v-shk .para:has(.dv-pn) .kto{flex:0 1 var(--imya-w,16ch);min-width:0}
+</style>
+<style>:root{--imya-w:calc(23ch * 1.19 + .6rem)}</style><div class="dva"><div class="kol"><div class="para shapka-dnej"><span class="kto"></span><span class="komu"><span class="dv dv-pn">пн</span><span class="dv dv-cht">чт</span></span></div><div class="para" data-i="агаркова ирина" data-shk-id="1"><span class="kto"><b>Агаркова</b> Ирина</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="аникина анастасия" data-shk-id="2"><span class="kto"><b>Аникина</b> Анастасия</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Настя Вахрина</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Настя Вахрина</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="афанасьева полина" data-shk-id="4"><span class="kto"><b>Афанасьева</b> Полина</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Настя Вахрина</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Настя Вахрина</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="белеванцева елизавета" data-shk-id="5"><span class="kto"><b>Белеванцева</b> Елизавета</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Настя Вахрина</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Настя Вахрина</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="бирюков василий" data-shk-id="6"><span class="kto"><b>Бирюков</b> Василий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="болотин фёдор" data-shk-id="7"><span class="kto"><b>Болотин</b> Фёдор</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Надя</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Надя</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="борисов дмитрий" data-shk-id="8"><span class="kto"><b>Борисов</b> Дмитрий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="бочарова анна" data-shk-id="9"><span class="kto"><b>Бочарова</b> Анна</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ваня Яковлев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Ваня Яковлев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="будылин михаил" data-shk-id="10"><span class="kto"><b>Будылин</b> Михаил</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="быков владислав" data-shk-id="11"><span class="kto"><b>Быков</b> Владислав</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ольга Рыжая</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Ольга Рыжая</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="верхошинский марк" data-shk-id="12"><span class="kto"><b>Верхошинский</b> Марк</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Михаил Шнитке</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Михаил Шнитке</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="виляев максим" data-shk-id="13"><span class="kto"><b>Виляев</b> Максим</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталья Амбург</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Наталья Амбург</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="гамаюнова софья" data-shk-id="14"><span class="kto"><b>Гамаюнова</b> Софья</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="глебова елизавета" data-shk-id="15"><span class="kto"><b>Глебова</b> Елизавета</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Елена Мирошниченко</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Елена Мирошниченко</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="данилова вера" data-shk-id="16"><span class="kto"><b>Данилова</b> Вера</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталья Амбург</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Наталья Амбург</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="добромыслов георгий" data-shk-id="17"><span class="kto"><b>Добромыслов</b> Георгий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталья Амбург</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Наталья Амбург</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="долгирева екатерина" data-shk-id="18"><span class="kto"><b>Долгирева</b> Екатерина</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ваня Яковлев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Ваня Яковлев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="домра евгений" data-shk-id="19"><span class="kto"><b>Домра</b> Евгений</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Вася</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Вася</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="егоров ярослав" data-shk-id="20"><span class="kto"><b>Егоров</b> Ярослав</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Настя Вахрина</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Настя Вахрина</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="жуков иван" data-shk-id="22"><span class="kto"><b>Жуков</b> Иван</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="исанин леонид" data-shk-id="23"><span class="kto"><b>Исанин</b> Леонид</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ваня Яковлев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Ваня Яковлев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="искеева софья" data-shk-id="24"><span class="kto"><b>Искеева</b> Софья</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="ишкаев владислав" data-shk-id="57"><span class="kto"><b>Ишкаев</b> Владислав</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="кахиани нино" data-shk-id="25"><span class="kto"><b>Кахиани</b> Нино</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Саша Оревкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Саша Оревкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="коневник федор" data-shk-id="26"><span class="kto"><b>Коневник</b> Федор</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Андрей Рябичев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Андрей Рябичев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="кудишин андрей" data-shk-id="27"><span class="kto"><b>Кудишин</b> Андрей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ольга Рыжая</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Ольга Рыжая</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="кудряшов виктор" data-shk-id="28"><span class="kto"><b>Кудряшов</b> Виктор</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталия Стрелкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Наталия Стрелкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div></div><div class="kol"><div class="para shapka-dnej"><span class="kto"></span><span class="komu"><span class="dv dv-pn">пн</span><span class="dv dv-cht">чт</span></span></div><div class="para" data-i="левченко дмитрий" data-shk-id="29"><span class="kto"><b>Левченко</b> Дмитрий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Александр Тертерян</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Александр Тертерян</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="леонович матвей" data-shk-id="30"><span class="kto"><b>Леонович</b> Матвей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Дима Елисеев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Дима Елисеев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="лим владислав" data-shk-id="31"><span class="kto"><b>Лим</b> Владислав</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Дима Елисеев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Дима Елисеев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="лупулешин иван" data-shk-id="32"><span class="kto"><b>Лупулешин</b> Иван</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Дима Елисеев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Дима Елисеев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="могилевский дмитрий" data-shk-id="34"><span class="kto"><b>Могилевский</b> Дмитрий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Александр Тертерян</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Александр Тертерян</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="николаева елизавета" data-shk-id="35"><span class="kto"><b>Николаева</b> Елизавета</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="ордян леонид" data-shk-id="36"><span class="kto"><b>Ордян</b> Леонид</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Надя</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Надя</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="пирогов константин" data-shk-id="37"><span class="kto"><b>Пирогов</b> Константин</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Михаил Шнитке</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Михаил Шнитке</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="погорельцев александр" data-shk-id="38"><span class="kto"><b>Погорельцев</b> Александр</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Андрей Рябичев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Андрей Рябичев</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="пономарев алексей" data-shk-id="39"><span class="kto"><b>Пономарев</b> Алексей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Елена Мирошниченко</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Елена Мирошниченко</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="романчук тимофей" data-shk-id="40"><span class="kto"><b>Романчук</b> Тимофей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталия Стрелкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Наталия Стрелкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="рыбаков никита" data-shk-id="41"><span class="kto"><b>Рыбаков</b> Никита</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Вася</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Вася</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="савельев михаил" data-shk-id="42"><span class="kto"><b>Савельев</b> Михаил</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Саша Оревкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Саша Оревкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="савков андрей" data-shk-id="43"><span class="kto"><b>Савков</b> Андрей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="симонова анастасия" data-shk-id="44"><span class="kto"><b>Симонова</b> Анастасия</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталия Стрелкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Наталия Стрелкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="сухов даниил" data-shk-id="45"><span class="kto"><b>Сухов</b> Даниил</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Михаил Шнитке</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Михаил Шнитке</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="тараканов роман" data-shk-id="46"><span class="kto"><b>Тараканов</b> Роман</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="тухватулин-йалчын дэвин" data-shk-id="47"><span class="kto"><b>Тухватулин-Йалчын</b> Дэвин</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="устинина полина" data-shk-id="48"><span class="kto"><b>Устинина</b> Полина</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">—</span></span><span class="dv dv-cht"><span class="prep-imya">—</span></span></span></div><div class="para" data-i="фефелов иван" data-shk-id="49"><span class="kto"><b>Фефелов</b> Иван</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></span></span></div><div class="para" data-i="фёдоров михаил" data-shk-id="50"><span class="kto"><b>Фёдоров</b> Михаил</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ольга Рыжая</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Ольга Рыжая</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="храмченко эльдар" data-shk-id="51"><span class="kto"><b>Храмченко</b> Эльдар</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Надя</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Надя</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="цикунов александр" data-shk-id="52"><span class="kto"><b>Цикунов</b> Александр</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Вася</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Вася</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="цуканов александр" data-shk-id="53"><span class="kto"><b>Цуканов</b> Александр</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Александр Тертерян</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span><span class="dv dv-cht"><span class="prep-imya">Александр Тертерян</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></span></span></div><div class="para" data-i="чапышев марк" data-shk-id="54"><span class="kto"><b>Чапышев</b> Марк</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Саша Оревкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Саша Оревкова</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="шевелев константин" data-shk-id="55"><span class="kto"><b>Шевелев</b> Константин</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Елена Мирошниченко</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Елена Мирошниченко</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div><div class="para" data-i="юсуфов арон" data-shk-id="56"><span class="kto"><b>Юсуфов</b> Арон</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Михаил Шнитке</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span><span class="dv dv-cht"><span class="prep-imya">Михаил Шнитке</span><span class="kab-mesto" data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></span></span></div></div></div></section>
+  <section class="vid" id="v-prep"><table class="prep-tab"><tbody><tr class="prep-shapka"><td class="tp"></td><td class="td-deti">пн</td><td class="td-deti">чт</td><td class="tg">группа</td><td class="tk"></td></tr><tr data-i="наталья амбург" data-tid="11"><td class="tp"><b>Наталья Амбург</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Виляев</span></span><span class="tabl"><span class="det-f">Данилова</span></span><span class="tabl"><span class="det-f">Добромыслов</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Виляев</span></span><span class="tabl"><span class="det-f">Данилова</span></span><span class="tabl"><span class="det-f">Добромыслов</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">Д</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></td></tr><tr data-i="вася" data-tid="8"><td class="tp"><b>Вася</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Домра</span></span><span class="tabl"><span class="det-f">Рыбаков</span></span><span class="tabl"><span class="det-f">Цикунов</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Домра</span></span><span class="tabl"><span class="det-f">Рыбаков</span></span><span class="tabl"><span class="det-f">Цикунов</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">В</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></td></tr><tr data-i="настя вахрина" data-tid="10"><td class="tp"><b>Настя Вахрина</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Аникина</span></span><span class="tabl"><span class="det-f">Афанасьева</span></span><span class="tabl"><span class="det-f">Белеванцева</span></span><span class="tabl"><span class="det-f">Егоров</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Аникина</span></span><span class="tabl"><span class="det-f">Афанасьева</span></span><span class="tabl"><span class="det-f">Белеванцева</span></span><span class="tabl"><span class="det-f">Егоров</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">Д</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></td></tr><tr data-i="дима елисеев" data-tid="5"><td class="tp"><b>Дима Елисеев</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Леонович</span></span><span class="tabl"><span class="det-f">Лим</span></span><span class="tabl"><span class="det-f">Лупулешин</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Леонович</span></span><span class="tabl"><span class="det-f">Лим</span></span><span class="tabl"><span class="det-f">Лупулешин</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">Н</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></td></tr><tr data-i="даня макаров" data-tid="4"><td class="tp"><b>Даня Макаров</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Бирюков</span></span><span class="tabl"><span class="det-f">Будылин</span></span><span class="tabl"><span class="det-f">Искеева</span></span><span class="tabl"><span class="det-f">Тухватулин-Йалчын</span></span><span class="tabl"><span class="det-f">Фефелов</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Бирюков</span></span><span class="tabl"><span class="det-f">Будылин</span></span><span class="tabl"><span class="det-f">Искеева</span></span><span class="tabl"><span class="det-f">Тухватулин-Йалчын</span></span><span class="tabl"><span class="det-f">Фефелов</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">Д</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></td></tr><tr data-i="елена мирошниченко" data-tid="6"><td class="tp"><b>Елена Мирошниченко</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Глебова</span></span><span class="tabl"><span class="det-f">Пономарев</span></span><span class="tabl"><span class="det-f">Шевелев</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Глебова</span></span><span class="tabl"><span class="det-f">Пономарев</span></span><span class="tabl"><span class="det-f">Шевелев</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">В</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></td></tr><tr data-i="надя" data-tid="9"><td class="tp"><b>Надя</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Болотин</span></span><span class="tabl"><span class="det-f">Ордян</span></span><span class="tabl"><span class="det-f">Храмченко</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Болотин</span></span><span class="tabl"><span class="det-f">Ордян</span></span><span class="tabl"><span class="det-f">Храмченко</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">Н</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></td></tr><tr data-i="саша оревкова" data-tid="15"><td class="tp"><b>Саша Оревкова</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Кахиани</span></span><span class="tabl"><span class="det-f">Савельев</span></span><span class="tabl"><span class="det-f">Чапышев</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Кахиани</span></span><span class="tabl"><span class="det-f">Савельев</span></span><span class="tabl"><span class="det-f">Чапышев</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">В</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></td></tr><tr data-i="ольга рыжая" data-tid="13"><td class="tp"><b>Ольга Рыжая</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Быков</span></span><span class="tabl"><span class="det-f">Кудишин</span></span><span class="tabl"><span class="det-f">Фёдоров</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Быков</span></span><span class="tabl"><span class="det-f">Кудишин</span></span><span class="tabl"><span class="det-f">Фёдоров</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">В</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></td></tr><tr data-i="андрей рябичев" data-tid="1"><td class="tp"><b>Андрей Рябичев</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Коневник</span></span><span class="tabl"><span class="det-f">Погорельцев</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Коневник</span></span><span class="tabl"><span class="det-f">Погорельцев</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">Д</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">302</span></span></td></tr><tr data-i="наталия стрелкова" data-tid="12"><td class="tp"><b>Наталия Стрелкова</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Кудряшов</span></span><span class="tabl"><span class="det-f">Романчук</span></span><span class="tabl"><span class="det-f">Симонова</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Кудряшов</span></span><span class="tabl"><span class="det-f">Романчук</span></span><span class="tabl"><span class="det-f">Симонова</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">Н</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></td></tr><tr data-i="александр тертерян" data-tid="16"><td class="tp"><b>Александр Тертерян</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Левченко</span></span><span class="tabl"><span class="det-f">Могилевский</span></span><span class="tabl"><span class="det-f">Цуканов</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Левченко</span></span><span class="tabl"><span class="det-f">Могилевский</span></span><span class="tabl"><span class="det-f">Цуканов</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">Н</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">203</span></span></td></tr><tr data-i="михаил шнитке" data-tid="7"><td class="tp"><b>Михаил Шнитке</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Верхошинский</span></span><span class="tabl"><span class="det-f">Пирогов</span></span><span class="tabl"><span class="det-f">Сухов</span></span><span class="tabl"><span class="det-f">Юсуфов</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Верхошинский</span></span><span class="tabl"><span class="det-f">Пирогов</span></span><span class="tabl"><span class="det-f">Сухов</span></span><span class="tabl"><span class="det-f">Юсуфов</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">В</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></td></tr><tr data-i="ваня яковлев" data-tid="2"><td class="tp"><b>Ваня Яковлев</b></td><td class="td-deti dv-pn"><span class="tabl"><span class="det-f">Бочарова</span></span><span class="tabl"><span class="det-f">Долгирева</span></span><span class="tabl"><span class="det-f">Исанин</span></span><span class="den-metka" data-tolko-gost title="понедельник"></span></td><td class="td-deti dv-cht"><span class="tabl"><span class="det-f">Бочарова</span></span><span class="tabl"><span class="det-f">Долгирева</span></span><span class="tabl"><span class="det-f">Исанин</span></span><span class="den-metka" data-tolko-gost title="четверг"></span></td><td class="tg">В</td><td class="tk"><span data-tolko-gost><span class="kab staryj" title="на этот день ещё не назначен; кабинет с 2026-09-06">303</span></span></td></tr></tbody></table></section>
+  <section class="vid" id="v-В"><div class="dva"><div class="kol"><div class="para shapka-dnej"><span class="kto"></span><span class="komu"><span class="dv dv-pn">пн</span><span class="dv dv-cht">чт</span></span></div><div class="para" data-i="бочарова анна" data-shk-id="9"><span class="kto"><b>Бочарова</b> Анна</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ваня Яковлев</span></span><span class="dv dv-cht"><span class="prep-imya">Ваня Яковлев</span></span></span></div><div class="para" data-i="быков владислав" data-shk-id="11"><span class="kto"><b>Быков</b> Владислав</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ольга Рыжая</span></span><span class="dv dv-cht"><span class="prep-imya">Ольга Рыжая</span></span></span></div><div class="para" data-i="верхошинский марк" data-shk-id="12"><span class="kto"><b>Верхошинский</b> Марк</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Михаил Шнитке</span></span><span class="dv dv-cht"><span class="prep-imya">Михаил Шнитке</span></span></span></div><div class="para" data-i="глебова елизавета" data-shk-id="15"><span class="kto"><b>Глебова</b> Елизавета</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Елена Мирошниченко</span></span><span class="dv dv-cht"><span class="prep-imya">Елена Мирошниченко</span></span></span></div><div class="para" data-i="долгирева екатерина" data-shk-id="18"><span class="kto"><b>Долгирева</b> Екатерина</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ваня Яковлев</span></span><span class="dv dv-cht"><span class="prep-imya">Ваня Яковлев</span></span></span></div><div class="para" data-i="домра евгений" data-shk-id="19"><span class="kto"><b>Домра</b> Евгений</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Вася</span></span><span class="dv dv-cht"><span class="prep-imya">Вася</span></span></span></div><div class="para" data-i="исанин леонид" data-shk-id="23"><span class="kto"><b>Исанин</b> Леонид</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ваня Яковлев</span></span><span class="dv dv-cht"><span class="prep-imya">Ваня Яковлев</span></span></span></div><div class="para" data-i="кахиани нино" data-shk-id="25"><span class="kto"><b>Кахиани</b> Нино</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Саша Оревкова</span></span><span class="dv dv-cht"><span class="prep-imya">Саша Оревкова</span></span></span></div><div class="para" data-i="кудишин андрей" data-shk-id="27"><span class="kto"><b>Кудишин</b> Андрей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ольга Рыжая</span></span><span class="dv dv-cht"><span class="prep-imya">Ольга Рыжая</span></span></span></div><div class="para" data-i="пирогов константин" data-shk-id="37"><span class="kto"><b>Пирогов</b> Константин</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Михаил Шнитке</span></span><span class="dv dv-cht"><span class="prep-imya">Михаил Шнитке</span></span></span></div><div class="para" data-i="пономарев алексей" data-shk-id="39"><span class="kto"><b>Пономарев</b> Алексей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Елена Мирошниченко</span></span><span class="dv dv-cht"><span class="prep-imya">Елена Мирошниченко</span></span></span></div><div class="para" data-i="рыбаков никита" data-shk-id="41"><span class="kto"><b>Рыбаков</b> Никита</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Вася</span></span><span class="dv dv-cht"><span class="prep-imya">Вася</span></span></span></div><div class="para" data-i="савельев михаил" data-shk-id="42"><span class="kto"><b>Савельев</b> Михаил</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Саша Оревкова</span></span><span class="dv dv-cht"><span class="prep-imya">Саша Оревкова</span></span></span></div><div class="para" data-i="сухов даниил" data-shk-id="45"><span class="kto"><b>Сухов</b> Даниил</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Михаил Шнитке</span></span><span class="dv dv-cht"><span class="prep-imya">Михаил Шнитке</span></span></span></div><div class="para" data-i="фёдоров михаил" data-shk-id="50"><span class="kto"><b>Фёдоров</b> Михаил</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Ольга Рыжая</span></span><span class="dv dv-cht"><span class="prep-imya">Ольга Рыжая</span></span></span></div><div class="para" data-i="цикунов александр" data-shk-id="52"><span class="kto"><b>Цикунов</b> Александр</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Вася</span></span><span class="dv dv-cht"><span class="prep-imya">Вася</span></span></span></div><div class="para" data-i="чапышев марк" data-shk-id="54"><span class="kto"><b>Чапышев</b> Марк</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Саша Оревкова</span></span><span class="dv dv-cht"><span class="prep-imya">Саша Оревкова</span></span></span></div><div class="para" data-i="шевелев константин" data-shk-id="55"><span class="kto"><b>Шевелев</b> Константин</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Елена Мирошниченко</span></span><span class="dv dv-cht"><span class="prep-imya">Елена Мирошниченко</span></span></span></div><div class="para" data-i="юсуфов арон" data-shk-id="56"><span class="kto"><b>Юсуфов</b> Арон</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Михаил Шнитке</span></span><span class="dv dv-cht"><span class="prep-imya">Михаил Шнитке</span></span></span></div></div><div class="kol kol-pr"><div class="prep-ramka"><div class="para" data-i="вася"><span class="kto"><b>Вася</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Домра</span></span><span class="tabl"><span class="det-f">Рыбаков</span></span><span class="tabl"><span class="det-f">Цикунов</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Домра</span></span><span class="tabl"><span class="det-f">Рыбаков</span></span><span class="tabl"><span class="det-f">Цикунов</span></span></span></span></span></div><div class="para" data-i="елена мирошниченко"><span class="kto"><b>Елена Мирошниченко</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Глебова</span></span><span class="tabl"><span class="det-f">Пономарев</span></span><span class="tabl"><span class="det-f">Шевелев</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Глебова</span></span><span class="tabl"><span class="det-f">Пономарев</span></span><span class="tabl"><span class="det-f">Шевелев</span></span></span></span></span></div><div class="para" data-i="саша оревкова"><span class="kto"><b>Саша Оревкова</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Кахиани</span></span><span class="tabl"><span class="det-f">Савельев</span></span><span class="tabl"><span class="det-f">Чапышев</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Кахиани</span></span><span class="tabl"><span class="det-f">Савельев</span></span><span class="tabl"><span class="det-f">Чапышев</span></span></span></span></span></div><div class="para" data-i="ольга рыжая"><span class="kto"><b>Ольга Рыжая</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Быков</span></span><span class="tabl"><span class="det-f">Кудишин</span></span><span class="tabl"><span class="det-f">Фёдоров</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Быков</span></span><span class="tabl"><span class="det-f">Кудишин</span></span><span class="tabl"><span class="det-f">Фёдоров</span></span></span></span></span></div><div class="para" data-i="михаил шнитке"><span class="kto"><b>Михаил Шнитке</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Верхошинский</span></span><span class="tabl"><span class="det-f">Пирогов</span></span><span class="tabl"><span class="det-f">Сухов</span></span><span class="tabl"><span class="det-f">Юсуфов</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Верхошинский</span></span><span class="tabl"><span class="det-f">Пирогов</span></span><span class="tabl"><span class="det-f">Сухов</span></span><span class="tabl"><span class="det-f">Юсуфов</span></span></span></span></span></div><div class="para" data-i="ваня яковлев"><span class="kto"><b>Ваня Яковлев</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Бочарова</span></span><span class="tabl"><span class="det-f">Долгирева</span></span><span class="tabl"><span class="det-f">Исанин</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Бочарова</span></span><span class="tabl"><span class="det-f">Долгирева</span></span><span class="tabl"><span class="det-f">Исанин</span></span></span></span></span></div></div></div></div></section><section class="vid" id="v-Д"><div class="dva"><div class="kol"><div class="para shapka-dnej"><span class="kto"></span><span class="komu"><span class="dv dv-pn">пн</span><span class="dv dv-cht">чт</span></span></div><div class="para" data-i="аникина анастасия" data-shk-id="2"><span class="kto"><b>Аникина</b> Анастасия</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Настя Вахрина</span></span><span class="dv dv-cht"><span class="prep-imya">Настя Вахрина</span></span></span></div><div class="para" data-i="афанасьева полина" data-shk-id="4"><span class="kto"><b>Афанасьева</b> Полина</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Настя Вахрина</span></span><span class="dv dv-cht"><span class="prep-imya">Настя Вахрина</span></span></span></div><div class="para" data-i="белеванцева елизавета" data-shk-id="5"><span class="kto"><b>Белеванцева</b> Елизавета</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Настя Вахрина</span></span><span class="dv dv-cht"><span class="prep-imya">Настя Вахрина</span></span></span></div><div class="para" data-i="бирюков василий" data-shk-id="6"><span class="kto"><b>Бирюков</b> Василий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span></span></span></div><div class="para" data-i="будылин михаил" data-shk-id="10"><span class="kto"><b>Будылин</b> Михаил</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span></span></span></div><div class="para" data-i="виляев максим" data-shk-id="13"><span class="kto"><b>Виляев</b> Максим</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталья Амбург</span></span><span class="dv dv-cht"><span class="prep-imya">Наталья Амбург</span></span></span></div><div class="para" data-i="данилова вера" data-shk-id="16"><span class="kto"><b>Данилова</b> Вера</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталья Амбург</span></span><span class="dv dv-cht"><span class="prep-imya">Наталья Амбург</span></span></span></div><div class="para" data-i="добромыслов георгий" data-shk-id="17"><span class="kto"><b>Добромыслов</b> Георгий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталья Амбург</span></span><span class="dv dv-cht"><span class="prep-imya">Наталья Амбург</span></span></span></div><div class="para" data-i="егоров ярослав" data-shk-id="20"><span class="kto"><b>Егоров</b> Ярослав</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Настя Вахрина</span></span><span class="dv dv-cht"><span class="prep-imya">Настя Вахрина</span></span></span></div><div class="para" data-i="искеева софья" data-shk-id="24"><span class="kto"><b>Искеева</b> Софья</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span></span></span></div><div class="para" data-i="коневник федор" data-shk-id="26"><span class="kto"><b>Коневник</b> Федор</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Андрей Рябичев</span></span><span class="dv dv-cht"><span class="prep-imya">Андрей Рябичев</span></span></span></div><div class="para" data-i="погорельцев александр" data-shk-id="38"><span class="kto"><b>Погорельцев</b> Александр</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Андрей Рябичев</span></span><span class="dv dv-cht"><span class="prep-imya">Андрей Рябичев</span></span></span></div><div class="para" data-i="тухватулин-йалчын дэвин" data-shk-id="47"><span class="kto"><b>Тухватулин-Йалчын</b> Дэвин</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span></span></span></div><div class="para" data-i="фефелов иван" data-shk-id="49"><span class="kto"><b>Фефелов</b> Иван</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Даня Макаров</span></span><span class="dv dv-cht"><span class="prep-imya">Даня Макаров</span></span></span></div></div><div class="kol kol-pr"><div class="prep-ramka"><div class="para" data-i="наталья амбург"><span class="kto"><b>Наталья Амбург</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Виляев</span></span><span class="tabl"><span class="det-f">Данилова</span></span><span class="tabl"><span class="det-f">Добромыслов</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Виляев</span></span><span class="tabl"><span class="det-f">Данилова</span></span><span class="tabl"><span class="det-f">Добромыслов</span></span></span></span></span></div><div class="para" data-i="настя вахрина"><span class="kto"><b>Настя Вахрина</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Аникина</span></span><span class="tabl"><span class="det-f">Афанасьева</span></span><span class="tabl"><span class="det-f">Белеванцева</span></span><span class="tabl"><span class="det-f">Егоров</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Аникина</span></span><span class="tabl"><span class="det-f">Афанасьева</span></span><span class="tabl"><span class="det-f">Белеванцева</span></span><span class="tabl"><span class="det-f">Егоров</span></span></span></span></span></div><div class="para" data-i="даня макаров"><span class="kto"><b>Даня Макаров</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Бирюков</span></span><span class="tabl"><span class="det-f">Будылин</span></span><span class="tabl"><span class="det-f">Искеева</span></span><span class="tabl"><span class="det-f">Тухватулин-Йалчын</span></span><span class="tabl"><span class="det-f">Фефелов</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Бирюков</span></span><span class="tabl"><span class="det-f">Будылин</span></span><span class="tabl"><span class="det-f">Искеева</span></span><span class="tabl"><span class="det-f">Тухватулин-Йалчын</span></span><span class="tabl"><span class="det-f">Фефелов</span></span></span></span></span></div><div class="para" data-i="андрей рябичев"><span class="kto"><b>Андрей Рябичев</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Коневник</span></span><span class="tabl"><span class="det-f">Погорельцев</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Коневник</span></span><span class="tabl"><span class="det-f">Погорельцев</span></span></span></span></span></div></div></div></div></section><section class="vid" id="v-Н"><div class="dva"><div class="kol"><div class="para shapka-dnej"><span class="kto"></span><span class="komu"><span class="dv dv-pn">пн</span><span class="dv dv-cht">чт</span></span></div><div class="para" data-i="болотин фёдор" data-shk-id="7"><span class="kto"><b>Болотин</b> Фёдор</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Надя</span></span><span class="dv dv-cht"><span class="prep-imya">Надя</span></span></span></div><div class="para" data-i="кудряшов виктор" data-shk-id="28"><span class="kto"><b>Кудряшов</b> Виктор</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталия Стрелкова</span></span><span class="dv dv-cht"><span class="prep-imya">Наталия Стрелкова</span></span></span></div><div class="para" data-i="левченко дмитрий" data-shk-id="29"><span class="kto"><b>Левченко</b> Дмитрий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Александр Тертерян</span></span><span class="dv dv-cht"><span class="prep-imya">Александр Тертерян</span></span></span></div><div class="para" data-i="леонович матвей" data-shk-id="30"><span class="kto"><b>Леонович</b> Матвей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Дима Елисеев</span></span><span class="dv dv-cht"><span class="prep-imya">Дима Елисеев</span></span></span></div><div class="para" data-i="лим владислав" data-shk-id="31"><span class="kto"><b>Лим</b> Владислав</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Дима Елисеев</span></span><span class="dv dv-cht"><span class="prep-imya">Дима Елисеев</span></span></span></div><div class="para" data-i="лупулешин иван" data-shk-id="32"><span class="kto"><b>Лупулешин</b> Иван</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Дима Елисеев</span></span><span class="dv dv-cht"><span class="prep-imya">Дима Елисеев</span></span></span></div><div class="para" data-i="могилевский дмитрий" data-shk-id="34"><span class="kto"><b>Могилевский</b> Дмитрий</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Александр Тертерян</span></span><span class="dv dv-cht"><span class="prep-imya">Александр Тертерян</span></span></span></div><div class="para" data-i="ордян леонид" data-shk-id="36"><span class="kto"><b>Ордян</b> Леонид</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Надя</span></span><span class="dv dv-cht"><span class="prep-imya">Надя</span></span></span></div><div class="para" data-i="романчук тимофей" data-shk-id="40"><span class="kto"><b>Романчук</b> Тимофей</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталия Стрелкова</span></span><span class="dv dv-cht"><span class="prep-imya">Наталия Стрелкова</span></span></span></div><div class="para" data-i="симонова анастасия" data-shk-id="44"><span class="kto"><b>Симонова</b> Анастасия</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Наталия Стрелкова</span></span><span class="dv dv-cht"><span class="prep-imya">Наталия Стрелкова</span></span></span></div><div class="para" data-i="храмченко эльдар" data-shk-id="51"><span class="kto"><b>Храмченко</b> Эльдар</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Надя</span></span><span class="dv dv-cht"><span class="prep-imya">Надя</span></span></span></div><div class="para" data-i="цуканов александр" data-shk-id="53"><span class="kto"><b>Цуканов</b> Александр</span><span class="komu"><span class="dv dv-pn"><span class="prep-imya">Александр Тертерян</span></span><span class="dv dv-cht"><span class="prep-imya">Александр Тертерян</span></span></span></div></div><div class="kol kol-pr"><div class="prep-ramka"><div class="para" data-i="дима елисеев"><span class="kto"><b>Дима Елисеев</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Леонович</span></span><span class="tabl"><span class="det-f">Лим</span></span><span class="tabl"><span class="det-f">Лупулешин</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Леонович</span></span><span class="tabl"><span class="det-f">Лим</span></span><span class="tabl"><span class="det-f">Лупулешин</span></span></span></span></span></div><div class="para" data-i="надя"><span class="kto"><b>Надя</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Болотин</span></span><span class="tabl"><span class="det-f">Ордян</span></span><span class="tabl"><span class="det-f">Храмченко</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Болотин</span></span><span class="tabl"><span class="det-f">Ордян</span></span><span class="tabl"><span class="det-f">Храмченко</span></span></span></span></span></div><div class="para" data-i="наталия стрелкова"><span class="kto"><b>Наталия Стрелкова</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Кудряшов</span></span><span class="tabl"><span class="det-f">Романчук</span></span><span class="tabl"><span class="det-f">Симонова</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Кудряшов</span></span><span class="tabl"><span class="det-f">Романчук</span></span><span class="tabl"><span class="det-f">Симонова</span></span></span></span></span></div><div class="para" data-i="александр тертерян"><span class="kto"><b>Александр Тертерян</b></span><span class="komu deti"><span class="den-ryad dv-pn"><span class="den-podpis">пн</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Левченко</span></span><span class="tabl"><span class="det-f">Могилевский</span></span><span class="tabl"><span class="det-f">Цуканов</span></span></span></span><span class="den-ryad dv-cht"><span class="den-podpis">чт</span><span class="deti-ryad"><span class="tabl"><span class="det-f">Левченко</span></span><span class="tabl"><span class="det-f">Могилевский</span></span><span class="tabl"><span class="det-f">Цуканов</span></span></span></span></span></div></div></div></div></section>
+</section>
+
+<script>
+// Поиск ищет и школьника, и преподавателя, подсказывает от двух букв: людей мало.
+const IMENA = ['Агаркова Ирина', 'Аникина Анастасия', 'Афанасьева Полина', 'Белеванцева Елизавета', 'Бирюков Василий', 'Болотин Фёдор', 'Борисов Дмитрий', 'Бочарова Анна', 'Будылин Михаил', 'Быков Владислав', 'Верхошинский Марк', 'Виляев Максим', 'Гамаюнова Софья', 'Глебова Елизавета', 'Данилова Вера', 'Добромыслов Георгий', 'Долгирева Екатерина', 'Домра Евгений', 'Егоров Ярослав', 'Жуков Иван', 'Исанин Леонид', 'Искеева Софья', 'Ишкаев Владислав', 'Кахиани Нино', 'Коневник Федор', 'Кудишин Андрей', 'Кудряшов Виктор', 'Левченко Дмитрий', 'Леонович Матвей', 'Лим Владислав', 'Лупулешин Иван', 'Могилевский Дмитрий', 'Николаева Елизавета', 'Ордян Леонид', 'Пирогов Константин', 'Погорельцев Александр', 'Пономарев Алексей', 'Романчук Тимофей', 'Рыбаков Никита', 'Савельев Михаил', 'Савков Андрей', 'Симонова Анастасия', 'Сухов Даниил', 'Тараканов Роман', 'Тухватулин-Йалчын Дэвин', 'Устинина Полина', 'Фефелов Иван', 'Фёдоров Михаил', 'Храмченко Эльдар', 'Цикунов Александр', 'Цуканов Александр', 'Чапышев Марк', 'Шевелев Константин', 'Юсуфов Арон', 'Андрей Рябичев', 'Ваня Яковлев', 'Даня Макаров', 'Дима Елисеев', 'Елена Мирошниченко', 'Михаил Шнитке', 'Вася', 'Надя', 'Настя Вахрина', 'Наталья Амбург', 'Наталия Стрелкова', 'Ольга Рыжая', 'Саша Оревкова', 'Александр Тертерян', '16 Деревья', '1 Постепенно, с первого шага', '2 Правило суммы и произведения', '3 Пары и тройки', '4 Ещё раз про сложение и умножение', '5 Биекции', '6 Графы', '7 Множества', '8 Зоопарк теории графов', '9 Индукция', '10 Биномиальные коэффициенты', 'Д1 Информация', 'Д2 Геометрическое суммирование', '11 Соответствия', '12 Делимость', '13 Остатки', '14 ОТА', '15 Бесконечность', 'Д3 Игры'];
+// Школьник → {id, группа}. Клик по школьнику теперь ВЕДЁТ на его группу, а не
+// пишет текст поверх страницы — владелец 09.09, дословно: «мне нужно не
+// открыть вот эту странную полоску, ... а перевести меня на страницу с
+// распределением группы В, чтобы я увидел Ивана Фефелова, с другой стороны —
+// его преподавателя». Группа пустой строкой — школьник нигде, и открывается
+// вкладка «школьникам», а не «В»/«Д»/«Н» (см. скрипт перехода ниже).
+const UCHENIKI = {"Агаркова Ирина":{"id":1,"g":""},"Аникина Анастасия":{"id":2,"g":"Д"},"Афанасьева Полина":{"id":4,"g":"Д"},"Белеванцева Елизавета":{"id":5,"g":"Д"},"Бирюков Василий":{"id":6,"g":"Д"},"Болотин Фёдор":{"id":7,"g":"Н"},"Борисов Дмитрий":{"id":8,"g":""},"Бочарова Анна":{"id":9,"g":"В"},"Будылин Михаил":{"id":10,"g":"Д"},"Быков Владислав":{"id":11,"g":"В"},"Верхошинский Марк":{"id":12,"g":"В"},"Виляев Максим":{"id":13,"g":"Д"},"Гамаюнова Софья":{"id":14,"g":""},"Глебова Елизавета":{"id":15,"g":"В"},"Данилова Вера":{"id":16,"g":"Д"},"Добромыслов Георгий":{"id":17,"g":"Д"},"Долгирева Екатерина":{"id":18,"g":"В"},"Домра Евгений":{"id":19,"g":"В"},"Егоров Ярослав":{"id":20,"g":"Д"},"Жуков Иван":{"id":22,"g":""},"Исанин Леонид":{"id":23,"g":"В"},"Искеева Софья":{"id":24,"g":"Д"},"Ишкаев Владислав":{"id":57,"g":""},"Кахиани Нино":{"id":25,"g":"В"},"Коневник Федор":{"id":26,"g":"Д"},"Кудишин Андрей":{"id":27,"g":"В"},"Кудряшов Виктор":{"id":28,"g":"Н"},"Левченко Дмитрий":{"id":29,"g":"Н"},"Леонович Матвей":{"id":30,"g":"Н"},"Лим Владислав":{"id":31,"g":"Н"},"Лупулешин Иван":{"id":32,"g":"Н"},"Могилевский Дмитрий":{"id":34,"g":"Н"},"Николаева Елизавета":{"id":35,"g":""},"Ордян Леонид":{"id":36,"g":"Н"},"Пирогов Константин":{"id":37,"g":"В"},"Погорельцев Александр":{"id":38,"g":"Д"},"Пономарев Алексей":{"id":39,"g":"В"},"Романчук Тимофей":{"id":40,"g":"Н"},"Рыбаков Никита":{"id":41,"g":"В"},"Савельев Михаил":{"id":42,"g":"В"},"Савков Андрей":{"id":43,"g":""},"Симонова Анастасия":{"id":44,"g":"Н"},"Сухов Даниил":{"id":45,"g":"В"},"Тараканов Роман":{"id":46,"g":""},"Тухватулин-Йалчын Дэвин":{"id":47,"g":"Д"},"Устинина Полина":{"id":48,"g":""},"Фефелов Иван":{"id":49,"g":"Д"},"Фёдоров Михаил":{"id":50,"g":"В"},"Храмченко Эльдар":{"id":51,"g":"Н"},"Цикунов Александр":{"id":52,"g":"В"},"Цуканов Александр":{"id":53,"g":"Н"},"Чапышев Марк":{"id":54,"g":"В"},"Шевелев Константин":{"id":55,"g":"В"},"Юсуфов Арон":{"id":56,"g":"В"}};
+// Что показать по найденному ПРЕПОДАВАТЕЛЮ или ЛИСТКУ — текстом на месте, как
+// и раньше: это не тот адрес, на который владелец пожаловался.
+const KOMU = {"16 Деревья":"листок 9 класса · A · α · ℵ","1 Постепенно, с первого шага":"листок 8 класса","2 Правило суммы и произведения":"листок 8 класса","3 Пары и тройки":"листок 8 класса","4 Ещё раз про сложение и умножение":"листок 8 класса","5 Биекции":"листок 8 класса","6 Графы":"листок 8 класса","7 Множества":"листок 8 класса","8 Зоопарк теории графов":"листок 8 класса","9 Индукция":"листок 8 класса","10 Биномиальные коэффициенты":"листок 8 класса","Д1 Информация":"листок 8 класса","Д2 Геометрическое суммирование":"листок 8 класса","11 Соответствия":"листок 8 класса","12 Делимость":"листок 8 класса","13 Остатки":"листок 8 класса","14 ОТА":"листок 8 класса","15 Бесконечность":"листок 8 класса","Д3 Игры":"листок 8 класса","Андрей Рябичев":"Коневник Федор, Погорельцев Александр · Д · 302","Ваня Яковлев":"Бочарова Анна, Долгирева Екатерина, Исанин Леонид · В · 303","Даня Макаров":"Бирюков Василий, Будылин Михаил, Искеева Софья, Тухватулин-Йалчын Дэвин, Фефелов Иван · Д · 302","Дима Елисеев":"Леонович Матвей, Лим Владислав, Лупулешин Иван · Н · 203","Елена Мирошниченко":"Глебова Елизавета, Пономарев Алексей, Шевелев Константин · В · 303","Михаил Шнитке":"Верхошинский Марк, Пирогов Константин, Сухов Даниил, Юсуфов Арон · В · 303","Вася":"Домра Евгений, Рыбаков Никита, Цикунов Александр · В · 303","Надя":"Болотин Фёдор, Ордян Леонид, Храмченко Эльдар · Н · 203","Настя Вахрина":"Аникина Анастасия, Афанасьева Полина, Белеванцева Елизавета, Егоров Ярослав · Д · 302","Наталья Амбург":"Виляев Максим, Данилова Вера, Добромыслов Георгий · Д · 302","Наталия Стрелкова":"Кудряшов Виктор, Романчук Тимофей, Симонова Анастасия · Н · 203","Ольга Рыжая":"Быков Владислав, Кудишин Андрей, Фёдоров Михаил · В · 303","Саша Оревкова":"Кахиани Нино, Савельев Михаил, Чапышев Марк · В · 303","Александр Тертерян":"Левченко Дмитрий, Могилевский Дмитрий, Цуканов Александр · Н · 203"};
+const poisk=document.getElementById('poisk'),spisok=document.getElementById('spisok'),nashli=document.getElementById('nashli');
+poisk.addEventListener('input',e=>{
+  const q=e.target.value.trim().toLowerCase(); nashli.innerHTML='';
+  if(q.length<2){spisok.hidden=true;return;}
+  const r=IMENA.filter(n=>n.toLowerCase().includes(q)).slice(0,8);
+  spisok.innerHTML=r.map(n=>'<div>'+n+'</div>').join(''); spisok.hidden=!r.length;
+});
+spisok.addEventListener('click',e=>{
+  if(e.target.tagName!=='DIV')return;
+  const n=e.target.textContent; spisok.hidden=true;
+  // 🔴 ШКОЛЬНИК — ПЕРЕХОДОМ, ПРЕПОДАВАТЕЛЬ/ЛИСТОК — ПО-СТАРОМУ, ТЕКСТОМ. Уйти с
+  // адреса распределения дальше можно как угодно (назад, другая вкладка меню) —
+  // сбрасывать здесь нечего, это обычная навигация браузера.
+  const uch = UCHENIKI[n];
+  if(uch){
+    location.href = '/raspredelenie?sid=' + uch.id
+      + (uch.g ? '&g=' + encodeURIComponent(uch.g) : '');
+    return;
+  }
+  poisk.value=n;
+  nashli.innerHTML = KOMU[n] ? '<div class="otvet"><b>'+n+'</b> → '+KOMU[n]+'</div>' : '';
+});
+// 🔴 УХОД КЛИКОМ МИМО ГАСИТ И ПОДСКАЗКИ, И ОТВЕТ. Раньше гас только `spisok`;
+// `nashli` (ответ по преподавателю/листку) оставался висеть, пока не наберут
+// новый запрос заново, — то самое «полоску невозможно закрыть, не сбросив
+// человека», только уже для НЕ-школьника. Дублирует часть жалобы 09.09, но
+// чинится тем же способом и в том же файле, что и переход школьника.
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.podskazki')){spisok.hidden=true;nashli.innerHTML='';}
+});
+
+// 🔴 ПРИШЛИ ПО ССЫЛКЕ ИЗ ПОИСКА — ВКЛАДКА ГРУППЫ И ПОДСВЕТКА СТРОКИ. `sid`/`g`
+// читаются из адреса при каждой загрузке, а не запоминаются нигде: обычная
+// навигация, уйти можно куда угодно, ничего не сбрасывая. Работает на любом
+// адресе распределения — на занятии и на постоянном каркас один и тот же.
+(function(){
+  const q = new URLSearchParams(location.search);
+  const sid = q.get('sid');
+  if(!sid) return;
+  const g = q.get('g');
+  const vk = g && document.getElementById('t-' + g);
+  if(vk) vk.checked = true;
+  const stroka = document.querySelector('[data-shk-id="' + CSS.escape(sid) + '"]');
+  if(stroka){ stroka.classList.add('podsvechen'); stroka.scrollIntoView({block:'center'}); }
+})();
+
+// Поиск на РАСПРЕДЕЛЕНИИ: прячет строки, не совпавшие с фамилией или именем.
+// Работает разом во всех вкладках и в обеих половинах строки — искать надо там,
+// где смотришь.
+// 🔴 ВЫБОРА ДНЯ ПРИ ОТКРЫТИИ БОЛЬШЕ НЕТ, И ЭТО НЕ УПРОЩЕНИЕ, А СЛЕДСТВИЕ. Здесь
+// стояло `getElementById('d-cht').checked = true` — отметить четверг во вторник,
+// среду и четверг. Переключателя дней не существует с решения владельца 5 от
+// 07.09 (одна табличка на оба дня), радиокнопок `d-pn`/`d-cht` в странице нет, и
+// строка бросала `TypeError` на КАЖДОМ открытии, обрывая весь скрипт ниже —
+// вместе с поиском.
+//
+// 🔴 ПОИСК ИЩЕТ В ТОМ ПОЛЕ, КОТОРОЕ НА СТРАНИЦЕ ЕСТЬ. Здесь стояло `poisk-r` —
+// id, которого в разметке нет НИ ОДНОГО, и не было до этого захода: замерено
+// и на боевом сайте (`grep -c 'id="poisk-r"'` → 0), и в `HEAD~2`. То есть
+// `pr` был `null`, строка ниже бросала второй `TypeError`, и поиск по
+// распределению не работал вовсе — молча, потому что консоль никто не открывал.
+// Поле поиска на этой странице одно, наверху, и его id — `poisk`.
+const pr=document.getElementById('poisk');
+pr.addEventListener('input',e=>{
+  const q=e.target.value.trim().toLowerCase();
+  // 🔴 `[data-i]` НА ОБОИХ СЕЛЕКТОРАХ. Строка-шапка столбцов «пн · чт» — тоже
+  // `.para`, но искомого имени не несёт и `data-i` не имеет; без фильтра поиск
+  // падал на `undefined.includes` на первой же букве и не прятал НИЧЕГО.
+  document.querySelectorAll('#s-rasp .para[data-i], #s-rasp tr[data-i]').forEach(d=>{
+    d.classList.toggle('skryt', !!q && !d.dataset.i.includes(q) &&
+      !d.textContent.toLowerCase().includes(q));
+  });
+});
+</script>
+
+<script>
+/* ── КРИВАЯ ДРАКОНА ХАРТЕРА—ХЕЙТУЭЯ ─────────────────────────────────────────────
+   🔴 ЛИНИЕЙ СО СКРУГЛЁННЫМИ УГЛАМИ, А НЕ ЛЕСЕНКОЙ И НЕ ОБЛАКОМ ТОЧЕК.
+   Первый заход рисовал её единичными шагами с острыми углами — на большом экране
+   вышла пиксельная лесенка. Владелец: «плохо прорисовано… должна быть детальная,
+   не пиксельная».
+
+   Способ взят там, где он уже отработан: сайт лекции про кривую дракона
+   (`materials/krivaya-drakona/sayt/src/dragon.js`) — слово складок, ломаная целыми
+   координатами, скруглённые углы. Кривая рисуется одной непрерывной линией,
+   которую можно проследить пальцем: это её смысл, а не её вид.
+
+   СЛОВО СКЛАДОК. На каждом шаге к слову приписывается поворот налево и зеркально
+   обращённое предыдущее слово: s = s + L + flip(s). Это буквально складывание
+   полоски бумаги пополам, из которого кривая и получается.
+
+   Ранг 13 — 8192 звена: достаточно, чтобы линия читалась как сплошная, и мало,
+   чтобы рисоваться мгновенно. Холст перерисовывается при смене размера, поэтому
+   на любом экране линия остаётся чёткой — в отличие от растянутой картинки. */
+(function(){
+  const holst = document.getElementById('drakon');
+  if(!holst || !holst.getContext) return;
+
+  /* Слово поворотов: +1 налево, −1 направо. */
+  function slovo(rang){
+    let s = [];
+    for(let i = 0; i < rang; i++){
+      const zerkalo = [];
+      for(let j = s.length - 1; j >= 0; j--) zerkalo.push(-s[j]);
+      s = s.concat([1], zerkalo);
+    }
+    return s;
+  }
+
+  /* Ломаная целыми координатами: округление обязательно, иначе поворот на 90°
+     даёт 6.1e-17 вместо нуля и звенья перестают быть горизонтальными. */
+  function lomanaya(rang){
+    const pov = slovo(rang), shag = [[1,0],[0,1],[-1,0],[0,-1]];
+    let n = 0, x = 0, y = 0;
+    const tochki = [[0,0]];
+    for(let i = 0; i <= pov.length; i++){
+      x += shag[n][0]; y += shag[n][1];
+      tochki.push([x, y]);
+      if(i < pov.length) n = (n + (pov[i] === 1 ? 1 : 3)) % 4;
+    }
+    return tochki;
+  }
+
+  /* 🔴 РАНГ 16, А НЕ 13. На тринадцати звено занимает пять пикселей, и линия
+     толщиной в половину звена слипается в кляксы — та самая «пиксельность», на
+     которую пожаловался владелец. На шестнадцати звеньев 65 тысяч, каждое
+     меньше двух пикселей, и кривая читается как тонкий плотный узор. Считается
+     один раз при загрузке, дальше только перерисовывается. */
+  const TOCHKI = lomanaya(16);
+
+  function risovat(){
+    const r = holst.getBoundingClientRect();
+    if(r.width < 40 || r.height < 40) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    holst.width = Math.round(r.width * dpr);
+    holst.height = Math.round(r.height * dpr);
+    const ctx = holst.getContext('2d');
+    ctx.clearRect(0, 0, holst.width, holst.height);
+
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for(const [a, b] of TOCHKI){
+      if(a < x0) x0 = a; if(a > x1) x1 = a;
+      if(b < y0) y0 = b; if(b > y1) y1 = b;
+    }
+    /* Отрицательное поле: кривая НАМЕРЕННО больше холста и обрезается краями.
+       Владелец: «увеличить её ещё в три раза, чтобы она вылезла за пределы».
+       Обрезанная фигура читается как продолжающаяся за экран, целиком вписанная —
+       как картинка на подставке. */
+    const pole = -0.38;
+    const mash = Math.min(holst.width * (1 - pole * 2) / (x1 - x0),
+                          holst.height * (1 - pole * 2) / (y1 - y0));
+    const sdvX = (holst.width - (x1 - x0) * mash) / 2;
+    const sdvY = (holst.height - (y1 - y0) * mash) / 2;
+
+    /* Цвет берётся из палитры страницы: тёмная и светлая темы переключаются
+       переменными, и второй список цветов здесь неминуемо бы разъехался. */
+    ctx.strokeStyle = getComputedStyle(document.documentElement)
+      .getPropertyValue('--accent').trim() || '#2f6e8e';
+    ctx.lineWidth = Math.max(0.7 * dpr, mash * 0.42);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    for(let i = 0; i < TOCHKI.length; i++){
+      const px = sdvX + (TOCHKI[i][0] - x0) * mash;
+      const py = holst.height - sdvY - (TOCHKI[i][1] - y0) * mash;
+      if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  risovat();
+  let zhdu;
+  window.addEventListener('resize', function(){
+    clearTimeout(zhdu); zhdu = setTimeout(risovat, 200);
+  });
+})();
+</script>
+<div class="okno" id="okno-vhod" hidden>
+  <div class="okno-fon" data-zakryt></div>
+  <form class="okno-telo" id="forma-vhoda" method="post" action="/vhod">
+    <h2>Вход</h2>
+    <!-- 🔴 СКРЫТОЕ ИМЯ ПОЛЬЗОВАТЕЛЯ СТОИТ ЗДЕСЬ НЕ ДЛЯ СЕРВЕРА — ОН ЕГО НЕ ЧИТАЕТ.
+         Менеджеры паролей сохраняют ПАРУ «логин + пароль» и форму без логина чаще
+         всего пропускают молча. С этим полем браузер предлагает запомнить вход и
+         подставляет его в следующий раз. Владелец 06.09: «нужно, чтобы после
+         входа пароль запоминался автоматически». -->
+    <input type="text" name="kto" value="организатор" autocomplete="username"
+           readonly hidden aria-hidden="true" tabindex="-1">
+    <label for="parol">Пароль организатора</label>
+    <input type="password" id="parol" name="parol" required autocomplete="current-password">
+    <p class="okno-oshibka" id="vhod-oshibka" hidden>Неверный пароль.</p>
+    <div class="okno-knopki">
+      <button type="button" class="vtoraya" data-zakryt>Отмена</button>
+      <button type="submit" class="glavnaya">ОК</button>
+    </div>
+  </form>
+</div>
+<script>
+/* ── ВХОД ВСПЛЫВАЮЩИМ ОКНОМ, А НЕ ОТДЕЛЬНОЙ СТРАНИЦЕЙ ───────────────────────────
+   Владелец 06.09: «нажимаю Вход — появляется небольшое всплывающее окно для
+   пароля, ввожу поверх всего, нажимаю ОК и остаюсь на той же странице».
+   Отдельная страница /vhod осталась жива и работает — она нужна как запасной
+   путь и как то, куда сервер отправляет неавторизованного; но обычный человек
+   её больше не видит. */
+(function(){
+  const okno = document.getElementById('okno-vhod');
+  const forma = document.getElementById('forma-vhoda');
+  const pole = document.getElementById('parol');
+  const oshibka = document.getElementById('vhod-oshibka');
+  if(!okno) return;
+
+  function otkryt(){ okno.hidden = false; oshibka.hidden = true; pole.value=''; pole.focus(); }
+  function zakryt(){ okno.hidden = true; }
+
+  document.addEventListener('click', function(ev){
+    const knopka = ev.target.closest('[data-otkryt-vhod]');
+    if(knopka){ ev.preventDefault(); otkryt(); return; }
+    if(ev.target.closest('[data-zakryt]')) zakryt();
+  });
+  document.addEventListener('keydown', function(ev){
+    if(ev.key === 'Escape' && !okno.hidden) zakryt();
+  });
+
+  /* 🔴 ФОРМА ОТПРАВЛЯЕТСЯ БРАУЗЕРОМ, А НЕ СКРИПТОМ, И ЭТО ГЛАВНОЕ ЗДЕСЬ.
+     Раньше вход шёл через `fetch` с `preventDefault` — и менеджер паролей не
+     видел входа вовсе, поэтому не предлагал пароль сохранить и не подставлял
+     его потом. Владелец вводил пароль каждый раз заново.
+
+     Обычная отправка это чинит: браузер понимает, что произошёл вход, сервер
+     отвечает 302 на `/`, и человек оказывается ровно там же, где был, — то есть
+     обещание «остаюсь на той же странице» выполняется и без скрипта. Неверный
+     пароль возвращает на `/?vhod=ne-pustil`, и окно открывается снова с ошибкой.
+
+     Скрипт здесь только один: показать окно и запомнить, что оно было открыто. */
+  const adres = new URL(location.href);
+  if(adres.searchParams.get('vhod') === 'ne-pustil'){
+    otkryt();
+    oshibka.textContent = 'Неверный пароль.';
+    oshibka.hidden = false;
+    adres.searchParams.delete('vhod');
+    history.replaceState(null, '', adres.pathname + adres.search + adres.hash);
+  }
+})();
+</script>
+<script>
+/* 🔴 НА ЛЮБОМ АДРЕСЕ РАСПРЕДЕЛЕНИЯ ОТКРЫТА ВКЛАДКА РАСПРЕДЕЛЕНИЯ, И ЭТО СИЛЬНЕЕ
+   ПАМЯТИ БРАУЗЕРА. Цена прежней редакции, измеренная владельцем на боевом сайте:
+   ПУСТОЙ ЭКРАН. `PRAVKA_SKRIPT` восстанавливает последнюю открытую вкладку из
+   `sessionStorage`, а на странице занятия разделов «Класс» и «Листки» нет вовсе
+   (их расписание читает `kt.DNI`, а он тут из одного дня). Восстановленный
+   `p-start` показывал секцию, которой на странице не существует, — и человек
+   видел меню и НИЧЕГО под ним. Его слова: «нажимаю распределение, у меня моргает
+   распределение, но я остаюсь на вкладке кондуит… я ничего не вижу».
+
+   Поэтому: адрес сильнее памяти, и проверка идёт по префиксу, а не по одному
+   пути. Скрипт стоит ПОСЛЕДНИМ (см. `skripty`), чтобы перебить восстановление. */
+/* Панель занятий закрывается кликом мимо неё: она перекрывает таблицу, а
+   отдельная кнопка «закрыть» — ещё один предмет на экране, где их и так много. */
+document.addEventListener('click', function(ev){
+  var kal = document.getElementById('p-kal');
+  if(!kal || !kal.checked) return;
+  if(ev.target.closest('.zan-navig')) return;
+  kal.checked = false;
+});
+var _put = location.pathname.replace(/\/+$/, '');
+if(_put === '/raspredelenie' || _put.indexOf('/raspredelenie/') === 0){
+  var rasp = document.getElementById('p-rasp');
+  if(rasp) rasp.checked = true;
+}
+/* 🔴 АДРЕС `/#s-list` ОТКРЫВАЕТ ВКЛАДКУ «ЛИСТКИ», А НЕ ПРОСТО ПРОКРУЧИВАЕТ В НИКУДА.
+   Такая ссылка стоит в меню страницы занятия с 07.09 и до сих пор не открывала
+   ничего: раздел скрыт, пока не отмечена его радиокнопка, а якорь радиокнопок не
+   трогает — человек попадал на заглавную и видел «Класс». Теперь на неё же ведут
+   пункты меню КАБИНЕТА, страницы отдельной от оболочки, и без этих четырёх строк
+   уйти из кабинета можно было бы только на «Класс» и «Распределение».
+   Правило одно на все разделы: `#s-XXX` отмечает `p-XXX`, если такая пара есть. */
+var _yakor = (location.hash || '').replace('#', '');
+if(_yakor.indexOf('s-') === 0){
+  var _vkl = document.getElementById('p-' + _yakor.slice(2));
+  if(_vkl && _vkl.classList.contains('rd')) _vkl.checked = true;
+}
+</script>
+
