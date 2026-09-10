@@ -123,8 +123,43 @@ ZAMER = r"""
   // A form control is drawn by the browser, not laid out from its text: a
   // <select> shows one option and hides the rest BY DESIGN, and an <input> has no
   // text nodes at all.  Judging either for clipping or wrapping is crying wolf.
-  const organ = (el) => ['SELECT','OPTION','TEXTAREA','INPUT','BUTTON'].includes(el.tagName)
-      || !!el.querySelector('select, textarea, input, button');
+  //
+  // 🔴 THE CONTROL ITSELF, NEVER ITS ANCESTORS.  The first version of this rule
+  // also threw out every element CONTAINING a control — and on the organiser's
+  // screens that is almost every row and every card, because each row carries a
+  // <select>.  Found by the verifier, and it was worse than the bug being fixed:
+  // squeezing the left column of «школьникам» to 150px, so that «Аникина Анастас…»
+  // and «Афанасьева Пол…» were cut on the screenshot, moved the gate from
+  // (1,0,18,0) to (1,0,10,0) — the page was destroyed and the gate got GREENER.
+  // The <select> is kept out of the measurement instead: the text walk below skips
+  // text that lives inside a control, so an ancestor is judged on its own text and
+  // nothing else.
+  const organ = (el) => ['SELECT','OPTION','TEXTAREA','INPUT','BUTTON'].includes(el.tagName);
+
+  const VNE_TEKSTA = ['SELECT','OPTION','TEXTAREA','INPUT','BUTTON','STYLE','SCRIPT'];
+
+  // Rectangles of the element's OWN text: what a reader actually sees painted.
+  // A <select>'s option list, a <style>'s source and an <input>'s value are drawn
+  // by the browser rather than laid out from this element's text, so they are not
+  // this element's text and cannot be evidence that this element is cut.
+  const rects_teksta = (el) => {
+    const out = [];
+    const hod = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        if (!(n.nodeValue || '').trim()) return NodeFilter.FILTER_REJECT;
+        for (let p = n.parentElement; p && p !== el.parentElement; p = p.parentElement)
+          if (VNE_TEKSTA.includes(p.tagName)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    for (let n = hod.nextNode(); n; n = hod.nextNode()) {
+      const d = document.createRange();
+      d.selectNodeContents(n);
+      for (const b of d.getClientRects())
+        if (b.width > 0 && b.height > 0) out.push(b);
+    }
+    return out;
+  };
 
   // Text with the content of <style>/<script>/<option> subtracted, so a report
   // quotes what a reader sees and not a stylesheet.
@@ -134,10 +169,34 @@ ZAMER = r"""
     return (k.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
   };
 
+  // 🔴 AN INLINE BOX HAS `clientWidth === 0` BY SPECIFICATION -- it is not narrow,
+  // it simply has no client box.  Every numeric comparison against it is therefore
+  // false, and the wrap check could not judge a single inline `<span>` -- which on
+  // this site is most of the text there is.  Found by the self-test refusing to
+  // catch its own breakage on «кондуит»: `span.iz`, two line boxes, 233px needed,
+  // `clientWidth` 0.
+  // The width an inline box really had is the content width of the block that
+  // contains it -- but only when it is that block's ONLY text: sharing a line with
+  // siblings is a perfectly good reason to wrap, and reporting it would be the
+  // gate crying wolf.  When it shares, the element is left unjudged, and that is
+  // said out loud in the list of what the gate does not check.
+  const dostupno = (el) => {
+    if (el.clientWidth > 0) return el.clientWidth;
+    let n = el.parentElement;
+    while (n && n !== document.body && n.clientWidth === 0) n = n.parentElement;
+    if (!n || n === document.body) return 0;
+    const sosedi = [...n.childNodes].filter(k =>
+        (k.nodeType === 3 ? (k.nodeValue || '').trim()
+                          : k !== el && (k.textContent || '').trim()));
+    return sosedi.length ? 0 : n.clientWidth;
+  };
+
   const vnutri = (el) => {                    // padding box
     const r = el.getBoundingClientRect(), s = getComputedStyle(el);
     return {l: r.left + parseFloat(s.borderLeftWidth),
-            r: r.right - parseFloat(s.borderRightWidth)};
+            r: r.right - parseFloat(s.borderRightWidth),
+            t: r.top + parseFloat(s.borderTopWidth),
+            b: r.bottom - parseFloat(s.borderBottomWidth)};
   };
 
   const put = (el) => {
@@ -170,8 +229,14 @@ ZAMER = r"""
 
   for (const el of na_obrezku) {
     const s = getComputedStyle(el);
-    // scrollWidth exceeding clientWidth says the box is too small for SOMETHING.
-    if (!(el.scrollWidth > el.clientWidth + 1 && s.overflowX !== 'visible')) continue;
+    // scrollWidth/scrollHeight exceeding the client box says the box is too small
+    // for SOMETHING.  🔴 HEIGHT TOO, and that was a hole the verifier walked
+    // straight through: `.kto{height:7px;overflow:hidden}` on twenty rows left the
+    // left column unreadable on the screenshot and the gate reported the same
+    // number it had before the damage. Text cut from BELOW is cut.
+    const uzko = el.scrollWidth > el.clientWidth + 1 && s.overflowX !== 'visible';
+    const nizko = el.scrollHeight > el.clientHeight + 1 && s.overflowY !== 'visible';
+    if (!uzko && !nizko) continue;
     // 🔴 ...AND THE SOMETHING MUST BE TEXT.  `scrollWidth` alone is not enough:
     // measured live 10.09, it reported `section#s-start` (1478 vs 1440, an SVG
     // decoration the section clips ON PURPOSE) and every `.prep-imya` of the
@@ -182,14 +247,16 @@ ZAMER = r"""
     // past the padding box: `<style>` has no boxes, `<option>` has no boxes, an
     // SVG is not text — all three fall out by themselves, no list of exceptions.
     const b = vnutri(el);
-    const d = document.createRange();
-    d.selectNodeContents(el);
-    const rects = [...d.getClientRects()].filter(r => r.width > 0 && r.height > 0);
+    const rects = rects_teksta(el);
     if (!rects.length) continue;
-    const vylez = Math.max(...rects.map(r => Math.max(r.right - b.r, b.l - r.left)));
-    if (vylez <= 1) continue;
-    out.obrezka.push({put: put(el), tekst: chistyy(el),
-                      nado: el.scrollWidth, est: el.clientWidth});
+    const vbok = Math.max(...rects.map(r => Math.max(r.right - b.r, b.l - r.left)));
+    const vniz = Math.max(...rects.map(r => Math.max(r.bottom - b.b, b.t - r.top)));
+    if (vbok <= 1 && vniz <= 1) continue;
+    out.obrezka.push({
+        put: put(el), tekst: chistyy(el),
+        storona: vbok > 1 ? 'вширь' : 'ввысь',
+        nado: vbok > 1 ? el.scrollWidth : el.scrollHeight,
+        est: vbok > 1 ? el.clientWidth : el.clientHeight});
   }
 
   // ── 2. NEEDLESS WRAP ───────────────────────────────────────────────────────
@@ -217,11 +284,7 @@ ZAMER = r"""
     // needless wraps across four pages, of which 21 were padded labels («В»,
     // «Д», «16A», arrows) that never wrapped at all -- a gate crying wolf, and
     // a gate crying wolf is a gate that gets switched off.
-    const diapazon = document.createRange();
-    diapazon.selectNodeContents(el);
-    const verhi = new Set([...diapazon.getClientRects()]
-        .filter(b => b.width > 0 && b.height > 0)
-        .map(b => Math.round(b.top)));
+    const verhi = new Set(rects_teksta(el).map(b => Math.round(b.top)));
     const strok = verhi.size;
     if (strok >= 2 && s.whiteSpace !== 'pre') {
       // 🔴 NOT a detached clone.  A clone appended to <body> loses everything it
@@ -233,12 +296,10 @@ ZAMER = r"""
       // switched back: all inherited font, spacing and context are preserved.
       const bylo = el.style.whiteSpace;
       el.style.whiteSpace = 'nowrap';
-      const d2 = document.createRange();
-      d2.selectNodeContents(el);
-      const rr = [...d2.getClientRects()].filter(b => b.width > 0);
+      const rr = rects_teksta(el);
       const nuzhno = rr.length ? Math.max(...rr.map(b => b.width)) : 0;
       el.style.whiteSpace = bylo;
-      if (nuzhno <= el.clientWidth + 1) {
+      if (nuzhno <= dostupno(el) + 1) {
         out.perenos.push({put: put(el), tekst, strok,
                           nuzhno: Math.round(nuzhno), est: el.clientWidth});
       }
@@ -286,9 +347,23 @@ ZAMER = r"""
     }
     if (!rod) continue;                 // nothing owns it but the page itself
     out.na_vyhod++;
-    if (rod.tip === 'клип') continue;   // hidden overflow is check 1's business
     const a = el.getBoundingClientRect(), b = vnutri(rod.el);
     const vlevo = Math.round(b.l - a.left), vpravo = Math.round(a.right - b.r);
+    if (rod.tip === 'клип') {
+      // 🔴 A CLIPPING CONTAINER HIDES WHAT LEAVES IT TO THE RIGHT, and check 1
+      // catches that through scrollWidth.  To the LEFT it catches nothing:
+      // `scrollWidth` in a left-to-right document NEVER grows leftwards, so
+      // content that walks out of the left edge is painted nowhere and counted
+      // nowhere.  The verifier proved it as an A/B: shifting a card's children
+      // `left:-260px` emptied the whole right-hand column on the screenshot and
+      // left the gate at (0,0,0,0), while `+260px` on the same nodes gave
+      // (4,0,0,0).  This is the very defect this file was rewritten for, mirrored.
+      if (vlevo > 1) {
+        out.vyshli.push({put: put(el), rod: put(rod.el), tip: 'срезано слева',
+                         vlevo, vpravo: 0, tekst: chistyy(el)});
+      }
+      continue;
+    }
     if (vlevo > 1 || vpravo > 1) {
       out.vyshli.push({put: put(el), rod: put(rod.el), tip: rod.tip,
                        vlevo, vpravo, tekst: chistyy(el)});
@@ -311,49 +386,86 @@ LOMKA = r"""() => {
   const vidno = (el) => { const r = el.getBoundingClientRect();
       return r.width > 1 && r.height > 1; };
   const iz = (sel) => [...document.querySelectorAll(sel)].filter(vidno);
+  const otchet = {obrezka: false, perenos: false, vyhod: false, skroll: false};
 
-  // 1. CLIPPING -- squeeze a text box shut.  Deliberately a NON-LEAF node
-  //    (`.kto` wraps a `<b>`), the exact shape the walk used to drop: if it ever
-  //    regresses to leaves only, this stays green and the self-test says so.
-  const k = iz('.kto')[0] || iz('td, li, .para')[0];
-  if (k) { k.style.width = '8px'; k.style.minWidth = '8px'; k.style.flex = '0 0 8px';
-           k.style.overflow = 'hidden'; k.style.whiteSpace = 'nowrap';
-           k.style.textOverflow = 'ellipsis'; }
+  // 🔴 EVERY BREAKAGE VERIFIES THAT IT LANDED, AND TRIES AGAIN WHEN IT DID NOT.
+  // The verifier caught the previous version rapporting a triumphant red on all
+  // thirteen screens while on five of them ONLY the h-scroll had fired: the
+  // clipping breakage set `width:8px` on a `td.kto` inside a `table-layout:auto`
+  // table, where the browser ignores it (measured: 311px -> 303px), and the
+  // self-test never asked whether the damage had any effect. A self-test that
+  // reports on damage it failed to inflict is the same lie as a gate reporting on
+  // nodes it failed to look at.
 
-  // 2. NEEDLESS WRAP -- a break where the width did not require one.  The break
-  //    is forced with a `<br>` rather than by squeezing the box, and that is on
-  //    purpose: squeezing and then widening the box back cannot work, because
-  //    CSS re-lays out the moment the width changes and the wrap disappears with
-  //    it (tried live 10.09 — the self-test reported «ПЕРЕНОС поймано 0» and was
-  //    right to).  A `<br>` reproduces the DEFINITION the check judges by — two
-  //    line boxes where one line of text fitted the width the element HAS — and
-  //    does not depend on which CSS route produced it in the wild.
-  const w = iz('span, td, li, div').find(e => e !== k &&
-      ![...e.children].some(c => (c.textContent || '').trim()) &&
-      (e.textContent || '').trim().split(/\s+/).length >= 2 &&
-      e.scrollWidth <= e.clientWidth + 1);
-  if (w) { const slova = w.textContent.trim().split(/\s+/);
-           w.textContent = '';
-           w.append(document.createTextNode(slova.slice(0, -1).join(' ')),
-                    document.createElement('br'),
-                    document.createTextNode(slova[slova.length - 1])); }
+  // 1. CLIPPING -- squeeze a text box shut. Deliberately prefers a NON-LEAF node
+  //    (`.kto` wraps a `<b>`), the exact shape the walk used to drop.
+  for (const k of iz('.kto, td, th, li, .para').slice(0, 40)) {
+    k.style.setProperty('max-width', '8px', 'important');
+    k.style.setProperty('overflow', 'hidden', 'important');
+    k.style.whiteSpace = 'nowrap'; k.style.textOverflow = 'ellipsis';
+    k.style.display = k.tagName === 'TD' || k.tagName === 'TH' ? 'block' : k.style.display;
+    if (k.scrollWidth > k.clientWidth + 1) { otchet.obrezka = true; break; }
+    k.style.removeProperty('max-width'); k.style.removeProperty('overflow');
+    k.style.whiteSpace = ''; k.style.textOverflow = ''; k.style.display = '';
+  }
+
+  // 2. NEEDLESS WRAP -- a break where the width did not require one. Forced with
+  //    a `<br>` rather than by squeezing: squeezing and widening back cannot work,
+  //    because CSS re-lays out the moment the width changes and the wrap goes with
+  //    it. A `<br>` reproduces the DEFINITION the check judges by.
+  for (const w of iz('span, td, li, div, p').slice(0, 300)) {
+    if ([...w.children].some(c => (c.textContent || '').trim())) continue;
+    // 🔴 THE DAMAGE MUST LAND ON THE POPULATION THE CHECK JUDGES, or the self-test
+    // measures the gate's blind spots instead of its sight. The wrap check skips
+    // flex/grid boxes (no line boxes to count) and form controls; a breakage aimed
+    // at those is a breakage nobody promised to catch. Found by this very block
+    // going red on «кондуит»: it had broken a box the check never looks at.
+    const st = getComputedStyle(w);
+    if (['flex','inline-flex','grid','inline-grid'].includes(st.display)) continue;
+    if (st.whiteSpace === 'pre') continue;
+    if (['SELECT','OPTION','TEXTAREA','INPUT','BUTTON'].includes(w.tagName)) continue;
+    // ...and it must be a box whose available width the check can name at all: an
+    // inline span sharing its line with siblings is left unjudged on purpose (see
+    // `dostupno`), so breaking one would be testing a declared blind spot and
+    // calling the result a miss.
+    if (w.clientWidth <= 0) continue;
+    const slova = (w.textContent || '').trim().split(/\s+/);
+    if (slova.length < 2 || w.scrollWidth > w.clientWidth + 1) continue;
+    w.textContent = '';
+    w.append(document.createTextNode(slova.slice(0, -1).join(' ')),
+             document.createElement('br'),
+             document.createTextNode(slova[slova.length - 1]));
+    // verify it actually took two line boxes, and undo if it did not
+    const d = document.createRange(); d.selectNodeContents(w);
+    const verhi = new Set([...d.getClientRects()]
+        .filter(b => b.width > 0 && b.height > 0).map(b => Math.round(b.top)));
+    if (verhi.size >= 2) { otchet.perenos = true; break; }
+    w.textContent = slova.join(' ');
+  }
 
   // 4. ESCAPED -- pills walk out of the LEFT edge of the card that owns them,
   //    exactly as in the owner's screenshot `13`, and the document does NOT
   //    scroll on that account, so checks 1-3 stay blind to it.
   const cel = iz('.kol-pr .para').length ? iz('.kol-pr .para') : iz('.para');
-  cel.forEach(pa => {
-      pa.style.background = 'rgba(255,255,255,.06)';
-      pa.style.borderRadius = '8px';
-      const deti = pa.querySelectorAll('.deti-ryad span, .komu.deti span, .komu');
-      (deti.length ? deti : pa.children).forEach(x => {
-          x.style.marginLeft = '-120px'; });
-  });
+  for (const pa of cel) {
+    pa.style.background = 'rgba(255,255,255,.06)';
+    pa.style.borderRadius = '8px';
+    const deti = pa.querySelectorAll('.deti-ryad span, .komu.deti span, .komu, b');
+    const kogo = deti.length ? deti : pa.children;
+    const rod = pa.getBoundingClientRect();
+    [...kogo].forEach(x => { x.style.position = 'relative'; x.style.left = '-120px'; });
+    if ([...kogo].some(x => x.getBoundingClientRect().left < rod.left - 1)) {
+      otchet.vyhod = true; break;
+    }
+  }
 
   // 3. H-SCROLL -- push the document wider than the window.
   const d = document.createElement('div');
   d.style.width = '2400px'; d.style.height = '1px';
   document.body.appendChild(d);
+  otchet.skroll = document.documentElement.scrollWidth >
+                  document.documentElement.clientWidth;
+  return otchet;
 }"""
 
 
@@ -428,10 +540,13 @@ def progon(baza_url: str, slomat: bool, otbor: str | None) -> tuple[list, int]:
                             continue
                         page.evaluate("(i)=>document.getElementById(i).checked=true", radio)
                         page.wait_for_timeout(200)
+                    lomka_otchet = None
                     if slomat:
-                        page.evaluate(LOMKA)
+                        lomka_otchet = page.evaluate(LOMKA)
                         page.wait_for_timeout(150)
                     z = page.evaluate(ZAMER)
+                    if lomka_otchet is not None:
+                        z["lomka"] = lomka_otchet
                 except Exception as exc:                       # noqa: BLE001
                     itogi.append((rol, imya, put, None, str(exc).splitlines()[0][:90]))
                     continue
@@ -517,8 +632,10 @@ def main() -> int:
             continue
         for vid, klyuch in (("ОБРЕЗКА", "obrezka"), ("ПЕРЕНОС", "perenos")):
             for d in z[klyuch][:8]:
-                print(f"   {vid} · {rol} · {imya} · {d['put']} · «{d['tekst']}» · "
-                      f"надо {d.get('nado', d.get('nuzhno'))} есть {d['est']}")
+                storona = f" {d['storona']}" if d.get("storona") else ""
+                print(f"   {vid}{storona} · {rol} · {imya} · {d['put']} · "
+                      f"«{d['tekst']}» · надо {d.get('nado', d.get('nuzhno'))} "
+                      f"есть {d['est']}")
         for d in z["vyshli"][:8]:
             print(f"   ВЫШЛО · {rol} · {imya} · {d['put']} · «{d['tekst']}» · "
                   f"влево {d['vlevo']} вправо {d['vpravo']} · "
@@ -544,34 +661,76 @@ def main() -> int:
           "\n · роль `prepod`: гейт меряет ГОСТЯ и ОРГАНИЗАТОРА. Третья роль есть "
           "в `veb/vhod.py`, и её экраны не измерены ни разу."
           "\n · состояния, в которые страница приходит только по клику: раскрытые "
-          "списки, окно входа, подсказка значка «обычно у». Гейт меряет покой.")
+          "списки, окно входа, подсказка значка «обычно у». Гейт меряет покой."
+          "\n · НАЛОЖЕНИЕ элементов друг на друга. Класса «перекрытие» среди "
+          "четырёх проверок нет вовсе: строку можно положить поверх соседней, и "
+          "все четыре числа останутся нулями, хотя читать нельзя. Замерено "
+          "верификатором на «принимающим» у гостя."
+          "\n · КОЛОНКА, В КОТОРОЙ ТЕКСТ РВЁТСЯ ПО БУКВАМ, но никуда не выходит: "
+          "проверка 2 по определению прощает перенос, которого ширина "
+          "«потребовала», проверка 1 не видит переполнения — имя, вставшее "
+          "лесенкой по две буквы, для гейта здоровое. Дыра МЕЖДУ проверками."
+          "\n · встроенный (`display:inline`) элемент, делящий строку с соседями: "
+          "его доступную ширину назвать нечем (`clientWidth` встроенного бокса "
+          "равен нулю по спецификации), а брать ширину блока нельзя — перенос "
+          "из-за соседа законен. Такой элемент на перенос НЕ судится."
+          "\n · текст внутри `<svg><text>`: `SVG` и `PATH` выброшены из обхода "
+          "целиком, надписи на схемах не судятся."
+          "\n · элемент, схлопнутый в ноль (высота или ширина меньше пикселя): "
+          "`vidim()` считает его невидимым, а не сломанным."
+          "\n · экраны, где `--slomat` не сумел нанести поломку: он теперь "
+          "называет их сам отдельной строкой — на них испытаны не все четыре "
+          "проверки.")
 
     if args.slomat:
-        # 🔴 «КРАСНЫЙ» ЕЩЁ НЕ ЗНАЧИТ «ВСЕ ЧЕТЫРЕ РАБОТАЮТ». Сломано четыре вещи, и
-        # проверок четыре: если краснеет только горизонтальный скролл, а три
-        # остальные молчат, общий красный это скрывает — ровно тем способом, каким
-        # гейт врал до 10.09. Поэтому самопроверка судит КАЖДУЮ проверку отдельно.
-        srabotalo = {"ОБРЕЗКА": 0, "ПЕРЕНОС": 0, "ВЫШЛО ЗА КОНТЕЙНЕР": 0,
-                     "СКРОЛЛ": 0}
+        # 🔴 «КРАСНЫЙ» ЕЩЁ НЕ ЗНАЧИТ «ВСЕ ЧЕТЫРЕ РАБОТАЮТ», А «13 ИЗ 13» НЕ ЗНАЧИТ
+        # «ВЕЗДЕ ИСПЫТАНЫ ЧЕТЫРЕ». Общий красный скрывает и то, что краснеет одна
+        # проверка из четырёх, и то, что на пяти экранах поломка вовсе не села, —
+        # ровно тем способом, каким гейт врал до 10.09. Поэтому здесь считается
+        # ДВОЕ: сколько раз поломку удалось нанести, и сколько раз её поймали.
+        PROV = (("ОБРЕЗКА", "obrezka", "obrezka"),
+                ("ПЕРЕНОС", "perenos", "perenos"),
+                ("ВЫШЛО ЗА КОНТЕЙНЕР", "vyshli", "vyhod"),
+                ("СКРОЛЛ", "skroll", "skroll"))
+        nanesli = {imya: 0 for imya, _, _ in PROV}
+        poymali = {imya: 0 for imya, _, _ in PROV}
         for _rol, _imya, _put, z, _osh in itogi:
             if not z:
                 continue
-            srabotalo["ОБРЕЗКА"] += len(z["obrezka"])
-            srabotalo["ПЕРЕНОС"] += len(z["perenos"])
-            srabotalo["ВЫШЛО ЗА КОНТЕЙНЕР"] += len(z["vyshli"])
-            srabotalo["СКРОЛЛ"] += 1 if z["skroll"] else 0
+            lom = z.get("lomka", {})
+            for imya_pr, klyuch, klyuch_lom in PROV:
+                if not lom.get(klyuch_lom):
+                    continue
+                nanesli[imya_pr] += 1
+                nashli = z[klyuch] if klyuch != "skroll" else z["skroll"]
+                if (len(nashli) if isinstance(nashli, list) else nashli):
+                    poymali[imya_pr] += 1
         print()
-        for imya_pr, n in srabotalo.items():
-            print(f"   САМОПРОВЕРКА · {imya_pr:<20} поймано {n}"
-                  + ("" if n else "   🔴 НИ ОДНОГО"))
-        molchat = [k for k, n in srabotalo.items() if not n]
-        if molchat:
-            print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: сломаны все четыре вещи, а молчат "
-                  + ", ".join(molchat) + ". Проверка, которая ничего не поймала на "
-                  "подстроенном нарушении, не ловит и настоящее.")
+        bеda = []
+        for imya_pr, _, _ in PROV:
+            n, p_ = nanesli[imya_pr], poymali[imya_pr]
+            hvost = ""
+            if n == 0:
+                hvost = "   🔴 ПОЛОМКУ НЕ УДАЛОСЬ НАНЕСТИ НИ РАЗУ — проверка не испытана"
+                bеda.append(f"{imya_pr}: нечем было сломать")
+            elif p_ < n:
+                hvost = f"   🔴 ПРОПУСТИЛА {n - p_}"
+                bеda.append(f"{imya_pr}: пропустила {n - p_} из {n}")
+            print(f"   САМОПРОВЕРКА · {imya_pr:<20} сломано на {n:>2} экранах, "
+                  f"поймано на {p_:>2}{hvost}")
+        ne_seli = [f"{rol}/{imya}" for rol, imya, _p, z, _o in itogi if z
+                   and not all(z.get("lomka", {}).get(k) for _n, _kk, k in PROV)]
+        if ne_seli:
+            print("   ⚠ поломка села НЕ ЦЕЛИКОМ на экранах: " + ", ".join(ne_seli)
+                  + " — там испытаны не все четыре проверки, и общий красный это"
+                    " скрывает.")
+        if bеda:
+            print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: " + "; ".join(bеda)
+                  + ". Проверка, которая ничего не поймала на подстроенном "
+                    "нарушении, не ловит и настоящее.")
             return 1
-        print(f"\n✅ САМОПРОВЕРКА: покраснели все четыре проверки, "
-              f"{krasnyh} экранов из {izmereno}. Рычаг работает.")
+        print(f"\n✅ САМОПРОВЕРКА: каждая из четырёх проверок поймала КАЖДУЮ "
+              f"нанесённую ей поломку. Красных экранов {krasnyh} из {izmereno}.")
         return 0
 
     if krasnyh:
