@@ -349,33 +349,37 @@ def zapisat(connection, student_id, teacher_id, slot, room="303",
         "values (?, ?, ?, ?, ?, ?)", (student_id, teacher_id, room, slot, ot, do))
 
 
-def test_the_initials_stand_beside_the_surname_and_not_in_a_column_of_their_own(
+def test_the_initials_stand_in_a_column_of_their_own_and_not_in_the_surname_cell(
     mir, connection
 ):
-    """The decision of the owner, 09.09: «не колонкой».
+    """The decision of the owner, 10.09 (O3), which REVERSES his decision of 09.09.
 
-    Judged by shape rather than by text: a column of принимающие would pass any check
-    on wording.  The header of a листок carries the surname, the счётчик обязательных
-    (its own column since the owner's edit of 10.09, H4.4) and one column per problem —
-    and NOTHING else.
+    On 09.09 he said «не колонкой» and the initials were written into the surname cell
+    as a superscript; this test asserted THAT.  On 10.09 he looked at «Агаркова Ирина
+    ᴰ·ᴱ·» on the live page and said: «ты правильно решил поместить инициалы
+    преподавателя в строку, но для этого нужен ОТДЕЛЬНЫЙ СТОЛБЕЦ. Должно быть:
+    „Агаркова Ирина“, а дальше идёт столбец» — and answered the objection that made
+    the first decision («there is no room») himself: «там, где заканчивается самая
+    длинная фамилия, ещё есть место».
 
-    🔴 THE COUNT IS SPELLED OUT AS A SUM, NOT WRITTEN AS A NUMBER.  When the счётчик
-    got its column this assertion went red, and the honest question at that moment was
-    "which column appeared" — a bare `== 7` cannot be asked that.  Naming the two
-    non-problem columns keeps the test able to say what it is defending.
+    🔴 THE COUNT IS SPELLED OUT AS A SUM, NOT WRITTEN AS A NUMBER.  Every time a column
+    appears this assertion goes red, and the honest question at that moment is "which
+    column appeared" — a bare `== 9` cannot be asked that.
     """
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1)
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    FAMILIA, SCHYOTCHIK = 1, 1
-    assert len(re.findall(r"<th[ >]", kusok)) == FAMILIA + SCHYOTCHIK + len(LISTOK)
-    # The one column that is not a problem and not the surname is the счётчик, named
-    # by its class: a column of принимающие would be an <th> of some other kind.
-    assert len(re.findall(r'<th class="sch"', kusok)) == SCHYOTCHIK
-    assert "прин" not in re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
-    # And the initials themselves live inside the surname cell.
+    FAMILIA, PRINIMAYUSHCHIJ, SCHYOTCHIK, GALKA = 1, 1, 1, 1
+    assert len(re.findall(r"<th[ >]", kusok)) == (
+        FAMILIA + PRINIMAYUSHCHIJ + SCHYOTCHIK + GALKA + len(LISTOK))
+    shapka_html = re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
+    assert len(re.findall(r'<th class="pr"', shapka_html)) == PRINIMAYUSHCHIJ
+    # 🔴 И ЭТО ТА ЖЕ ПРОВЕРКА ФОРМОЙ, ЧТО БЫЛА: клетка фамилии не несёт второго
+    # носителя.  Раньше она требовала инициалы ВНУТРИ неё, теперь — снаружи;
+    # проверяется одно и то же место, и подменить его словами по-прежнему нельзя.
     yacheyka = re.search(r'<td class="kto">(.*?)</td>', kusok, re.S).group(1)
-    assert '<i class="prin"' in yacheyka
+    assert "prin" not in yacheyka, yacheyka
+    assert '<td class="pr"><i class="prin"' in kusok
 
 
 def test_the_hover_carries_the_name_the_group_and_the_room(mir, connection):

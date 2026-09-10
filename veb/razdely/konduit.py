@@ -377,10 +377,38 @@ def _prin(prinimayushchie, student_id) -> str:
     Пустое место читается как «забыли нарисовать»; прочерк с подсказкой говорит, что
     вопрос задан и ответа нет.  На живой базе таких школьников есть, и молчание о них
     было бы сообщением о том, что у всех всё назначено.
+
+    🔴 РАЗМЕТКА ЗДЕСЬ НЕ МЕНЯЕТСЯ ДАЖЕ ТОГДА, КОГДА МЕНЯЕТСЯ КЛЕТКА ВОКРУГ НЕЁ.  С 10.09
+    инициалы стоят в СВОЁМ столбце (O3, `_stolbec_prin` ниже), а не надстрочником у
+    фамилии, — но это решение о том, куда положить готовый кусок.  Сам кусок читает
+    `tests/grid/test_konduit_i_raspredelenie_odna_pravda.py`, сверяя кондуит с
+    распределением по одному и тому же источнику; переписать его заодно значило бы
+    трогать чужую проверку ради своей вёрстки.
     """
     return prinimayushchie.get(
         student_id,
         '<i class="prin net" title="принимающий на сегодня не назначен">\u2014</i>')
+
+
+#: Шапка столбца принимающего.  Сокращение — по той же причине, что и у столбца счётчика:
+#: полное слово раздвинуло бы узкий столбец втрое и отобрало бы ширину у решётки.
+ZAGOLOVOK_PRIN = ('<th class="pr" title="инициалы того, кто принимает у школьника '
+                  'сегодня; наведение разворачивает имя, группу и кабинет">Прин.</th>')
+
+
+def _stolbec_prin(prinimayushchie, student_id) -> str:
+    """Клетка СВОЕГО столбца принимающего — та самая, которой владелец потребовал 10.09.
+
+    🔴 ЭТО ПРЯМОЙ ПЕРЕСМОТР РЕШЕНИЯ 09.09 «НЕ КОЛОНКОЙ», И ПЕРЕСМОТР ЕГО ЖЕ.  Тогда
+    инициалы приписали к фамилии надстрочником, чтобы не отбирать ширину у решётки.
+    Увидев это живьём, владелец сказал (`TZ-DOBOR-10-09.md` O3): «ты правильно решил
+    поместить инициалы преподавателя в строку, но для этого нужен ОТДЕЛЬНЫЙ СТОЛБЕЦ.
+    Должно быть: „Агаркова Ирина“, а дальше идёт столбец».  И сам снял возражение про
+    ширину: «там, где заканчивается самая длинная фамилия (Тухватулин-Йалчын Дэвин),
+    ещё есть место».  Это тот же его канон «нельзя смешивать» (`Q4`): в клетке с
+    фамилией жили ДВА разных факта — кто этот школьник и кто у него принимает.
+    """
+    return '<td class="pr">%s</td>' % _prin(prinimayushchie, student_id)
 
 
 def _uchastniki(catalogue) -> tuple:
@@ -597,14 +625,15 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, i
         stroki.append(
             f'<tr{klass}><td class="kto">'
             f'<label for="k-u{u.id}">'
-            f'<b>{e(u.surname)}</b> {e(u.name)}</label>'
-            f'{_prin(prinimayushchie, u.id)}</td>'
+            f'<b>{e(u.surname)}</b> {e(u.name)}</label></td>'
+            f'{_stolbec_prin(prinimayushchie, u.id)}'
             f'<td class="sch">{_schyotchik(schyot)}</td>'
             f'{_galka(schyot.zakryl, "закрыл все %d обязательных" % schyot.vsego)}'
             f'{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
-            f'<table class="kond" style="max-width:{21.5 + len(listki) * 5.5:.1f}em">'
-            f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{ZAGOLOVOK_GT}{shapka}</tr></thead>'
+            f'<table class="kond" style="max-width:{25 + len(listki) * 5.5:.1f}em">'
+            f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_PRIN}{ZAGOLOVOK_SCH}'
+            f'{ZAGOLOVOK_GT}{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
@@ -685,13 +714,14 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie,
             galka = _galka(schyot.zakryl,
                            "закрыл все %d обязательных этого листка" % schyot.vsego)
             stroki.append(f'<tr{klass}><td class="kto">'
-                          f'<b>{e(u.surname)}</b> {e(u.name)}'
-                          f'{_prin(prinimayushchie, u.id)}</td>'
+                          f'<b>{e(u.surname)}</b> {e(u.name)}</td>'
+                          f'{_stolbec_prin(prinimayushchie, u.id)}'
                           f'<td class="sch">{_schyotchik(schyot)}</td>{galka}'
                           f'{"".join(kletki)}</tr>')
-        potolok = 21.5 + len(zad) * 5.5
+        potolok = 25 + len(zad) * 5.5
         telo = (f'<table class="kond" style="max-width:{potolok:.1f}em">'
-                f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{ZAGOLOVOK_GT}{shapka}</tr></thead>'
+                f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_PRIN}{ZAGOLOVOK_SCH}'
+                f'{ZAGOLOVOK_GT}{shapka}</tr></thead>'
                 f'<tbody>{"".join(stroki)}</tbody></table>')
     return (f'<section class="vid" id="n-{sh.id}">'
             f'<p class="zag2 zag-listok">{e(sh.title or sh.number)}</p>{telo}</section>')
@@ -1150,19 +1180,26 @@ def stili(kt) -> str:
 #s-kond .kond tbody td.gt{{text-align:center;width:2.2rem;min-width:2.2rem;
   padding:.2rem .3rem;border-bottom:1px solid var(--rule);border-right:1px solid var(--rule);
   background:var(--bg);font-size:1.15rem;line-height:1;color:var(--zel);font-weight:700}}
-/* ── ИНИЦИАЛЫ ПРИНИМАЮЩЕГО У ФАМИЛИИ ──────────────────────────────────────
-   Надстрочно и мелко: это подпись к фамилии, а не второе имя. Курсор `help`
-   обещает подсказку, которая есть, — иначе о наведении никто не догадается.
-   Ни одного нового цвета: `--faint` уже значит «фон, а не сообщение» по всей
-   странице. ⚠ Прежняя редакция этой строки добавляла «и им же покрашена звезда в
-   шапке столбца» — с 10.09 это НЕВЕРНО: звезда перекрашена в `--krasn` (H4.1,
-   «все три значка должны быть выделены цветом»), и `--faint` здесь остался только
-   у инициалов. Расхождение нашёл верификатор захода; на рендер оно не влияло, а на
-   следующего читателя влияло бы. */
-#s-kond .kond td.kto .prin{{font-style:normal;font-family:var(--sans);font-size:.62rem;
-  font-weight:600;color:var(--faint);vertical-align:super;margin-left:.3em;cursor:help;
-  white-space:nowrap}}
-#s-kond .kond td.kto .prin.net{{font-weight:400}}
+/* ── СТОЛБЕЦ ПРИНИМАЮЩЕГО ─────────────────────────────────────────────────
+   🔴 ПРАВКА ВЛАДЕЛЬЦА 10.09 (O3): «нужен ОТДЕЛЬНЫЙ СТОЛБЕЦ. Должно быть:
+   „Агаркова Ирина“, а дальше идёт столбец». До неё инициалы стояли ВНУТРИ клетки
+   фамилии надстрочником (`vertical-align:super`, кегль `.62rem`) — то самое
+   «Агаркова Ирина ᴰ·ᴱ·», которое он назвал смешиванием.
+   Надстрочность снята вместе с переездом: в своём столбце строчить нечего, и
+   инициалы садятся на базовую линию строки, ровно как счётчик рядом.
+   Столбец узкий (`3.4rem` — «А.Р./Н.А.» и есть самое длинное, что сюда попадает)
+   и стоит В ПРЕДЕЛАХ той ширины, о которой владелец сказал «место есть»: у решётки
+   он не отбирает ничего, потому что колонка фамилии и так шире самой длинной из них.
+   Ни одного нового цвета: `--faint` уже значит «фон, а не сообщение» по всей странице,
+   и курсор `help` по-прежнему обещает подсказку, которая есть. */
+#s-kond .kond thead th.pr{{text-align:center;white-space:nowrap;font-size:.72rem;
+  padding:.5rem .3rem;border-bottom:2px solid var(--rule)}}
+#s-kond .kond tbody td.pr{{text-align:center;white-space:nowrap;width:3.4rem;
+  min-width:3.4rem;padding:.3rem .35rem;border-bottom:1px solid var(--rule);
+  background:var(--bg)}}
+#s-kond .kond td.pr .prin{{font-style:normal;font-family:var(--sans);font-size:.72rem;
+  font-weight:600;color:var(--faint);cursor:help;white-space:nowrap}}
+#s-kond .kond td.pr .prin.net{{font-weight:400}}
 /* Клетка листка тапается: курсор и подсветка обещают действие, которое есть.
    Клетки годового обзора и личной карточки адреса пары не несут и остаются
    обычным текстом — там столбец это ЛИСТОК, а не задача, и отмечать нечего. */
@@ -1384,19 +1421,26 @@ def stili(kt) -> str:
     display:block;overflow:hidden;text-overflow:ellipsis}}
   #s-kond .kond tbody tr.moi td.kto{{padding-left:.55rem}}
   #s-kond .kond td.kto label{{display:block;overflow:hidden;text-overflow:ellipsis}}
-  /* 🔴 НА ТЕЛЕФОНЕ КОЛОНКА СЧЁТЧИКА ЕДЕТ ВМЕСТЕ С ФАМИЛИЕЙ, А НЕ УХОДИТ ПОД НЕЁ.
-     Столбец фамилии здесь ровно 7.2rem (правило выше), поэтому липкость счётчика
-     ставится на то же самое число: прокручивая решётку вбок, видно и чья строка,
-     и сколько обязательных у этого школьника. Число снято с той же ячейки, а не
-     подобрано на глаз, — разъедутся они только вместе.
-     Порядок наложения: фамилия (4) поверх счётчика (3) поверх клеток задач, у
-     которых `position:relative` и своего слоя нет. Иначе при прокрутке счётчик
-     накрыл бы фамилию — то есть ровно то, от чего владелец её и уводил. */
-  #s-kond .kond thead th.sch{{left:7.2rem;padding:.4rem .25rem}}
-  #s-kond .kond tbody td.sch{{position:sticky;left:7.2rem;z-index:3;
+  /* 🔴 НА ТЕЛЕФОНЕ КОЛОНКИ ПРИНИМАЮЩЕГО И СЧЁТЧИКА ЕДУТ ВМЕСТЕ С ФАМИЛИЕЙ, А НЕ
+     УХОДЯТ ПОД НЕЁ. Столбец фамилии здесь ровно 7.2rem, столбец принимающего —
+     3.4rem (оба числа заданы правилами выше), поэтому липкость ставится теми же
+     числами и их суммой: прокручивая решётку вбок, видно и чья строка, и кто у
+     неё принимает, и сколько обязательных. Числа сняты с самих ячеек, а не
+     подобраны на глаз, — разъедутся они только вместе.
+     Порядок наложения: фамилия (4) поверх принимающего и счётчика (3) поверх
+     клеток задач, у которых `position:relative` и своего слоя нет. Иначе при
+     прокрутке они накрыли бы фамилию — то есть ровно то, от чего владелец её и
+     уводил. Столбец галочки НЕ липкий нарочно: он отвечает на вопрос «всё?»,
+     который задают, глядя на начало строки, а не посреди прокрутки, и три
+     примёрзших столбца на 320 точках съели бы решётку. */
+  #s-kond .kond thead th.pr{{left:7.2rem;padding:.4rem .25rem}}
+  #s-kond .kond tbody td.pr{{position:sticky;left:7.2rem;z-index:3;
+    padding:.2rem .25rem}}
+  #s-kond .kond thead th.sch{{left:10.6rem;padding:.4rem .25rem}}
+  #s-kond .kond tbody td.sch{{position:sticky;left:10.6rem;z-index:3;
     padding:.2rem .25rem}}
   #s-kond .kond td.sch .ob-sch{{font-size:.72rem}}
-  #s-kond .kond td.kto .prin{{vertical-align:super;font-size:.62rem}}
+  #s-kond .kond td.pr .prin{{font-size:.66rem}}
   /* Клетка — цель пальца: 44 точки в высоту, компактнее в ширину. */
   #s-kond .kond tbody td+td{{min-width:2.5em;height:44px;padding:.2rem;
     font-size:1.05rem}}
@@ -1411,8 +1455,11 @@ def stili(kt) -> str:
   #s-kond .kond td.kto{{width:6.2rem;max-width:6.2rem}}
   #s-kond .kond td.kto b,#s-kond .kond td.kto label{{font-size:.76rem}}
   #s-kond .kond tbody td+td{{min-width:2.2em}}
-  /* Столбец фамилии сузился — вместе с ним переезжает и липкий счётчик. */
-  #s-kond .kond thead th.sch,#s-kond .kond tbody td.sch{{left:6.2rem}}
+  /* Столбец фамилии сузился — вместе с ним переезжают и оба липких соседа.
+     Принимающий здесь тоже уже: «А.Р./Н.А.» помещается в 3rem мелким кеглем. */
+  #s-kond .kond tbody td.pr{{width:3rem;min-width:3rem}}
+  #s-kond .kond thead th.pr,#s-kond .kond tbody td.pr{{left:6.2rem}}
+  #s-kond .kond thead th.sch,#s-kond .kond tbody td.sch{{left:9.2rem}}
 }}
 #s-kond .kond-lich i{{display:inline-block;font-style:normal;font-family:var(--sans);
   font-size:.85rem;background:var(--chip);border-radius:6px;padding:.05em .45em;
