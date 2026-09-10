@@ -604,7 +604,7 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie) ->
                 f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{shapka}</tr></thead>'
                 f'<tbody>{"".join(stroki)}</tbody></table>')
     return (f'<section class="vid" id="n-{sh.id}">'
-            f'<p class="zag2">{e(sh.title or sh.number)}</p>{telo}</section>')
+            f'<p class="zag2 zag-listok">{e(sh.title or sh.number)}</p>{telo}</section>')
 
 
 def _uchenik(u, listki, zadachi, sostoyaniya, daty) -> str:
@@ -708,7 +708,7 @@ def _grobarij(listki, zadachi, na_uchyote, sostoyaniya, daty) -> str:
         zapisi = zapisi_grobaria(zadachi[sh.id], ids, sostoyaniya,
                                  lambda u, z: daty.get((u, z)), imena.get)
         if not zapisi:
-            bloki.append(f'<p class="zag2">{e(sh.title or sh.number)}</p>'
+            bloki.append(f'<p class="zag2 zag-listok">{e(sh.title or sh.number)}</p>'
                          '<p class="net">ни одна задача этого листка не осталась '
                          'за порогом — в гробарий с него ничего не пошло</p>')
             continue
@@ -720,7 +720,7 @@ def _grobarij(listki, zadachi, na_uchyote, sostoyaniya, daty) -> str:
                if z.pervye else '<span class="net">никто</span>')
             + '</td></tr>'
             for z in zapisi)
-        bloki.append(f'<p class="zag2">{e(sh.title or sh.number)}</p>'
+        bloki.append(f'<p class="zag2 zag-listok">{e(sh.title or sh.number)}</p>'
                      f'<table class="kond-lich grob"><thead><tr><th>Задача</th>'
                      f'<th>Сдало</th><th>Кто сдал</th></tr></thead>'
                      f'<tbody>{stroki}</tbody></table>')

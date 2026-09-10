@@ -1429,6 +1429,16 @@ h1{{font-family:var(--sans);font-size:2.1rem;font-weight:600;letter-spacing:-.02
   margin:1.6rem 0 0;background:var(--panel);max-width:52em}}
 .zag2{{font-family:var(--sans);font-size:.82rem;font-weight:700;letter-spacing:.1em;
   text-transform:uppercase;color:var(--faint);margin:0 0 .5em}}
+/* 🔴 ЗАГОЛОВОК ЛИСТКА НЕ ПОДНИМАЕТСЯ В ВЕРХНИЙ РЕГИСТР, И ЭТО НЕ ВКУС.
+   Владелец 10.09: вкладка называется «16α», а заголовок под ней печатал
+   «16А. ДЕРЕВЬЯ» — и он читал это как расхождение в данных. Данные ЦЕЛЫ:
+   сверка на боевой базе дала НОЛЬ листков, где `title` не начинается с `number`.
+   Врало отображение: `text-transform:uppercase` переводит «α» (U+03B1) в «Α»
+   (U+0391) — ЗАГЛАВНУЮ ГРЕЧЕСКУЮ АЛЬФУ, которая на экране неотличима от русской
+   «А» (U+0410). Три листка одной темы называются 16A, 16α и 16ℵ, и различить их
+   можно ТОЛЬКО по этому знаку — то есть регистр стирал единственное различие.
+   Проверяется командой: python3 -c "print('16α'.upper())" → 16Α. */
+.zag-listok{{text-transform:none;letter-spacing:.02em}}
 .str,.vid{{display:none}}
 #p-start:checked~#s-start,#p-list:checked~#s-list,#p-rasp:checked~#s-rasp{{display:block}}
 #p-start:checked~.menu label[for=p-start],#p-list:checked~.menu label[for=p-list],
