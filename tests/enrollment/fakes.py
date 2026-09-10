@@ -133,3 +133,18 @@ class FakeEnrollmentStore(EnrollmentPort):
                 self.closes += 1
                 return closed
         raise AssertionError("fake store: no row with id %s" % (enrollment_id,))
+
+
+class FakeCalendar:
+    """``TeacherCalendarPort`` over a plain dict: ``{teacher_id: {slots attended}}``.
+
+    A teacher named in ``not_attending`` for a slot is absent from the set for that
+    slot; every other (teacher, slot) pair attends, matching
+    ``infra.prepodavatel_den_repo`` storing absence rather than presence.
+    """
+
+    def __init__(self, not_attending: "set[tuple[int, int]]" = frozenset()) -> None:
+        self._not_attending = set(not_attending)
+
+    def attends(self, teacher_id: int, slot: int) -> bool:
+        return (teacher_id, slot) not in self._not_attending
