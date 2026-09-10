@@ -57,6 +57,39 @@ from veb.razdely.istoria import perebivki
 from veb.razdely.lichnaya import deti_na_datu, segodnya
 
 
+# ── ЗНАЧКИ ЛИСТКА ──────────────────────────────────────────────────────────
+# 🔴 THE GLYPH IS THE SHEET'S OWN, NOT A NEW ALPHABET INVENTED FOR THE SCREEN.  The paper
+# листок prints `◦` beside a problem that has to be handed in, `†` beside one that has to
+# be handed in IN WRITING and `⋆` beside a hard one, and the conduit lost all three when
+# the problems were entered — the owner on 2026-09-09: «в кондуите, где написаны номера
+# задач, не отмечены кружочки и крестики… это должно быть прямо в кондуите видно».  So
+# the mark drawn here is the same character, in the same meaning, and the pupil comparing
+# screen with paper does not have to learn a second notation.
+#
+# `problems.kind` IS WHERE IT COMES FROM, and that is the whole point of the заход this
+# was written in: the kind is DATA, written by `tools/import_listka.py` out of the PDF, so
+# the neighbouring заход that counts "сколько обязательных сдано" reads the same column
+# and cannot end up with a different answer than the screen shows.
+ZNACHKI = {"обязательная": "◦", "письменная": "†", "звезда": "⋆"}
+#: The class the glyph is drawn with, one per kind.  Latin, short and stable: it is
+#: repeated once per column header of every листок.
+ZNACHOK_KLASS = {"обязательная": "ob", "письменная": "pi", "звезда": "zv"}
+
+
+def znachok(kind: str) -> str:
+    """The mark for one problem's kind, ready to sit beside its number, or ``""``.
+
+    An unknown kind draws NOTHING rather than a question mark.  `двойная` is the live
+    example — two rows in `problems` carry it, nobody now knows what the senior meant by
+    `**`, and a glyph invented for it here would be this file making a claim about
+    somebody's data that no source backs.  `обычная` draws nothing for the honest reason:
+    the sheet prints nothing beside it.
+    """
+    if kind not in ZNACHKI:
+        return ""
+    return '<i class="pm %s">%s</i>' % (ZNACHOK_KLASS[kind], ZNACHKI[kind])
+
+
 def _uchastniki(catalogue) -> tuple:
     """The pupils on the roll today, and everybody the кондуит has a record of.
 
@@ -97,6 +130,42 @@ def _moi_deti(kt) -> set:
     if kt.prepod_id is None:
         return set()
     return {r["id"] for r in deti_na_datu(kt.c, kt.prepod_id, segodnya())}
+
+
+def _samyj_novyj(kt, listki) -> int | None:
+    """The id of the листок that opens by itself, ASKED OF THE БАЗА at draw time.
+
+    🔴 THE ANSWER IS A QUERY AND NOT A CONSTANT, and that is the whole of the owner's
+    request: «по умолчанию открывается самый новый листок».  Write the id into the code
+    and the next листок issued has to be found by whoever notices the site is opening on
+    the wrong one; ask the база and the листок that appears opens itself.
+
+    NEWEST IS `issued_at`, NOT `ord`, and the difference is not academic on the sheets
+    this site is serving right now.  `16A`, `16α` and `16ℵ` are ONE листок in three
+    strengths — `veb/razdely/listki.L9` holds them as a single row `("16", "Деревья",
+    [A, α, ℵ])` — so their `ord` runs 19, 20, 21 while all three carry the same
+    `issued_at` of 2026-09-03.  Ordering by `ord` would open `16ℵ`, the weakest version,
+    for everybody; ordering by the date and breaking the tie by `ord` opens `16A`, which
+    is what the owner sees on his own page and asked for.
+
+    ONLY A ЛИСТОК WITH CELLS CAN BE THE DEFAULT.  A row in `sheets` whose problems have
+    not been imported yet is not yet a листок anybody can look at, and opening on it
+    would greet the teacher with «в этом листке ещё нет задач» at the exact moment the
+    next листок is being entered.  It becomes the default the moment it has a column.
+
+    Returns ``None`` when there is nothing to open — an empty база, or a class whose
+    листки all stand without cells.  The caller then falls back to «Весь год», which is
+    where the conduit opened before this was written.
+    """
+    if not listki:
+        return None
+    mesta = ",".join("?" * len(listki))
+    stroka = kt.c.execute(
+        "select s.id from sheets s "
+        "where s.id in (%s) and exists (select 1 from problems p where p.sheet_id = s.id) "
+        "order by s.issued_at desc, s.ord asc limit 1" % mesta,
+        [sh.id for sh in listki]).fetchone()
+    return stroka[0] if stroka else None
 
 
 def _daty(kt) -> dict:
@@ -201,7 +270,12 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
     if not zad:
         telo = '<p class="net">в этом листке ещё нет задач</p>'
     else:
-        shapka = "".join(f'<th class="zn">{e(p.label)}</th>' for p in zad)
+        # The glyph rides in the column header and nowhere else: one mark per COLUMN,
+        # twenty-one of them on the widest листок, instead of one per cell — the same
+        # grid holds thirty-one thousand cells, and a mark repeated in every one of them
+        # would be both unreadable and a quarter of a megabyte on a page that has to open
+        # on a laptop with no internet.
+        shapka = "".join(f'<th class="zn">{e(p.label)}{znachok(p.kind)}</th>' for p in zad)
         stroki = []
         for u in na_uchyote:
             kletki = []
@@ -283,7 +357,8 @@ def _uchenik(u, listki, zadachi, sostoyaniya, daty) -> str:
         if fishki:
             spisok = "".join(
                 f'<i class="{"vsyo" if z == "1" else "snyato"}"'
-                f'{f" title={chr(34)}{e(k)}{chr(34)}" if k else ""}>{e(p.label)}</i>'
+                f'{f" title={chr(34)}{e(k)}{chr(34)}" if k else ""}>{e(p.label)}'
+                f'{znachok(p.kind)}</i>'
                 for p, z, k in fishki)
         else:
             spisok = '<span class="net">ничего не отмечено</span>'
@@ -668,6 +743,29 @@ def stili(kt) -> str:
   z-index:-1;pointer-events:none}}
 #s-kond .kond tbody td+td:hover{{outline:2px solid var(--accent);outline-offset:-2px}}
 #s-kond .kond .iz{{color:var(--faint);font-size:.75rem}}
+/* ── ЗНАЧОК ЛИСТКА У НОМЕРА ЗАДАЧИ ────────────────────────────────────────
+   Значок стоит НАДСТРОЧНО и вплотную к номеру: колонка шириной 3em, а номер
+   бывает трёхсимвольный (`13б`, `-1в`), и значок на общей строке отодвинул бы
+   номер из середины клетки. Кегль крупнее номера — иначе `◦` при .78rem
+   неотличим от точки. 1.05rem против .78rem у номера — размер, снятый со снимка
+   живой шапки в 1440×900, а не выбранный на глаз: при .9rem кружок и звезда
+   различались там только цветом. Ни одного нового цвета: `--accent` уже несёт «твоё, важное»
+   по всему сайту, `--warm` — «внимание» (им же покрашено снятое), `--faint` —
+   «фон, а не сообщение». Разные ЦВЕТА, а не только разные символы: четыре десятка
+   значков в строке различаются полосой цвета раньше, чем формой. */
+#s-kond .kond th.zn .pm{{font-style:normal;font-size:1.05rem;line-height:1;
+  vertical-align:super;margin-left:.05em}}
+#s-kond .pm.ob{{color:var(--accent)}}
+#s-kond .pm.pi{{color:var(--warm);font-weight:700}}
+#s-kond .pm.zv{{color:var(--faint)}}
+/* Словарь значков — один раз на странице, между кнопками классов и полосой
+   вкладок, то есть до первой решётки и после выбора класса. */
+#s-kond .kond-slovar{{margin:.1rem 0 .7rem;font-family:var(--sans);font-size:.85rem;
+  color:var(--muted)}}
+#s-kond .kond-slovar .pm{{font-style:normal;font-size:1.15rem;line-height:1}}
+#s-kond .kond-slovar .iz{{color:var(--faint);font-size:.85rem}}
+#s-kond .kond-lich i .pm{{font-style:normal;vertical-align:super;font-size:.75rem;
+  line-height:1}}
 #s-kond .kond-imya{{font-family:var(--sans);font-size:1.5rem;font-weight:600;margin:0 0 1rem}}
 #s-kond .kond-lich td{{vertical-align:baseline}}
 #s-kond .kond-lich .kto{{font-family:var(--sans);font-weight:600;white-space:nowrap;
@@ -826,17 +924,36 @@ def razdel(kt) -> str:
     listki_9 = [sh for sh in listki if sh.number.startswith(nomera_9)]
     listki_8 = [sh for sh in listki if sh not in listki_9]
 
+    # 🔴 ПРАВКА ВЛАДЕЛЬЦА 09.09: ОТКРЫВАЕТСЯ САМЫЙ НОВЫЙ ЛИСТОК, А НЕ «ВЕСЬ ГОД».
+    # Который именно — спрашивается у базы (`_samyj_novyj`), а не вписано сюда числом:
+    # выдадут следующий листок — он и откроется, и чинить для этого нечего.  Класс по
+    # умолчанию девятый, поэтому и листок ищется среди девятого; если у девятого нет ни
+    # одного листка с задачами, отметка остаётся на «Весь год», как было раньше.
+    otkryt = _samyj_novyj(kt, listki_9)
     radio = ('<input class="rd" type="radio" name="kl" id="kl-9" checked>'
              '<input class="rd" type="radio" name="kl" id="kl-8">'
-             '<input class="rd" type="radio" name="knd" id="k-vse9" checked>'
+             f'<input class="rd" type="radio" name="knd" id="k-vse9"'
+             f'{"" if otkryt else " checked"}>'
              '<input class="rd" type="radio" name="knd" id="k-vse8">'
-             + "".join(f'<input class="rd" type="radio" name="knd" id="k-{sh.id}">'
+             + "".join(f'<input class="rd" type="radio" name="knd" id="k-{sh.id}"'
+                       f'{" checked" if sh.id == otkryt else ""}>'
                        for sh in listki)
              + "".join(f'<input class="rd" type="radio" name="knd" id="k-u{u.id}">'
                        for u in na_uchyote))
     klassy = ('<div class="kond-klassy">'
-              '<label for="kl-9">9 класс</label>'
-              '<label for="kl-8">8 класс</label></div>')
+              '<label for="kl-8">8 класс</label>'
+              '<label for="kl-9">9 класс</label></div>')
+
+    # 🔴 СЛОВАРЬ ЗНАЧКОВ ПОДПИСАН ОДИН РАЗ НА СТРАНИЦЕ, А НЕ В КАЖДОЙ КЛЕТКЕ.  Ровно то,
+    # что просил владелец: значки обязаны быть различимы, когда их четыре десятка в
+    # строке, а объяснение — стоять один раз и не мешать.  Подпись в каждой ячейке
+    # (`title="обязательная"`) не годится дважды: на телефоне её нечем вызвать, и она
+    # выросла бы в тридцать одну тысячу повторов одного и того же слова.
+    slovar = ('<p class="kond-slovar">'
+              + "".join(f'{znachok(vid)}\u2009{vid}' + ("  " if vid != "звезда" else "")
+                        for vid in ("обязательная", "письменная", "звезда"))
+              + '<span class="iz"> · без значка — обычная, сдавать не обязательно</span>'
+              + '</p>')
     vkladki = ('<div class="tabbar">'
                '<label class="kl9" for="k-vse9">Весь год</label>'
                '<label class="kl8" for="k-vse8">Весь год</label>'
@@ -866,4 +983,4 @@ def razdel(kt) -> str:
             f'<div class="kond-verh"><div>'
             f'<h1>Кондуит</h1>'
             f'</div>{metka_galki}</div>'
-            f'{klassy}{vkladki}{panely}{istoria}</section>')
+            f'{klassy}{slovar}{vkladki}{panely}{istoria}</section>')

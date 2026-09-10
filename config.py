@@ -97,12 +97,18 @@ TZ_DISPLAY = "Europe/Moscow"
 # would silently break the importer.  The three event kinds below are new and are named
 # in English because they are named that way in the specification.
 
-#: Kinds of problem on a sheet, as they occur in ``seed/sheets.json``.
-PROBLEM_KINDS = ("обязательная", "обычная", "звезда", "двойная")
+#: Kinds of problem on a sheet.  Four of them occur in ``seed/sheets.json``; the fifth,
+#: ``письменная``, comes from the sheets themselves and was added by
+#: ``migrations/009_vid_pismennaya.sql``.  The sheet prints one glyph per kind: ``◦``
+#: обязательная, ``†`` письменная, ``⋆`` звезда, nothing обычная.  ``двойная`` has no
+#: glyph and no known meaning -- two rows carry it and it is left alone on purpose.
+PROBLEM_KINDS = ("обязательная", "обычная", "звезда", "двойная", "письменная")
 
 #: Only these kinds create a debt when they are left unsolved.  A starred problem is an
-#: invitation, not an obligation.
-OBLIGATORY_KINDS = ("обязательная",)
+#: invitation, not an obligation.  ``письменная`` is an obligation like ``обязательная``
+#: and differs from it only in HOW it is handed in -- leaving it out here would silently
+#: cancel the debt on every problem the sheet marks with a dagger.
+OBLIGATORY_KINDS = ("обязательная", "письменная")
 
 #: The three kinds of journal event.  The distinction comes from accounting (сторно) and
 #: from FHIR; a single ``deleted`` flag destroys it.

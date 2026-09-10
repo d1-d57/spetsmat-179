@@ -102,7 +102,13 @@ def test_the_real_seed_is_the_544_problems_the_задание_names():
 
     assert len(sheets) == 18
     assert len(tasks) == 544
-    assert kinds == {"обязательная": 215, "обычная": 288, "звезда": 39, "двойная": 2}
+    # `письменная` was added to `config.PROBLEM_KINDS` on 2026-09-10 and is expected to
+    # be ZERO here, which is the whole point of asserting it: the seed is last year's
+    # workbook, whose glyph vocabulary had no dagger in it.  The kind is read out of the
+    # SHEETS, by `tools/import_listka.py`, and never out of `seed/sheets.json` — a
+    # non-zero count in this line would mean the seed had grown a source it does not have.
+    assert kinds == {"обязательная": 215, "обычная": 288, "звезда": 39, "двойная": 2,
+                     "письменная": 0}
     assert len(read_students(config.ROOT / "seed")) == 56
     assert len(read_teachers(config.ROOT / "seed")) == 18
 
