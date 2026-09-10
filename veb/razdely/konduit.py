@@ -85,6 +85,21 @@ ZNACHKI = {"обязательная": "◦", "письменная": "†", "з
 #: The class the glyph is drawn with, one per kind.  Latin, short and stable: it is
 #: repeated once per column header of every листок.
 ZNACHOK_KLASS = {"обязательная": "ob", "письменная": "pi", "звезда": "zv"}
+#: Как вид задачи ЗОВЁТСЯ ЧЕЛОВЕКУ, который смотрит на легенду.
+#:
+#: 🔴 ЛЕГЕНДА ПИСАЛАСЬ КЛЮЧАМИ БАЗЫ, И ОДИН ИЗ НИХ НИЧЕГО НЕ ЗНАЧИТ.  Владелец 10.09
+#: (`TZ-DOBOR-10-09.md` H4.7): «написано „звёздочка — звезда“.  Звёздочка — это СЛОЖНАЯ.
+#: Переписать словами, которые что-то значат».  Он прав буквально: «⋆ звезда» объясняет
+#: значок значком, то есть не объясняет ничего.
+#:
+#: 🔴 КЛЮЧ `звезда` В БАЗЕ НЕ ТРОГАЕТСЯ, И ЭТО НЕ ЛЕНЬ.  Он лежит в `problems.kind` у
+#: 43 строк, его пишет `tools/import_listka.py` и читает `tools/vidy_zadach.py` — ни один
+#: из этих файлов не зона этой позиции, и все они говорят о ДАННЫХ.  Здесь же вопрос
+#: только о том, каким словом вид назван на экране, и словарь ровно на один шаг: ключ
+#: базы → слово преподавателю.  Переименование данных ради подписи на экране — это
+#: миграция, у которой нет причины.
+NAZVANIE = {"обязательная": "обязательная", "письменная": "письменная",
+            "звезда": "сложная"}
 
 
 def znachok(kind: str) -> str:
@@ -907,13 +922,13 @@ def stili(kt) -> str:
    ни строки JS. Вкладки чужого класса не прячутся `display:none` у меток,
    а именно снимаются из потока — иначе полоса вкладок держала бы пустое
    место там, где стояли восемнадцать листков восьмого класса. */
-#s-kond .kond-klassy{{display:flex;gap:.4rem;margin:.2rem 0 .9rem}}
+#s-kond .kond-klassy{{display:flex;gap:.4rem;margin:0}}
 #s-kond .kond-klassy label{{cursor:pointer;font-family:var(--sans);font-weight:600;
   font-size:1.05rem;color:var(--muted);padding:.35em 1.1rem;border-radius:8px;
   border:1px solid var(--rule)}}
 #s-kond .kond-klassy label:hover{{color:var(--text);background:var(--accent-soft)}}
-#kl-9:checked~.kond-klassy label[for=kl-9],
-#kl-8:checked~.kond-klassy label[for=kl-8]{{color:var(--accent);
+#kl-9:checked~.kond-verh .kond-klassy label[for=kl-9],
+#kl-8:checked~.kond-verh .kond-klassy label[for=kl-8]{{color:var(--accent);
   background:var(--accent-soft);border-color:var(--accent)}}
 #kl-9:checked~.tabbar .kl8{{display:none}}
 #kl-8:checked~.tabbar .kl9{{display:none}}
@@ -993,7 +1008,8 @@ def stili(kt) -> str:
 #s-kond .kond td[data-u]{{cursor:pointer}}
 #s-kond .kond td[data-u]:hover{{background:var(--accent-soft)}}
 #s-kond .kond td[data-u].zhdyot{{opacity:.5}}
-#s-kond .kond-verh{{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}}
+#s-kond .kond-verh{{display:flex;align-items:center;gap:.5rem 1rem;flex-wrap:wrap;
+  margin:0 0 .9rem}}
 /* 🔴 «ВНЕСТИ ЗАДАЧИ» — САМАЯ БОЛЬШАЯ КНОПКА СТРАНИЦЫ. Владелец 10.09: «это самая
    важная кнопка, она не должна ютиться где-то в рандомном месте» (H4.2). Поэтому
    она ЗАЛИТА, а не обведена: обведённых кнопок на этой полосе ещё три — «8 класс»,
@@ -1030,7 +1046,15 @@ def stili(kt) -> str:
    а клеток тридцать одна тысяча. */
 #s-kond table.kond{{font-size:.95rem;width:100%;border-collapse:separate;
   border-spacing:0}}
+/* 🔴 НОМЕР ЗАДАЧИ ПИШЕТСЯ ТАК, КАК ОН НАПИСАН НА ЛИСТКЕ: `1а`, а не `1А`.
+   Правка владельца 10.09 (H4.5).  Заглавные буквы не приезжали из базы — там уже
+   лежит `1а` и `13б`, проверено запросом, — их рисовало общее правило оболочки
+   `th{{text-transform:uppercase}}` (`veb/obshchee/karkas.py`), которое верно для
+   подписей вроде «УЧЕНИК» и неверно для номера задачи: номер это НЕ подпись, это
+   цитата с бумажного листка, и школьник сверяет её посимвольно.  Оболочка не зона
+   этой позиции, и трогать её незачем: правило снимается там, где оно мешает. */
 #s-kond .kond th.zn{{padding:.5rem .2rem;text-align:center;font-size:.78rem;
+  text-transform:none;letter-spacing:0;
   min-width:3em;border-bottom:2px solid var(--rule);border-left:1px solid var(--rule)}}
 /* 🔴 ШАПКА ЛИПНЕТ К НИЗУ МЕНЮ, И ВЫСОТУ МЕНЮ СООБЩАЕТ САМО МЕНЮ.
    `--vysota-menu` ставит скрипт кондуита (`veb/obshchee/karkas.py`), измеряя живой
@@ -1099,11 +1123,32 @@ def stili(kt) -> str:
    по всему сайту, `--warm` — «внимание» (им же покрашено снятое), `--faint` —
    «фон, а не сообщение». Разные ЦВЕТА, а не только разные символы: четыре десятка
    значков в строке различаются полосой цвета раньше, чем формой. */
+/* 🔴 ЗНАЧОК НЕ УЧАСТВУЕТ В ЦЕНТРИРОВАНИИ НОМЕРА — ПРАВКА ВЛАДЕЛЬЦА 10.09 (H4.6):
+   «кружок и крестик — это индекс, при центрировании учитываться не должен; из-за
+   этого номер выглядит левее, чем должен».  Он описывает ровно то, что делал браузер:
+   `1а` и `◦` стояли в одной строке текста, строка центровалась ЦЕЛИКОМ, и номер уезжал
+   влево на полширины значка.  Чинится нулевой шириной: значок остаётся в потоке (то
+   есть по-прежнему рисуется сразу за номером и наследует его строку), но в ширину
+   строки не даёт ничего, и центруется один номер.
+   `overflow:visible` здесь обязателен и не декоративен: без него нулевая ширина
+   ОБРЕЗАЛА бы значок, а не выпустила его наружу.  Он же выводит узел из-под проверки
+   обрезки гейта вёрстки (`tools/gejt_verstki.py` смотрит `scrollWidth > clientWidth`
+   только при `overflow-x != visible`) — то есть гейт не краснеет на том, что здесь
+   сделано нарочно, и продолжает краснеть на настоящей обрезке. */
 #s-kond .kond th.zn .pm{{font-style:normal;font-size:1.05rem;line-height:1;
-  vertical-align:super;margin-left:.05em}}
+  vertical-align:super;margin-left:.05em;
+  display:inline-block;width:0;overflow:visible;white-space:nowrap}}
 #s-kond .pm.ob{{color:var(--accent)}}
 #s-kond .pm.pi{{color:var(--warm);font-weight:700}}
-#s-kond .pm.zv{{color:var(--faint)}}
+/* 🔴 ЗВЁЗДОЧКА ВЫДЕЛЕНА ЦВЕТОМ НАРАВНЕ С КРУЖКОМ И КРЕСТИКОМ — ПРАВКА 10.09 (H4.1):
+   «все три значка должны быть выделены цветом».  До неё `⋆` стоял в `--faint`, то есть
+   в цвете, который на этой странице значит «фон, а не сообщение», — и в шапке из сорока
+   столбцов сложная задача не отличалась от никакой.  `--krasn` — третий и последний
+   настоящий цвет закрытой палитры (`--accent` уже занят обязательной, `--warm`
+   письменной), нового не заводится.  Насыщенность у него как у соседей, поэтому три
+   значка теперь читаются полосой цвета раньше, чем формой, — тем же способом, каким
+   этот файл уже различал два первых. */
+#s-kond .pm.zv{{color:var(--krasn);font-weight:700}}
 /* ── СКОЛЬКО ЧЕЛОВЕК СДАЛО ЗАДАЧУ ─────────────────────────────────────────
    Число стоит ПОД номером задачи отдельной строкой: в шапке шириной 3em оно рядом
    с номером и значком не помещается, а перенос сделал бы высоту шапки прыгающей от
@@ -1115,10 +1160,10 @@ def stili(kt) -> str:
 #s-kond .kond th.zn .sdalo.zakr{{color:var(--accent);font-weight:700}}
 /* Словарь значков — один раз на странице, между кнопками классов и полосой
    вкладок, то есть до первой решётки и после выбора класса. */
-#s-kond .kond-slovar{{margin:.1rem 0 .7rem;font-family:var(--sans);font-size:.85rem;
-  color:var(--muted)}}
+#s-kond .kond-slovar{{margin:0;font-family:var(--sans);font-size:.82rem;
+  color:var(--muted);flex:0 1 auto;min-width:0}}
 #s-kond .kond-slovar .pm{{font-style:normal;font-size:1.15rem;line-height:1}}
-#s-kond .kond-slovar .iz{{color:var(--faint);font-size:.85rem}}
+#s-kond .kond-slovar .iz{{color:var(--faint);font-size:.82rem}}
 #s-kond .kond-lich i .pm{{font-style:normal;vertical-align:super;font-size:.75rem;
   line-height:1}}
 #s-kond .kond-imya{{font-family:var(--sans);font-size:1.5rem;font-weight:600;margin:0 0 1rem}}
@@ -1331,15 +1376,22 @@ def razdel(kt) -> str:
               '<label for="kl-8">8 класс</label>'
               '<label for="kl-9">9 класс</label></div>')
 
+    # 🔴 ЛЕГЕНДА НАЗЫВАЕТ ЗНАЧКИ СЛОВАМИ, А НЕ КЛЮЧАМИ БАЗЫ — ПРАВКА 10.09 (H4.7).
+    # `NAZVANIE` переводит `problems.kind` в слово для человека; ключ `звезда`
+    # остаётся в базе как есть, потому что переименовать его значило бы править
+    # `problems`, `tools/import_listka.py` и `vidy_zadach.py` — ни один из них не зона
+    # этой позиции, и все они говорят о ДАННЫХ, а не о том, что читает преподаватель.
+
     # 🔴 СЛОВАРЬ ЗНАЧКОВ ПОДПИСАН ОДИН РАЗ НА СТРАНИЦЕ, А НЕ В КАЖДОЙ КЛЕТКЕ.  Ровно то,
     # что просил владелец: значки обязаны быть различимы, когда их четыре десятка в
     # строке, а объяснение — стоять один раз и не мешать.  Подпись в каждой ячейке
     # (`title="обязательная"`) не годится дважды: на телефоне её нечем вызвать, и она
     # выросла бы в тридцать одну тысячу повторов одного и того же слова.
     slovar = ('<p class="kond-slovar">'
-              + "".join(f'{znachok(vid)}\u2009{vid}' + ("  " if vid != "звезда" else "")
+              + "".join(f'{znachok(vid)}\u2009{NAZVANIE[vid]}'
+                        + ("  " if vid != "звезда" else "")
                         for vid in ("обязательная", "письменная", "звезда"))
-              + '<span class="iz"> · без значка — обычная, сдавать не обязательно</span>'
+              + '<span class="iz"> · без значка — не обязательна</span>'
               + '</p>')
     vkladki = ('<div class="tabbar">'
                '<label class="kl9" for="k-vse9">Весь год</label>'
@@ -1391,5 +1443,13 @@ def razdel(kt) -> str:
             # «где-то в рандомном месте», как владелец и сказал. Обёртка снята,
             # и оба стали элементами одной флекс-полосы.
             f'<a class="vnesti-knopka" href="/vnesti">Внести задачи</a>'
-            f'{metka_galki}</div>'
-            f'{klassy}{slovar}{vkladki}{panely}{istoria}</section>')
+            # 🔴 ОДНА ВЕРХНЯЯ ПАНЕЛЬ — ПРАВКА ВЛАДЕЛЬЦА 10.09 (H4.8): «одна полоска
+            # панели, а ниже уже сразу видно всё, что нужно.  Сейчас это проблема,
+            # когда ты наслаиваешь много строк».  Кнопки классов и словарь значков
+            # стояли отдельными полосами под заголовком — вместе с заголовком и
+            # полосой вкладок это было четыре яруса до первой строки решётки.
+            # Теперь всё, кроме вкладок, лежит в ОДНОМ флекс-ряду `.kond-verh`, и
+            # порядок в нём — порядок владельца: заголовок, действие, выбор класса,
+            # подпись к значкам, фильтр у правого края.
+            f'{klassy}{slovar}{metka_galki}</div>'
+            f'{vkladki}{panely}{istoria}</section>')
