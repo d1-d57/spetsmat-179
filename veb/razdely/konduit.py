@@ -156,6 +156,31 @@ def _schyotchik(schyot) -> str:
 ZAGOLOVOK_SCH = ('<th class="sch" title="сдано обязательных задач этого разреза '
                  'из общего их числа">Обяз.</th>')
 
+#: Шапка столбца крупной зелёной галочки.  Значок в шапке — тот же, что в клетках под ней:
+#: столбец, подписанный словом, отобрал бы у решётки ширину, которой владелец уже дважды
+#: просил не разбрасываться, а объяснение живёт в подсказке — ровно как у столбца счётчика.
+ZAGOLOVOK_GT = ('<th class="gt" title="крупная зелёная галочка — школьник закрыл '
+                'всё обязательное этого разреза">✓</th>')
+
+
+def _galka(est: bool, podskazka: str) -> str:
+    """Клетка СВОЕГО столбца: крупная зелёная галочка — или пустая клетка.
+
+    🔴 ОТДЕЛЬНЫЙ СТОЛБЕЦ — ПРАВКА ВЛАДЕЛЬЦА 10.09 (`TZ-DOBOR-10-09.md` O2): «должна
+    возникать большая зелёная галочка… достаточно заметной галочки — мы увидим, что
+    школьник всё сдал».  До неё тот же факт нёс ФОН ВСЕЙ СТРОКИ, и владелец потребовал
+    его снять (O1): подсветка строки уже значила «мой школьник».  Столбец — это и есть
+    носитель, который значит ровно одно.
+
+    🔴 НЕ СДАЛ — КЛЕТКА ПУСТАЯ, А НЕ КРЕСТИК И НЕ СЕРАЯ ГАЛОЧКА.  Пятьдесят три строки,
+    и знак у каждой второй перестал бы быть заметным — то самое «достаточно заметной»,
+    о котором владелец сказал.  Отсутствие галочки уже сообщение: рядом стоит счётчик,
+    который называет числами, сколько осталось.
+    """
+    if not est:
+        return '<td class="gt"></td>'
+    return '<td class="gt gt-da" title="%s">✓</td>' % e(podskazka)
+
 
 def _klass_stroki(u, chuzhoj) -> str:
     """Класс строки школьника: чей это ребёнок — и БОЛЬШЕ НИЧЕГО.
@@ -574,10 +599,12 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, i
             f'<label for="k-u{u.id}">'
             f'<b>{e(u.surname)}</b> {e(u.name)}</label>'
             f'{_prin(prinimayushchie, u.id)}</td>'
-            f'<td class="sch">{_schyotchik(schyot)}</td>{"".join(kletki)}</tr>')
+            f'<td class="sch">{_schyotchik(schyot)}</td>'
+            f'{_galka(schyot.zakryl, "закрыл все %d обязательных" % schyot.vsego)}'
+            f'{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
-            f'<table class="kond" style="max-width:{19 + len(listki) * 5.5:.1f}em">'
-            f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{shapka}</tr></thead>'
+            f'<table class="kond" style="max-width:{21.5 + len(listki) * 5.5:.1f}em">'
+            f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{ZAGOLOVOK_GT}{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
@@ -655,14 +682,16 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie,
             # у организатора и у общего пароля своих нет вовсе (`chuzhoj` пуст),
             # и правило `tr:not(.chuzh)` покрасило бы им всех до одного.
             klass = _klass_stroki(u, chuzhoj)
+            galka = _galka(schyot.zakryl,
+                           "закрыл все %d обязательных этого листка" % schyot.vsego)
             stroki.append(f'<tr{klass}><td class="kto">'
                           f'<b>{e(u.surname)}</b> {e(u.name)}'
                           f'{_prin(prinimayushchie, u.id)}</td>'
-                          f'<td class="sch">{_schyotchik(schyot)}</td>'
+                          f'<td class="sch">{_schyotchik(schyot)}</td>{galka}'
                           f'{"".join(kletki)}</tr>')
-        potolok = 19 + len(zad) * 5.5
+        potolok = 21.5 + len(zad) * 5.5
         telo = (f'<table class="kond" style="max-width:{potolok:.1f}em">'
-                f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{shapka}</tr></thead>'
+                f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{ZAGOLOVOK_GT}{shapka}</tr></thead>'
                 f'<tbody>{"".join(stroki)}</tbody></table>')
     return (f'<section class="vid" id="n-{sh.id}">'
             f'<p class="zag2 zag-listok">{e(sh.title or sh.number)}</p>{telo}</section>')
@@ -1105,6 +1134,22 @@ def stili(kt) -> str:
 #s-kond .kond td.sch .ob-sch{{font-style:normal;font-family:var(--sans);
   font-size:.92rem;font-weight:700;color:var(--accent)}}
 #s-kond .kond td.sch .ob-sch.net{{color:var(--faint);font-weight:400}}
+/* ── СТОЛБЕЦ КРУПНОЙ ЗЕЛЁНОЙ ГАЛОЧКИ ──────────────────────────────────────
+   🔴 ПРАВКА ВЛАДЕЛЬЦА 10.09 (O2): «должна возникать большая зелёная галочка…
+   достаточно заметной галочки».  Крупная — это `1.15rem` против `.92rem` у соседнего
+   счётчика: она обязана читаться раньше числа, потому что отвечает на вопрос «всё?»,
+   а не «сколько?».
+   🔴 ЗЕЛЁНЫЙ БЕРЁТСЯ ГОТОВЫЙ, НОВОГО ЦВЕТА НЕ ЗАВОДИТСЯ.  `--zel` объявлен в `:root`
+   каркаса (`veb/obshchee/karkas.py`, обе темы) и уже несёт «был» в полосе занятий
+   кабинета — той самой, которую владелец принял дословно («роскошно, шикарно»).
+   Шестнадцатеричного числа здесь нет, как и требует `doc/DIZAJN-ZAKREPLENO.md §2`.
+   Столбец узкий и своей рамкой отделён от решётки — так же, как столбец счётчика:
+   иначе общее правило `tbody td+td` сочло бы его клеткой задачи и покрасило бы. */
+#s-kond .kond thead th.gt{{text-align:center;font-size:.9rem;color:var(--zel);
+  padding:.5rem .3rem;border-bottom:2px solid var(--rule)}}
+#s-kond .kond tbody td.gt{{text-align:center;width:2.2rem;min-width:2.2rem;
+  padding:.2rem .3rem;border-bottom:1px solid var(--rule);border-right:1px solid var(--rule);
+  background:var(--bg);font-size:1.15rem;line-height:1;color:var(--zel);font-weight:700}}
 /* ── ИНИЦИАЛЫ ПРИНИМАЮЩЕГО У ФАМИЛИИ ──────────────────────────────────────
    Надстрочно и мелко: это подпись к фамилии, а не второе имя. Курсор `help`
    обещает подсказку, которая есть, — иначе о наведении никто не догадается.

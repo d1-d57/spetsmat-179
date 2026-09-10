@@ -151,7 +151,17 @@ def test_a_retracted_obligatory_is_not_counted_as_handed_in(mir, connection, mar
                             str(mir.sheet_ids[0])))[0] == (0, 3)
 
 
-# ------------------------------------------------------- величина 2: строка светится
+# ------------------------------------- величина 2: столбец крупной зелёной галочки
+
+
+def galki(kusok: str) -> list:
+    """Столбец галочки, сверху вниз: `True` там, где она горит.
+
+    Читается по КЛАССУ клетки, а не по символу: галочка, дорисованная где-нибудь ещё
+    (в клетке фамилии, в счётчике), этой проверкой не считается — она и не должна.
+    """
+    return [bool(m.group(1))
+            for m in re.finditer(r'<td class="gt( gt-da)?"', kusok)]
 
 
 def test_no_row_glows_for_having_closed_the_obligatory_problems(
@@ -180,6 +190,52 @@ def test_no_row_glows_for_having_closed_the_obligatory_problems(
     assert "gotov" not in kusok, "класс подсветки не остался нигде в разметке"
 
 
+def test_the_green_tick_lights_in_its_own_column_exactly_for_who_closed_everything(
+    mir, connection, marking
+):
+    """O2: «должна возникать большая зелёная галочка… мы увидим, что школьник всё сдал».
+
+    The same world as the test above: the first pupil closes all three obligatory
+    problems, the second takes a звезда and an обычная and closes none.  The признак the
+    row lost is checked HERE, in the column that now carries it — that is the whole of
+    O1+O2 together, and checking only the loss would leave the fact silently dropped.
+    """
+    zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
+    for zadacha in (zadachi[0], zadachi[1], zadachi[2]):
+        otmetit(marking, mir.student_ids[0], zadacha)
+    otmetit(marking, mir.student_ids[1], zadachi[3])
+    otmetit(marking, mir.student_ids[1], zadachi[4])
+    connection.commit()
+    html = konduit.razdel(kontekst(connection))
+    kusok = panel(html, str(mir.sheet_ids[0]))
+    assert galki(kusok) == [True, False, False, False, False]
+    # It IS a column: a header of its own, in the same thead as the счётчик.
+    shapka_html = re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
+    assert shapka_html.count('<th class="gt"') == 1, shapka_html
+    # And the tick is drawn green by the class, not by a colour written in the cell.
+    assert re.search(r"td\.gt\b[^}]*var\(--zel\)", konduit.stili(kontekst(connection)))
+
+
+def test_the_tick_is_not_smeared_over_the_surname_cell_or_the_counter(
+    mir, connection, marking
+):
+    """Q4, «нельзя смешивать», judged where it actually breaks: one признак, one place.
+
+    The pupil below is in the state that carries the признак, so a second carrier would
+    be visible right now rather than in theory.
+    """
+    for zadacha in mir.problems_by_sheet[mir.sheet_ids[0]][:3]:
+        otmetit(marking, mir.student_ids[0], zadacha)
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    telo = re.search(r"<tbody>(.*?)</tbody>", kusok, re.S).group(1)
+    stroka = re.search(r"<tr[^>]*>(.*?)</tr>", telo, re.S).group(1)
+    assert '<td class="gt gt-da"' in stroka, "галочка у этого школьника вообще есть"
+    kto = re.search(r'<td class="kto">(.*?)</td>', stroka, re.S).group(1)
+    sch = re.search(r'<td class="sch">(.*?)</td>', stroka, re.S).group(1)
+    assert "✓" not in kto and "✓" not in sch, (kto, sch)
+
+
 def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marking):
     """`1д`-`4д` on the live база are exactly like this: 99 problems and no obligatory one."""
     for zapros in ZHIVYE_KOLONKI:
@@ -187,7 +243,9 @@ def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marki
     mir = seed_world(connection, students=3, sheets=(("звезда", "обычная"),))
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    assert "gotov" not in kusok
+    assert galki(kusok) == [False, False, False], (
+        "галочка «сдал всё обязательное» на листке без обязательных не горит ни у кого: "
+        "вакуумная истина зажгла бы её всем сразу, и признак перестал бы что-либо значить")
     assert schyotchiki(kusok) == [None, None, None], "листок без обязательных пишет точку"
 
 
