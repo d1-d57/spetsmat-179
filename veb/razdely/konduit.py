@@ -102,7 +102,14 @@ def znachok(kind: str) -> str:
 
 
 def _schyotchik(schyot) -> str:
-    """Слева от школьника: сколько обязательных он сдал и сколько ему осталось.
+    """Содержимое СВОЕЙ КОЛОНКИ, стоящей сразу ПОСЛЕ фамилии: сколько обязательных сдано.
+
+    🔴 КОЛОНКА, А НЕ ПРИСТАВКА К ФАМИЛИИ — ПРАВКА ВЛАДЕЛЬЦА 10.09 (`TZ-DOBOR-10-09.md`
+    H4.4).  До неё число стояло ЛЕВЕЕ фамилии, внутри той же ячейки, и владелец назвал это
+    «очень плохо, некрасиво и непонятно»: «фамилия — первое, что важно, а второе — этот
+    параметр».  Поэтому число уехало в отдельный `<td class="sch">` между фамилией и первой
+    задачей, и порядок чтения строки стал тем, который он назвал.  Сама разметка числа при
+    этом не изменилась ни на знак — переехала ячейка, а не счётчик.
 
     🔴 ОБА ЧИСЛА ВЛАДЕЛЬЦА СТОЯТ НА ЭКРАНЕ, А НЕ ОДНО ИЗ НИХ.  09.09: «сколько он
     обязательных задач сдал.  Ещё ему осталось сдать».  Сданное и всего видны цифрами
@@ -125,6 +132,14 @@ def _schyotchik(schyot) -> str:
                      % (schyot.sdano, schyot.vsego, schyot.ostalos))
     return ('<i class="ob-sch" title="%s">%d<span class="iz">/%d</span></i>'
             % (e(podskazka), schyot.sdano, schyot.vsego))
+
+
+#: Шапка колонки счётчика — одна на оба разреза, где эта колонка есть (`_obzor` и `_listok`).
+#: Слово сокращено не для красоты: колонка узкая нарочно, а полное «обязательных» раздвинуло
+#: бы её втрое и отобрало ширину у самой решётки.  Что именно сокращено, говорит подсказка,
+#: и она же называет оба числа словами — то же устройство, что и у самого счётчика.
+ZAGOLOVOK_SCH = ('<th class="sch" title="сдано обязательных задач этого разреза '
+                 'из общего их числа">Обяз.</th>')
 
 
 def _klass_stroki(u, chuzhoj, schyot) -> str:
@@ -432,13 +447,14 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, i
         # владелец увидел это раньше, чем я.
         klass = _klass_stroki(u, chuzhoj, schyot)
         stroki.append(
-            f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
+            f'<tr{klass}><td class="kto">'
             f'<label for="k-u{u.id}">'
             f'<b>{e(u.surname)}</b> {e(u.name)}</label>'
-            f'{_prin(prinimayushchie, u.id)}</td>{"".join(kletki)}</tr>')
+            f'{_prin(prinimayushchie, u.id)}</td>'
+            f'<td class="sch">{_schyotchik(schyot)}</td>{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
-            f'<table class="kond" style="max-width:{16 + len(listki) * 5.5:.1f}em">'
-            f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
+            f'<table class="kond" style="max-width:{19 + len(listki) * 5.5:.1f}em">'
+            f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
@@ -507,12 +523,14 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie) ->
             # у организатора и у общего пароля своих нет вовсе (`chuzhoj` пуст),
             # и правило `tr:not(.chuzh)` покрасило бы им всех до одного.
             klass = _klass_stroki(u, chuzhoj, schyot)
-            stroki.append(f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
+            stroki.append(f'<tr{klass}><td class="kto">'
                           f'<b>{e(u.surname)}</b> {e(u.name)}'
-                          f'{_prin(prinimayushchie, u.id)}</td>{"".join(kletki)}</tr>')
-        potolok = 16 + len(zad) * 5.5
+                          f'{_prin(prinimayushchie, u.id)}</td>'
+                          f'<td class="sch">{_schyotchik(schyot)}</td>'
+                          f'{"".join(kletki)}</tr>')
+        potolok = 19 + len(zad) * 5.5
         telo = (f'<table class="kond" style="max-width:{potolok:.1f}em">'
-                f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
+                f'<thead><tr><th>Ученик</th>{ZAGOLOVOK_SCH}{shapka}</tr></thead>'
                 f'<tbody>{"".join(stroki)}</tbody></table>')
     return (f'<section class="vid" id="n-{sh.id}">'
             f'<p class="zag2">{e(sh.title or sh.number)}</p>{telo}</section>')
@@ -935,13 +953,31 @@ def stili(kt) -> str:
    которых фон тоже накрашен. */
 #s-kond .kond tbody tr.gotov td{{background:var(--chip)}}
 #s-kond .kond tbody tr.gotov:hover td{{background:var(--chip)}}
-#s-kond .kond td.kto .ob-sch{{display:inline-block;width:2.6em;margin-right:.45rem;
-  text-align:right;font-style:normal;font-family:var(--sans);font-size:.8rem;
-  font-weight:600;color:var(--muted)}}
-#s-kond .kond td.kto .ob-sch.net{{color:var(--faint);font-weight:400}}
-/* Закрыл — счётчик берёт «твоё, важное»; это тот же `--accent`, которым покрашена
-   сданная клетка, и он значит здесь ровно то же самое. */
-#s-kond .kond tbody tr.gotov td.kto .ob-sch{{color:var(--accent)}}
+/* 🔴 СЧЁТЧИК СТОИТ В СВОЕЙ КОЛОНКЕ ПОСЛЕ ФАМИЛИИ — ПРАВКА ВЛАДЕЛЬЦА 10.09 (H4.4).
+   Три вещи, каждая из которых чинит названную им претензию:
+   1. Это НАСТОЯЩИЙ столбец (`td.sch`), а не отступ внутри ячейки фамилии. Общее
+      правило решётки `tbody td+td` считает клеткой ВСЁ, кроме первой ячейки строки,
+      и покрасило бы счётчик как задачу; поэтому у `td.sch` своя пара правил, и она
+      весомее по устройству селектора (один id и ДВА класса против id и одного).
+   2. Цвет — `--accent`, тот самый, которым на этой странице покрашена сданная
+      клетка: число «сдано» и галочка «сдано» говорят одно и то же и потому красятся
+      одинаково. Прежний `--muted` и был тем «непонятно», о котором он сказал.
+      Знаменатель остаётся `--faint`: он не сообщение, а рамка для числа.
+   3. «Закрыл все обязательные» РАНЬШЕ выражался тем, что счётчик становился
+      accent — теперь accent стоит всегда, и признак переехал на подложку
+      `--accent-soft`. Ни одного нового цвета: обе переменные страница уже объявила,
+      а строка целиком по-прежнему светится `--chip`, как её принял владелец. */
+#s-kond .kond thead th.sch{{text-align:center;white-space:nowrap;font-size:.72rem;
+  padding:.5rem .3rem;border-bottom:2px solid var(--rule);
+  border-left:1px solid var(--rule)}}
+#s-kond .kond tbody td.sch{{text-align:center;white-space:nowrap;padding:.3rem .4rem;
+  min-width:0;border-left:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  background:var(--bg)}}
+#s-kond .kond td.sch .ob-sch{{font-style:normal;font-family:var(--sans);
+  font-size:.92rem;font-weight:700;color:var(--accent)}}
+#s-kond .kond td.sch .ob-sch.net{{color:var(--faint);font-weight:400}}
+#s-kond .kond tbody tr.gotov td.sch .ob-sch{{background:var(--accent-soft);
+  border-radius:6px;padding:.05em .4em}}
 /* ── ИНИЦИАЛЫ ПРИНИМАЮЩЕГО У ФАМИЛИИ ──────────────────────────────────────
    Надстрочно и мелко: это подпись к фамилии, а не второе имя. Курсор `help`
    обещает подсказку, которая есть, — иначе о наведении никто не догадается.
@@ -1119,18 +1155,19 @@ def stili(kt) -> str:
     display:block;overflow:hidden;text-overflow:ellipsis}}
   #s-kond .kond tbody tr.moi td.kto{{padding-left:.55rem}}
   #s-kond .kond td.kto label{{display:block;overflow:hidden;text-overflow:ellipsis}}
-  /* 🔴 НА ТЕЛЕФОНЕ СЧЁТЧИК СТОИТ СТРОКОЙ ВЫШЕ ФАМИЛИИ, А НЕ ПЕРЕД НЕЙ. Столбец
-     фамилии здесь 7.2rem, и 2.6em счётчика — это больше трети его: фамилия ушла бы
-     в многоточие ровно на том экране, ради которого её и не режут (см. правило
-     выше). `<b>` и `<label>` в этом запросе и так `display:block`, поэтому счётчик
-     оказывается над ними сам; правило ниже только прижимает его к правому краю
-     ячейки, чтобы числа стояли столбиком и читались друг под другом. */
-  #s-kond .kond td.kto .ob-sch{{display:inline;width:auto;margin:0 .35rem 0 0;
-    font-size:.7rem;line-height:1.1}}
-  /* Счётчик и инициалы стоят ПЕРВОЙ строкой ячейки, фамилия — второй: `<b>` и
-     `<label>` в этом запросе `display:block`, поэтому строка делится сама. На
-     ноутбуке всё это остаётся одной строкой и десктопный вид не меняется. */
-  #s-kond .kond td.kto .prin{{vertical-align:baseline;margin-left:0;font-size:.62rem}}
+  /* 🔴 НА ТЕЛЕФОНЕ КОЛОНКА СЧЁТЧИКА ЕДЕТ ВМЕСТЕ С ФАМИЛИЕЙ, А НЕ УХОДИТ ПОД НЕЁ.
+     Столбец фамилии здесь ровно 7.2rem (правило выше), поэтому липкость счётчика
+     ставится на то же самое число: прокручивая решётку вбок, видно и чья строка,
+     и сколько обязательных у этого школьника. Число снято с той же ячейки, а не
+     подобрано на глаз, — разъедутся они только вместе.
+     Порядок наложения: фамилия (4) поверх счётчика (3) поверх клеток задач, у
+     которых `position:relative` и своего слоя нет. Иначе при прокрутке счётчик
+     накрыл бы фамилию — то есть ровно то, от чего владелец её и уводил. */
+  #s-kond .kond thead th.sch{{left:7.2rem;padding:.4rem .25rem}}
+  #s-kond .kond tbody td.sch{{position:sticky;left:7.2rem;z-index:3;
+    padding:.2rem .25rem}}
+  #s-kond .kond td.sch .ob-sch{{font-size:.72rem}}
+  #s-kond .kond td.kto .prin{{vertical-align:super;font-size:.62rem}}
   /* Клетка — цель пальца: 44 точки в высоту, компактнее в ширину. */
   #s-kond .kond tbody td+td{{min-width:2.5em;height:44px;padding:.2rem;
     font-size:1.05rem}}
@@ -1145,6 +1182,8 @@ def stili(kt) -> str:
   #s-kond .kond td.kto{{width:6.2rem;max-width:6.2rem}}
   #s-kond .kond td.kto b,#s-kond .kond td.kto label{{font-size:.76rem}}
   #s-kond .kond tbody td+td{{min-width:2.2em}}
+  /* Столбец фамилии сузился — вместе с ним переезжает и липкий счётчик. */
+  #s-kond .kond thead th.sch,#s-kond .kond tbody td.sch{{left:6.2rem}}
 }}
 #s-kond .kond-lich i{{display:inline-block;font-style:normal;font-family:var(--sans);
   font-size:.85rem;background:var(--chip);border-radius:6px;padding:.05em .45em;
