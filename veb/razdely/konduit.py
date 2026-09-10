@@ -46,11 +46,13 @@ from anywhere.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, timezone
 
 import config
 
 from core.services.history import zanyatie_dlya, zanyatie_po_iso
+from core.services.sostav_na_den import SLOTY_ZANYATIJ
 from core.services.progress import (
     ProgressService,
     obyazatelnyh_sdano,
@@ -61,8 +63,9 @@ from core.services.progress import (
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
 from tools.export_xlsx import SIGN
 from veb.obshchee.karkas import e
+from veb.sobrat_fajl import SOKR_DNYA
 from veb.razdely.istoria import perebivki
-from veb.razdely.lichnaya import deti_na_datu, segodnya
+from veb.razdely.lichnaya import deti_na_datu, kabinet_na_datu, segodnya
 
 
 # ── ЗНАЧКИ ЛИСТКА ──────────────────────────────────────────────────────────
@@ -164,6 +167,104 @@ def _skolko_sdalo(problem, na_uchyote, sostoyaniya) -> str:
                      % (sdalo, len(na_uchyote), config.GRAVEYARD_THRESHOLD))
     return ('<b class="sdalo%s" title="%s">%d</b>'
             % (" zakr" if zakryta else "", e(podskazka), sdalo))
+
+
+#: Слот занятия → его день недели, СОКРАЩЁННЫЙ ОБЩЕПРИНЯТО. Оба словаря взяты у своих
+#: хозяев (`core.services.sostav_na_den.SLOTY_ZANYATIJ` — какой день какой слот,
+#: `veb.sobrat_fajl.SOKR_DNYA` — как день зовут), и ни один здесь не переписан: «пн» и «чт»,
+#: вписанные сюда парой строк, разъехались бы с расписанием в тот день, когда занятие
+#: переедет на другой день недели, и разъехались бы МОЛЧА.  `SOKR_DNYA` считает понедельник
+#: нулём, а `SLOTY_ZANYATIJ` — единицей (ISO), отсюда `-1`; ровно та же поправка стоит в
+#: `veb/obshchee/karkas.py:323` и по той же причине.
+DEN_SLOTA = {slot: SOKR_DNYA[den - 1] for den, slot in SLOTY_ZANYATIJ.items()}
+
+
+def initsialy(imya: str) -> str:
+    """«Андрей Рябичев» → «А.Р.»; «Надя» → «Надя».
+
+    🔴 ОДНОСЛОВНОЕ ИМЯ ОСТАЁТСЯ СОБОЙ, А НЕ ПРЕВРАЩАЕТСЯ В ОДНУ БУКВУ.  В `teachers`
+    живьём лежат и «Андрей Рябичев», и «Надя», и «Вася» — школа зовёт часть принимающих
+    по имени, и это не неполная запись, которую надо чинить.  «Н.» вместо «Надя» не короче
+    на экране и при этом теряет единственное, что о человеке известно; хуже, «Надя» и
+    «Наталья Амбург» слились бы в одну букву.
+    """
+    chasti = imya.split()
+    if len(chasti) >= 2:
+        return "%s.%s." % (chasti[0][0].upper(), chasti[1][0].upper())
+    return chasti[0] if chasti else ""
+
+
+def _prinimayushchie(kt, den: str) -> dict:
+    """`{student_id: <разметка инициалов>}` — кто принимает у школьника на эту дату.
+
+    🔴 НЕ КОЛОНКОЙ — РЕШЕНИЕ ВЛАДЕЛЬЦА 09.09.  «Я бы показывал инициалы преподавателя, и
+    номер группы, и номер кабинета» — но инициалы стоят У ФАМИЛИИ, а имя, группа и кабинет
+    разворачиваются наведением.  Отдельный столбец в решётке, где столбцы — это ЗАДАЧИ,
+    был бы столбцом не про задачу; и он отъел бы ширину у той самой решётки, которую
+    владелец уже просил расширить.
+
+    🔴 КАБИНЕТ СПРАШИВАЕТСЯ У `lichnaya.kabinet_na_datu` И БОЛЬШЕ НИГДЕ.  Источников
+    кабинета в проекте ЧЕТЫРЕ и они расходятся между собой — `enrollment.room`,
+    `kabinet_na_den`, `teachers.kabinet`, таблица `kabinety`; 07.09 это стоило владельцу
+    страницы, которая спорила сама с собой (303 против 307).  Та функция и есть решение
+    того спора, и второй запрос за кабинетом здесь воспроизвёл бы его целиком.  Ответ
+    кэшируется по принимающему: их девятнадцать, а школьников на решётке пятьдесят три.
+
+    🔴 ИНТЕРВАЛ ПОЛУОТКРЫТЫЙ, И ЭТО НЕ СТИЛЬ ЗАПРОСА.  Открытая строка `enrollment` несёт
+    `valid_to = '9999-12-31'`, а НЕ `NULL` (`valid_to is null` не находит на живой базе ни
+    одной строки из 247), и часть открытых строк начинается в БУДУЩЕМ — поэтому проверяется
+    весь интервал `valid_from <= день < valid_to`, тем же условием, каким его проверяет
+    `lichnaya.deti_na_datu`.
+    """
+    ryady = kt.c.execute(
+        "select e.student_id, e.teacher_id, e.slot, t.name, t.gruppa "
+        "from enrollment e join teachers t on t.id = e.teacher_id "
+        "where e.valid_from <= ? and ? < e.valid_to "
+        "order by e.slot, t.name",
+        (den, den)).fetchall()
+
+    kabinety = {}
+    po_shkolniku = defaultdict(list)
+    for r in ryady:
+        prepod = r["teacher_id"]
+        if prepod not in kabinety:
+            kabinety[prepod] = kabinet_na_datu(kt.c, prepod, den)
+        po_shkolniku[r["student_id"]].append(
+            (r["slot"], prepod, r["name"], r["gruppa"], kabinety[prepod]))
+
+    razmetka = {}
+    for student_id, stroki in po_shkolniku.items():
+        # Один и тот же принимающий в обоих слотах — это ОДИН человек и одни инициалы.
+        # Разные — двое, и тогда подсказка обязана сказать, кто в какой день, иначе она
+        # называет двух людей и не говорит, когда встретишь которого.
+        prepody = []
+        for slot, prepod, imya, gruppa, kabinet in stroki:
+            if prepod not in [p for _s, p, *_ in prepody]:
+                prepody.append((slot, prepod, imya, gruppa, kabinet))
+        podpisi = []
+        for slot, _prepod, imya, gruppa, kabinet in prepody:
+            hvost = "группа %s" % gruppa if gruppa else "группа не назначена"
+            hvost += " · кабинет %s" % kabinet if kabinet else " · кабинет не назначен"
+            den_slota = DEN_SLOTA.get(slot)
+            podpisi.append(("%s — %s · %s" % (den_slota, imya, hvost)) if len(prepody) > 1
+                           else "%s · %s" % (imya, hvost))
+        razmetka[student_id] = (
+            '<i class="prin" title="принимающий: %s">%s</i>'
+            % (e("; ".join(podpisi)),
+               e("/".join(initsialy(imya) for _s, _p, imya, _g, _k in prepody))))
+    return razmetka
+
+
+def _prin(prinimayushchie, student_id) -> str:
+    """Инициалы школьника, а где распределения нет — прочерк, а не пустое место.
+
+    Пустое место читается как «забыли нарисовать»; прочерк с подсказкой говорит, что
+    вопрос задан и ответа нет.  На живой базе таких школьников есть, и молчание о них
+    было бы сообщением о том, что у всех всё назначено.
+    """
+    return prinimayushchie.get(
+        student_id,
+        '<i class="prin net" title="принимающий на сегодня не назначен">\u2014</i>')
 
 
 def _uchastniki(catalogue) -> tuple:
@@ -296,7 +397,7 @@ def _kratko(den: str) -> str:
     return "%s.%s" % (den[8:10], den[5:7])
 
 
-def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str:
+def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, imya="vse") -> str:
     """Cut one: the whole year on one grid — a row per pupil, a column per листок.
 
     In the cell "credited of total" for that листок. This is the view the owner
@@ -333,14 +434,15 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str
         stroki.append(
             f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
             f'<label for="k-u{u.id}">'
-            f'<b>{e(u.surname)}</b> {e(u.name)}</label></td>{"".join(kletki)}</tr>')
+            f'<b>{e(u.surname)}</b> {e(u.name)}</label>'
+            f'{_prin(prinimayushchie, u.id)}</td>{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
             f'<table class="kond" style="max-width:{16 + len(listki) * 5.5:.1f}em">'
             f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
-def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
+def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie) -> str:
     """Cut two: one листок, in the alphabet of the workbook — `1`, `x`, empty.
 
     This is the table `tools/export_xlsx.py` writes to a worksheet, drawn on
@@ -406,7 +508,8 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
             # и правило `tr:not(.chuzh)` покрасило бы им всех до одного.
             klass = _klass_stroki(u, chuzhoj, schyot)
             stroki.append(f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
-                          f'<b>{e(u.surname)}</b> {e(u.name)}</td>{"".join(kletki)}</tr>')
+                          f'<b>{e(u.surname)}</b> {e(u.name)}'
+                          f'{_prin(prinimayushchie, u.id)}</td>{"".join(kletki)}</tr>')
         potolok = 16 + len(zad) * 5.5
         telo = (f'<table class="kond" style="max-width:{potolok:.1f}em">'
                 f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
@@ -758,6 +861,15 @@ def stili(kt) -> str:
 /* Закрыл — счётчик берёт «твоё, важное»; это тот же `--accent`, которым покрашена
    сданная клетка, и он значит здесь ровно то же самое. */
 #s-kond .kond tbody tr.gotov td.kto .ob-sch{{color:var(--accent)}}
+/* ── ИНИЦИАЛЫ ПРИНИМАЮЩЕГО У ФАМИЛИИ ──────────────────────────────────────
+   Надстрочно и мелко: это подпись к фамилии, а не второе имя. Курсор `help`
+   обещает подсказку, которая есть, — иначе о наведении никто не догадается.
+   Ни одного нового цвета: `--faint` уже значит «фон, а не сообщение» по всей
+   странице, и им же покрашена звезда в шапке столбца. */
+#s-kond .kond td.kto .prin{{font-style:normal;font-family:var(--sans);font-size:.62rem;
+  font-weight:600;color:var(--faint);vertical-align:super;margin-left:.3em;cursor:help;
+  white-space:nowrap}}
+#s-kond .kond td.kto .prin.net{{font-weight:400}}
 /* Клетка листка тапается: курсор и подсветка обещают действие, которое есть.
    Клетки годового обзора и личной карточки адреса пары не несут и остаются
    обычным текстом — там столбец это ЛИСТОК, а не задача, и отмечать нечего. */
@@ -927,8 +1039,12 @@ def stili(kt) -> str:
      выше). `<b>` и `<label>` в этом запросе и так `display:block`, поэтому счётчик
      оказывается над ними сам; правило ниже только прижимает его к правому краю
      ячейки, чтобы числа стояли столбиком и читались друг под другом. */
-  #s-kond .kond td.kto .ob-sch{{display:block;width:auto;margin:0 0 .05rem;
+  #s-kond .kond td.kto .ob-sch{{display:inline;width:auto;margin:0 .35rem 0 0;
     font-size:.7rem;line-height:1.1}}
+  /* Счётчик и инициалы стоят ПЕРВОЙ строкой ячейки, фамилия — второй: `<b>` и
+     `<label>` в этом запросе `display:block`, поэтому строка делится сама. На
+     ноутбуке всё это остаётся одной строкой и десктопный вид не меняется. */
+  #s-kond .kond td.kto .prin{{vertical-align:baseline;margin-left:0;font-size:.62rem}}
   /* Клетка — цель пальца: 44 точки в высоту, компактнее в ширину. */
   #s-kond .kond tbody td+td{{min-width:2.5em;height:44px;padding:.2rem;
     font-size:1.05rem}}
@@ -1013,6 +1129,8 @@ def razdel(kt) -> str:
     sostoyaniya = progress.states_for_many([s.id for s in vse],
                                            [p.id for p in vse_zadachi])
     daty = _daty(kt)
+    # Один запрос на всю страницу: та же дата, по которой считается «только мои».
+    prinimayushchie = _prinimayushchie(kt, segodnya())
 
     sdano_vsego = sum(1 for s in sostoyaniya.values() if s.is_credited)
     na_uchyote_ids = {u.id for u in na_uchyote}
@@ -1082,9 +1200,12 @@ def razdel(kt) -> str:
                + "".join(f'<label class="kl8" for="k-{sh.id}">{e(sh.number)}</label>'
                          for sh in listki_8)
                + "</div>")
-    panely = (_obzor(na_uchyote, listki_9, zadachi, sostoyaniya, chuzhoj, "vse9")
-              + _obzor(na_uchyote, listki_8, zadachi, sostoyaniya, chuzhoj, "vse8")
-              + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj, daty)
+    panely = (_obzor(na_uchyote, listki_9, zadachi, sostoyaniya, chuzhoj,
+                     prinimayushchie, "vse9")
+              + _obzor(na_uchyote, listki_8, zadachi, sostoyaniya, chuzhoj,
+                       prinimayushchie, "vse8")
+              + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj,
+                                daty, prinimayushchie)
                         for sh in listki)
               + "".join(_uchenik(u, listki, zadachi, sostoyaniya, daty)
                         for u in na_uchyote))

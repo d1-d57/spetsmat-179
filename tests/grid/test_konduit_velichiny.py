@@ -31,9 +31,26 @@ from veb.razdely import konduit
 LISTOK = ("обязательная", "обязательная", "письменная", "звезда", "обычная")
 
 
+#: Колонки, которые ЖИВАЯ база несёт, а `migrations/` не создаёт: `teachers.gruppa`,
+#: `teachers.kabinet`, `teachers.aktiven`, `students.gruppa`.  Найдено этим заходом
+#: прямым сравнением: на боевой базе они есть (и `veb/razdely/lichnaya.kabinet_na_datu`,
+#: написанная соседним заходом, уже на них опирается), а база, собранная всеми десятью
+#: миграциями с нуля, не имеет ни одной из них.  Здесь они дописываются, чтобы тест
+#: судил ТУ схему, на которой сайт работает; чинится это в `migrations/`, а не тут — не
+#: зона этого захода, и вопрос назван в `## ВОПРОСЫ`.
+ZHIVYE_KOLONKI = (
+    "alter table teachers add column kabinet text",
+    "alter table teachers add column aktiven integer not null default 1",
+    "alter table teachers add column gruppa text",
+    "alter table students add column gruppa text",
+)
+
+
 @pytest.fixture
 def mir(connection):
     """Пять школьников, один листок, ни одной отметки — отметки ставит сам тест."""
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
     return seed_world(connection, students=5, sheets=(LISTOK,))
 
 
@@ -136,6 +153,8 @@ def test_the_row_glows_exactly_for_the_pupil_who_closed_his_obligatory(
 
 def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marking):
     """`1д`–`4д` на живой базе именно такие: 99 задач и ни одной обязательной."""
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
     mir = seed_world(connection, students=3, sheets=(("звезда", "обычная"),))
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
@@ -219,3 +238,103 @@ def test_a_retracted_hand_in_does_not_count_towards_closing_a_problem(
     connection.commit()
     stolbcy = shapka(panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0])))
     assert (stolbcy[0][1], stolbcy[0][2]) == (1, False)
+
+
+# --------------------------------------------- величина 4: инициалы принимающего
+
+
+PRIN = re.compile(r'<i class="prin( net)?" title="принимающий:? ?([^"]*)">([^<]*)</i>')
+
+
+def zapisat(connection, student_id, teacher_id, slot, room="303",
+            ot="2020-01-01", do="9999-12-31"):
+    connection.execute(
+        "insert into enrollment (student_id, teacher_id, room, slot, valid_from, valid_to) "
+        "values (?, ?, ?, ?, ?, ?)", (student_id, teacher_id, room, slot, ot, do))
+
+
+def test_the_initials_stand_beside_the_surname_and_not_in_a_column_of_their_own(
+    mir, connection
+):
+    """Решение владельца 09.09 — «не колонкой».
+
+    Проверяется формой: число `<th>` в шапке обязано остаться числом задач плюс один
+    столбец фамилии.  Колонка принимающего прошла бы любую проверку текста.
+    """
+    zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1)
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    assert len(re.findall(r"<th[ >]", kusok)) == 1 + len(LISTOK)
+    # А сами инициалы — внутри ячейки фамилии.
+    yacheyka = re.search(r'<td class="kto">(.*?)</td>', kusok, re.S).group(1)
+    assert '<i class="prin"' in yacheyka
+
+
+def test_the_hover_carries_the_name_the_group_and_the_room(mir, connection):
+    connection.execute("update teachers set name = ?, gruppa = ? where id = ?",
+                       ("Андрей Рябичев", "Д", mir.teacher_ids[0]))
+    zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1, room="302")
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    net, title, txt = PRIN.findall(kusok)[0]
+    assert txt == "А.Р."
+    assert title == "Андрей Рябичев · группа Д · кабинет 302"
+    assert not net
+
+
+def test_a_pupil_with_no_open_row_gets_a_dash_and_not_a_blank(mir, connection):
+    """Пустое место читается как «забыли нарисовать»; прочерк говорит, что ответа нет."""
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    nayden = PRIN.findall(kusok)
+    assert len(nayden) == 5
+    assert all(net and txt == "—" for net, _title, txt in nayden)
+
+
+def test_a_row_that_is_already_closed_does_not_name_a_принимающий(mir, connection):
+    """Интервал полуоткрытый: закрытая вчера строка сегодня уже не отвечает.
+
+    `valid_to` — это день, С КОТОРОГО строка не действует, и `<=` вместо `<` показал бы
+    вчерашнего принимающего ещё один день.
+    """
+    zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1,
+            ot="2020-01-01", do="2020-06-01")
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    assert PRIN.findall(kusok)[0][2] == "—"
+
+
+def test_two_different_принимающих_are_both_named_with_their_days(mir, connection):
+    """Разные люди в понедельник и в четверг — подсказка обязана сказать, кто когда."""
+    connection.execute("update teachers set name = ?, gruppa = ? where id = ?",
+                       ("Андрей Рябичев", "Д", mir.teacher_ids[0]))
+    connection.execute("update teachers set name = ?, gruppa = ? where id = ?",
+                       ("Ваня Яковлев", "В", mir.teacher_ids[1]))
+    zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1, room="302")
+    zapisat(connection, mir.student_ids[0], mir.teacher_ids[1], 2, room="303")
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    _net, title, txt = PRIN.findall(kusok)[0]
+    assert txt == "А.Р./В.Я."
+    assert title == ("пн — Андрей Рябичев · группа Д · кабинет 302; "
+                     "чт — Ваня Яковлев · группа В · кабинет 303")
+
+
+def test_one_принимающий_in_both_slots_is_one_person_and_one_pair_of_initials(
+    mir, connection
+):
+    connection.execute("update teachers set name = ?, gruppa = ? where id = ?",
+                       ("Андрей Рябичев", "Д", mir.teacher_ids[0]))
+    zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1, room="302")
+    zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 2, room="302")
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    _net, title, txt = PRIN.findall(kusok)[0]
+    assert txt == "А.Р.", "один человек — одни инициалы, а не «А.Р./А.Р.»"
+    assert title.startswith("Андрей Рябичев"), "дня недели тут не нужно: он один и тот же"
+
+
+def test_a_one_word_name_keeps_its_word():
+    """«Надя» и «Наталья Амбург» — двое живых принимающих, и «Н.» слило бы их в одно."""
+    assert konduit.initsialy("Надя") == "Надя"
+    assert konduit.initsialy("Наталья Амбург") == "Н.А."
