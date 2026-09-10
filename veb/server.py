@@ -53,6 +53,7 @@ from zoneinfo import ZoneInfo
 
 import config
 from core.services.enrollment import (
+    TEACHER_CEILING,
     EnrollmentError,
     EnrollmentService,
     MoveChangesNothing,
@@ -436,6 +437,24 @@ def _gruppy_vseh_prepodavatelej(connection: sqlite3.Connection) -> dict[int, str
     except sqlite3.OperationalError:
         return {}
     return {row["id"]: row["gruppa"] for row in rows if row["gruppa"]}
+
+
+class _PrepodavatelDenAdapter:
+    """``TeacherCalendarPort`` over ``infra.prepodavatel_den_repo.dni`` — read-only.
+
+    That module (out of this заход's zone) already answers "which slots does this
+    teacher attend" for the teacher-editing screen; this adapter is the seam that
+    lets ``EnrollmentService`` ask the same question without ``core/`` importing
+    sqlite3 itself.
+    """
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def attends(self, teacher_id: int, slot: int) -> bool:
+        from infra.prepodavatel_den_repo import dni
+
+        return slot in dni(self._connection).get(teacher_id, ())
 
 
 def _open_assignments(
@@ -1502,7 +1521,15 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
 
         repo = SqliteEnrollmentRepo(conn)
-        service = EnrollmentService(repo)
+        # The interactive form is the ONLY caller wired with both hard refusals: a
+        # day the teacher does not attend, and a sixth student in one slot.  Import
+        # tools and the bot's own correction paths build ``EnrollmentService``
+        # without either (see ``core.services.enrollment.EnrollmentService``) — they
+        # write historical or already-corrected data that predates both rules, and
+        # are out of this заход's zone to change.
+        service = EnrollmentService(
+            repo, calendar=_PrepodavatelDenAdapter(conn), ceiling=TEACHER_CEILING
+        )
         try:
             move = service.move(
                 student_id=student_id,
@@ -1579,6 +1606,18 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if standing.teacher_id == teacher_id:
                 self._send_json(200, {"bez_izmenenij": True})
+                return
+            # 🔴 ЭТА ВЕТКА ПИШЕТ `enrollment` НАПРЯМУЮ, В ОБХОД `service.move()` —
+            # без этой строки день-запрет и потолок были бы обходимы ровно
+            # перезагрузкой страницы: первая попытка идёт через `move()` и падает
+            # `MoveNotForward`, а вторая, эта, писала бы raw SQL никем не спрошенная.
+            try:
+                service.enforce_calendar_and_ceiling(
+                    teacher_id=teacher_id, slot=slot, day=effective_from,
+                    excluding_enrollment_id=standing.id,
+                )
+            except EnrollmentError as exc:
+                self._send_json(409, {"error": str(exc)})
                 return
             # 🔴 КАБИНЕТ БЕРЁТСЯ ИЗ ТЕКУЩЕГО РАСПРЕДЕЛЕНИЯ, А НЕ ИЗ `teachers.kabinet`.
             # Здесь стояло `select kabinet from teachers where id = ?` — чтение
