@@ -21,6 +21,7 @@ there before the reversed event.  The projection never looks past the last event
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional
 
 import config
@@ -152,3 +153,160 @@ class ProgressService:
     def graveyard_threshold(self) -> int:
         """The one place the threshold is read from, so it stays in ``config.py``."""
         return config.GRAVEYARD_THRESHOLD
+
+
+# ============================================================ статистика на экране
+#
+# 🔴 EVERY FUNCTION BELOW IS PURE AND TAKES THE STATES IT NEEDS, INSTEAD OF ASKING THE
+# JOURNAL FOR THEM.  The кондуит already fetches the whole rectangle once
+# (``states_for_many`` over every pupil × every problem, 31 000 cells) and redraws itself
+# after EVERY write to the база (``veb/server.py::_peresobrat``).  Four величины each
+# opening their own read of the same journal would be four more passes over it per redraw,
+# for an answer already in memory — and, worse, four more places that could disagree with
+# the projection about what a plus is.  The states come in; the arithmetic happens here and
+# in exactly one place, so the screen, the tests and the SQL check all say the same number.
+#
+# «Сдал» here always means CREDITED — the cell stands at SOLVED.  A ``retract`` is a hand-in
+# that was not defended and does NOT count, which is the same rule ``graveyard`` above
+# already carries; a second reading of it here would be the second opinion this whole file
+# refuses.
+
+
+@dataclass(frozen=True)
+class SchyotObyazatelnyh:
+    """How many obligatory problems one pupil has taken, out of how many there are.
+
+    ``vsego`` is counted over the problems HANDED IN, not over the whole year: the кондуит
+    draws one table per листок, and a global number printed on the row of a листок table
+    would answer a question that table is not asking.  The caller decides the scope by
+    deciding which problems it passes.
+    """
+
+    sdano: int
+    vsego: int
+
+    @property
+    def ostalos(self) -> int:
+        """How many are still standing — the second half of what the owner asked to see."""
+        return self.vsego - self.sdano
+
+    @property
+    def zakryl(self) -> bool:
+        """Nothing obligatory left — the row the owner wants to glow.
+
+        🔴 A СЧЁТ WITH ``vsego == 0`` IS NOT «ЗАКРЫЛ», AND THAT IS NOT PEDANTRY.  Листки
+        ``1д``–``4д`` carry 18, 32, 23 and 26 problems and NOT ONE обязательная among
+        them (counted on the live база 2026-09-10).  Vacuous truth would light up all
+        fifty-three rows of four листков at once, and a signal that fires for everybody
+        says nothing about anybody.
+        """
+        return self.vsego > 0 and self.sdano == self.vsego
+
+
+def obyazatelnyh_sdano(problems, sostoyaniya, student_id: int) -> SchyotObyazatelnyh:
+    """«Сдал столько обязательных из стольких» for one pupil over these problems.
+
+    ОБЯЗАТЕЛЬНАЯ IS ASKED OF ``Problem.is_obligatory`` AND NEVER SPELLED OUT HERE.  The
+    owner's «кружки И крестики вместе» is already the content of ``config.OBLIGATORY_KINDS``
+    (``обязательная`` and ``письменная``, the ``◦`` and the ``†`` the листок prints), and a
+    pair of kind names retyped in this file would be the copy that drifts the day a fifth
+    kind is added — which is exactly how ``письменная`` cost three edits instead of one
+    (``core/services/sheets.ProblemDraft.__post_init__``).
+
+    Pairs missing from ``sostoyaniya`` count as not taken rather than raising: the caller
+    that fetched a rectangle of the on-roll pupils and is now drawing one of them cannot
+    be missing its own cells, and a pupil who left mid-year legitimately has none.
+    """
+    obyazatelnye = [p for p in problems if p.is_obligatory]
+    sdano = sum(
+        1
+        for p in obyazatelnye
+        if sostoyaniya.get((student_id, p.id), CellState.EMPTY).is_credited
+    )
+    return SchyotObyazatelnyh(sdano=sdano, vsego=len(obyazatelnye))
+
+
+def skolko_sdalo(problem_id: int, student_ids, sostoyaniya) -> int:
+    """How many of these pupils have this problem credited.
+
+    🔴 THE LIST OF PUPILS IS THE CALLER'S AND IS NOT DEFAULTED HERE.  ``graveyard`` above
+    falls back to «everybody in the catalogue» and is right to, because a year a pupil
+    solved does not stop having happened when they leave.  The number drawn over a COLUMN
+    of the кондуит is a different promise: it has to be checkable by counting the ``✓``
+    visible in that column, and the кондуит draws only the pupils on the roll.  Two
+    honest answers to two different questions; the difference is in who is passed in.
+    """
+    return sum(
+        1
+        for student_id in student_ids
+        if sostoyaniya.get((student_id, problem_id), CellState.EMPTY).is_credited
+    )
+
+
+def zakryta_klassom(sdalo: int) -> bool:
+    """«Сдало больше трёх людей — всё ок» (владелец 09.09), off the one threshold."""
+    return sdalo > config.GRAVEYARD_THRESHOLD
+
+
+def v_grobarij(sdalo: int) -> bool:
+    """«Задача, которую решило меньше трёх людей из класса» (владелец 09.09).
+
+    🔴 THE TWO PREDICATES DO NOT MEET, AND THAT IS THE OWNER'S OWN WORDING RATHER THAN A
+    BUG INTRODUCED HERE.  «Закрыта классом» is *больше* трёх and гробарий is *меньше*
+    трёх, so a problem taken by EXACTLY three is neither: it is not a гробарий and it is
+    not marked closed.  Both read the single constant ``config.GRAVEYARD_THRESHOLD``, so
+    the gap cannot widen by one of them being retuned; closing it is a decision for the
+    owner and is asked as a question in the заход rather than legislated here.
+    """
+    return sdalo < config.GRAVEYARD_THRESHOLD
+
+
+@dataclass(frozen=True)
+class ZapisGrobaria:
+    """One problem of a листок that has become historical, and who did take it.
+
+    ``pervye`` holds AT MOST ``config.GRAVEYARD_THRESHOLD`` names — «когда три человека
+    уже сдало, дальше имена не записывают» (владелец 09.09).  The cap is not merely a
+    display limit: a гробарий row exists only while fewer than the threshold have taken
+    the problem, so the cap and the rule are the same number and are read from the same
+    place.
+    """
+
+    problem: Problem
+    sdalo: int
+    pervye: tuple
+
+
+def zapisi_grobaria(problems, student_ids, sostoyaniya, kogda, imya) -> list:
+    """The гробарий rows of ONE листок: its problems that fewer than three pupils took.
+
+    ``kogda(student_id, problem_id)`` gives a sortable moment for a credited cell (the
+    кондуит hands in the LESSON DAY of the standing event, which is what it already
+    computes for every cell it draws) and ``imya(student_id)`` gives the name to print.
+    Both are handed in rather than looked up: ``core/`` knows no SQL and no HTML, and the
+    caller already holds both answers for the whole grid.
+
+    ORDER IS «КТО СДАЛ РАНЬШЕ», TIES BROKEN BY NAME.  The moment available is the lesson
+    day, not the second — the кондуит attributes every tick to a lesson (``core/services/
+    history.zanyatie_po_iso``) and that is the granularity the screen shows anywhere else.
+    Two pupils who took a problem at the same lesson are therefore genuinely tied, and the
+    tie is broken by the name so the list is stable between two redraws of the same page
+    rather than depending on dictionary order.  A pupil with no date at all sorts last
+    rather than first: absence of a date is not evidence of being early.
+    """
+    zapisi = []
+    for problem in problems:
+        vzyavshie = [
+            student_id
+            for student_id in student_ids
+            if sostoyaniya.get((student_id, problem.id), CellState.EMPTY).is_credited
+        ]
+        if not v_grobarij(len(vzyavshie)):
+            continue
+        vzyavshie.sort(key=lambda s: (kogda(s, problem.id) or "9999-12-31", imya(s)))
+        zapisi.append(ZapisGrobaria(
+            problem=problem,
+            sdalo=len(vzyavshie),
+            pervye=tuple(imya(s) for s in vzyavshie[:config.GRAVEYARD_THRESHOLD]),
+        ))
+    return zapisi
