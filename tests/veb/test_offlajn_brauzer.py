@@ -141,7 +141,13 @@ def _stranica(stend):
       const m = [...document.querySelectorAll('#s-kond .tabbar label')]
         .find(l => !l.getAttribute('for').startsWith('k-vse'));
       if (m) document.getElementById(m.getAttribute('for')).checked = true; }""")
-    page.wait_for_timeout(200)
+    # Дождаться, пока уляжется стартовая проба связи: пока она в полёте, счётчик ещё
+    # не нарисован, и синхронное ожидание ниже читало бы отсутствующий атрибут. На
+    # загруженной машине проба доходит не мгновенно — под полным прогоном набора это
+    # давало красное на ровном месте.
+    page.wait_for_function(
+        "() => document.getElementById('och-schyot').hasAttribute('data-n')",
+        timeout=30000)
     return ctx, page
 
 
@@ -183,7 +189,7 @@ def test_set_est_otmetka_uezzhaet_srazu_i_ochered_pusta(stend):
         rebyonok, zadacha = stend["deti"][0], stend["zadachi"][0]
         bylo = len(_v_baze(stend))
         _tapnut(page, rebyonok, zadacha)
-        _zhdat_ochered(page, 0, timeout=15000)
+        _zhdat_ochered(page, 0, timeout=30000)
         assert _v_ocheredi(page) == 0
         assert _znak(page, rebyonok, zadacha) == "✓"
         assert len(_v_baze(stend)) == bylo + 1
@@ -340,7 +346,7 @@ def test_otvergnutaya_pravka_vozvrashchaet_znak_i_ostavlyaet_prichinu(stend):
         page.wait_for_function("() => !document.getElementById('och-otkaz').hidden",
                                timeout=20000)
         # Очередь не заткнулась: отказная запись из неё ушла.
-        _zhdat_ochered(page, 0, timeout=15000)
+        _zhdat_ochered(page, 0, timeout=30000)
         # В журнал при этом не попало ничего.
         assert _v_baze(stend) == v_baze_do
         # Знак вернулся к тому, что стоит в журнале.
