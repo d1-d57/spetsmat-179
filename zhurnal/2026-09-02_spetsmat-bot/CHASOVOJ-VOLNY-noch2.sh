@@ -101,19 +101,39 @@ podnyat_svoyu_golovu_esli_myortva() {
   local NOW TISH
   NOW=$(date +%s)
   TISH=$(( (NOW - $(mtime "$SERDCE")) / 60 ))
-  [ "$TISH" -lt "$MERTVA_MIN" ] && return 0
+  if [ "$TISH" -lt "$MERTVA_MIN" ]; then
+    rm -f "$ZAMKI/skazano-o-smerti" 2>/dev/null
+    return 0
+  fi
+
+  # 🔴 ЗВОНИТЬ ВЛАДЕЛЬЦУ НА СМЕРТЬ ГОЛОВЫ. Было: печатать в пульс и пытаться
+  # поднять через `claude -p`, но НЕ звонить. 10.09: голова умерла в 13:29:45 и
+  # 16:02:26, часовой ни разу не дозвонился, печатал «сердце молчит N мин».
+  # ⚠ Порог MERTVA_MIN=45м: 10 мин — ложные тревоги на длинном ходу, 90 мин —
+  # пропуск смерти. 45 мин — компромисс: хватает на один-два круга часового при
+  # 300с периоде и не пропускает реальную смерть.
+  # ⚠ Повтор не сыплется каждый круг: флаг skazano-o-smerti гасит 900с (15 мин).
+  # Если через 15 мин смерть не преодолена — владелец должен вмешаться вручую.
+  if [ ! -f "$ZAMKI/skazano-o-smerti" ] || \
+     [ $(( NOW - $(mtime "$ZAMKI/skazano-o-smerti") )) -gt 900 ]; then
+    local LAST_COMMIT
+    LAST_COMMIT=$(git -C "$KOREN" log -1 --format='%ci' 2>/dev/null | tr -d '\n')
+    puls "🔔 СМЕРТЬ ГОЛОВЫ: сердце молчит ${TISH}м ≥ ${MERTVA_MIN}м · круг $KRUG · окон $OKON · свежих kod_* $SVEZHIH · последний коммит: $LAST_COMMIT"
+    skazat_vladelcu "🔴 Голова волны noch2 МЕРТВА: сердце молчит ${TISH} мин (порог ${MERTVA_MIN}м). Круг $KRUG, окон живых $OKON, свежих позиций $SVEZHIH. Последний коммит: $LAST_COMMIT. Часовой пытается поднять новую голову через claude -p."
+    touch "$ZAMKI/skazano-o-smerti"
+  fi
 
   local SCHET_F="$ZAMKI/podyomov" SCHET=0
   [ -f "$SCHET_F" ] && SCHET=$(cat "$SCHET_F")
   if [ "$SCHET" -ge "$PODYOMOV_MAX" ]; then
-    puls "⚠ голова мертва (тишина ${TISH}м), но подъёмов уже $SCHET из $PODYOMOV_MAX — НЕ поднимаю, это петля. Нужен человек."
+    puls "⚠ голова мертва (тишина ${TISH}м), но подъёмов уже $SCHET из $PODYOMOV_MAX — НЕ поднимаю, это петля. Владелец оповещён, нужен человек."
     return 0
   fi
 
   # Замок атомарный: mkdir падает, если каталог есть — два часовых не поднимут две головы.
   mkdir "$ZAMKI/podnimayu" 2>/dev/null || { puls "подъём уже ведёт другой часовой, не мешаю"; return 0; }
 
-  puls "🔴 ГОЛОВА МЕРТВА (сердце молчит ${TISH}м ≥ ${MERTVA_MIN}м, мандат открыт, подъёма в процессах нет). ПОДНИМАЮ, подъём $((SCHET+1)) из $PODYOMOV_MAX."
+  puls "🔴 ГОЛОВА МЕРТВА (сердце молчит ${TISH}м ≥ ${MERTVA_MIN}м). Владелец оповещён. ПОДНИМАЮ, подъём $((SCHET+1)) из $PODYOMOV_MAX."
   echo "$((SCHET+1))" > "$SCHET_F"
   nohup claude -p --model opus --dangerously-skip-permissions "[PODYOM-VOLNY-noch2] $(cat "$LIST")" >> "/tmp/podyom-noch2.log" 2>&1 &
   disown 2>/dev/null || true
