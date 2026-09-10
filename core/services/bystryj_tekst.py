@@ -387,11 +387,19 @@ _RULE = re.compile(r"^[-—–―‒−_*=]{3,}$")
 #: line carrying two brackets keeps them apart instead of swallowing everything between.
 _SHEET_MARKER = re.compile(r"\[\s*([^\[\]]*?)\s*\]")
 
-#: What a problem label looks like when it is written rather than spoken: a number, an
-#: optional letter, and the decorations the printed sheet carries (`7б°`, `10а:)`).
-#: Anchored at both ends -- a token that merely CONTAINS a number is not a label, and
-#: trimming it into one is how a word becomes a mark.
-_LABEL = re.compile(r"^\d+\s*[а-яёa-z]?[%s]*$" % re.escape(golos.LABEL_DECORATIONS))
+#: What a problem label looks like when it is written rather than spoken: an optional
+#: leading minus, a number, an optional letter, and the decorations the printed sheet
+#: carries (`7б°`, `10а:)`).  Anchored at both ends -- a token that merely CONTAINS a
+#: number is not a label, and trimming it into one is how a word becomes a mark.
+#:
+#: 🔴 THE LEADING `-` IS LOAD-BEARING, NOT COSMETIC.  Some sheets print negative-numbered
+#: problems (`-1`…`-5`, see `core/services/golos.py`'s `NEGATIVE_WORDS` for the same fact
+#: on the dictated side) -- измерено на боевой базе 2026-09-10: лист «16ℵ» печатает
+#: `-1а` первой задачей.  Without the `-` this token falls through to "name", and a
+#: teacher typing `Агаркова -1а` gets a "кто это?" on a name the roster has, because the
+#: real input was silently `"Агаркова -1а"` as one unresolved phrase rather than
+#: `"Агаркова"` plus a label.
+_LABEL = re.compile(r"^-?\d+\s*[а-яёa-z]?[%s]*$" % re.escape(golos.LABEL_DECORATIONS))
 
 #: Punctuation that separates labels and carries nothing: commas, semicolons, the trailing
 #: full stop of a line, and the `№`/`#` a teacher puts in front of a number.  Stripped from
