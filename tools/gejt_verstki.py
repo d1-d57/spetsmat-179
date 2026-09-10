@@ -542,12 +542,24 @@ LOMKA = r"""() => {
   //    поломка, посаженная внутрь уже центрированного поддерева, была бы поломкой
   //    того, о чём проверка молчит нарочно, — и самопроверка мерила бы объявленное
   //    слепое пятно вместо зрения.
-  for (const c of iz('.kto, .para, li, p, td.kto, .komu').slice(0, 200)) {
-    const rod = c.parentElement;
-    const centr = (e) => e && ['center', '-webkit-center']
-        .includes(getComputedStyle(e).textAlign);
-    if (centr(c) || centr(rod)) continue;
+  // 🔴 И СПИСОК ЦЕЛЕЙ КОНЧАЕТСЯ ОБЩИМ `body *`, А НЕ ИМЕНАМИ КЛАССОВ ЭТОГО САЙТА.
+  //    С одними `.kto/.para/li/p` поломка не села на «принимающим» и «классе» —
+  //    там таких узлов нет, — и самопроверка честно писала «сломано на 11 из 13»
+  //    вместо того, чтобы испытать проверку на всех тринадцати.
+  const centr = (e) => e && ['center', '-webkit-center']
+      .includes(getComputedStyle(e).textAlign);
+  for (const c of [...iz('.kto, .para, li, p, td.kto, .komu'),
+                   ...iz('body *')].slice(0, 600)) {
+    if (centr(c) || centr(c.parentElement)) continue;
     if (!(c.textContent || '').trim()) continue;
+    // Внутри <style>/<script> текста для читателя нет, и проверка 5 такой узел
+    // не назовёт: `chistyy()` вычитает их содержимое и оставляет пустую строку.
+    if (c.querySelector('style, script') || ['STYLE','SCRIPT'].includes(c.tagName))
+      continue;
+    // Исключение из запрета — не поломка: проверка обязана его ПРОСТИТЬ, и
+    // ломать его значило бы объявить провалом ровно то поведение, ради которого
+    // список исключений и заведён.
+    if (c.matches('#s-kond .kond th.zn')) continue;
     c.style.setProperty('text-align', 'center', 'important');
     if (centr(c)) { otchet.centr = true; break; }
     c.style.removeProperty('text-align');
