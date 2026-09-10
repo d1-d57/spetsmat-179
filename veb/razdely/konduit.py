@@ -474,6 +474,53 @@ def _daty(kt) -> dict:
     return daty
 
 
+def _moi_segodnya(kt) -> set:
+    """Клетки, отмеченные ЭТИМ принимающим на ТЕКУЩЕМ занятии: `{(school_id, problem_id)}`.
+
+    🔴 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА 10.09: «надо добавить выделение для галочек, которые
+    поставлены именно тобой (принимающим) сегодня — в смысле в период с начала
+    текущего урока до начала следующего».
+
+    «Сегодня» здесь — НЕ календарный день, и это не вольность: правило владельца от
+    09.09 уже записано в `core/services/history.zanyatie_dlya` («последнее
+    НАЧАВШЕЕСЯ занятие»), и второе определение того же слова разошлось бы с первым
+    на первом же занятии, начавшемся после полуночи или продлившемся за неё. Поэтому
+    занятие события считается ТЕМ ЖЕ вызовом, что и дата в клетке, а «текущее» —
+    занятие для «сейчас».
+
+    Судится ПОСЛЕДНЕЕ событие пары: если после моей галочки кто-то её снял или
+    переставил, клетка больше не моя — выделение обязано говорить о том, что стоит
+    СЕЙЧАС, а не о том, что когда-то было.
+
+    Без вошедшего преподавателя (гость, организатор, общий пароль) множество пусто:
+    выделять «моё» тому, у кого своего нет, нечего.
+    """
+    if getattr(kt, "prepod_id", None) is None:
+        return set()
+    tekushchee = zanyatie_dlya(datetime.now(timezone.utc))
+    if tekushchee is None:
+        return set()
+    tekushchee_iso = tekushchee.isoformat()
+
+    posledniye = kt.c.execute("""
+        select m.student_id, m.problem_id, m.valid_at, m.teacher_id
+        from marks m
+        join (select student_id, problem_id, max(id) as last_id
+                from marks group by student_id, problem_id) last
+          on last.last_id = m.id
+        where m.teacher_id = ?
+    """, (kt.prepod_id,))
+    pamyat: dict = {}
+    moi = set()
+    for r in posledniye:
+        kogda = r["valid_at"]
+        if kogda not in pamyat:
+            pamyat[kogda] = zanyatie_po_iso(kogda)
+        if pamyat[kogda] == tekushchee_iso:
+            moi.add((r["student_id"], r["problem_id"]))
+    return moi
+
+
 def _kratko(den: str) -> str:
     """`2026-09-10` → `10.09` — то, что помещается под галочкой в клетке 3em шириной.
 
@@ -529,7 +576,8 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, i
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
-def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie) -> str:
+def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie,
+            moi_segodnya=frozenset()) -> str:
     """Cut two: one листок, in the alphabet of the workbook — `1`, `x`, empty.
 
     This is the table `tools/export_xlsx.py` writes to a worksheet, drawn on
@@ -578,15 +626,23 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie) ->
                 kogda = daty.get((u.id, p.id))
                 if znak and kogda:
                     adres += f' data-d="{_kratko(kogda)}"'
+                # 🔴 «ПОСТАВЛЕНО МНОЙ НА ЭТОМ ЗАНЯТИИ» — ОТДЕЛЬНЫЙ ПРИЗНАК, А НЕ
+                # ОТТЕНОК ГАЛОЧКИ. Владелец 10.09 просил выделить именно СВОИ
+                # сегодняшние отметки: на занятии рядом работают четырнадцать
+                # человек, и вопрос «что успел я» — не тот же, что «что стоит».
+                # Класс ставится ТОЛЬКО на такие клетки: на странице их единицы, а
+                # клеток тридцать одна тысяча, и общий класс на всех стоил бы
+                # четверти мегабайта (см. соседний комментарий про `class="z"`).
+                moya = " moya" if (u.id, p.id) in moi_segodnya else ""
                 if znak == "1":
                     # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: сдано — это ГАЛОЧКА, не единица.
                     # Алфавит клетки от этого не меняется: `tools/export_xlsx.py`
                     # по-прежнему пишет `1`, а решётка на экране рисует тот же
                     # факт знаком, который читается быстрее. Снятое (`x`) и
                     # пустое — как были.
-                    kletki.append(f'<td class="vsyo"{adres}>✓</td>')
+                    kletki.append(f'<td class="vsyo{moya}"{adres}>✓</td>')
                 elif znak:
-                    kletki.append(f'<td class="snyato"{adres}>{znak}</td>')
+                    kletki.append(f'<td class="snyato{moya}"{adres}>{znak}</td>')
                 else:
                     kletki.append(f'<td{adres}></td>')
             # 🔴 ПРАВКА ВЛАДЕЛЬЦА 07.09: СВОИ ШКОЛЬНИКИ ВЫДЕЛЯЮТСЯ ЦВЕТОМ.
@@ -1068,6 +1124,12 @@ def stili(kt) -> str:
 #s-kond .kond td[data-u]{{cursor:pointer}}
 #s-kond .kond td[data-u]:hover{{background:var(--accent-soft)}}
 #s-kond .kond td[data-u].zhdyot{{opacity:.5}}
+/* «Отменить» — рядом с «Внести задачи», но тише её: это ход назад, а не главное
+   действие экрана. Цвет предупреждающий, а не тревожный: ошибка тапа — мелочь. */
+#s-kond .otmenit-knopka{{font-family:var(--sans);font-size:.82rem;cursor:pointer;
+  padding:.3rem .7rem;border:1px solid var(--rule);border-radius:.4rem;
+  background:transparent;color:var(--warm,#e8836a)}}
+#s-kond .otmenit-knopka:hover{{border-color:var(--warm,#e8836a)}}
 #s-kond .kond-verh{{display:flex;align-items:center;gap:.5rem 1rem;flex-wrap:wrap;
   margin:0 0 .9rem}}
 /* 🔴 «ВНЕСТИ ЗАДАЧИ» — САМАЯ БОЛЬШАЯ КНОПКА СТРАНИЦЫ. Владелец 10.09: «это самая
@@ -1131,6 +1193,14 @@ def stili(kt) -> str:
 #s-kond .kond td.kto{{white-space:nowrap;padding:.3rem 1.2rem .3rem 0;font-size:.95rem;
   position:sticky;left:0;z-index:4;background:var(--bg);
   border-bottom:1px solid var(--rule)}}
+/* 🔴 ВЫДЕЛЕНИЕ СВОИХ СЕГОДНЯШНИХ ОТМЕТОК (владелец 10.09). Не цветом самой
+   галочки, а подложкой и левой чертой: галочка обязана остаться той же галочкой —
+   её значение «сдано» не меняется от того, кто её поставил. Признак читается
+   боковым зрением при прокрутке и не спорит с уже принятыми цветами значков
+   (⋆ оранжевая, ◦ голубой) — берётся акцент, которым на этом сайте отмечено
+   «твоё» (строка своего школьника несёт его же). */
+#s-kond .kond tbody td.moya{{background:var(--moyo,rgba(127,182,210,.14));
+  box-shadow:inset 2px 0 0 var(--accent)}}
 #s-kond .kond td.kto label{{cursor:pointer}}
 #s-kond .kond td.kto label:hover{{color:var(--accent)}}
 /* Каждая клетка КРОМЕ первой в строке — это клетка кондуита. Класс на ней не
@@ -1382,6 +1452,8 @@ def razdel(kt) -> str:
     sostoyaniya = progress.states_for_many([s.id for s in vse],
                                            [p.id for p in vse_zadachi])
     daty = _daty(kt)
+    # Мои галочки на ТЕКУЩЕМ занятии — один запрос на страницу, как и даты.
+    moi_segodnya = _moi_segodnya(kt)
     # Один запрос на всю страницу: та же дата, по которой считается «только мои».
     prinimayushchie = _prinimayushchie(kt, segodnya())
 
@@ -1473,7 +1545,7 @@ def razdel(kt) -> str:
               + _obzor(na_uchyote, listki_8, zadachi, sostoyaniya, chuzhoj,
                        prinimayushchie, "vse8")
               + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj,
-                                daty, prinimayushchie)
+                                daty, prinimayushchie, moi_segodnya)
                         for sh in listki)
               + _grobarij(listki_9, zadachi, na_uchyote, sostoyaniya, daty)
               + "".join(_uchenik(u, listki, zadachi, sostoyaniya, daty)
@@ -1503,6 +1575,15 @@ def razdel(kt) -> str:
             # «где-то в рандомном месте», как владелец и сказал. Обёртка снята,
             # и оба стали элементами одной флекс-полосы.
             f'<a class="vnesti-knopka" href="/vnesti">Внести задачи</a>'
+            # 🔴 «ОТМЕНИТЬ» — ДЛЯ СЛУЧАЙНОГО ТАПА, И РОЖДАЕТСЯ СКРЫТОЙ. Владелец
+            # 10.09: «хочется, чтобы в кондуите была кнопка отменить, если случайно
+            # ткнул куда-то (особенно с телефона легко это сделать)». До первого
+            # тапа отменять нечего, и кнопка, висящая серой, была бы органом,
+            # который ничего не делает, — тем самым, который владелец уже просил не
+            # заводить (про «Применить постоянное»). Показывает и наполняет её
+            # скрипт кондуита после первой успешной записи.
+            f'<button type="button" id="otmenit-tap" class="otmenit-knopka"'
+            f' data-org="videt-konduit" hidden>Отменить</button>'
             # 🔴 ОДНА ВЕРХНЯЯ ПАНЕЛЬ — ПРАВКА ВЛАДЕЛЬЦА 10.09 (H4.8): «одна полоска
             # панели, а ниже уже сразу видно всё, что нужно.  Сейчас это проблема,
             # когда ты наслаиваешь много строк».  Кнопки классов и словарь значков

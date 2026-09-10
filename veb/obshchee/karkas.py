@@ -949,11 +949,21 @@ KONDUIT_SKRIPT = """
     if (sob.target.classList && sob.target.classList.contains("rd")) { zapomnit(); }
   });
 
-  document.addEventListener("click", function (sob) {
-    var td = sob.target.closest("#s-kond .kond td[data-u]");
-    if (!td || td.classList.contains("zhdyot")) { return; }
-    var bylo = td.textContent.trim();
-    var target = DALEE[bylo] || "solved";
+  /* 🔴 КНОПКА «ОТМЕНИТЬ» — ДЛЯ СЛУЧАЙНОГО ТАПА, И ОНА ПОМНИТ РОВНО ОДИН ХОД.
+     Владелец 10.09: «хочется, чтобы в кондуите была кнопка отменить, если случайно
+     ткнул куда-то (особенно с телефона легко это сделать)».
+     ОДИН ход, а не стопка: на занятии тапают быстро и много, и стопка отмен
+     превратилась бы в способ незаметно откатить чужую работу. Отменяется последнее
+     СВОЁ действие на этой странице — то, которое человек только что видел.
+     Отмена идёт ТОЙ ЖЕ дверью `/api/priyom` с прежним состоянием как целевым:
+     журнал только дописывается, и «отменить» здесь — это не удаление события, а
+     возврат клетки в то, что стояло до тапа. */
+  /* Знак в клетке → состояние, которым его вернуть. Обратная таблица к ZNAK. */
+  var SOSTOYANIE_ZNAKA = {"": "empty", "\u2713": "solved", "x": "retracted"};
+  /* Отправка одной клетки. Зовётся и тапом, и кнопкой «Отменить»: дверь одна,
+     `/api/priyom`, и второго пути записи в кондуите по-прежнему нет. */
+  function otpravit(td, target, eto_otmena) {
+    if (td.classList.contains("zhdyot")) { return; }
     var vernut = td.className, znak_byl = td.textContent;
     td.classList.add("zhdyot");
     /* 🔴 ТАЙМАУТ, БЕЗ КОТОРОГО КЛЕТКА ЗАЛИПАЕТ НАВСЕГДА. Владелец 10.09: «кондуит
@@ -976,7 +986,24 @@ KONDUIT_SKRIPT = """
                             target: target})
     }).then(function (r) { clearTimeout(budilnik); return r.json(); }).then(function (otvet) {
       td.classList.remove("zhdyot");
-      if (otvet && otvet.sostoyanie) { narisovat(td, otvet.sostoyanie); }
+      if (otvet && otvet.sostoyanie) {
+        narisovat(td, otvet.sostoyanie);
+        /* 🔴 ВЫДЕЛЕНИЕ «ПОСТАВЛЕНО МНОЙ СЕЙЧАС» ДОРИСОВЫВАЕТСЯ ЗДЕСЬ, А НЕ ЖДЁТ
+           ПЕРЕЗАГРУЗКИ. Класс `moya` ставит сервер при отрисовке страницы, но
+           `narisovat` перезаписывает `className` целиком — и только что
+           поставленная галочка оказывалась невыделенной до следующего открытия
+           страницы. То есть ровно та галочка, ради которой владелец и просил
+           выделение («что успел я на этом занятии»), его и не получала.
+           Пустая клетка выделения не несёт: выделять нечего. */
+        if (otvet.sostoyanie !== "empty") { td.classList.add("moya"); }
+        /* Отмена САМА отменяемой не становится: иначе кнопка превратилась бы в
+           переключатель двух состояний, и человек, ткнувший её дважды, вернул бы
+           ровно то, что отменял. */
+        if (!eto_otmena) {
+          poslednij = {td: td, sostoyanie: SOSTOYANIE_ZNAKA[znak_byl.trim()] || "empty"};
+          pokazat_otmenu(true);
+        }
+      }
       else {
         // Не записалось — клетка обязана вернуться к тому, что стоит в журнале,
         // а не остаться с галочкой, которой в базе нет.
@@ -993,6 +1020,32 @@ KONDUIT_SKRIPT = """
         ? "сервер не ответил за 10 с — нажмите ещё раз"
         : "не записалось: " + oshibka;
     });
+  }
+
+  var poslednij = null;          // {td, sostoyanie} — куда и во что вернуть
+  var knopka_otmeny = null;
+
+  function pokazat_otmenu(vidno) {
+    if (!knopka_otmeny) {
+      knopka_otmeny = document.getElementById("otmenit-tap");
+    }
+    if (knopka_otmeny) { knopka_otmeny.hidden = !vidno; }
+  }
+
+  document.addEventListener("click", function (sob) {
+    var otm = sob.target.closest("#otmenit-tap");
+    if (otm) {
+      if (!poslednij) { return; }
+      var cel = poslednij;
+      poslednij = null;
+      pokazat_otmenu(false);
+      otpravit(cel.td, cel.sostoyanie, true);
+      return;
+    }
+    var td = sob.target.closest("#s-kond .kond td[data-u]");
+    if (!td || td.classList.contains("zhdyot")) { return; }
+    var bylo = td.textContent.trim();
+    otpravit(td, DALEE[bylo] || "solved", false);
   });
 
   // 🔴 ШАПКА КОНДУИТА ЛИПНЕТ К НИЗУ МЕНЮ, А НЕ К ЧИСЛУ 4rem.
