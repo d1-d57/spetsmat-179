@@ -438,7 +438,10 @@ def progon(baza_url: str, slomat: bool, otbor: str | None) -> tuple[list, int]:
                 itogi.append((rol, imya, put, z, None))
             ctx.close()
         brauzer.close()
-    return itogi, len(ekrany)
+    # How many measurements this run OWED: one per screen per role that can see
+    # it.  Never a formula over the screen count — «проверено 6 экранов из 5» is
+    # the arithmetic of a gate that does not know what it set out to do.
+    return itogi, sum(len(e[3]) for e in ekrany)
 
 
 def main() -> int:
@@ -453,7 +456,7 @@ def main() -> int:
     chisla = chisla_bazy(db)
     httpd, conn, t, url = podnyat_server(db)
     try:
-        itogi, vsego_ekranov = progon(url, args.slomat, args.ekran)
+        itogi, dolzhno_byt = progon(url, args.slomat, args.ekran)
     finally:
         httpd.shutdown(); httpd.server_close(); t.join(); conn.close()
 
@@ -490,7 +493,7 @@ def main() -> int:
               f"из {z['vsego']}")
 
     print()
-    print(f"ОХВАТ: проверено {izmereno} экранов из {vsego_ekranov * 2 - 1}; "
+    print(f"ОХВАТ: проверено {izmereno} экранов из {dolzhno_byt}; "
           f"осмотрено элементов {uzlov}")
     print("        три числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
           "на ВЫХОД ЗА КОНТЕЙНЕР, из общего числа элементов страницы.")
@@ -562,7 +565,8 @@ def main() -> int:
         return 0
 
     if krasnyh:
-        print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон.")
+        print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон "
+              f"(измерено {izmereno} из {dolzhno_byt} обещанных).")
         return 1
     print(f"\n✅ ЗЕЛЁНЫЙ: {izmereno} экранов, все четыре числа нули на каждом.")
     return 0
