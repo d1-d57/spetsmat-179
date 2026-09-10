@@ -172,10 +172,12 @@ def test_the_standing_arrangement_carries_both_days_of_every_pupil(running_serve
     telo = body.decode("utf-8")
     vid = re.search(r'<section class="vid" id="v-shk">.*?</section>', telo, re.S)
     assert vid, "вкладка школьников на месте"
-    # 🔴 `data-sid` СТОИТ ПОСЛЕ `data-i` НА ТОЙ ЖЕ СТРОКЕ (заход poisk-i-kartochka,
+    # 🔴 `data-shk-id` СТОИТ ПОСЛЕ `data-i` НА ТОЙ ЖЕ СТРОКЕ (заход poisk-i-kartochka,
     # подсветка школьника с адреса поиска) — узор больше не кончается на `data-i`
-    # сразу закрывающим `>`.
-    shkolniki = re.findall(r'<div class="para" data-i="[^"]*" data-sid="\d+">', vid.group(0))
+    # сразу закрывающим `>`. Имя НЕ `data-sid` — то уже занято `ATRIBUTY_ORGANA`
+    # (`tools/sobrat_stranicu.py`) под другой, org-only атрибут на других
+    # элементах той же строки.
+    shkolniki = re.findall(r'<div class="para" data-i="[^"]*" data-shk-id="\d+">', vid.group(0))
     polya = re.findall(r'data-slot="\d+"', vid.group(0))
     assert shkolniki, "школьники на вкладке есть"
     assert len(polya) == 2 * len(shkolniki), (

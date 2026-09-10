@@ -385,7 +385,7 @@ document.addEventListener('click',e=>{{
   const g = q.get('g');
   const vk = g && document.getElementById('t-' + g);
   if(vk) vk.checked = true;
-  const stroka = document.querySelector('[data-sid="' + CSS.escape(sid) + '"]');
+  const stroka = document.querySelector('[data-shk-id="' + CSS.escape(sid) + '"]');
   if(stroka){{ stroka.classList.add('podsvechen'); stroka.scrollIntoView({{block:'center'}}); }}
 }})();
 
