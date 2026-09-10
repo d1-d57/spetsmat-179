@@ -260,13 +260,25 @@ def test_the_initials_stand_beside_the_surname_and_not_in_a_column_of_their_own(
 ):
     """The decision of the owner, 09.09: «не колонкой».
 
-    Judged by shape: the number of `<th>` in the header must stay the number of problems
-    plus the one surname column.  A column of принимающие would pass any check on text.
+    Judged by shape rather than by text: a column of принимающие would pass any check
+    on wording.  The header of a листок carries the surname, the счётчик обязательных
+    (its own column since the owner's edit of 10.09, H4.4) and one column per problem —
+    and NOTHING else.
+
+    🔴 THE COUNT IS SPELLED OUT AS A SUM, NOT WRITTEN AS A NUMBER.  When the счётчик
+    got its column this assertion went red, and the honest question at that moment was
+    "which column appeared" — a bare `== 7` cannot be asked that.  Naming the two
+    non-problem columns keeps the test able to say what it is defending.
     """
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1)
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    assert len(re.findall(r"<th[ >]", kusok)) == 1 + len(LISTOK)
+    FAMILIA, SCHYOTCHIK = 1, 1
+    assert len(re.findall(r"<th[ >]", kusok)) == FAMILIA + SCHYOTCHIK + len(LISTOK)
+    # The one column that is not a problem and not the surname is the счётчик, named
+    # by its class: a column of принимающие would be an <th> of some other kind.
+    assert len(re.findall(r'<th class="sch"', kusok)) == SCHYOTCHIK
+    assert "прин" not in re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
     # And the initials themselves live inside the surname cell.
     yacheyka = re.search(r'<td class="kto">(.*?)</td>', kusok, re.S).group(1)
     assert '<i class="prin"' in yacheyka
