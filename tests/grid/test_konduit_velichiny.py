@@ -162,3 +162,60 @@ def test_being_mine_and_having_closed_are_both_visible_at_once(
                   str(mir.sheet_ids[0]))
     pervaya = re.search(r'<tr class="([^"]*)"><td class="kto">', kusok).group(1)
     assert "moi" in pervaya and "gotov" in pervaya, pervaya
+
+
+# ------------------------------------------------- величина 3: сколько сдало задачу
+
+
+def shapka(kusok: str) -> list:
+    """Столбцы листка сверху вниз: `(метка, сдало, закрыта ли классом)`."""
+    return [(m.group("label"), int(m.group("n")), bool(m.group("zakr")))
+            for m in re.finditer(
+                r'<th class="zn">(?P<label>.*?)(?:<i class="pm[^>]*>.</i>)?'
+                r'<b class="sdalo(?P<zakr> zakr)?"[^>]*>(?P<n>\d+)</b></th>', kusok)]
+
+
+def test_every_column_carries_how_many_took_it_and_the_number_is_per_column(
+    mir, connection, marking
+):
+    """Число стоит у СВОЕГО столбца.
+
+    Сдвиг на единицу — самая правдоподобная поломка этой величины: шапка одна на
+    двадцать один столбец, все числа на месте, и ни одно не относится к своей задаче.
+    Поэтому мир нарочно сделан так, что все пять чисел РАЗНЫЕ.
+    """
+    zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
+    for nomer, zadacha in enumerate(zadachi):        # 0, 1, 2, 3 и 4 сдавших
+        for uchenik in mir.student_ids[:nomer]:
+            otmetit(marking, uchenik, zadacha)
+    connection.commit()
+    stolbcy = shapka(panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0])))
+    assert [n for _label, n, _z in stolbcy] == [0, 1, 2, 3, 4]
+    assert [label for label, _n, _z in stolbcy] == ["1.1", "1.2", "1.3", "1.4", "1.5"]
+
+
+def test_closed_by_the_class_means_MORE_than_three_took_it(mir, connection, marking):
+    """Ровно три — ещё не закрыта; четыре — закрыта. Слова владельца, буквально."""
+    zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
+    for uchenik in mir.student_ids[:3]:
+        otmetit(marking, uchenik, zadachi[0])
+    for uchenik in mir.student_ids[:4]:
+        otmetit(marking, uchenik, zadachi[1])
+    connection.commit()
+    stolbcy = shapka(panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0])))
+    assert (stolbcy[0][1], stolbcy[0][2]) == (3, False), "трое — ещё не закрыта"
+    assert (stolbcy[1][1], stolbcy[1][2]) == (4, True), "четверо — закрыта классом"
+
+
+def test_a_retracted_hand_in_does_not_count_towards_closing_a_problem(
+    mir, connection, marking
+):
+    """Ровно тот случай, ради которого порог и придуман: сдали, но не защитили."""
+    zadacha = mir.problems_by_sheet[mir.sheet_ids[0]][0]
+    for uchenik in mir.student_ids[:5]:
+        otmetit(marking, uchenik, zadacha)
+    for uchenik in mir.student_ids[:4]:
+        otmetit(marking, uchenik, zadacha, CellState.RETRACTED)
+    connection.commit()
+    stolbcy = shapka(panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0])))
+    assert (stolbcy[0][1], stolbcy[0][2]) == (1, False)

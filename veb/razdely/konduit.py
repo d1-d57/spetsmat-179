@@ -48,6 +48,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import config
+
 from core.services.history import zanyatie_dlya, zanyatie_po_iso
 from core.services.progress import (
     ProgressService,
@@ -136,6 +138,32 @@ def _klass_stroki(u, chuzhoj, schyot) -> str:
     if schyot.zakryl:
         klassy.append("gotov")
     return (' class="%s"' % " ".join(klassy)) if klassy else ""
+
+
+def _skolko_sdalo(problem, na_uchyote, sostoyaniya) -> str:
+    """Под номером задачи — сколько человек её сдало, и закрыта ли она классом.
+
+    🔴 ЧИСЛО СЧИТАЕТСЯ ПО ТЕМ ЖЕ ШКОЛЬНИКАМ, ЧЬИ СТРОКИ НАРИСОВАНЫ НИЖЕ, и это его
+    единственное обещание: столбец можно пересчитать глазами по галочкам под ним.
+    `ProgressService.graveyard` по умолчанию считает по ВСЕМ школьникам каталога,
+    включая выбывших, и он прав в своём вопросе («год, который человек прорешал, не
+    перестаёт быть прорешанным»), но здесь это дало бы число, которое на экране не
+    сходится ни с чем: выбывших в решётке нет.
+
+    🔴 ЗНАЧОК СТОИТ У НОМЕРА, ЧИСЛО — ПОД НИМ, И ЭТО ВСЁ. Владелец 09.09 просил
+    «некоторый параметр… сколько человек её сдало»; второй значок рядом с `◦`/`†`/`⋆`
+    сделал бы шапку столбца в 3em шириной нечитаемой — их и так до сорока в строке.
+    «Закрыта классом» выражена ЦВЕТОМ САМОГО ЧИСЛА, а не новым символом.
+    """
+    sdalo = skolko_sdalo(problem.id, [u.id for u in na_uchyote], sostoyaniya)
+    zakryta = zakryta_klassom(sdalo)
+    if zakryta:
+        podskazka = "сдало %d из %d — задача закрыта классом" % (sdalo, len(na_uchyote))
+    else:
+        podskazka = ("сдало %d из %d — классом ещё не закрыта (нужно больше %d)"
+                     % (sdalo, len(na_uchyote), config.GRAVEYARD_THRESHOLD))
+    return ('<b class="sdalo%s" title="%s">%d</b>'
+            % (" zakr" if zakryta else "", e(podskazka), sdalo))
 
 
 def _uchastniki(catalogue) -> tuple:
@@ -328,7 +356,9 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
         # grid holds thirty-one thousand cells, and a mark repeated in every one of them
         # would be both unreadable and a quarter of a megabyte on a page that has to open
         # on a laptop with no internet.
-        shapka = "".join(f'<th class="zn">{e(p.label)}{znachok(p.kind)}</th>' for p in zad)
+        shapka = "".join(
+            f'<th class="zn">{e(p.label)}{znachok(p.kind)}'
+            f'{_skolko_sdalo(p, na_uchyote, sostoyaniya)}</th>' for p in zad)
         stroki = []
         for u in na_uchyote:
             schyot = obyazatelnyh_sdano(zad, sostoyaniya, u.id)
@@ -831,6 +861,15 @@ def stili(kt) -> str:
 #s-kond .pm.ob{{color:var(--accent)}}
 #s-kond .pm.pi{{color:var(--warm);font-weight:700}}
 #s-kond .pm.zv{{color:var(--faint)}}
+/* ── СКОЛЬКО ЧЕЛОВЕК СДАЛО ЗАДАЧУ ─────────────────────────────────────────
+   Число стоит ПОД номером задачи отдельной строкой: в шапке шириной 3em оно рядом
+   с номером и значком не помещается, а перенос сделал бы высоту шапки прыгающей от
+   столбца к столбцу. Кегль мельче номера — это подпись к нему, а не второй номер.
+   «Закрыта классом» — тот же `--accent`, которым покрашена сданная клетка и значок
+   обязательной: он уже значит «сделано» по всей странице, и нового цвета не нужно. */
+#s-kond .kond th.zn .sdalo{{display:block;font-family:var(--sans);font-size:.68rem;
+  font-weight:400;line-height:1.1;color:var(--faint);margin-top:.1rem}}
+#s-kond .kond th.zn .sdalo.zakr{{color:var(--accent);font-weight:700}}
 /* Словарь значков — один раз на странице, между кнопками классов и полосой
    вкладок, то есть до первой решётки и после выбора класса. */
 #s-kond .kond-slovar{{margin:.1rem 0 .7rem;font-family:var(--sans);font-size:.85rem;
