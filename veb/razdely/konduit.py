@@ -46,15 +46,26 @@ from anywhere.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, timezone
 
+import config
+
 from core.services.history import zanyatie_dlya, zanyatie_po_iso
-from core.services.progress import ProgressService
+from core.services.sostav_na_den import SLOTY_ZANYATIJ
+from core.services.progress import (
+    ProgressService,
+    obyazatelnyh_sdano,
+    skolko_sdalo,
+    zakryta_klassom,
+    zapisi_grobaria,
+)
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
 from tools.export_xlsx import SIGN
 from veb.obshchee.karkas import e
+from veb.sobrat_fajl import SOKR_DNYA
 from veb.razdely.istoria import perebivki
-from veb.razdely.lichnaya import deti_na_datu, segodnya
+from veb.razdely.lichnaya import deti_na_datu, kabinet_na_datu, segodnya
 
 
 # ── ЗНАЧКИ ЛИСТКА ──────────────────────────────────────────────────────────
@@ -88,6 +99,172 @@ def znachok(kind: str) -> str:
     if kind not in ZNACHKI:
         return ""
     return '<i class="pm %s">%s</i>' % (ZNACHOK_KLASS[kind], ZNACHKI[kind])
+
+
+def _schyotchik(schyot) -> str:
+    """Слева от школьника: сколько обязательных он сдал и сколько ему осталось.
+
+    🔴 ОБА ЧИСЛА ВЛАДЕЛЬЦА СТОЯТ НА ЭКРАНЕ, А НЕ ОДНО ИЗ НИХ.  09.09: «сколько он
+    обязательных задач сдал.  Ещё ему осталось сдать».  Сданное и всего видны цифрами
+    (`3/5`), остаток — словами в подсказке: третье число в колонке шириной под фамилию
+    не помещается ни на ноутбуке владельца, ни тем более на телефоне, а вычесть 3 из 5
+    человек умеет.  Подсказка не единственный носитель ни одного факта: она разворачивает
+    то, что уже написано.
+
+    🔴 ЛИСТОК БЕЗ ОБЯЗАТЕЛЬНЫХ ПИШЕТ ТОЧКУ, А НЕ `0/0`.  Так устроены `1д`–`4д`: 99 задач
+    на четверых и ни одной обязательной.  `0/0` там читается как «ничего не сдал» —
+    ровно наоборот тому, что происходит.
+    """
+    if schyot.vsego == 0:
+        return ('<i class="ob-sch net" title="в этом листке нет обязательных задач">'
+                '\u00b7</i>')
+    if schyot.zakryl:
+        podskazka = "все %d обязательных сдано" % schyot.vsego
+    else:
+        podskazka = ("обязательных сдано %d из %d, осталось %d"
+                     % (schyot.sdano, schyot.vsego, schyot.ostalos))
+    return ('<i class="ob-sch" title="%s">%d<span class="iz">/%d</span></i>'
+            % (e(podskazka), schyot.sdano, schyot.vsego))
+
+
+def _klass_stroki(u, chuzhoj, schyot) -> str:
+    """Классы строки школьника: чей это ребёнок и закрыл ли он обязательные.
+
+    Два признака СКЛАДЫВАЮТСЯ, а не вытесняют друг друга, и это не оформление: свой
+    ребёнок, закрывший обязательные, обязан читаться и как свой, и как закрывший.
+    Поэтому «свой» несёт полосу слева и цвет фамилии, а «закрыл» — фон строки: они
+    рисуются разными средствами и видны одновременно.
+    """
+    klassy = []
+    if chuzhoj:
+        klassy.append("chuzh" if u.id in chuzhoj else "moi")
+    if schyot.zakryl:
+        klassy.append("gotov")
+    return (' class="%s"' % " ".join(klassy)) if klassy else ""
+
+
+def _skolko_sdalo(problem, na_uchyote, sostoyaniya) -> str:
+    """Под номером задачи — сколько человек её сдало, и закрыта ли она классом.
+
+    🔴 ЧИСЛО СЧИТАЕТСЯ ПО ТЕМ ЖЕ ШКОЛЬНИКАМ, ЧЬИ СТРОКИ НАРИСОВАНЫ НИЖЕ, и это его
+    единственное обещание: столбец можно пересчитать глазами по галочкам под ним.
+    `ProgressService.graveyard` по умолчанию считает по ВСЕМ школьникам каталога,
+    включая выбывших, и он прав в своём вопросе («год, который человек прорешал, не
+    перестаёт быть прорешанным»), но здесь это дало бы число, которое на экране не
+    сходится ни с чем: выбывших в решётке нет.
+
+    🔴 ЗНАЧОК СТОИТ У НОМЕРА, ЧИСЛО — ПОД НИМ, И ЭТО ВСЁ. Владелец 09.09 просил
+    «некоторый параметр… сколько человек её сдало»; второй значок рядом с `◦`/`†`/`⋆`
+    сделал бы шапку столбца в 3em шириной нечитаемой — их и так до сорока в строке.
+    «Закрыта классом» выражена ЦВЕТОМ САМОГО ЧИСЛА, а не новым символом.
+    """
+    sdalo = skolko_sdalo(problem.id, [u.id for u in na_uchyote], sostoyaniya)
+    zakryta = zakryta_klassom(sdalo)
+    if zakryta:
+        podskazka = "сдало %d из %d — задача закрыта классом" % (sdalo, len(na_uchyote))
+    else:
+        podskazka = ("сдало %d из %d — классом ещё не закрыта (нужно больше %d)"
+                     % (sdalo, len(na_uchyote), config.GRAVEYARD_THRESHOLD))
+    return ('<b class="sdalo%s" title="%s">%d</b>'
+            % (" zakr" if zakryta else "", e(podskazka), sdalo))
+
+
+#: Слот занятия → его день недели, СОКРАЩЁННЫЙ ОБЩЕПРИНЯТО. Оба словаря взяты у своих
+#: хозяев (`core.services.sostav_na_den.SLOTY_ZANYATIJ` — какой день какой слот,
+#: `veb.sobrat_fajl.SOKR_DNYA` — как день зовут), и ни один здесь не переписан: «пн» и «чт»,
+#: вписанные сюда парой строк, разъехались бы с расписанием в тот день, когда занятие
+#: переедет на другой день недели, и разъехались бы МОЛЧА.  `SOKR_DNYA` считает понедельник
+#: нулём, а `SLOTY_ZANYATIJ` — единицей (ISO), отсюда `-1`; ровно та же поправка стоит в
+#: `veb/obshchee/karkas.py:323` и по той же причине.
+DEN_SLOTA = {slot: SOKR_DNYA[den - 1] for den, slot in SLOTY_ZANYATIJ.items()}
+
+
+def initsialy(imya: str) -> str:
+    """«Андрей Рябичев» → «А.Р.»; «Надя» → «Надя».
+
+    🔴 ОДНОСЛОВНОЕ ИМЯ ОСТАЁТСЯ СОБОЙ, А НЕ ПРЕВРАЩАЕТСЯ В ОДНУ БУКВУ.  В `teachers`
+    живьём лежат и «Андрей Рябичев», и «Надя», и «Вася» — школа зовёт часть принимающих
+    по имени, и это не неполная запись, которую надо чинить.  «Н.» вместо «Надя» не короче
+    на экране и при этом теряет единственное, что о человеке известно; хуже, «Надя» и
+    «Наталья Амбург» слились бы в одну букву.
+    """
+    chasti = imya.split()
+    if len(chasti) >= 2:
+        return "%s.%s." % (chasti[0][0].upper(), chasti[1][0].upper())
+    return chasti[0] if chasti else ""
+
+
+def _prinimayushchie(kt, den: str) -> dict:
+    """`{student_id: <разметка инициалов>}` — кто принимает у школьника на эту дату.
+
+    🔴 НЕ КОЛОНКОЙ — РЕШЕНИЕ ВЛАДЕЛЬЦА 09.09.  «Я бы показывал инициалы преподавателя, и
+    номер группы, и номер кабинета» — но инициалы стоят У ФАМИЛИИ, а имя, группа и кабинет
+    разворачиваются наведением.  Отдельный столбец в решётке, где столбцы — это ЗАДАЧИ,
+    был бы столбцом не про задачу; и он отъел бы ширину у той самой решётки, которую
+    владелец уже просил расширить.
+
+    🔴 КАБИНЕТ СПРАШИВАЕТСЯ У `lichnaya.kabinet_na_datu` И БОЛЬШЕ НИГДЕ.  Источников
+    кабинета в проекте ЧЕТЫРЕ и они расходятся между собой — `enrollment.room`,
+    `kabinet_na_den`, `teachers.kabinet`, таблица `kabinety`; 07.09 это стоило владельцу
+    страницы, которая спорила сама с собой (303 против 307).  Та функция и есть решение
+    того спора, и второй запрос за кабинетом здесь воспроизвёл бы его целиком.  Ответ
+    кэшируется по принимающему: их девятнадцать, а школьников на решётке пятьдесят три.
+
+    🔴 ИНТЕРВАЛ ПОЛУОТКРЫТЫЙ, И ЭТО НЕ СТИЛЬ ЗАПРОСА.  Открытая строка `enrollment` несёт
+    `valid_to = '9999-12-31'`, а НЕ `NULL` (`valid_to is null` не находит на живой базе ни
+    одной строки из 247), и часть открытых строк начинается в БУДУЩЕМ — поэтому проверяется
+    весь интервал `valid_from <= день < valid_to`, тем же условием, каким его проверяет
+    `lichnaya.deti_na_datu`.
+    """
+    ryady = kt.c.execute(
+        "select e.student_id, e.teacher_id, e.slot, t.name, t.gruppa "
+        "from enrollment e join teachers t on t.id = e.teacher_id "
+        "where e.valid_from <= ? and ? < e.valid_to "
+        "order by e.slot, t.name",
+        (den, den)).fetchall()
+
+    kabinety = {}
+    po_shkolniku = defaultdict(list)
+    for r in ryady:
+        prepod = r["teacher_id"]
+        if prepod not in kabinety:
+            kabinety[prepod] = kabinet_na_datu(kt.c, prepod, den)
+        po_shkolniku[r["student_id"]].append(
+            (r["slot"], prepod, r["name"], r["gruppa"], kabinety[prepod]))
+
+    razmetka = {}
+    for student_id, stroki in po_shkolniku.items():
+        # Один и тот же принимающий в обоих слотах — это ОДИН человек и одни инициалы.
+        # Разные — двое, и тогда подсказка обязана сказать, кто в какой день, иначе она
+        # называет двух людей и не говорит, когда встретишь которого.
+        prepody = []
+        for slot, prepod, imya, gruppa, kabinet in stroki:
+            if prepod not in [p for _s, p, *_ in prepody]:
+                prepody.append((slot, prepod, imya, gruppa, kabinet))
+        podpisi = []
+        for slot, _prepod, imya, gruppa, kabinet in prepody:
+            hvost = "группа %s" % gruppa if gruppa else "группа не назначена"
+            hvost += " · кабинет %s" % kabinet if kabinet else " · кабинет не назначен"
+            den_slota = DEN_SLOTA.get(slot)
+            podpisi.append(("%s — %s · %s" % (den_slota, imya, hvost)) if len(prepody) > 1
+                           else "%s · %s" % (imya, hvost))
+        razmetka[student_id] = (
+            '<i class="prin" title="принимающий: %s">%s</i>'
+            % (e("; ".join(podpisi)),
+               e("/".join(initsialy(imya) for _s, _p, imya, _g, _k in prepody))))
+    return razmetka
+
+
+def _prin(prinimayushchie, student_id) -> str:
+    """Инициалы школьника, а где распределения нет — прочерк, а не пустое место.
+
+    Пустое место читается как «забыли нарисовать»; прочерк с подсказкой говорит, что
+    вопрос задан и ответа нет.  На живой базе таких школьников есть, и молчание о них
+    было бы сообщением о том, что у всех всё назначено.
+    """
+    return prinimayushchie.get(
+        student_id,
+        '<i class="prin net" title="принимающий на сегодня не назначен">\u2014</i>')
 
 
 def _uchastniki(catalogue) -> tuple:
@@ -220,7 +397,7 @@ def _kratko(den: str) -> str:
     return "%s.%s" % (den[8:10], den[5:7])
 
 
-def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str:
+def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, prinimayushchie, imya="vse") -> str:
     """Cut one: the whole year on one grid — a row per pupil, a column per листок.
 
     In the cell "credited of total" for that листок. This is the view the owner
@@ -231,8 +408,13 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str
     """
     shapka = "".join(f'<th class="zn" title="{e(sh.title or "")}">{e(sh.number)}</th>'
                      for sh in listki)
+    # Обязательные ЭТОГО разреза: на годовом обзоре — за все листки класса, а не за год
+    # вообще.  Восьмой и девятый классы стоят разными вкладками, и число, посчитанное по
+    # обоим сразу, не отвечало бы ни одной из них.
+    obyaz_razreza = [p for sh in listki for p in zadachi[sh.id]]
     stroki = []
     for u in na_uchyote:
+        schyot = obyazatelnyh_sdano(obyaz_razreza, sostoyaniya, u.id)
         kletki = []
         for sh in listki:
             zad = zadachi[sh.id]
@@ -248,18 +430,19 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str
         # Тот же признак, что и в разрезе одного листка: класс ставится на СВОИХ.
         # 07.09 он стоял только там, и на общей вкладке свои не выделялись вовсе —
         # владелец увидел это раньше, чем я.
-        klass = (' class="chuzh"' if u.id in chuzhoj
-                 else (' class="moi"' if chuzhoj else ""))
+        klass = _klass_stroki(u, chuzhoj, schyot)
         stroki.append(
-            f'<tr{klass}><td class="kto"><label for="k-u{u.id}">'
-            f'<b>{e(u.surname)}</b> {e(u.name)}</label></td>{"".join(kletki)}</tr>')
+            f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
+            f'<label for="k-u{u.id}">'
+            f'<b>{e(u.surname)}</b> {e(u.name)}</label>'
+            f'{_prin(prinimayushchie, u.id)}</td>{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
             f'<table class="kond" style="max-width:{16 + len(listki) * 5.5:.1f}em">'
             f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
             f'<tbody>{"".join(stroki)}</tbody></table></section>')
 
 
-def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
+def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty, prinimayushchie) -> str:
     """Cut two: one листок, in the alphabet of the workbook — `1`, `x`, empty.
 
     This is the table `tools/export_xlsx.py` writes to a worksheet, drawn on
@@ -275,9 +458,12 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
         # grid holds thirty-one thousand cells, and a mark repeated in every one of them
         # would be both unreadable and a quarter of a megabyte on a page that has to open
         # on a laptop with no internet.
-        shapka = "".join(f'<th class="zn">{e(p.label)}{znachok(p.kind)}</th>' for p in zad)
+        shapka = "".join(
+            f'<th class="zn">{e(p.label)}{znachok(p.kind)}'
+            f'{_skolko_sdalo(p, na_uchyote, sostoyaniya)}</th>' for p in zad)
         stroki = []
         for u in na_uchyote:
+            schyot = obyazatelnyh_sdano(zad, sostoyaniya, u.id)
             kletki = []
             for p in zad:
                 znak = SIGN[sostoyaniya[(u.id, p.id)]]
@@ -320,10 +506,10 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
             # Класс ставится на СВОИХ, а не выводится как «отсутствие чужого»:
             # у организатора и у общего пароля своих нет вовсе (`chuzhoj` пуст),
             # и правило `tr:not(.chuzh)` покрасило бы им всех до одного.
-            klass = (' class="chuzh"' if u.id in chuzhoj
-                     else (' class="moi"' if chuzhoj else ""))
-            stroki.append(f'<tr{klass}><td class="kto">'
-                          f'<b>{e(u.surname)}</b> {e(u.name)}</td>{"".join(kletki)}</tr>')
+            klass = _klass_stroki(u, chuzhoj, schyot)
+            stroki.append(f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
+                          f'<b>{e(u.surname)}</b> {e(u.name)}'
+                          f'{_prin(prinimayushchie, u.id)}</td>{"".join(kletki)}</tr>')
         potolok = 16 + len(zad) * 5.5
         telo = (f'<table class="kond" style="max-width:{potolok:.1f}em">'
                 f'<thead><tr><th>Ученик</th>{shapka}</tr></thead>'
@@ -370,6 +556,87 @@ def _uchenik(u, listki, zadachi, sostoyaniya, daty) -> str:
             f'<p class="zag2"><label for="k-vse">← ко всем</label></p>'
             f'<h2 class="kond-imya">{e(u.surname)} {e(u.name)}</h2>'
             f'<table class="kond-lich"><tbody>{"".join(stroki)}</tbody></table></section>')
+
+
+def _istoricheskie(listki, zadachi) -> list:
+    """Листки класса, после которых УЖЕ роздан следующий, — от свежего к старому.
+
+    🔴 «СТАЛ ИСТОРИЧЕСКИМ» — ЭТО ФАКТ О БАЗЕ, А НЕ ДАТА, ВПИСАННАЯ В КОД.  Владелец 09.09:
+    «задачи, которые не сданы на момент, когда раздали следующий листок».  Значит
+    исторический — это листок, чей `issued_at` СТРОГО раньше самого свежего `issued_at`
+    этого класса; вписать сюда «16-й станет историческим в понедельник» значило бы, что
+    во вторник кто-то обязан прийти и это поправить.
+
+    ВЕРСИИ ОДНОГО ЛИСТКА ИСТОРИЧЕСКИМИ ДРУГ ДРУГА НЕ ДЕЛАЮТ.  `16A`, `16α` и `16ℵ` — один
+    листок в трёх силах, у них ОДИН `issued_at` (2026-09-03) и разные `ord`; сравнение по
+    `ord` объявило бы `16A` и `16α` историческими в тот же день, когда их раздали, и
+    гробарий открылся бы на задачах текущего листка.  Ровно по этой причине `_samyj_novyj`
+    выше тоже считает свежесть датой, а не порядком.
+
+    ЛИСТОК БЕЗ ЗАДАЧ НЕ СЧИТАЕТСЯ НИ САМЫМ СВЕЖИМ, НИ ИСТОРИЧЕСКИМ — тот же критерий, что
+    и у `_samyj_novyj`: ряд в `sheets`, задачи которого ещё не внесены, — это не листок, на
+    который кто-то смотрел.  Иначе заведённая заранее строка следующего листка отправила бы
+    текущий в гробарий за сутки до того, как его действительно раздали.
+    """
+    s_zadachami = [sh for sh in listki if zadachi[sh.id]]
+    if len(s_zadachami) < 2:
+        return []
+    svezhaya = max(sh.issued_at for sh in s_zadachami)
+    return sorted((sh for sh in s_zadachami if sh.issued_at < svezhaya),
+                  key=lambda sh: (sh.issued_at, sh.ord), reverse=True)
+
+
+def _grobarij(listki, zadachi, na_uchyote, sostoyaniya, daty) -> str:
+    """Вкладка «Гробарий»: задачи исторических листков, которые сдали меньше трёх.
+
+    🔴 ПУСТАЯ ВКЛАДКА ОБЯЗАНА СКАЗАТЬ, ЧТО ОНА ПУСТА И КОГДА НАПОЛНИТСЯ.  Сегодня она
+    пуста ПО ПРАВИЛУ, а не потому, что её не написали: у девятого класса роздан ровно один
+    листок, исторических нет.  Вкладка, которая в этом состоянии просто ничего не рисует,
+    неотличима от сломанной — а посмотрит на неё преподаватель на занятии, без возможности
+    спросить.  Поэтому правило написано в ней ВСЕГДА, и пустая она говорит, чего ждёт.
+    """
+    imena = {u.id: "%s %s" % (u.surname, u.name) for u in na_uchyote}
+    ids = [u.id for u in na_uchyote]
+    istoricheskie = _istoricheskie(listki, zadachi)
+
+    pravilo = (
+        '<p class="grob-pravilo">Сюда попадают задачи листка, ставшего историческим — '
+        'то есть такого, после которого раздали следующий, — если их сдали меньше '
+        f'{config.GRAVEYARD_THRESHOLD}\u00a0человек. Рядом — имена тех, кто их всё-таки '
+        f'сдал: не больше {config.GRAVEYARD_THRESHOLD}, дальше имена не записываются.</p>')
+
+    if not istoricheskie:
+        svezhie = ", ".join(e(sh.number) for sh in listki if zadachi[sh.id]) or "ни одного"
+        telo = ('<p class="net">Гробарий пуст, и это не ошибка: исторических листков пока '
+                f'нет. Роздан{"ы" if len([s for s in listki if zadachi[s.id]]) > 1 else ""} '
+                f'{svezhie} — и пока следующий листок не раздан, в гробарий попадать нечему. '
+                'Он наполнится сам в тот день, когда выйдет следующий листок.</p>')
+        return (f'<section class="vid" id="n-grob">'
+                f'<p class="zag2">Гробарий</p>{pravilo}{telo}</section>')
+
+    bloki = []
+    for sh in istoricheskie:
+        zapisi = zapisi_grobaria(zadachi[sh.id], ids, sostoyaniya,
+                                 lambda u, z: daty.get((u, z)), imena.get)
+        if not zapisi:
+            bloki.append(f'<p class="zag2">{e(sh.title or sh.number)}</p>'
+                         '<p class="net">ни одна задача этого листка не осталась '
+                         'за порогом — в гробарий с него ничего не пошло</p>')
+            continue
+        stroki = "".join(
+            f'<tr><td class="kto">{e(z.problem.label)}{znachok(z.problem.kind)}</td>'
+            f'<td class="skolko">{z.sdalo}</td>'
+            f'<td class="fishki">'
+            + ("".join(f'<i>{e(p)}</i>' for p in z.pervye)
+               if z.pervye else '<span class="net">никто</span>')
+            + '</td></tr>'
+            for z in zapisi)
+        bloki.append(f'<p class="zag2">{e(sh.title or sh.number)}</p>'
+                     f'<table class="kond-lich grob"><thead><tr><th>Задача</th>'
+                     f'<th>Сдало</th><th>Кто сдал</th></tr></thead>'
+                     f'<tbody>{stroki}</tbody></table>')
+    return (f'<section class="vid" id="n-grob">'
+            f'<p class="zag2">Гробарий</p>{pravilo}{"".join(bloki)}</section>')
 
 
 #: Панель истории клетки и жест, которым она открывается.
@@ -607,7 +874,7 @@ def stili(kt) -> str:
     the база.
     """
     _c, _p, na_uchyote, _v, listki, _z = _sobrat(kt)
-    klyuchi = ["vse9", "vse8"] + [str(sh.id) for sh in listki]
+    klyuchi = ["vse9", "vse8", "grob"] + [str(sh.id) for sh in listki]
     vkladki = "".join(
         f"#k-{k}:checked~#n-{k}{{display:block}}"
         f"#k-{k}:checked~.tabbar label[for=k-{k}]"
@@ -655,6 +922,35 @@ def stili(kt) -> str:
    съедает подсветку: у своих строк фон уже накрашен, поэтому наведение
    различается рамкой на клетке и полосой столбца, а не цветом фона. */
 #s-kond .kond tbody tr.moi:hover td{{background:var(--chip)}}
+/* ── СЧЁТЧИК ОБЯЗАТЕЛЬНЫХ СЛЕВА И СВЕТЯЩАЯСЯ СТРОКА ────────────────────────
+   🔴 НИ ОДНОГО НОВОГО ЦВЕТА: палитра закрыта (`doc/DIZAJN-ZAKREPLENO.md §2`), и
+   строка светится фоном `--chip` — тем самым, которым уже подсвечена наведённая
+   своя строка. Почему НЕ `--accent-soft`: им покрашены строки СВОИХ детей, и
+   свой ребёнок, закрывший обязательные, перестал бы отличаться от свего, который
+   не закрыл, — то есть новый признак съел бы принятый владельцем старый.
+   Два признака сложены разными средствами нарочно: «свой» — полоса слева и цвет
+   фамилии, «закрыл» — фон строки; вместе они читаются одновременно.
+   Наведение на светящуюся строку остаётся различимым рамкой на клетке и полосой
+   столбца — тем же способом, каким оно уже различается на своих строках, у
+   которых фон тоже накрашен. */
+#s-kond .kond tbody tr.gotov td{{background:var(--chip)}}
+#s-kond .kond tbody tr.gotov:hover td{{background:var(--chip)}}
+#s-kond .kond td.kto .ob-sch{{display:inline-block;width:2.6em;margin-right:.45rem;
+  text-align:right;font-style:normal;font-family:var(--sans);font-size:.8rem;
+  font-weight:600;color:var(--muted)}}
+#s-kond .kond td.kto .ob-sch.net{{color:var(--faint);font-weight:400}}
+/* Закрыл — счётчик берёт «твоё, важное»; это тот же `--accent`, которым покрашена
+   сданная клетка, и он значит здесь ровно то же самое. */
+#s-kond .kond tbody tr.gotov td.kto .ob-sch{{color:var(--accent)}}
+/* ── ИНИЦИАЛЫ ПРИНИМАЮЩЕГО У ФАМИЛИИ ──────────────────────────────────────
+   Надстрочно и мелко: это подпись к фамилии, а не второе имя. Курсор `help`
+   обещает подсказку, которая есть, — иначе о наведении никто не догадается.
+   Ни одного нового цвета: `--faint` уже значит «фон, а не сообщение» по всей
+   странице, и им же покрашена звезда в шапке столбца. */
+#s-kond .kond td.kto .prin{{font-style:normal;font-family:var(--sans);font-size:.62rem;
+  font-weight:600;color:var(--faint);vertical-align:super;margin-left:.3em;cursor:help;
+  white-space:nowrap}}
+#s-kond .kond td.kto .prin.net{{font-weight:400}}
 /* Клетка листка тапается: курсор и подсветка обещают действие, которое есть.
    Клетки годового обзора и личной карточки адреса пары не несут и остаются
    обычным текстом — там столбец это ЛИСТОК, а не задача, и отмечать нечего. */
@@ -758,6 +1054,15 @@ def stili(kt) -> str:
 #s-kond .pm.ob{{color:var(--accent)}}
 #s-kond .pm.pi{{color:var(--warm);font-weight:700}}
 #s-kond .pm.zv{{color:var(--faint)}}
+/* ── СКОЛЬКО ЧЕЛОВЕК СДАЛО ЗАДАЧУ ─────────────────────────────────────────
+   Число стоит ПОД номером задачи отдельной строкой: в шапке шириной 3em оно рядом
+   с номером и значком не помещается, а перенос сделал бы высоту шапки прыгающей от
+   столбца к столбцу. Кегль мельче номера — это подпись к нему, а не второй номер.
+   «Закрыта классом» — тот же `--accent`, которым покрашена сданная клетка и значок
+   обязательной: он уже значит «сделано» по всей странице, и нового цвета не нужно. */
+#s-kond .kond th.zn .sdalo{{display:block;font-family:var(--sans);font-size:.68rem;
+  font-weight:400;line-height:1.1;color:var(--faint);margin-top:.1rem}}
+#s-kond .kond th.zn .sdalo.zakr{{color:var(--accent);font-weight:700}}
 /* Словарь значков — один раз на странице, между кнопками классов и полосой
    вкладок, то есть до первой решётки и после выбора класса. */
 #s-kond .kond-slovar{{margin:.1rem 0 .7rem;font-family:var(--sans);font-size:.85rem;
@@ -809,6 +1114,18 @@ def stili(kt) -> str:
     display:block;overflow:hidden;text-overflow:ellipsis}}
   #s-kond .kond tbody tr.moi td.kto{{padding-left:.55rem}}
   #s-kond .kond td.kto label{{display:block;overflow:hidden;text-overflow:ellipsis}}
+  /* 🔴 НА ТЕЛЕФОНЕ СЧЁТЧИК СТОИТ СТРОКОЙ ВЫШЕ ФАМИЛИИ, А НЕ ПЕРЕД НЕЙ. Столбец
+     фамилии здесь 7.2rem, и 2.6em счётчика — это больше трети его: фамилия ушла бы
+     в многоточие ровно на том экране, ради которого её и не режут (см. правило
+     выше). `<b>` и `<label>` в этом запросе и так `display:block`, поэтому счётчик
+     оказывается над ними сам; правило ниже только прижимает его к правому краю
+     ячейки, чтобы числа стояли столбиком и читались друг под другом. */
+  #s-kond .kond td.kto .ob-sch{{display:inline;width:auto;margin:0 .35rem 0 0;
+    font-size:.7rem;line-height:1.1}}
+  /* Счётчик и инициалы стоят ПЕРВОЙ строкой ячейки, фамилия — второй: `<b>` и
+     `<label>` в этом запросе `display:block`, поэтому строка делится сама. На
+     ноутбуке всё это остаётся одной строкой и десктопный вид не меняется. */
+  #s-kond .kond td.kto .prin{{vertical-align:baseline;margin-left:0;font-size:.62rem}}
   /* Клетка — цель пальца: 44 точки в высоту, компактнее в ширину. */
   #s-kond .kond tbody td+td{{min-width:2.5em;height:44px;padding:.2rem;
     font-size:1.05rem}}
@@ -829,6 +1146,20 @@ def stili(kt) -> str:
   margin:0 .25em .25em 0}}
 #s-kond .kond-lich i.vsyo{{color:var(--accent)}}
 #s-kond .kond-lich i.snyato{{color:var(--warm)}}
+
+/* ── ГРОБАРИЙ ─────────────────────────────────────────────────────────────
+   Ни одного нового приёма: правило набрано как служебная подпись (`--muted`,
+   sans, мелко), таблица — та же `kond-lich`, что и в личной карточке школьника,
+   имена — те же фишки на `--chip`. Отличие ровно одно: у гробария есть шапка,
+   потому что три столбца тут не читаются без подписи. */
+#s-kond .grob-pravilo{{font-family:var(--sans);font-size:.9rem;color:var(--muted);
+  max-width:44rem;margin:.2rem 0 1.1rem;line-height:1.45}}
+#s-kond .kond-lich.grob{{border-collapse:collapse}}
+#s-kond .kond-lich.grob thead th{{font-family:var(--sans);font-size:.8rem;
+  font-weight:600;color:var(--muted);text-align:left;padding:0 1.2rem .35rem 0;
+  border-bottom:1px solid var(--rule)}}
+#s-kond .kond-lich.grob td{{padding-top:.35rem}}
+#s-kond .kond-lich.grob .skolko{{text-align:left}}
 
 /* ═══ ИСТОРИЯ КЛЕТКИ. Открывается жестом — правый клик на ноутбуке, долгое зажатие
    на телефоне; видимой метки на клетке НЕТ (решение владельца 09.09). Ни одного
@@ -893,6 +1224,8 @@ def razdel(kt) -> str:
     sostoyaniya = progress.states_for_many([s.id for s in vse],
                                            [p.id for p in vse_zadachi])
     daty = _daty(kt)
+    # Один запрос на всю страницу: та же дата, по которой считается «только мои».
+    prinimayushchie = _prinimayushchie(kt, segodnya())
 
     sdano_vsego = sum(1 for s in sostoyaniya.values() if s.is_credited)
     na_uchyote_ids = {u.id for u in na_uchyote}
@@ -938,6 +1271,7 @@ def razdel(kt) -> str:
              + "".join(f'<input class="rd" type="radio" name="knd" id="k-{sh.id}"'
                        f'{" checked" if sh.id == otkryt else ""}>'
                        for sh in listki)
+             + '<input class="rd" type="radio" name="knd" id="k-grob">'
              + "".join(f'<input class="rd" type="radio" name="knd" id="k-u{u.id}">'
                        for u in na_uchyote))
     klassy = ('<div class="kond-klassy">'
@@ -961,11 +1295,22 @@ def razdel(kt) -> str:
                          for sh in listki_9)
                + "".join(f'<label class="kl8" for="k-{sh.id}">{e(sh.number)}</label>'
                          for sh in listki_8)
+               # 🔴 ВКЛАДКА ТОЛЬКО У ДЕВЯТОГО КЛАССА, И ЭТО НЕ НЕДОДЕЛКА.  Гробарий —
+               # механизм живого курса: он держит задачи, которые ещё можно добрать.
+               # Восемнадцать листков восьмого класса розданы 2025-09-01, следующего за
+               # ними не будет никогда, и гробарий по ним открылся бы сразу сотнями строк
+               # прошлогодних задач — то есть ровно НЕ пустой вкладкой, о которой просил
+               # владелец, и не тем, на что кто-то станет смотреть.  Назван вопросом.
+               + '<label class="kl9" for="k-grob">Гробарий</label>'
                + "</div>")
-    panely = (_obzor(na_uchyote, listki_9, zadachi, sostoyaniya, chuzhoj, "vse9")
-              + _obzor(na_uchyote, listki_8, zadachi, sostoyaniya, chuzhoj, "vse8")
-              + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj, daty)
+    panely = (_obzor(na_uchyote, listki_9, zadachi, sostoyaniya, chuzhoj,
+                     prinimayushchie, "vse9")
+              + _obzor(na_uchyote, listki_8, zadachi, sostoyaniya, chuzhoj,
+                       prinimayushchie, "vse8")
+              + "".join(_listok(sh, zadachi[sh.id], na_uchyote, sostoyaniya, chuzhoj,
+                                daty, prinimayushchie)
                         for sh in listki)
+              + _grobarij(listki_9, zadachi, na_uchyote, sostoyaniya, daty)
               + "".join(_uchenik(u, listki, zadachi, sostoyaniya, daty)
                         for u in na_uchyote))
 
