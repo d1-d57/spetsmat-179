@@ -399,3 +399,80 @@ def test_the_selector_counts_rows_and_not_the_difference_between_two_names(shkol
     assert mesto.u_drugogo is False
     assert mesto.perekryt_prepodavatelem is True
     assert perekrytiya_k_snyatiyu(sostav) == (sid,)
+
+
+# ----------------------------------------------- what the verifier of this заход found
+
+
+def test_the_button_does_not_hand_a_pupil_to_a_teacher_who_never_comes_on_that_day(
+        shkola):
+    """Refusal 2 has to read BOTH tables of absence, and it read only one.
+
+    «Сегодня заболел» lives in ``teacher_attendance``; «по четвергам не хожу вообще»
+    lives in ``prepodavatel_ne_prihodit``, and the project keeps them apart on purpose.
+    The refusal that knew only the first one refused honestly for the sick teacher and
+    silently handed the child to the one who is never there on a Thursday — and nothing
+    reddened, because formally the child HAS a teacher.
+    """
+    base, c = shkola
+    nikogda, gost = _teacher(c, "никогда"), _teacher(c, "гость")
+    sid = _student(c, "Отданный")
+    _standing(c, sid, nikogda)
+    session_id = c.execute(
+        "insert into sessions (held_on) values (?)", (THURSDAY,)).lastrowid
+    _deviation(c, session_id, sid, gost)
+    from infra.prepodavatel_den_repo import otmetit
+    otmetit(c, nikogda, SLOT_THURSDAY, prihodit=False)
+    c.commit()
+
+    status, schet = _get(base + "/api/den/perekrytiya?den=" + THURSDAY)
+    assert status == 200 and schet["n"] == 0
+    status, otvet = _post(base + "/api/den/primenit-postoyannoe", {"den": THURSDAY})
+    assert status == 200 and otvet["snyato"] == 0
+    assert _den_pokazyvaet(c, sid) == gost
+
+
+def test_snyato_reports_what_was_done_and_matches_the_two_measurements(shkola):
+    """``snyato`` is a report of the removal, so it must agree with the numbers around it:
+    with the rows that actually lost their teacher, and with the ids handed back."""
+    base, c = shkola
+    svoj, gost = _teacher(c, "свой"), _teacher(c, "гость")
+    ids = [_student(c, "Перекрытый-%d" % i) for i in range(3)]
+    for sid in ids:
+        _standing(c, sid, svoj)
+    session_id = c.execute(
+        "insert into sessions (held_on) values (?)", (THURSDAY,)).lastrowid
+    for sid in ids:
+        _deviation(c, session_id, sid, gost)
+    c.commit()
+
+    status, otvet = _post(base + "/api/den/primenit-postoyannoe", {"den": THURSDAY})
+    assert status == 200
+    ubylo = otvet["do"]["s_prepodavatelem"] - otvet["posle"]["s_prepodavatelem"]
+    assert otvet["snyato"] == ubylo == len(otvet["id"]) == 3
+
+
+def test_two_lessons_on_one_date_are_read_as_the_same_one_by_both_doors(shkola):
+    """``sessions.held_on`` is not unique, and ``SqliteSessions.for_day`` documents that it
+    takes the SMALLEST id.  The doors must take the same one, or the numbers would describe
+    one lesson while the rows were removed from another."""
+    base, c = shkola
+    svoj, gost = _teacher(c, "свой"), _teacher(c, "гость")
+    sid = _student(c, "Двойной")
+    _standing(c, sid, svoj)
+    pervoe = c.execute("insert into sessions (held_on) values (?)", (THURSDAY,)).lastrowid
+    vtoroe = c.execute("insert into sessions (held_on) values (?)", (THURSDAY,)).lastrowid
+    assert pervoe < vtoroe
+    # The override lies on the SECOND lesson only; the first one is empty.
+    _deviation(c, vtoroe, sid, gost)
+    c.commit()
+
+    status, otvet = _post(base + "/api/den/primenit-postoyannoe", {"den": THURSDAY})
+    assert status == 200
+    # Both doors looked at the same (smallest-id) lesson, so both saw an empty day and
+    # neither reached into the other one.
+    assert otvet["snyato"] == 0
+    assert otvet["do"] == otvet["posle"] == {"strok": 0, "s_prepodavatelem": 0,
+                                             "otmetok_otsutstvia": 0}
+    assert c.execute("select count(*) from attendance where session_id = ?",
+                     (vtoroe,)).fetchone()[0] == 1
