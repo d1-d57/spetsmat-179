@@ -280,6 +280,14 @@ grep -n '<как механизм назван в вызывающем коде>
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### The зона text never named that "боевая база" is a remote host, not a local path
+`config.DB_PATH` (used by default in `tools/import_listka.py`, `tools/vidy_zadach.py`, `ops/rezervnaya_kopia.py`) resolves relative to whatever checkout runs the script. Run in the worktree with no flags, it silently targets the worktree's own local `data/spetsmat.db` — a real SQLite file that opens fine, accepts writes fine, and reports success — while the actual production database lives on a separate machine (`ivan@159.194.254.52:/opt/spetsmat-bot/data/spetsmat.db`, owned by user `spetsmat`, reached via `sudo -u spetsmat` since `ivan` has passwordless sudo). Nothing in `kod_razmetka-bazy.md`, `TZ-DOBOR-10-09.md` §B1, or the three зона files themselves states this host/path — it had to be reverse-engineered from `deploy/vykatka.sh`.
+ЦЕНА: no data was harmed this time only because the state was checked before writing, but the failure mode is a false positive with zero errors: a заход could report "изменений 35/37, готовность выполнена" while having written only to a throwaway local copy that no student or teacher ever sees, and the "боевая база" would remain untouched with `† 0` on the live site. Discovering the real topology (SSH host, remote user, sudo path) cost real time out of a wave running against a 13:10 hard deadline. Recorded as a queue item below (ДОМ: `TZ-DOBOR-10-09.md`) so future заходы touching "боевая база" name the access path explicitly instead of leaving it to be rediscovered under time pressure.
+
+### The TZ's "state" description went stale between being written and being dispatched
+`TZ-DOBOR-10-09.md` §B1 (written this morning, 10.09) states "в боевой базе разметки нет: в кондуите † 0 во всех листках" as the reason this заход needed to run. In fact `sudo journalctl` on the server shows the owner personally ran the exact backup+import sequence at 00:26–00:27 on 10.09 — hours before either the TZ or this заход existed — and the live database already carried the target state (`16A † 1`, `16α † 4`, `16ℵ † 0`) before I touched anything. Caught only because the DO-verifier's raw pre-dump (§3) already showed the "after" distribution, which triggered re-checking with `tools/vidy_zadach.py` directly instead of trusting the TZ's narrative and proceeding to write.
+ЦЕНА: had this gone unnoticed, the honest cost is small here (the import is idempotent, so a blind re-run would have been harmless) — but the report would have falsely credited this заход's run with "35/37 изменений" that actually happened ten hours earlier by the owner's own hand, corrupting the factory's record of who did what and when. A wave-writing convention that re-checks live state right before generating a заход (or that updates the TZ the moment a manual fix lands) would remove this trap. Recorded as a queue item below (ДОМ: `TZ-DOBOR-10-09.md`).
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -288,7 +296,33 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+1. **Challenged assumption, checked before acting:** the зона scripts default to `config.DB_PATH`, which resolves to a path inside whichever checkout runs them. Running them in this worktree would touch the worktree's own `data/spetsmat.db` copy, not the actual production database — that would satisfy no criterion of readiness and would not make the dagger visible on the live site. Investigated the live topology instead of guessing:
+   - `deploy/vykatka.sh` confirms the real target is a remote server reached over SSH — `ivan@159.194.254.52`, `/opt/spetsmat-bot`, deployed by `rsync`, no `.git` there.
+   - SSH connectivity from this machine works (`ivan@159.194.254.52`, hostname `matshkola-01`), and `ivan` has passwordless `sudo`.
+   - The live DB is `/opt/spetsmat-bot/data/spetsmat.db`, owned by `spetsmat:spetsmat` (mode 640, directory 750) — readable/writable as that user via `sudo -u spetsmat`. Its `-wal`/`-shm` files are present and recently modified, confirming it is the actively-written production file, not a stale copy.
+   - `sha256sum` of the deployed `tools/import_listka.py`, `tools/vidy_zadach.py`, `ops/rezervnaya_kopia.py` on the server matches this repo's copies byte-for-byte — the mechanism is already deployed, so this заход is a **data** operation run against the production server over SSH, not a code change. (Matches the leftover §0.1 text: "правка данных, а не кода".)
+   - Consequence for execution: every command in ЗАДАЧА steps 1–3 runs as `ssh ivan@159.194.254.52 "sudo -u spetsmat python3 /opt/spetsmat-bot/<script> ..."`, not locally in the worktree.
+2. **DO-type verifier (§3), fresh subagent, before any write:** dump the raw per-cell state (`label`, `kind`, `block_id`) of `problems` for sheets `16A`, `16α`, `16ℵ` straight out of the live database by hand-written SQL over the sqlite3 module — a different method from `tools/vidy_zadach.py`, which only aggregates counts and will be used again afterwards. Coverage: 3 of 3 sheets, read-only. This snapshot is what "изменилось 35/37 ячеек" and "ни одна ГАЛОЧКА не изменилась" get compared against, since it is unrepeatable once the import runs.
+3. ЗАДАЧА step 1 — backup: `sudo -u spetsmat python3 ops/rezervnaya_kopia.py --metka ruchnoj` on the server (the proven, line-verified 08.09 mechanism); print path + size; prove restorability by opening the resulting snapshot and reading one table from it.
+4. ЗАДАЧА step 2 — import, in order: `sudo -u spetsmat python3 tools/import_listka.py 16A`, then `16α`, then `16ℵ`, on the server, against the live db. Expect the same shape of change as B1's copy measurement (16A: 35 changes incl. 8 обязательная→письменная; 16α: 37 changes, plus the 3 extra cells 10а/10б/10в kept, run whole per owner's decision).
+5. ЗАДАЧА step 3 — verify: `sudo -u spetsmat python3 tools/vidy_zadach.py 16A 16α 16ℵ` on the server; готовности criterion requires exactly `16A † 1`, `16α † 4`, `16ℵ † 0`.
+6. Cross-check against the DO-verifier's before-snapshot: same 35/37 delta, and a direct `select count(*) from marks` before vs. after — must be equal (no student check-off touched, only `problems.kind`/`block_id`).
+7. Look at the live site with a browser (screenshots in `skrinshoty-10-09/` are the spec) and confirm the dagger (`†`) is visible on problem 8 of sheet 16A in the конduit, live.
+8. No change to `tools/import_listka.py` / `tools/vidy_zadach.py` / `ops/` is expected — the mechanism is already correct and deployed; this заход's own git zone is expected to stay empty. If the live run surfaces a real defect in one of these files, fix it in the worktree, commit immediately per §4, and re-deploy is NOT in scope of this заход (no `vykatka.sh` run planned) — a needed code fix would become a `## ВОПРОСЫ` entry instead, since deploying is outside the named ЗАДАЧА.
+9. Finish with the full git-hygiene WARNING block (own branch has no commits expected, since no code changed) and the ## ОТЧЁТ.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. §B1 of the TZ was already fully resolved by the owner's own manual run (`ops/rezervnaya_kopia.py --metka ruchnoj` at 00:26:16, then `tools/import_listka.py` for all three sheets at 00:27:01–06 on 2026-09-10, confirmed by `sudo journalctl`) before this заход was even dispatched. The TZ's "Состояние" line ("в боевой базе разметки нет") is stale and should be updated to "сделано вручную 00:27 10.09" so a future заход/analyst does not re-derive this from scratch.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/TZ-DOBOR-10-09.md
+   ДОСТАВЛЕНО: нет
+2. `tools/import_listka.py`, `tools/vidy_zadach.py`, `ops/rezervnaya_kopia.py` default to `config.DB_PATH`, which resolves against whatever local checkout runs them — none of the three files, nor `TZ-DOBOR-10-09.md` §B1, nor this заход's own text, name that the real "боевая база" is remote (`ivan@159.194.254.52:/opt/spetsmat-bot`, `sudo -u spetsmat`, deployed by `deploy/vykatka.sh` rsync, not git). A future заход of this shape should state the access path explicitly rather than leave it to be reverse-engineered from `deploy/vykatka.sh` under time pressure.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/TZ-DOBOR-10-09.md
+   ДОСТАВЛЕНО: нет
+3. Готовности criterion 3 ("крестик виден в кондуите живьём у задачи 8 листка 16A — проверка глазами") could NOT be performed in this заход: no browser tool and no teacher/kabinet login credentials were available in this session, and the конduit is behind login. Data-level confirmation is solid (`tools/vidy_zadach.py` run directly against the live db shows `16A † 1`, matching problem 8; `изменений 0` on a fresh re-run of the import proves no drift). This is the same honest-gap class as B2 in the TZ — needs thirty seconds of a human's eyes on the live site, not a заход.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -315,30 +349,52 @@ grep -n '<как механизм назван в вызывающем коде>
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+**СНИМОК ВХОДА** *(§0.1 cancelled by the orchestrator for this wave — executor ran the single replacement command itself instead of the git-contour subagent, per the cancellation text at §0.1)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c 'zahod/'
+0
 ```
-<сюда — вывод, дословно>
 
-**ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+**ЧТО СДЕЛАНО**
+No merge/close/zayavka actions were needed or performed — the single check above is the entire substitute ritual mandated by the §0.1 cancellation.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
+*(0 unmerged `zahod/*` branches against `main` at time of check.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**WHAT WAS DONE, AND WHY.** ЗАДАЧА asked for a backup → import of three sheets (`16A`, `16α`, `16ℵ`) → verification, run against the live production database. Investigation (see ## ПЛАН point 1) showed "боевая база" is not local: it is `/opt/spetsmat-bot/data/spetsmat.db` on `ivan@159.194.254.52`, reachable via SSH + `sudo -u spetsmat` (passwordless sudo). A fresh subagent (§3, DO-type) then dumped the live database's raw per-cell state for all three sheets BEFORE any action of mine, read-only — and that dump already showed the target distribution (`16A † 1`, `16α † 4`, `16ℵ † 0`). Direct confirmation with `tools/vidy_zadach.py` against the live db (read-only) proved the same. `sudo journalctl` on the server showed why: the owner personally ran `ops/rezervnaya_kopia.py --metka ruchnoj` and `tools/import_listka.py` for all three sheets at 00:26–00:27 on 2026-09-10, roughly ten hours before this заход was dispatched. The substantive work this ЗАДАЧА asked for was therefore already done, by the owner, before I started.
+
+**HOW I VERIFIED IT ANYWAY, RATHER THAN TAKING THE ABOVE ON FAITH:**
+- Took my own fresh backup (`spetsmat-20260910T075615Z-ruchnoj.db.gz`, 294373 bytes) and proved restorability by decompressing it and reading three tables from it read-only (`sheets`, `problems` count 595, `marks` count 16190) — satisfies готовности criterion 1 personally, independent of the owner's earlier backup (which also still exists: `spetsmat-20260910T002616Z-ruchnoj.db.gz`, taken 00:26:16, immediately before the 00:27:01 import).
+- Re-ran `tools/import_listka.py` for all three sheets against the live db as a live, idempotent probe: all three printed `изменений 0` (`ячеек связано: 21/17/13`, `ячеек заведено: 0`, `ячеек переразмечено: 0` for each) — proves the live composition and classification exactly match the PDF source right now, with no drift since the owner's run. This is *my own* "живой прогон на реальном объекте" as required by criterion 5, even though it changed nothing (there was nothing left to change).
+- Re-ran `tools/vidy_zadach.py 16A 16α 16ℵ` against the live db immediately after: `16A † 1`, `16α † 4`, `16ℵ † 0` exactly — satisfies готовности criterion 2, ОХВАТ "51 ячеек из 51".
+- Compared `select count(*) from marks` before (16190, from the §3 verifier's pre-dump and again from my restored backup) and after (16190, queried live) — unchanged, satisfies готовности criterion 4. (Also true by construction: `import_listka.py` neither reads nor writes `marks`, per its own docstring.)
+- Готовности criterion 3 (dagger visible live in the конduit UI, eyes on it) — **not verified**, see `## ВОПРОСЫ` item 3: no browser tool and no login credentials were available in this session; the конduit is behind a teacher login. This is a legitimate open item, not a silent skip.
+
+**COVERAGE:** 3 of 3 sheets checked at the database level, both via the §3 verifier's independent raw dump and via `tools/vidy_zadach.py`'s own aggregate count; 1 of the готовности criteria's visual check (criterion 3) not covered, named above and in `## ВОПРОСЫ`.
+
+**WHAT I DID NOT TOUCH:** No code was changed in `tools/import_listka.py`, `tools/vidy_zadach.py`, or `ops/` — `sha256sum` of the deployed copies on the server matched this repo's copies exactly, so the mechanism needed no fix. Nothing outside the named зона was opened for editing. No deploy (`vykatka.sh`) was run — none was needed, since no code changed.
+
+**VERIFIER (§3) RESULT:** fresh subagent, DO-type, read-only raw per-cell dump of `problems` (label/kind/block_id) for all three sheets plus `marks` count, taken before any action of mine. Ended with the required line: "выдано 3 позиций из 3 найденных". Its dump matches the post-state exactly (see above) — confirming the live db had already reached the target state before this заход began.
+
+**TIME + TOKENS:** неприменимо — движок `opencode`, счётчика стоимости в логе нет.
+
+**ПОВТОРЯЕМОСТЬ находок:** Both `## ВОПРОСЫ` items 1–2 (топология "боевой базы" не названа в тексте захода/ТЗ; ТЗ протухает, если владелец чинит руками между сборкой ТЗ и запуском захода) are the "immediate class" — they will recur on the very next заход that touches "боевая база" unless the заход/ТЗ-writing convention names the remote access path explicitly and re-checks live state right before dispatch. Recorded as queue items with a concrete ДОМ (`TZ-DOBOR-10-09.md`), not just narrated here. Item 3 (no browser/login in this session) is not something that repeats predictably — it depends on which session type runs the next заход — so it stays a `## ВОПРОСЫ` item addressed to the owner, not a factory lesson.
+
+**НЕОБРАТИМОЕ:** необратимого нет. The only write actions taken were: one backup file created (additive, non-destructive), and three `import_listka.py` runs that each reported `изменений 0` (no-ops against the current live state).
+
+**АРТЕФАКТ:** артефакта нет — this заход is a production data operation, not a build; there is no generated file to open. The verifiable product is the live database's own state, evidenced by the `tools/vidy_zadach.py` output quoted above (reproducible on demand: `ssh ivan@159.194.254.52 "cd /opt/spetsmat-bot && sudo -u spetsmat python3 tools/vidy_zadach.py 16A 16α 16ℵ"`).
+**РОД АРТЕФАКТА:** неприменимо — no file-product; see АРТЕФАКТ above.
+**КОММИТ:** нет хэша — nothing to commit. The зона (`tools/import_listka.py`, `tools/vidy_zadach.py`, `ops/`) is byte-identical to `main` (`git diff main -- <зона>` empty; `sha256sum` matches the already-deployed server copies exactly), so no code change was needed or made. `git status --porcelain` on the worktree is empty. `git_zona.py vlit-v-osnovnuyu zahod/razmetka-bazy` reports "Всё, что есть в `zahod/razmetka-bazy`, уже в `main` — сливать нечего" (own branch merged/no-op, per WARNING block — done as the заход's own last move, per contract).
+
+**GIT HYGIENE NUMBERS (WARNING block, §1–6):**
+- 1 · вне git: 0 (worktree `status --porcelain` empty)
+- 2 · влитие своей ветки: no-op — nothing on `zahod/razmetka-bazy` beyond `main` to merge (confirmed both by `vlit-v-osnovnuyu` and by `git log --oneline main..zahod/razmetka-bazy` being empty)
+- 3 · пост-проверка: `tools/vidy_zadach.py --db data/spetsmat.db 16A 16α 16ℵ` run from the MAIN folder (`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot`) → rc=0, green (sanity check only — no code changed, so nothing could have broken)
+- 4 · гашение: `git branch --no-merged main` fluctuates run to run (this wave runs 5 sibling заходы in parallel worktrees, each committing independently — observed showing `zahod/konduit-panel` at one check and `zahod/gejt-pravda` + `zahod/karkas-menyu-kabinet` moments later, as siblings committed live). None of it is `zahod/razmetka-bazy` — mine contributes 0 to this count throughout, confirmed at both the input snapshot (`## ГИГИЕНА ВХОДА`, count 0) and here. The sibling branches are not mine to touch or explain.
+- 5 · вывоз: `zahod/razmetka-bazy` has no upstream configured and zero commits ahead of `main` — nothing to push, by construction (no code changed).
+- 6 · Numbers above are machine-printed, not recalled from memory; commands and raw output are quoted throughout this ОТЧЁТ and in `## ГИГИЕНА ВХОДА`.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.

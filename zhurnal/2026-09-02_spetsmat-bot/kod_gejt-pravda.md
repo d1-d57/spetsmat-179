@@ -282,6 +282,44 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Cause found by reading, to be proven by command before any edit.**
+
+The gate's node walk (`tools/gejt_verstki.py:75-81`) keeps only LEAF elements —
+an element is dropped when any of its children carries non-empty text. The clipped
+node on the live page is `<span class="kto"><b>SURNAME</b> Name…</span>`
+(`veb/razdely/shkolniki.py:356`), and `text-overflow:ellipsis` lives on `.kto`
+(`veb/obshchee/karkas.py:1308`, `:1591`). `.kto` has a `<b>` child with text, so the
+filter throws `.kto` away; the `<b>` that survives is not the clipped box. The gate
+therefore never looks at the one element that is cut. Hypothesis 1 of the TZ.
+
+Steps, each committed on its own:
+
+1. **PROOF.** Run the gate as it stands; then run a probe in the same browser that
+   counts nodes with `scrollWidth > clientWidth` WITH and WITHOUT the leaf filter,
+   on the guest role, tab «школьникам». Two numbers that differ prove the cause.
+   Also check hypotheses 2 (stale measurement) and 3 (wrong role/tab) and say which
+   of the three is true.
+2. **FIX THE WALK.** Stop dropping a clipped ancestor: judge an element for CLIPPING
+   whenever it establishes its own clipping context (`overflow` not `visible`), leaf
+   or not. Keep the leaf rule for the WRAP check, where it earns its place.
+3. **ROLE COVERAGE.** The gate authenticates as `organizator` always (`kuka()`), so the
+   guest render — the one the owner photographed — is never measured. Add the guest
+   as a first-class role; every page is measured under every role it has.
+4. **NEW CHECK «вышло за контейнер».** For every element, compare its border box with
+   the padding box of its nearest clipping/card ancestor; report the ones that stick
+   out. This is what screenshot `13` shows (pills LEFT of the card) and what none of
+   the three existing checks can see, because no document h-scroll appears.
+5. **COVERAGE PRINTED.** «проверено X узлов из Y» per page, and zero nodes on a live
+   page is RED, not green.
+6. **STILL NOT CHECKED** — printed, extended with what the new walk still cannot see.
+7. **TWO STATES × FOUR PAGES = EIGHT RUNS**, all numbers printed.
+8. Verifier subagent (§3), then commit → merge → post-check → report.
+
+Assumption stated before the work, per §1: I judge the gate against what the owner
+sees in the browser, and I do NOT touch `veb/**` — the clipping itself is a
+neighbour's zone (G3, G5). My deliverable is a gate that goes RED on today's live
+page, not a green page.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

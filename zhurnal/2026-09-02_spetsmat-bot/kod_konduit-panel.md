@@ -369,3 +369,53 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
+
+### PLAN (written before any edit)
+
+Six edits, all inside `veb/razdely/konduit.py` (markup in `razdel`/`_listok`/`_obzor`, CSS in
+`stili`). `tests/grid/` is in the zone on paper but is the Telegram keyboard suite and has
+nothing to do with the кондуит — it is left untouched, named here so the silence is not read
+as an oversight.
+
+Facts established before planning, by reading the live база rather than by eye:
+
+* **Edit 5 is NOT a data problem.** `problems.label` in `data/spetsmat.db` is ALREADY
+  lowercase — sheet `16A` carries `1а 1б 2 … 13б`. The capitals the owner sees are painted by
+  `th{text-transform:uppercase}` in `veb/obshchee/karkas.py` (the shell, not my zone). So the
+  fix is one CSS line of my own — `#s-kond .kond th.zn{text-transform:none}` — and no data or
+  import tool is touched.
+* **The palette is closed** (`doc/DIZAJN-ZAKREPLENO.md §2`): `--accent --accent-soft --warm
+  --faint --chip --krasn --muted --text --rule --panel --bg`. Every colour below is one of
+  those; no new value is introduced.
+
+1. **Counter into its own column after the surname.** A real `<td class="sch">` between
+   `td.kto` and the first problem column, plus a matching `<th class="sch">` in the head of
+   both `_listok` and `_obzor`. The generic grid rule `#s-kond .kond tbody td+td` would
+   otherwise treat it as a cell of the решётка, so `td.sch` gets rules of higher specificity
+   (1 id + 2 classes beats 1 id + 1 class). Colour: `--accent` for `сдано`, `--faint` for
+   `/всего` — the accent already means "сдано" on this page, so nothing new is claimed. The
+   `закрыл всё` state, which used to be carried by making the counter accent, moves to an
+   `--accent-soft` pill so the two states stay distinguishable.
+   On the phone the name column is a fixed `7.2rem`/`6.2rem`, so the new column can be sticky
+   at exactly that offset and keep travelling with the surname.
+2. **«Внести задачи» big.** Same button form, larger: filled `--accent-soft`, 1.15rem, and it
+   moves onto the `<h1>` line itself instead of the line below it.
+3. **One top band.** `.kond-verh` becomes the panel: `Кондуит` · big «Внести задачи» ·
+   `8 класс`/`9 класс` · legend · `только мои`, one flex row, `align-items:center`; the
+   tabbar and the решётка follow immediately. `.kond-klassy` moves INSIDE `.kond-verh`, which
+   breaks the sibling selectors `#kl-9:checked~.kond-klassy …` — they are rewritten to
+   `#kl-9:checked~.kond-verh .kond-klassy …` in the same edit.
+4. **Legend by substance.** «звезда» → «сложная», and `.pm.zv` stops being `--faint`
+   (background, not a message) and becomes `--krasn` — the third colour the palette already
+   holds, so all three glyphs are now colour-coded like the owner asked.
+5. **Lowercase numbers** — the one CSS line above.
+6. **Centering ignores the glyph.** `th.zn .pm` becomes `display:inline-block;width:0;
+   overflow:visible`, so the glyph takes no part in the line box and the NUMBER alone is
+   centred; the glyph is still drawn, overflowing to the right of it.
+
+Verification: the layout gate (`tools/gejt_verstki.py`) judges the кондуит on its default tab
+only, and the criterion asks for three листка plus the гробарий. The gate is not my zone, so
+instead of editing it I drive its own `ZAMER` script over the four tabs from a scratch runner
+in `scratchpad/konduit-panel/`, i.e. the same measurement, four times.
+
+Committed part by part, one commit per edit group.

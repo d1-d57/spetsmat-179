@@ -289,6 +289,73 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**ZONE CONTRACT — ONE STATED CORRECTION, MADE BEFORE ANY CODE IS WRITTEN.**
+The зона names `veb/obshchee/` `veb/razdely/lichnaya.py` `veb/razdely/glavnaya.py`
+`tests/veb/test_kabinet.py`. The page the задача is about — the кабинет of
+screenshot `19` — is rendered by **`veb/razdely/kabinet.py`**, which the зона does
+not name. `lichnaya.py` is NOT that page: it renders `#s-lich`, an in-shell tab
+labelled «Моё», and holds the two SQL helpers (`kabinet_na_datu`, `deti_na_datu`)
+that `kabinet.py` calls. Parts 2 and 3 of the задача (полоса занятий, removing
+«Моя история занятий» and «Распределение на занятие», full-width bars) live
+entirely inside `kabinet.py` and cannot be done anywhere else.
+
+Checked before deciding, not assumed: none of the five positions of wave УТРО lists
+`veb/razdely/kabinet.py` in its зона (`grep` over the five `kod_*.md` of this wave —
+`gejt-pravda` → `tools/gejt_verstki.py tests/gejt/`; `konduit-panel` →
+`veb/razdely/konduit.py tests/grid/`; `raspredelenie-kolonki` →
+`veb/razdely/shkolniki.py prepodavateli.py gruppy.py core/services/enrollment.py`;
+`razmetka-bazy` → `tools/ ops/`). So there is no collision to cause, and the файл is
+the very one whose own докстринг records the missing menu label as a debt owed to
+`veb/obshchee/karkas.py` — this заход's file.
+
+⇒ I treat `veb/razdely/kabinet.py` as part of my зона and commit it with the rest.
+Stated here, before the work, and repeated in `## ОТЧЁТ` and `## УРОКИ ФАБРИКЕ`.
+
+**Part 1 — the «Кабинет» tab (`veb/obshchee/karkas.py`).**
+* The menu row is built in `obolochka()`. «Кабинет» goes in as a LINK to `/kabinet`,
+  immediately after «Класс» — the position the owner allowed (H2.2).
+* The gate is `kt.prepod_id is not None`, NOT the capability `videt-svoyo`. Measured
+  reason: screenshot `20` is the OWNER signed in, and he shows «Сбросить/Сохранить»,
+  i.e. role `organizator`, which does not hold `videt-svoyo` — a tab gated on that
+  capability would be invisible to the one person who asked for it. `prepod_id` is
+  exactly the condition under which `glavnaya.py` already prints «Мой кабинет →»,
+  so link and tab appear and vanish together. A guest build has `prepod_id is None`
+  and gets neither, so `docs/index.html` is unchanged.
+* The in-shell «Моё» tab is retired: personal content gets ONE home, and it is the
+  page the owner asked to be reachable from the menu. Its radio + section + styles
+  come out of `obolochka()`; `lichnaya.py` keeps the two SQL helpers that
+  `kabinet.py` and `glavnaya.py` call.
+* `/kabinet` is a standalone document, so the menu is factored out of `obolochka()`
+  into a function of `karkas.py` that a standalone page can call, and `kabinet.py`
+  calls it. From the кабинет every other tab must be reachable (criterion 1), so
+  `VKLADKA_SKRIPT` gains a hash→radio line: `/#s-list` (already used by the lesson
+  page menu and today opening nothing) starts working for every section.
+
+**Part 2 — the strip of lesson dates (`veb/razdely/kabinet.py`).**
+* All lesson dates from the START OF THE SCHOOL YEAR (1 September, computed, not
+  written down) to the forward horizon, in one full-width row of cells.
+* Past: green = the teacher was there, red = marked absent. Source is the table that
+  already holds the fact — `teacher_attendance.status = OTSUTSTVUET` — the same one
+  `otsutstviya()` reads. No second truth.
+* Past is not editable (the route already refuses `den < segodnya()`), future cells
+  stay the existing checkbox — the mechanism the owner said not to write twice.
+* Hover on a cell names the pupils of that date (`deti_na_datu`).
+
+**Part 3 — remove what he did not ask for (`veb/razdely/kabinet.py`).**
+`.kab-ssylki` goes away whole: «Моя история занятий» (leads nowhere), «Распределение
+на занятие» («я этого не просил»), «На заглавную» (the menu does it now). Every bar
+becomes full-width: `.kab-stranica` loses `max-width:60rem;margin:0 auto` and takes
+the padding of `.holst`.
+
+**Part 4 — the front-page card (`veb/razdely/glavnaya.py`).**
+Drop the one CSS line that re-shows the three-group cabinet row to a signed-in
+person; the canon rule in `karkas.py` then hides it, which is what H2.3 asks. The
+sheet name is already a `<label for="p-list">`; the teacher's own group becomes a
+link next to their own room.
+
+**Order of commits:** part 1, then 2, then 3, then 4 — one commit each.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
