@@ -747,11 +747,13 @@ def stili(kt) -> str:
    Значок стоит НАДСТРОЧНО и вплотную к номеру: колонка шириной 3em, а номер
    бывает трёхсимвольный (`13б`, `-1в`), и значок на общей строке отодвинул бы
    номер из середины клетки. Кегль крупнее номера — иначе `◦` при .78rem
-   неотличим от точки. Ни одного нового цвета: `--accent` уже несёт «твоё, важное»
+   неотличим от точки. 1.05rem против .78rem у номера — размер, снятый со снимка
+   живой шапки в 1440×900, а не выбранный на глаз: при .9rem кружок и звезда
+   различались там только цветом. Ни одного нового цвета: `--accent` уже несёт «твоё, важное»
    по всему сайту, `--warm` — «внимание» (им же покрашено снятое), `--faint` —
    «фон, а не сообщение». Разные ЦВЕТА, а не только разные символы: четыре десятка
    значков в строке различаются полосой цвета раньше, чем формой. */
-#s-kond .kond th.zn .pm{{font-style:normal;font-size:.9rem;line-height:1;
+#s-kond .kond th.zn .pm{{font-style:normal;font-size:1.05rem;line-height:1;
   vertical-align:super;margin-left:.05em}}
 #s-kond .pm.ob{{color:var(--accent)}}
 #s-kond .pm.pi{{color:var(--warm);font-weight:700}}
@@ -760,7 +762,7 @@ def stili(kt) -> str:
    вкладок, то есть до первой решётки и после выбора класса. */
 #s-kond .kond-slovar{{margin:.1rem 0 .7rem;font-family:var(--sans);font-size:.85rem;
   color:var(--muted)}}
-#s-kond .kond-slovar .pm{{font-style:normal;font-size:1rem;line-height:1}}
+#s-kond .kond-slovar .pm{{font-style:normal;font-size:1.15rem;line-height:1}}
 #s-kond .kond-slovar .iz{{color:var(--faint);font-size:.85rem}}
 #s-kond .kond-lich i .pm{{font-style:normal;vertical-align:super;font-size:.75rem;
   line-height:1}}
