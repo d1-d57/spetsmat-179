@@ -45,15 +45,45 @@ from veb.razdely import ochered                                      # noqa: E40
 PREPODAVATELEJ = 18
 
 
+def _nachalo_goda() -> str:
+    """Первое сентября ТЕКУЩЕГО учебного года — тем же правилом, что и страница приёма.
+
+    Дата, вписанная числом, делает листок прошлогодним в сентябре следующего года, и
+    решётка кондуита пустеет молча: `veb/priyom.py::_listki_goda` отбирает по ней.
+    """
+    from datetime import date
+    s = date.today()
+    return "%d-09-01" % (s.year if s.month >= 9 else s.year - 1)
+
+
 @pytest.fixture
 def stend(tmp_path):
     """Живой сервер на временной базе: один листок, задачи, школьники, преподаватель."""
     db_path = tmp_path / "spetsmat.db"
     apply_migrations(db_path, config.MIGRATIONS_DIR)
     c = connect(db_path)
+    # 🔴 ЧЕТЫРЕ КОЛОНКИ, КОТОРЫХ НЕТ В `migrations/` И КОТОРЫЕ ЕСТЬ В ЖИВОЙ БАЗЕ.
+    # `teachers` выходит из миграций как `id, tg_id, name, aka, is_owner`; `aktiven`,
+    # `gruppa`, `kabinet` и `students.gruppa` заводит код на ходу
+    # (`veb/server.py::_obespechit_*`). База без них — не уменьшенная живая, а ДРУГАЯ,
+    # и страница `/` падает на ней `no such column: gruppa`. Тот же приём, что в
+    # `tests/veb/test_kabinet.py`: он там записан вместе с этой же причиной.
+    c.execute("alter table teachers add column aktiven integer not null default 1")
+    c.execute("alter table teachers add column gruppa text")
+    c.execute("alter table teachers add column kabinet text")
+    c.execute("alter table students add column gruppa text")
+    # 🔴 КОДЫ ГРУПП — ТЕ, КОТОРЫЕ РИСУЕТ КАРКАС, А НЕ ТЕ, КОТОРЫЕ СЕЕТ МИГРАЦИЯ.
+    # `migrations/005` кладёт `ИЯ · ДМ · НС`, а `razdel_raspredeleniya` держит вкладки
+    # `В · Д · Н` и спрашивает у `kt.gruppy` каждую из них по имени. На живой базе
+    # коды переименованы; база без них падает `KeyError: 'В'` на сборке страницы `/`,
+    # то есть ещё до всего, что этот файл собирается проверять.
+    for kod, starshij in (("В", "Ваня Яковлев"), ("Д", "Даня Макаров"),
+                          ("Н", "Наталия Стрелкова")):
+        c.execute("insert or ignore into gruppy (kod, starshij) values (?, ?)",
+                  (kod, starshij))
     listok = c.execute(
-        "insert into sheets (number, title, issued_at, ord) values ('1', 'листок 1', "
-        "?, 1)", (config.NACHALO_GODA if hasattr(config, "NACHALO_GODA") else "2026-09-01",),
+        "insert into sheets (number, title, issued_at, ord) "
+        "values ('1', 'листок 1', ?, 1)", (_nachalo_goda(),),
     ).lastrowid
     zadachi = [
         c.execute("insert into problems (sheet_id, label, kind, ord) "
@@ -61,8 +91,8 @@ def stend(tmp_path):
         for i in range(1, PREPODAVATELEJ + 1)
     ]
     prepod = c.execute(
-        "insert into teachers (name, aka, is_owner) values ('Пирогов', 'pir', 0)"
-    ).lastrowid
+        "insert into teachers (name, aka, is_owner, aktiven, gruppa, kabinet) "
+        "values ('Пирогов', 'pir', 0, 1, 'В', '203')").lastrowid
     deti = [
         c.execute("insert into students (surname, name, class, status, first_sheet_id) "
                   "values (?, 'Иван', '9a', 'active', ?)", (f"Асеев-{i}", listok)).lastrowid
@@ -175,7 +205,11 @@ def test_ochered_obyavlena_ranshe_konduita(stend):
     """
     _, telo, _ = _get(stend["url"] + "/", _kuka(stend["prepod"]))
     stranica = telo.decode("utf-8")
-    assert stranica.index("window.OCHERED") < stranica.index("OCHERED.podpisatsya")
+    # Ищем ОБЪЯВЛЕНИЕ и ВЫЗОВ, а не имена: имя `OCHERED.podpisatsya` стоит ещё и в
+    # шапке самого транспорта, где перечислен его интерфейс, — то есть РАНЬШЕ
+    # объявления, и проверка по голому имени была бы красной всегда.
+    assert (stranica.index("window.OCHERED = (function")
+            < stranica.index("OCHERED.podpisatsya(function"))
 
 
 def test_tap_konduita_idyot_cherez_ochered_a_ne_svoim_fetch(stend):
