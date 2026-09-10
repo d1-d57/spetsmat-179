@@ -88,32 +88,55 @@ def _zamer(p):
 # ── 1. the owner's defect: a clipped surname, guest role ───────────────────────
 
 def test_obrezka_familii_u_gostya(server, brauzer):
-    """«Тухватулин-Йалчын …» on `/raspredelenie`, tab «школьникам», WITHOUT a
-    password.  This is the exact screen of the owner's screenshot `11`, and the
-    exact number the gate reported as zero."""
+    """The cause of «обрезанных у гостя 48 → 0»: the walk kept LEAF elements only,
+    and the box that clips (`.kto`) always wraps `<b>SURNAME</b>`, so not one of
+    them was ever looked at.  Measured live on 2026-09-10, guest, tab «школьникам»:
+    113 `.kto` on the page, 0 of them leaves, 1 of them clipped — and the gate said
+    zero.
+
+    🔴 THE DAMAGE IS INJECTED, NOT BORROWED FROM THE PAGE.  The first version of
+    this test asserted that the live page still clips «Тухватулин-Йалчын …», and it
+    went red the same afternoon — a neighbour widened the column and the defect was
+    gone.  A test that needs the page to stay broken is a test that punishes the
+    fix; what must be pinned is the GATE's ability to see a clipped non-leaf, not
+    the presence of today's bug."""
     ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
     try:
-        s_defektom = _zamer(p)
-        assert s_defektom["obrezka"], (
-            "гейт не видит обрезки там, где она есть на живой странице у гостя — "
-            "это ровно то ложно-зелёное, ради которого написан этот тест")
+        do = _zamer(p)
 
-        # 🔴 THE CLIPPED BOX IS NOT A LEAF, and that was the whole cause.  `.kto`
-        # wraps `<b>SURNAME</b>`, so a leaf-only walk threw away all of them.
-        clip = [d for d in s_defektom["obrezka"] if ".kto" in d["put"]]
-        assert clip, ("обрезка найдена, но не на `.kto` — а обрезает именно она "
-                      "(`veb/obshchee/karkas.py:1308`)")
+        # The whole cause, stated as a measurement rather than as an argument.
+        pro_kto = p.evaluate("""() => {
+            const k = [...document.querySelectorAll('#v-shk .kto')].filter(e => {
+                const r = e.getBoundingClientRect(); return r.width > 1; });
+            const list = e => ![...e.children].some(
+                c => (c.textContent || '').trim().length > 0);
+            return {vsego: k.length, listyev: k.filter(list).length};
+        }""")
+        assert pro_kto["vsego"] > 50, "на странице нет колонки имён — мерить нечего"
+        assert pro_kto["listyev"] == 0, (
+            "разметка изменилась: `.kto` стал листом. Тогда причина ложно-зелёного "
+            "описана неверно и этот тест больше ничего не стережёт")
 
-        # remove the clipping and NOTHING ELSE: the same page, one property.
-        p.evaluate("""() => document.querySelectorAll('.kto').forEach(e => {
-            e.style.overflow = 'visible'; e.style.textOverflow = 'clip';
-            e.style.whiteSpace = 'normal'; })""")
-        p.wait_for_timeout(150)
-        bez_defekta = _zamer(p)
-        ostalos = [d for d in bez_defekta["obrezka"] if ".kto" in d["put"]]
-        assert not ostalos, (
-            f"обрезку сняли, а гейт всё ещё её показывает: {ostalos[:2]} — "
-            "гейт, который не умеет зеленеть, так же бесполезен, как молчащий")
+        p.evaluate("""() => document.querySelectorAll('#v-shk .kto').forEach(e => {
+            e.style.maxWidth = '60px'; e.style.overflow = 'hidden';
+            e.style.whiteSpace = 'nowrap'; e.style.textOverflow = 'ellipsis'; })""")
+        p.wait_for_timeout(200)
+        posle = _zamer(p)
+        clip = [d for d in posle["obrezka"] if ".kto" in d["put"]]
+        assert len(clip) > 10, (
+            f"колонка имён раздавлена до 60px, а гейт нашёл {len(clip)} обрезок на "
+            "`.kto` — это ровно то ложно-зелёное, ради которого написан этот тест: "
+            "обрезающий узел не лист, и обход, оставляющий только листья, его теряет")
+
+        p.evaluate("""() => document.querySelectorAll('#v-shk .kto').forEach(e => {
+            e.style.maxWidth = ''; e.style.overflow = '';
+            e.style.whiteSpace = ''; e.style.textOverflow = ''; })""")
+        p.wait_for_timeout(200)
+        chisto = _zamer(p)
+        assert len(chisto["obrezka"]) == len(do["obrezka"]), (
+            "обрезку сняли, а гейт всё ещё её показывает: "
+            f"{len(do['obrezka'])} → {len(chisto['obrezka'])}. Гейт, который не "
+            "умеет зеленеть, так же бесполезен, как молчащий")
     finally:
         ctx.close()
 
@@ -271,10 +294,12 @@ def test_uhod_vlevo_iz_klipayushchey_kartochki(server, brauzer):
     do, posle, chisto = _para(
         brauzer, server, "организатор", "/raspredelenie", "t-Д",
         "()=>document.querySelectorAll('.kol-pr .para').forEach(p=>{"
-        "p.style.overflow='hidden';[...p.children].forEach(c=>{"
+        "p.style.overflow='hidden';"
+        "p.querySelectorAll('*').forEach(c=>{"
         "c.style.position='relative';c.style.left='-260px';});})",
         "()=>document.querySelectorAll('.kol-pr .para').forEach(p=>{"
-        "p.style.overflow='';[...p.children].forEach(c=>{"
+        "p.style.overflow='';"
+        "p.querySelectorAll('*').forEach(c=>{"
         "c.style.position='';c.style.left='';});})")
     assert posle["vyshli"], "содержимое ушло за левый край карточки, а гейт зелёный"
     assert any(d["tip"] == "срезано слева" for d in posle["vyshli"])
