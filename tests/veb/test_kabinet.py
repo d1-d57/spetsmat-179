@@ -158,7 +158,60 @@ def test_a_named_teacher_sees_his_own_lesson_room_and_children(running_server):
     assert "Фефелов" in telo, "свои школьники"
     assert "Агаркова" not in telo, "чужие школьники на этой странице появиться не могут"
     assert "203" in telo, "свой кабинет на эту дату"
-    assert "/istoria" in telo, "ссылка на свою историю"
+
+
+def test_the_page_has_the_top_menu_and_none_of_the_three_removed_links(running_server):
+    """Owner 10.09 (`TZ-DOBOR-10-09.md` H1.1, H1.4, H1.5, H1.7).
+
+    «Нет верхнего меню, из кабинета некуда уйти» — теперь есть, и это тот же
+    `karkas.menyu_ssylkami`, что стоит на остальных страницах. Три кнопки, которые
+    здесь стояли, названы поимённо: «Моя история занятий» вела в пустое место и не
+    нужна вовсе, «Распределение на занятие» он не просил, «На заглавную» делает меню.
+    """
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    assert '<nav class="menu">' in telo, "верхнее меню"
+    assert 'href="/kabinet"' in telo and "Кабинет" in telo, "своя вкладка отмечена"
+    for chuzhoe in ('href="/"', 'href="/raspredelenie"', 'href="/#s-list"'):
+        assert chuzhoe in telo, f"уйти можно на {chuzhoe}"
+    assert "Моя история занятий" not in telo
+    assert "Распределение на занятие" not in telo
+    assert "На заглавную" not in telo
+
+
+def test_the_strip_covers_the_school_year_and_colours_only_the_past(running_server):
+    """Owner 10.09 (H1.6): даты с начала года, зелёная — был, красная — не был.
+
+    Границу «прошлое/будущее» проверяем ту же, на которой отказывает дверь записи:
+    прошедшая клетка не несёт `data-den` вовсе, то есть отметить её нечем даже
+    подделанным запросом со страницы.
+    """
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    proshlo = proshedshie_zanyatiya(segodnya())
+    kletok = telo.count('<span class="kab-den ') + telo.count('<label class="kab-den ')
+    assert kletok == len(proshlo) + 8, (
+        f"клеток {kletok}, а занятий с начала года {len(proshlo)} + 8 вперёд")
+    zelyonyh = telo.count('kab-den byl"')
+    krasnyh = telo.count('kab-den ne-byl"')
+    assert zelyonyh + krasnyh == len(proshlo), "цветом красится ровно прошлое"
+    assert telo.count('kab-den vperyod') == 8, "будущие ни зелёные, ни красные"
+    for den in proshlo:
+        assert f'data-den="{den}"' not in telo, f"прошедшее {den} не правится"
+
+
+def test_the_strip_starts_at_the_first_of_september(running_server):
+    """Начало считается от даты, а не вписано: 1 сентября того учебного года."""
+    from veb.razdely.kabinet import nachalo_uchebnogo_goda
+
+    assert nachalo_uchebnogo_goda("2026-09-10") == "2026-09-01"
+    assert nachalo_uchebnogo_goda("2026-09-01") == "2026-09-01"
+    assert nachalo_uchebnogo_goda("2027-02-03") == "2026-09-01"
+    assert nachalo_uchebnogo_goda("2026-08-31") == "2025-09-01"
 
 
 def test_the_grid_is_the_next_lessons_and_carries_no_written_down_date(running_server):

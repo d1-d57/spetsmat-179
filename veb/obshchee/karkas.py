@@ -1257,12 +1257,20 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
 :root{{--bg:#fbfaf6;--panel:#fffdf8;--text:#211f1b;--muted:#726c60;--rule:#e7e2d6;
   --accent:#2f6e8e;--accent-soft:#e8f0f4;--warm:#c9743a;--faint:#b7ae9c;--chip:#e7e0d2;
   --krasn:#b3402a;--krasn-fon:rgba(179,64,42,.08);
+  /* 🔴 ЗЕЛЁНЫЙ ЗАВЕДЁН ЗДЕСЬ, РЯДОМ С КРАСНЫМ, И БОЛЬШЕ НИГДЕ. Полоса занятий в
+     кабинете красит «был» и «не был», и второго цвета для «был» в палитре не
+     было вовсе. `doc/DIZAJN-ZAKREPLENO.md` §2 запрещает не новый цвет, а ВТОРОЕ
+     МЕСТО, где он записан: страница `/kabinet` берёт таблицу стилей отсюда
+     целиком (`list_odin._obshchij_stil`), так что запись остаётся одна. Пара
+     построена по образцу красной: тон и та же полупрозрачная подложка. */
+  --zel:#3d7a4e;--zel-fon:rgba(61,122,78,.10);
   --sans:"Source Sans 3",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
   --serif:"Source Serif 4",Georgia,"Times New Roman",serif}}
 @media(prefers-color-scheme:dark){{:root:not([data-theme=light]){{--bg:#1b1e22;--panel:#23272c;
   --text:#dcd8d0;--muted:#9a948a;--rule:#343a41;--accent:#7fb6d2;--accent-soft:#22333d;
   --warm:#e0946a;--faint:#6b6f75;--chip:#333a41;
-  --krasn:#e8836a;--krasn-fon:rgba(232,131,106,.12)}}}}
+  --krasn:#e8836a;--krasn-fon:rgba(232,131,106,.12);
+  --zel:#7cc08e;--zel-fon:rgba(124,192,142,.14)}}}}
 *{{box-sizing:border-box}}
 body{{margin:0;background:var(--bg);color:var(--text);font-family:var(--serif);font-size:20px}}
 /* Меню — строка сверху: три пункта помещаются, ничего выезжать не должно (§1). */

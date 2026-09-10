@@ -60,7 +60,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
@@ -80,6 +80,41 @@ from veb.razdely.list_odin import _obshchij_stil
 #: школьник или преподаватель будет отсутствовать в течение месяца»* — and short enough
 #: that the grid stays one screen a person reads at a glance rather than scrolls.
 GLUBINA_VPERYOD = 8
+
+#: Месяц, с которого считается учебный год. Полоса в кабинете показывает занятия «с
+#: начала года» (владелец 10.09, H1.6), и начало года — не 1 января: 1 сентября того
+#: года, в котором мы сейчас, если сентябрь уже был, и предыдущего, если ещё нет. Число
+#: считается от сегодняшней даты, а не вписывается: вписанный год протухает молча —
+#: ровно тем способом, каким `2026-09-05` уже звался здесь четвергом, будучи субботой.
+NACHALO_GODA_MESYAC = 9
+
+
+def nachalo_uchebnogo_goda(den: str) -> str:
+    """`2026-09-10` → `2026-09-01`; `2027-02-03` → `2026-09-01`."""
+    d = date.fromisoformat(den)
+    god = d.year if d.month >= NACHALO_GODA_MESYAC else d.year - 1
+    return date(god, NACHALO_GODA_MESYAC, 1).isoformat()
+
+
+def proshedshie_zanyatiya(den: str) -> list:
+    """Дни занятий с начала учебного года ДО `den`, не включая его самого.
+
+    🔴 КАЛЕНДАРЬ, А НЕ ТАБЛИЦА `sessions`, И ЭТО РАЗНЫЕ ВОПРОСЫ. `sessions` заводится
+    ЛЕНИВО — строка появляется, когда кто-то первым открыл экран этого дня или
+    поставил отметку (`veb/server.py::_post_zanyatie`, и точно так же дверь ниже в
+    этом файле). Занятие, на котором никто ничего не отметил, в таблице не лежит, и
+    полоса, построенная по ней, молча теряла бы дни. Какие дни недели — занятия,
+    знает ровно одно место, `sostav_na_den.SLOTY_ZANYATIJ`, и `slot_of` его читает.
+    """
+    d = date.fromisoformat(nachalo_uchebnogo_goda(den))
+    konec = date.fromisoformat(den)
+    dni = []
+    while d < konec:
+        if slot_of(d.isoformat()) is not None:
+            dni.append(d.isoformat())
+        d += timedelta(days=1)
+    return dni
+
 
 #: Which of the two lesson slots a Monday is, so the row can say «пн» / «чт» without a
 #: second calendar of its own.  `sostav_na_den.SLOTY_ZANYATIJ` maps the ISO weekday to the
@@ -134,8 +169,9 @@ def _vremya(den: str) -> str:
 def otsutstviya(c: sqlite3.Connection, teacher_id: int, dni) -> set:
     """Which of these dates this teacher is already marked absent on.
 
-    One query for the whole grid rather than one per date: the grid is eight rows today
-    and the query is the same shape whatever `GLUBINA_VPERYOD` becomes.
+    One query for the whole strip rather than one per date: the strip is the lesson days
+    of the school year so far plus `GLUBINA_VPERYOD` forward, and by May that is about
+    seventy dates — seventy queries where one has the same shape.
     """
     if not dni:
         return set()
@@ -153,45 +189,59 @@ def otsutstviya(c: sqlite3.Connection, teacher_id: int, dni) -> set:
 
 
 SVOI_STILI = """
-/* Кабинет: одна колонка в меру ширины читаемой строки, крупно — эту страницу
-   читают стоя, посреди занятия, с телефона в руке. Все цвета — переменные
-   каркаса, ни одного своего. */
-.kab-stranica{max-width:60rem;margin:0 auto;padding:1.6rem 2rem 4rem}
+/* 🔴 ВСЁ НА ВЕСЬ ЭКРАН, И ЭТО СТАРАЯ, МНОГО РАЗ НАЗВАННАЯ ПРЕТЕНЗИЯ ВЛАДЕЛЬЦА
+   (10.09, H1.8): «я давным-давно говорил, что так нельзя делать. У нас все
+   полоски делаются на весь экран». Здесь стояло `max-width:60rem;margin:0 auto`
+   — узкая колонка по центру. Поля берутся у `.holst` каркаса, то есть у той же
+   меры, которой отбита каждая другая страница сайта. */
+.kab-stranica{padding:1.3rem 3rem 4rem}
 .kab-stranica h1{margin:0 0 .2rem}
 .kab-kto{font-family:var(--sans);color:var(--muted);margin:0 0 2rem;font-size:1.05rem}
+.kab-kto a{color:var(--accent);text-decoration:none}
+.kab-kto a:hover{text-decoration:underline}
 .kab-blok{background:var(--panel);border:1px solid var(--rule);border-radius:16px;
   padding:1.4rem 1.7rem;margin:0 0 1.6rem}
 .kab-kogda{font-family:var(--sans);font-size:1.5rem;font-weight:600;margin:.2rem 0 0}
 .kab-listok{font-family:var(--sans);font-size:2rem;font-weight:600;margin:.5rem 0 0}
+.kab-listok a{color:inherit;text-decoration:none;border-bottom:2px solid var(--rule)}
+.kab-listok a:hover{border-bottom-color:var(--accent);color:var(--accent)}
 .kab-gde{font-family:var(--sans);font-size:1.25rem;margin:.7rem 0 0;color:var(--muted)}
 .kab-gde .kab{font-size:1.5rem}
 .kab-deti{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));
   gap:.1rem 2rem;margin:1rem 0 0}
 .kab-deti div{padding:.35rem 0;border-bottom:1px solid var(--rule);font-size:1.2rem}
-.kab-ssylki{display:flex;gap:.7rem;flex-wrap:wrap;margin:0 0 2rem}
-.kab-ssylki a{font-family:var(--sans);font-weight:600;font-size:1.05rem;
-  color:var(--accent);text-decoration:none;padding:.5em 1.1em;border-radius:10px;
-  background:var(--accent-soft)}
-.kab-ssylki a:hover{text-decoration:underline}
-/* Сетка будущих занятий: строка на занятие, крестик слева, дата справа от него.
-   Отмеченная строка гасится и подписывается словом — «отсутствует» это то самое
-   слово, которым то же состояние названо на распределении. */
-.kab-setka{margin:.8rem 0 0}
-.kab-ryad{display:flex;align-items:center;gap:1rem;padding:.7rem .2rem;
-  border-bottom:1px solid var(--rule);font-family:var(--sans);font-size:1.2rem}
-.kab-ryad input{width:1.4rem;height:1.4rem;flex:0 0 auto;cursor:pointer;
-  accent-color:var(--krasn)}
-.kab-ryad .kab-data{flex:1 1 auto;min-width:0}
-.kab-ryad .kab-chas{color:var(--muted);font-size:1rem;flex:0 0 auto}
-.kab-ryad .kab-slovo{color:var(--krasn);font-weight:600;flex:0 0 auto;
-  font-size:1rem;visibility:hidden}
-.kab-ryad.netu .kab-data{color:var(--muted);text-decoration:line-through}
-.kab-ryad.netu{background:var(--krasn-fon);border-radius:8px}
-.kab-ryad.netu .kab-slovo{visibility:visible}
+/* 🔴 ПОЛОСА ЗАНЯТИЙ — ОДНА СТРОКА КНОПОК С ДАТАМИ С НАЧАЛА ГОДА, НА ВЕСЬ ЭКРАН.
+   Владелец 10.09 (H1.6), дословно: «строка кнопок с датами занятий с начала года
+   … зелёный — я был, красный — не был … на будущее можно поставить, что меня не
+   будет … наведение показывает, какие были школьники».
+   Клетки переносятся на вторую строку, когда их станет больше, чем помещается:
+   к маю их около семидесяти, и горизонтальная прокрутка — то, что гейт вёрстки
+   считает красным. */
+.kab-polosa{display:flex;flex-wrap:wrap;gap:.4rem;margin:.9rem 0 0}
+.kab-den{font-family:var(--sans);font-size:1.05rem;font-weight:600;
+  padding:.5em .9em;border-radius:10px;border:1px solid var(--rule);
+  background:var(--panel);color:var(--muted);white-space:nowrap;line-height:1}
+/* Прошлое: два состояния и ни одного третьего. Правится оно не здесь — в
+   кабинете прошлое вообще не правится (владелец: «прошлое никто не меняет»), и
+   дверь `/api/kabinet/otsutstvie` отказывает на дате раньше сегодняшней. */
+.kab-den.byl{color:var(--zel);border-color:var(--zel);background:var(--zel-fon)}
+.kab-den.ne-byl{color:var(--krasn);border-color:var(--krasn);background:var(--krasn-fon)}
+/* Будущее: клетка сама себе выключатель. Флажок спрятан, а не убран — им
+   работают клавиатура и `:focus-visible`, и он же несёт дату для двери. */
+.kab-den.vperyod{cursor:pointer;color:var(--text)}
+.kab-den.vperyod:hover{border-color:var(--accent);color:var(--accent)}
+.kab-den input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.kab-den input:focus-visible+.kab-den-tekst{outline:2px solid var(--accent);
+  outline-offset:3px;border-radius:3px}
+.kab-den.vperyod.netu{color:var(--krasn);border-color:var(--krasn);
+  background:var(--krasn-fon);text-decoration:line-through}
+.kab-polosa-kak{font-family:var(--sans);font-size:1rem;color:var(--muted);
+  margin:.6rem 0 0}
 .kab-beda{color:var(--krasn);font-family:var(--sans);font-size:1rem;margin:.8rem 0 0;
   min-height:1.2em}
 @media(max-width:640px){.kab-stranica{padding:1.1rem 1rem 3rem}
-  .kab-listok{font-size:1.6rem}}
+  .kab-listok{font-size:1.6rem}
+  .kab-den{font-size:.95rem;padding:.45em .7em}}
 """
 
 #: The tick writes at once, exactly as the lesson screen does — the owner's ruling of
@@ -201,9 +251,9 @@ SVOI_STILI = """
 #: would otherwise read as «сохранено».
 SKRIPT = """
 <script>
-document.querySelectorAll('.kab-ryad input').forEach(function(fl){
+document.querySelectorAll('.kab-den input').forEach(function(fl){
   fl.addEventListener('change', function(){
-    var ryad = fl.closest('.kab-ryad');
+    var ryad = fl.closest('.kab-den');
     var beda = document.getElementById('kab-beda');
     beda.textContent = '';
     ryad.classList.toggle('netu', fl.checked);
@@ -240,11 +290,16 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                                     '<p class="net">Такого преподавателя нет в базе.</p>'
                                     '</div>')
 
+    # 🔴 ОТМЕТКИ СПРАШИВАЮТСЯ СРАЗУ ЗА ВСЮ ПОЛОСУ, ОДНИМ ЗАПРОСОМ. Раньше их брали
+    # только на восемь дней вперёд, потому что и рисовали только их; полоса красит
+    # ещё и прошлое, и запрос на восемь дней покрасил бы каждый прошедший день
+    # зелёным — то есть соврал бы ровно там, где владелец смотрит.
     dni = blizhajshie_zanyatiya(segodnya(), GLUBINA_VPERYOD)
-    net_na = otsutstviya(c, teacher_id, dni)
+    proshlo = proshedshie_zanyatiya(segodnya())
+    net_na = otsutstviya(c, teacher_id, proshlo + dni)
     blizhajshee = dni[0] if dni else None
 
-    # ── СЛЕДУЮЩЕЕ ЗАНЯТИЕ. Оно же первое в сетке ниже: два ответа об одном дне
+    # ── СЛЕДУЮЩЕЕ ЗАНЯТИЕ. Оно же первая будущая клетка полосы ниже: два ответа об одном дне
     # берутся из одного списка, а не из двух вычислений, которые однажды разойдутся.
     if blizhajshee is None:
         blok_blizh = ('<div class="kab-blok"><p class="net">'
@@ -254,13 +309,17 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
         kab = kabinet_na_datu(c, teacher_id, blizhajshee)
         deti = deti_na_datu(c, teacher_id, blizhajshee)
         nomer, tema, _versii = tekushchij()
-        listok = ("%s · %s" % (e(nomer), e(tema))) if tema else "листок пока не назван"
+        # 🔴 НАЗВАНИЕ ЛИСТКА — ССЫЛКА (H1.2: «нажать нельзя»). Ведёт на вкладку
+        # «Листки» заглавной, и открывает её `karkas.VKLADKA_SKRIPT`, который для
+        # того и научен переводить якорь `#s-list` в отметку радиокнопки.
+        listok = (('%s · <a href="/#s-list">%s</a>' % (e(nomer), e(tema))) if tema
+                  else "листок пока не назван")
         kab_html = (f'<span class="kab">{e(kab)}</span>' if kab
                     else '<span class="net">кабинет не назначен</span>')
         if blizhajshee in net_na:
             # Он сам сказал, что его не будет: список школьников на этот день — не
             # то, что ему нужно видеть, и показывать его значило бы спорить с его же
-            # отметкой. Ниже, в сетке, эта строка перечёркнута тем же словом.
+            # отметкой. Ниже, в полосе, эта клетка перечёркнута и покрашена красным.
             deti_html = ('<p class="kab-gde">вы отметили, что вас не будет '
                          'на этом занятии</p>')
         elif deti:
@@ -279,35 +338,58 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
             f'<p class="kab-gde">кабинет {kab_html}</p>'
             f'{deti_html}</div>')
 
-    # ── СЕТКА БУДУЩИХ ЗАНЯТИЙ. Крестик в клетку — «меня не будет».
-    ryady = []
-    for den in dni:
+    # ── ПОЛОСА ЗАНЯТИЙ С НАЧАЛА УЧЕБНОГО ГОДА. Одна строка на весь экран вместо
+    # трёх кнопок, которые здесь стояли: «Моя история занятий» вела в пустое место,
+    # «Распределение на занятие» владелец не просил вовсе («я не понимаю, что это»),
+    # а «На заглавную» делает теперь верхнее меню.
+    #
+    # 🔴 ДВА СПИСКА ДАТ, И ГРАНИЦА МЕЖДУ НИМИ — ТА ЖЕ, ЧТО У ДВЕРИ ЗАПИСИ. Прошлое
+    # это `den < segodnya()` — ровно то условие, на котором `otmetit_otsutstvie`
+    # отказывает; будущее (включая СЕГОДНЯШНЕЕ занятие) остаётся правимым, потому
+    # что сказать утром «сегодня меня не будет» — обычный случай. Одна граница на
+    # экран и дверь, а не две, которые однажды разойдутся.
+    kletki = []
+    for den in proshlo + dni:
         wd = date.fromisoformat(den).isoweekday()
+        d = date.fromisoformat(den)
+        podpis = "%s %02d.%02d" % (KOROTKO_DNYA.get(wd, ""), d.day, d.month)
+        # Наведение называет школьников ТОГО дня: `deti_na_datu` держит интервал
+        # `enrollment`, поэтому на прошедшую дату отвечает состав, который был
+        # тогда, а не сегодняшний.
+        kto_byl = deti_na_datu(c, teacher_id, den)
+        imena = ", ".join("%s %s" % (r["surname"], r["name"]) for r in kto_byl)
+        vsplyv = "%s · %s" % (po_russki(den), imena if imena else "школьников нет")
         netu = den in net_na
-        ryady.append(
-            f'<label class="kab-ryad{" netu" if netu else ""}">'
-            f'<input type="checkbox" data-den="{e(den)}"{" checked" if netu else ""}>'
-            f'<span class="kab-data">{e(KOROTKO_DNYA.get(wd, ""))} '
-            f'{e(po_russki(den))}</span>'
-            f'<span class="kab-chas">{_vremya(den)}</span>'
-            f'<span class="kab-slovo">отсутствует</span></label>')
+        if den < segodnya():
+            # 🔴 «БЫЛ» — ЭТО ОТСУТСТВИЕ ОТМЕТКИ ОБ ОТСУТСТВИИ, И ДРУГОГО ИСТОЧНИКА
+            # НЕТ. Факт «этого человека не было» живёт в `teacher_attendance` и
+            # больше нигде: его пишет и организатор на распределении, и сам
+            # преподаватель этой страницей. Второй таблицы «кто присутствовал» в
+            # базе не заводится — она была бы вторым ответом на тот же вопрос.
+            kletki.append('<span class="kab-den %s" title="%s">%s</span>'
+                          % ("ne-byl" if netu else "byl", e(vsplyv), e(podpis)))
+        else:
+            kletki.append(
+                '<label class="kab-den vperyod%s" title="%s">'
+                '<input type="checkbox" data-den="%s"%s>'
+                '<span class="kab-den-tekst">%s</span></label>'
+                % (" netu" if netu else "", e(vsplyv), e(den),
+                   " checked" if netu else "", e(podpis)))
 
+    gruppa_html = (' · <a href="/raspredelenie">группа %s</a>' % e(kto["gruppa"])
+                   if kto["gruppa"] else "")
     telo = f"""<div class="kab-stranica">
   <h1>{e(kto["name"])}</h1>
-  <p class="kab-kto">кабинет преподавателя{
-      ' · группа ' + e(kto["gruppa"]) if kto["gruppa"] else ''}</p>
+  <p class="kab-kto">кабинет преподавателя{gruppa_html}</p>
   {blok_blizh}
-  <div class="kab-ssylki">
-    <a href="/istoria">Моя история занятий</a>
-    <a href="/raspredelenie">Распределение на занятие</a>
-    <a href="/">На заглавную</a>
-  </div>
   <div class="kab-blok">
-    <p class="zag2">когда меня не будет</p>
-    <p class="kab-gde">Поставьте крестик в занятие, на которое вы не придёте.
-      Отметка сохраняется сразу; на распределении на эту дату вы будете отмечены
-      отсутствующим, и школьников вам на этот день назначить будет нельзя.</p>
-    <div class="kab-setka">{"".join(ryady)}</div>
+    <p class="zag2">мои занятия с начала года</p>
+    <div class="kab-polosa">{"".join(kletki)}</div>
+    <p class="kab-polosa-kak">Зелёная — вы были, красная — вас не было; прошлое
+      здесь не меняется. Будущее нажмите, чтобы отметить «меня не будет»: отметка
+      сохраняется сразу, на распределении на эту дату вы будете отмечены
+      отсутствующим, и школьников вам на этот день назначить будет нельзя.
+      Наведите на дату — покажет школьников того дня.</p>
     <p class="kab-beda" id="kab-beda"></p>
   </div>
 </div>{SKRIPT}"""
@@ -396,7 +478,7 @@ def pokazat_kabinet(h) -> bool:
         _otdat_html(h, 403, _dokument(
             "Кабинет", '<div class="kab-stranica"><h1>Кабинет</h1>'
             '<p class="net">Нужно войти.</p>'
-            '<div class="kab-ssylki"><a href="/vhod">Вход</a></div></div>'))
+            '<p class="kab-gde"><a href="/vhod">Вход</a></p></div>'))
         return True
     if kto is None:
         _otdat_html(h, 200, _dokument(
@@ -404,7 +486,7 @@ def pokazat_kabinet(h) -> bool:
             '<p class="net">Вход по общему паролю: система не знает, кто именно вошёл. '
             'Свой кабинет, своих школьников и отметку отсутствия показывает личный '
             'пароль.</p>'
-            '<div class="kab-ssylki"><a href="/">На заглавную</a></div></div>'))
+            '<p class="kab-gde"><a href="/">На заглавную</a></p></div>'))
         return True
     c = _soedinenie(h)
     try:
