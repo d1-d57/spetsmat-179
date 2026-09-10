@@ -251,7 +251,11 @@ def command_export(db_path: Optional[Path], out: Optional[Path]) -> int:
         connection.close()
     print(counts)
     print("файл: %s" % destination)
-    print("в git он не поедет: %s под .gitignore, в нём фамилии 56 детей" % export_dir())
+    # Каталог называется ТОТ, КУДА КНИГА ЛЕГЛА. Раньше здесь стоял `export_dir()`
+    # безусловно — то есть каталог по умолчанию, даже когда `--kuda` назвал другой:
+    # строка про `.gitignore` относилась к папке, в которой ничего не появилось.
+    print("в git он не поедет: %s под .gitignore, в нём фамилии 56 детей"
+          % destination.parent)
     return 0
 
 

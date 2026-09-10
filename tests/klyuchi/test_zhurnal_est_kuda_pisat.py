@@ -54,9 +54,16 @@ def koren_vozvrashchayetsya():
 
 
 def test_the_entry_point_gives_the_logger_a_home_before_build_speaks(
-    monkeypatch, koren_vozvrashchayetsya
+    monkeypatch, tmp_path, koren_vozvrashchayetsya
 ):
     import bot.__main__ as tochka_vhoda
+
+    # 🔴 ИСТОЧНИК НАЗЫВАЕТСЯ ДО ЗАПУСКА, ПОТОМУ ЧТО ТАК ТЕПЕРЬ ЗАПУСКАЕТСЯ И БОТ.
+    # `_main` передаёт `config.DB_PATH` аргументом в `build`, а аргументы вычисляются
+    # ДО вызова — значит без названного источника падает не подменённый `build`, а
+    # сам разбор аргументов, и проверка проверяла бы не то. Файла по этому пути нет и
+    # не нужно: до открытия базы дело не доходит, `build` подменён на взрыв.
+    monkeypatch.setenv("SPETSMAT_BAZA", str(tmp_path / "spetsmat.db"))
 
     assert not logging.getLogger("bot.app").isEnabledFor(logging.INFO), (
         "корень уже настроен кем-то до теста — проверка недействительна"

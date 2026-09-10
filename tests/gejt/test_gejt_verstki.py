@@ -48,10 +48,20 @@ pytest.importorskip(
 
 @pytest.fixture(scope="module")
 def server():
-    if not gejt.BAZA.exists():
-        pytest.fail(f"нет живой базы {gejt.BAZA} — гейт судит настоящую страницу, "
-                    "а не фикстуру, и без базы ему нечего открывать")
-    httpd, conn, t, url = gejt.podnyat_server(gejt.BAZA)
+    # 🔴 «НЕТ БАЗЫ» — ЭТО ПРОПУСК, А НЕ ПАДЕНИЕ, И ЭТО ИЗМЕНЕНИЕ ПО СУЩЕСТВУ.
+    # Пока `data/spetsmat.db` лежала в репозитории, «база есть всегда» было правдой и
+    # `pytest.fail` означал настоящую поломку. База ушла из git по решению владельца
+    # 10.09, и с тех пор то же падение означает всего лишь «на этой машине источник не
+    # назван» — то есть красное, которое ни о чём не говорит и которое перестают читать.
+    # Пропуск ЧЕСТНЕЕ: он говорит «не проверено», и он исчезает, стоит назвать источник.
+    try:
+        put = gejt.baza()
+    except SystemExit as otkaz:
+        pytest.skip("источник не назван: %s" % str(otkaz).splitlines()[0])
+    if not put.exists():
+        pytest.skip(f"названной базы {put} нет на диске — гейт судит настоящую "
+                    "страницу, а не фикстуру, и открывать ему нечего")
+    httpd, conn, t, url = gejt.podnyat_server(put)
     try:
         yield url
     finally:
