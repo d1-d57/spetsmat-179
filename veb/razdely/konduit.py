@@ -49,7 +49,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from core.services.history import zanyatie_dlya, zanyatie_po_iso
-from core.services.progress import ProgressService
+from core.services.progress import (
+    ProgressService,
+    obyazatelnyh_sdano,
+    skolko_sdalo,
+    zakryta_klassom,
+    zapisi_grobaria,
+)
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
 from tools.export_xlsx import SIGN
 from veb.obshchee.karkas import e
@@ -88,6 +94,48 @@ def znachok(kind: str) -> str:
     if kind not in ZNACHKI:
         return ""
     return '<i class="pm %s">%s</i>' % (ZNACHOK_KLASS[kind], ZNACHKI[kind])
+
+
+def _schyotchik(schyot) -> str:
+    """Слева от школьника: сколько обязательных он сдал и сколько ему осталось.
+
+    🔴 ОБА ЧИСЛА ВЛАДЕЛЬЦА СТОЯТ НА ЭКРАНЕ, А НЕ ОДНО ИЗ НИХ.  09.09: «сколько он
+    обязательных задач сдал.  Ещё ему осталось сдать».  Сданное и всего видны цифрами
+    (`3/5`), остаток — словами в подсказке: третье число в колонке шириной под фамилию
+    не помещается ни на ноутбуке владельца, ни тем более на телефоне, а вычесть 3 из 5
+    человек умеет.  Подсказка не единственный носитель ни одного факта: она разворачивает
+    то, что уже написано.
+
+    🔴 ЛИСТОК БЕЗ ОБЯЗАТЕЛЬНЫХ ПИШЕТ ТОЧКУ, А НЕ `0/0`.  Так устроены `1д`–`4д`: 99 задач
+    на четверых и ни одной обязательной.  `0/0` там читается как «ничего не сдал» —
+    ровно наоборот тому, что происходит.
+    """
+    if schyot.vsego == 0:
+        return ('<i class="ob-sch net" title="в этом листке нет обязательных задач">'
+                '\u00b7</i>')
+    if schyot.zakryl:
+        podskazka = "все %d обязательных сдано" % schyot.vsego
+    else:
+        podskazka = ("обязательных сдано %d из %d, осталось %d"
+                     % (schyot.sdano, schyot.vsego, schyot.ostalos))
+    return ('<i class="ob-sch" title="%s">%d<span class="iz">/%d</span></i>'
+            % (e(podskazka), schyot.sdano, schyot.vsego))
+
+
+def _klass_stroki(u, chuzhoj, schyot) -> str:
+    """Классы строки школьника: чей это ребёнок и закрыл ли он обязательные.
+
+    Два признака СКЛАДЫВАЮТСЯ, а не вытесняют друг друга, и это не оформление: свой
+    ребёнок, закрывший обязательные, обязан читаться и как свой, и как закрывший.
+    Поэтому «свой» несёт полосу слева и цвет фамилии, а «закрыл» — фон строки: они
+    рисуются разными средствами и видны одновременно.
+    """
+    klassy = []
+    if chuzhoj:
+        klassy.append("chuzh" if u.id in chuzhoj else "moi")
+    if schyot.zakryl:
+        klassy.append("gotov")
+    return (' class="%s"' % " ".join(klassy)) if klassy else ""
 
 
 def _uchastniki(catalogue) -> tuple:
@@ -231,8 +279,13 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str
     """
     shapka = "".join(f'<th class="zn" title="{e(sh.title or "")}">{e(sh.number)}</th>'
                      for sh in listki)
+    # Обязательные ЭТОГО разреза: на годовом обзоре — за все листки класса, а не за год
+    # вообще.  Восьмой и девятый классы стоят разными вкладками, и число, посчитанное по
+    # обоим сразу, не отвечало бы ни одной из них.
+    obyaz_razreza = [p for sh in listki for p in zadachi[sh.id]]
     stroki = []
     for u in na_uchyote:
+        schyot = obyazatelnyh_sdano(obyaz_razreza, sostoyaniya, u.id)
         kletki = []
         for sh in listki:
             zad = zadachi[sh.id]
@@ -248,10 +301,10 @@ def _obzor(na_uchyote, listki, zadachi, sostoyaniya, chuzhoj, imya="vse") -> str
         # Тот же признак, что и в разрезе одного листка: класс ставится на СВОИХ.
         # 07.09 он стоял только там, и на общей вкладке свои не выделялись вовсе —
         # владелец увидел это раньше, чем я.
-        klass = (' class="chuzh"' if u.id in chuzhoj
-                 else (' class="moi"' if chuzhoj else ""))
+        klass = _klass_stroki(u, chuzhoj, schyot)
         stroki.append(
-            f'<tr{klass}><td class="kto"><label for="k-u{u.id}">'
+            f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
+            f'<label for="k-u{u.id}">'
             f'<b>{e(u.surname)}</b> {e(u.name)}</label></td>{"".join(kletki)}</tr>')
     return (f'<section class="vid" id="n-{imya}">'
             f'<table class="kond" style="max-width:{16 + len(listki) * 5.5:.1f}em">'
@@ -278,6 +331,7 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
         shapka = "".join(f'<th class="zn">{e(p.label)}{znachok(p.kind)}</th>' for p in zad)
         stroki = []
         for u in na_uchyote:
+            schyot = obyazatelnyh_sdano(zad, sostoyaniya, u.id)
             kletki = []
             for p in zad:
                 znak = SIGN[sostoyaniya[(u.id, p.id)]]
@@ -320,9 +374,8 @@ def _listok(sh, zad, na_uchyote, sostoyaniya, chuzhoj, daty) -> str:
             # Класс ставится на СВОИХ, а не выводится как «отсутствие чужого»:
             # у организатора и у общего пароля своих нет вовсе (`chuzhoj` пуст),
             # и правило `tr:not(.chuzh)` покрасило бы им всех до одного.
-            klass = (' class="chuzh"' if u.id in chuzhoj
-                     else (' class="moi"' if chuzhoj else ""))
-            stroki.append(f'<tr{klass}><td class="kto">'
+            klass = _klass_stroki(u, chuzhoj, schyot)
+            stroki.append(f'<tr{klass}><td class="kto">{_schyotchik(schyot)}'
                           f'<b>{e(u.surname)}</b> {e(u.name)}</td>{"".join(kletki)}</tr>')
         potolok = 16 + len(zad) * 5.5
         telo = (f'<table class="kond" style="max-width:{potolok:.1f}em">'
@@ -655,6 +708,26 @@ def stili(kt) -> str:
    съедает подсветку: у своих строк фон уже накрашен, поэтому наведение
    различается рамкой на клетке и полосой столбца, а не цветом фона. */
 #s-kond .kond tbody tr.moi:hover td{{background:var(--chip)}}
+/* ── СЧЁТЧИК ОБЯЗАТЕЛЬНЫХ СЛЕВА И СВЕТЯЩАЯСЯ СТРОКА ────────────────────────
+   🔴 НИ ОДНОГО НОВОГО ЦВЕТА: палитра закрыта (`doc/DIZAJN-ZAKREPLENO.md §2`), и
+   строка светится фоном `--chip` — тем самым, которым уже подсвечена наведённая
+   своя строка. Почему НЕ `--accent-soft`: им покрашены строки СВОИХ детей, и
+   свой ребёнок, закрывший обязательные, перестал бы отличаться от свего, который
+   не закрыл, — то есть новый признак съел бы принятый владельцем старый.
+   Два признака сложены разными средствами нарочно: «свой» — полоса слева и цвет
+   фамилии, «закрыл» — фон строки; вместе они читаются одновременно.
+   Наведение на светящуюся строку остаётся различимым рамкой на клетке и полосой
+   столбца — тем же способом, каким оно уже различается на своих строках, у
+   которых фон тоже накрашен. */
+#s-kond .kond tbody tr.gotov td{{background:var(--chip)}}
+#s-kond .kond tbody tr.gotov:hover td{{background:var(--chip)}}
+#s-kond .kond td.kto .ob-sch{{display:inline-block;width:2.6em;margin-right:.45rem;
+  text-align:right;font-style:normal;font-family:var(--sans);font-size:.8rem;
+  font-weight:600;color:var(--muted)}}
+#s-kond .kond td.kto .ob-sch.net{{color:var(--faint);font-weight:400}}
+/* Закрыл — счётчик берёт «твоё, важное»; это тот же `--accent`, которым покрашена
+   сданная клетка, и он значит здесь ровно то же самое. */
+#s-kond .kond tbody tr.gotov td.kto .ob-sch{{color:var(--accent)}}
 /* Клетка листка тапается: курсор и подсветка обещают действие, которое есть.
    Клетки годового обзора и личной карточки адреса пары не несут и остаются
    обычным текстом — там столбец это ЛИСТОК, а не задача, и отмечать нечего. */
@@ -809,6 +882,14 @@ def stili(kt) -> str:
     display:block;overflow:hidden;text-overflow:ellipsis}}
   #s-kond .kond tbody tr.moi td.kto{{padding-left:.55rem}}
   #s-kond .kond td.kto label{{display:block;overflow:hidden;text-overflow:ellipsis}}
+  /* 🔴 НА ТЕЛЕФОНЕ СЧЁТЧИК СТОИТ СТРОКОЙ ВЫШЕ ФАМИЛИИ, А НЕ ПЕРЕД НЕЙ. Столбец
+     фамилии здесь 7.2rem, и 2.6em счётчика — это больше трети его: фамилия ушла бы
+     в многоточие ровно на том экране, ради которого её и не режут (см. правило
+     выше). `<b>` и `<label>` в этом запросе и так `display:block`, поэтому счётчик
+     оказывается над ними сам; правило ниже только прижимает его к правому краю
+     ячейки, чтобы числа стояли столбиком и читались друг под другом. */
+  #s-kond .kond td.kto .ob-sch{{display:block;width:auto;margin:0 0 .05rem;
+    font-size:.7rem;line-height:1.1}}
   /* Клетка — цель пальца: 44 точки в высоту, компактнее в ширину. */
   #s-kond .kond tbody td+td{{min-width:2.5em;height:44px;padding:.2rem;
     font-size:1.05rem}}
