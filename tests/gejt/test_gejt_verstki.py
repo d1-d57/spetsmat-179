@@ -177,8 +177,8 @@ def test_vyhod_za_konteyner(server, brauzer):
             pa.querySelectorAll('.deti-ryad span').forEach(
                 s => s.style.marginLeft = ''); })""")
         p.wait_for_timeout(150)
-        assert not _zamer(p)["vyshli"], (
-            "дефект убрали, а проверка «вышло за контейнер» всё ещё краснеет")
+        assert len(_zamer(p)["vyshli"]) == len(chisto["vyshli"]), (
+            "дефект убрали, а число выходов не вернулось к тому, что было до него")
     finally:
         ctx.close()
 
@@ -305,7 +305,14 @@ def test_uhod_vlevo_iz_klipayushchey_kartochki(server, brauzer):
     assert any(d["tip"] == "срезано слева" for d in posle["vyshli"])
     assert posle["skroll"] == 0, (
         "подстроен не тот дефект: скролл поймала бы и старая проверка 3")
-    assert not chisto["vyshli"], "не зеленеет обратно"
+    # 🔴 СРАВНЕНИЕ С «БЫЛО», А НЕ С НУЛЁМ.  На живой странице у организатора на
+    # вкладке группы Д уже стоят два настоящих выхода (таблетки школьников торчат
+    # на 6 px вправо за рамку карточки), и требовать здесь ноль значило бы, что
+    # тест зелен только пока страница идеальна — ровно та ошибка, из-за которой
+    # `test_obrezka_familii_u_gostya` покраснел от чужой ПОЧИНКИ.
+    assert len(chisto["vyshli"]) == len(do["vyshli"]), (
+        f"порчу убрали, а число выходов не вернулось: "
+        f"{len(do['vyshli'])} → {len(chisto['vyshli'])}")
 
 
 def test_kontrol_ne_oslepljaet_predka(server, brauzer):
