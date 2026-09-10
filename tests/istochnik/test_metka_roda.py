@@ -131,3 +131,44 @@ def test_shtatnaya_dver_pomechaet_kopiyu_tem_zhe_hodom(baza, tmp_path):
         m = istochnik.metka(c)
     assert m is not None and m.rod == "копия"
     assert str(baza) in m.otkuda, "копия обязана помнить, откуда она снята"
+
+
+def test_cp_kopia_na_toj_zhe_mashine_boevoj_sebya_ne_nazovyot(baza, tmp_path):
+    """🔴 ДЫРА, НАЙДЕННАЯ ПРОВЕРКОЙ НА ОБХОД, И ЕЁ ЗАКРЫТИЕ.
+
+    Хост ловит копию, УНЕСЁННУЮ на другую машину, и не ловит `cp` НА ТОЙ ЖЕ машине —
+    а на сервере `cp` делается именно там, где боевая и живёт. Снято дословно до
+    миграции 012: `cp boevaya.db chestnaya-cp.db` давал `вердикт: БОЕВАЯ, СВЕЖАЯ,
+    СВОЯ ✅`. Копия лежит по ДРУГОМУ пути по определению — иначе она не копия, а тот
+    же файл, — и метка теперь помнит файл, для которого поставлена.
+    """
+    import shutil
+
+    with _conn(baza) as c:
+        _zasejat(c)
+        c.commit()
+        istochnik.pometit(c, "боевая")
+        c.execute("pragma wal_checkpoint(TRUNCATE)")
+
+    kopia = tmp_path / "cp-kopia.db"
+    for hvost in ("", "-wal", "-shm"):          # копируем ВМЕСТЕ со спутниками,
+        src = baza.with_name(baza.name + hvost)  # иначе копия просто не читается
+        if src.exists():
+            shutil.copy2(src, str(kopia) + hvost)
+
+    with _conn(baza) as zhivaya_c, _conn(kopia) as kopia_c:
+        assert istochnik.proverit_metku(zhivaya_c) == 0, "оригинал обязан остаться боевым"
+        assert istochnik.proverit_metku(kopia_c) == 1, (
+            "`cp` на той же машине выдал себя за боевую — ровно та дыра, что закрыта 012")
+
+
+def test_metka_bez_puti_boevoj_ne_schitaetsya(baza):
+    """Метка старше миграции 012 не отличит боевую от её копии — значит не боевая.
+
+    Направление умолчания то же, что у засева `тест`: неизвестность не даёт доверия.
+    """
+    with _conn(baza) as c:
+        istochnik.pometit(c, "боевая")
+        c.execute("update istochnik_metka set put = '' where id = 1")
+        c.commit()
+        assert istochnik.proverit_metku(c) == 1

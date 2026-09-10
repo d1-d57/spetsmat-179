@@ -112,3 +112,21 @@ def test_snyat_kopiyu_pechataet_put_i_kak_na_nego_ukazat(zhivaya, tmp_path):
     assert str(kuda) in itog.stdout
     assert "%s=%s" % (config.BAZA_ENV, kuda) in itog.stdout
     assert kuda.exists()
+
+
+def test_nechitaemaya_baza_eto_kod_2_a_ne_lozhnoe_pusto(tmp_path):
+    """🔴 «НЕ ЧИТАЕТСЯ» И «ПУСТА» — РАЗНЫЕ ОТВЕТЫ, И ДВЕРЬ ИХ ПУТАЛА.
+
+    `sqlite3.connect` соединяется лениво, а все чтения обёрнуты в `except
+    sqlite3.Error`, поэтому файл, который не читается ВОВСЕ, выглядел как «БАЗА
+    ПУСТА · НЕ ПОМЕЧЕНА, накати миграции» — красное с неверным диагнозом,
+    отправляющее читателя не туда. Найдено проверкой на обход на `cp` WAL-базы без
+    спутников; здесь тот же класс воспроизводится файлом, который базой не является.
+    """
+    ne_baza = tmp_path / "eto-ne-baza.db"
+    ne_baza.write_bytes("не sqlite, а просто байты".encode("utf-8") * 100)
+    itog = _zapusk(baza=ne_baza)
+    assert itog.returncode == 2, itog.stdout + itog.stderr
+    vsyo = itog.stdout + itog.stderr
+    assert "ПРОЧИТАТЬ" in vsyo, "дверь обязана сказать «не читается», а не «пуста»"
+    assert "БАЗА ПУСТА" not in vsyo, "ложный диагноз «пуста» на нечитаемом файле"
