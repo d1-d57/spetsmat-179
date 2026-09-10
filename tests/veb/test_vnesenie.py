@@ -229,15 +229,105 @@ def test_tekst_dvusmyslennoe_imya_daet_knopki_a_ne_dogadku(server):
     assert row["verdict"] == "unknown"
 
 
+def test_vybor_alternativy_na_neresheonnoj_stroke_vsyo_ravno_pishetsya(server):
+    """Человек нажал кнопку «кто это?» и выбрал одного из предложенных — эта пара
+    (выбранный ученик, задача) обязана остаться ЗАПИСЫВАЕМОЙ: `_PREDLOZHENO` помнит её
+    по каждой альтернативе неразрешённой строки, а не только по строке, которая сама
+    решилась."""
+    baza, c = server["baza"], server["c"]
+    # два тёзки с одной фамилией дают гарантированно неразрешённую строку
+    sid1 = c.execute(
+        "insert into students (surname, name, class, status, first_sheet_id) "
+        "values ('Морозов','Глеб','9a','active',?)", (server["listok"],)).lastrowid
+    sid2 = c.execute(
+        "insert into students (surname, name, class, status, first_sheet_id) "
+        "values ('Морозов','Артём','9a','active',?)", (server["listok"],)).lastrowid
+    c.commit()
+
+    status, draft = _post(baza + "/api/vnesti/tekst", {"text": "Морозов 3"})
+    row = draft["rows"][0]
+    assert row["student_id"] is None, "ожидалась намеренно неразрешённая строка"
+    chosen = row["alternatives"][0]["id"]
+    cells = [{"student_id": chosen, "problem_id": c_["problem_id"], "ticked": True}
+             for c_ in row["cells"]]
+    status, otvet = _post(baza + "/api/vnesti/zapisat", {
+        "channel": "текст", "digest": draft["digest"], "cells": cells},
+        teacher_id=server["prepod"])
+    assert status == 200
+    assert otvet["zapisano"] and otvet["zapisano"][0]["zapisano"] is True
+    assert (chosen, server["zadachi"]["3"]) in {(r["student_id"], r["problem_id"]) for r in _marks(c)}
+
+
 def test_zapis_bez_studenta_propuskaetsya_a_ne_padaet(server):
     """Строка без разрешённого ученика, случайно отправленная в `zapisat`, тихо
     пропускается — а не роняет всю пачку и не пишет её наугад."""
     baza, c = server["baza"], server["c"]
+    status, draft = _post(baza + "/api/vnesti/tekst", {"text": "Петров 3"})
+    problem_id = draft["rows"][0]["cells"][0]["problem_id"]
     status, otvet = _post(baza + "/api/vnesti/zapisat", {
-        "channel": "текст", "digest": "abc",
-        "cells": [{"student_id": None, "problem_id": 1, "ticked": True}]},
+        "channel": "текст", "digest": draft["digest"],
+        "cells": [{"student_id": None, "problem_id": problem_id, "ticked": True}]},
         teacher_id=server["prepod"])
     assert status == 200
+    assert otvet["zapisano"] == []
+    assert _marks(c) == []
+
+
+def test_zapis_s_vydumannym_digestom_otkazyvaet_ne_pisha(server):
+    """`zapisat` с несуществующим/протухшим `digest` — законный отказ 409, не 500 и
+    не молчаливая запись «на слово клиента» (это и есть §3-находка, которую чинит
+    `_PREDLOZHENO`: сервер отказывается сверять то, чего сам не предлагал)."""
+    baza, c = server["baza"], server["c"]
+    status, otvet = _post(baza + "/api/vnesti/zapisat", {
+        "channel": "текст", "digest": "никогда-не-существовавший-digest",
+        "cells": [{"student_id": server["deti"]["Петров"], "problem_id": server["zadachi"]["3"],
+                  "ticked": True}]},
+        teacher_id=server["prepod"])
+    assert status == 409
+    assert _marks(c) == []
+
+
+def test_zapis_neponyatnogo_problem_id_ne_ronyaet_zapros(server):
+    """§3-находка: `problem_id`, которого нет в базе вовсе, раньше ронял запрос —
+    `sqlite3.IntegrityError` из `MarkingService.give` никто не ловил. Теперь пара,
+    которой гипотеза не предлагала, тихо пропускается ДО вызова `MarkingService`."""
+    baza, c = server["baza"], server["c"]
+    status, draft = _post(baza + "/api/vnesti/tekst", {"text": "Петров 3"})
+    status, otvet = _post(baza + "/api/vnesti/zapisat", {
+        "channel": "текст", "digest": draft["digest"],
+        "cells": [{"student_id": server["deti"]["Петров"], "problem_id": 999999,
+                  "ticked": True}]},
+        teacher_id=server["prepod"])
+    assert status == 200, otvet
+    assert otvet["zapisano"] == []
+    assert _marks(c) == []
+
+
+def test_zapis_ne_predlozhennoj_pary_otvergaetsya(server, monkeypatch):
+    """§3-находка: клетка, которую распознаватель пометил «снято» и НЕ нарисовал
+    галочкой, не может быть дописана как «сдано» подменённым телом запроса — сервер
+    сверяет пару (ученик, задача) со своей же памятью о том, что предлагал этот digest,
+    а не только с тем, что просит клиент."""
+    baza, c, zad, deti = server["baza"], server["c"], server["zadachi"], server["deti"]
+    from core.services.raspoznavanie import code_for_student
+
+    fake = _FakeVision([_llm_answer("u1 -", [
+        {"student_code": code_for_student(deti["Петров"]), "solved": [],
+         "retracted": ["3"], "alternatives": []},
+    ])])
+    monkeypatch.setattr(vnesenie, "build_vision", lambda: (fake, "test"))
+    jpeg = base64.b64encode(_jpeg_bytes()).decode()
+    status, draft = _post(baza + "/api/vnesti/foto", {"data_base64": jpeg},
+                          teacher_id=server["prepod"])
+    row = draft["rows"][0]
+    assert row["cells"][0]["retracted"] is True
+    # Подменяем ответ браузера: тикаем «снятую» клетку как если бы она была сдана.
+    status, otvet = _post(baza + "/api/vnesti/zapisat", {
+        "channel": "фото", "digest": draft["digest"],
+        "cells": [{"student_id": deti["Петров"], "problem_id": row["cells"][0]["problem_id"],
+                  "ticked": True}]},
+        teacher_id=server["prepod"])
+    assert status == 200, otvet
     assert otvet["zapisano"] == []
     assert _marks(c) == []
 

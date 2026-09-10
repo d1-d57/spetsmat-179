@@ -270,7 +270,9 @@ def api_tekst(h) -> bool:
         draft = bystryj_tekst.build_draft(text, students=students, catalogue=catalogue)
     finally:
         c.close()
-    _otdat_json(h, 200, _golos_draft_to_json("текст", draft, students))
+    payload = _golos_draft_to_json("текст", draft, students)
+    _zapomnit_predlozhennoe(payload["digest"], payload["rows"])
+    _otdat_json(h, 200, payload)
     return True
 
 
@@ -337,6 +339,7 @@ def api_foto(h) -> bool:
         )
     finally:
         c.close()
+    _zapomnit_predlozhennoe(payload["digest"], payload["rows"])
     _otdat_json(h, 200, payload)
     return True
 
@@ -388,6 +391,7 @@ def api_golos(h) -> bool:
         payload = _golos_draft_to_json("голос", draft, students, digest=digest)
     finally:
         c.close()
+    _zapomnit_predlozhennoe(payload["digest"], payload["rows"])
     _otdat_json(h, 200, payload)
     return True
 
@@ -402,14 +406,64 @@ _ISTOCHNIK = {"текст": bystryj_tekst.SOURCE, "фото": "фото", "го�
 _ZAMETKA = {"текст": bystryj_tekst.NOTE}
 
 
+#: 🔴 WHAT EACH DRAFT ACTUALLY OFFERED, KEPT JUST LONG ENOUGH TO BE CONFIRMED.
+#: `{digest: frozenset of (student_id, problem_id) pairs the draft showed as a real,
+#: writable cell}`.  `api_zapisat` was found (independent §3 verifier, 2026-09-10) to
+#: trust the CLIENT's `cells` list on its word alone: a crafted request naming a
+#: `problem_id` the draft never offered — an unknown id (crashing `MarkingService.give`
+#: with an uncaught `sqlite3.IntegrityError`, dropping the connection instead of
+#: answering cleanly) or a real one the draft explicitly marked `retracted` and never
+#: rendered a checkbox for — was written anyway, because nothing server-side remembered
+#: what the draft had actually said.  This dict is that memory.  It is NOT the place a
+#: cell's `ticked` state lives — the human is still free to un-tick a genuinely offered
+#: cell — it only answers "was this pair ever something a recognizer produced for this
+#: digest at all".
+#:
+#: Bounded rather than growing forever: this is a long-running process, and a teacher
+#: who requests a hypothesis and never confirms it must not leak memory one dict entry
+#: at a time.  `_PREDLOZHENO_ORDER` is the eviction queue: oldest digest out first.
+_PREDLOZHENO: dict = {}
+_PREDLOZHENO_ORDER: list = []
+_PREDLOZHENO_MAX = 500
+
+
+def _zapomnit_predlozhennoe(digest: str, rows) -> None:
+    """Record which (student, problem) pairs this digest's draft actually offered.
+
+    A row with no resolved student still offers a pair per ALTERNATIVE: the browser's
+    "кто это?" buttons let the human pick one of `row['alternatives']` before ticking
+    the row's own cells (see the page's own `narisovatDraft`/`pick` handler), and that
+    pick must not be rejected here as "never offered" just because the draft itself
+    could not commit to one candidate.
+    """
+    candidates = lambda row: (  # noqa: E731
+        [row["student_id"]] if row["student_id"] is not None
+        else [alt["id"] for alt in row["alternatives"]]
+    )
+    par = frozenset(
+        (student_id, cell["problem_id"])
+        for row in rows
+        for student_id in candidates(row)
+        for cell in row["cells"]
+        if cell["problem_id"] is not None and not cell.get("retracted")
+    )
+    if digest not in _PREDLOZHENO:
+        _PREDLOZHENO_ORDER.append(digest)
+        if len(_PREDLOZHENO_ORDER) > _PREDLOZHENO_MAX:
+            _PREDLOZHENO.pop(_PREDLOZHENO_ORDER.pop(0), None)
+    _PREDLOZHENO[digest] = par
+
+
 def api_zapisat(h) -> bool:
     """`POST /api/vnesti/zapisat` — the one door that writes.
 
     Body: `{channel, digest, cells: [{student_id, problem_id, ticked}, ...]}`.  Only
-    cells with BOTH a resolved `student_id` and `ticked: true` are written; everything
-    else is silently skipped rather than refused, because an unresolved or unticked row
-    is exactly what "показать гипотезу, не записывать" is for — the human decided it not
-    to become a mark.
+    cells with a resolved `student_id`, `ticked: true`, AND a (student_id, problem_id)
+    pair that `_PREDLOZHENO[digest]` actually offered are written; everything else is
+    silently skipped rather than refused, because an unresolved, unticked, or
+    never-offered pair is exactly what "показать гипотезу, не записывать" is for — the
+    human (or, per the §3 verifier's finding this line closes, a crafted request) does
+    not get to name a cell the draft itself never proposed.
     """
     if vhod.rol(h.headers) is None:
         _otdat_json(h, 403, {"error": "нужно войти"})
@@ -429,6 +483,16 @@ def api_zapisat(h) -> bool:
     if not digest:
         _otdat_json(h, 400, {"error": "нужен digest — какую попытку распознавания подтверждаем"})
         return True
+    predlozheno = _PREDLOZHENO.get(digest)
+    if predlozheno is None:
+        # Сервер перезапускался, или digest вообще выдуман — законный отказ, а не 500:
+        # без своей записи о предложенном честно нечего сверять, и молчаливая запись
+        # «на слово клиента» — ровно то, что здесь чинится.
+        _otdat_json(h, 409, {
+            "error": "эта гипотеза больше не помнится сервером (сервер перезапускался, "
+                     "или прошло слишком много других попыток) — покажите гипотезу заново"
+        })
+        return True
 
     zapisano = []
     c = _soedinenie(h)
@@ -442,6 +506,12 @@ def api_zapisat(h) -> bool:
                 problem_id = int(cell["problem_id"])
             except (KeyError, TypeError, ValueError):
                 continue  # неразрешённая строка — не пишем и не отказываем всей пачке
+            if (student_id, problem_id) not in predlozheno:
+                # Пары, которой эта гипотеза не предлагала, — включая любую с
+                # несуществующим id, который иначе уронил бы `MarkingService.give` на
+                # ограничении внешнего ключа, и любую, отмеченную распознавателем как
+                # «снято» и никогда не нарисованную галочкой.
+                continue
             klyuch = "vnesenie-%s-%s-%s-%s" % (channel, digest, student_id, problem_id)
             try:
                 itog = marking.give(
