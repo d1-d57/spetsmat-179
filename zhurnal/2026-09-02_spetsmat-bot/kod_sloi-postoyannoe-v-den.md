@@ -120,7 +120,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 🔴 **WRITE YOUR `## ОТЧЁТ`, `## ПЛАН` AND `## ВОПРОСЫ` IN ENGLISH, AND EVERY FILE AND EVERY COMMIT MESSAGE YOU PRODUCE TOO.** Owner's decision 30.08. It is a каркас-level rule, not a preference — wave 2 lost it twice because the pass text listed the report SECTIONS and never said «every file you create». Fixed Russian addresses stay Cyrillic: `ЦЕНА:` · `ВЕРДИКТ:` · `ДОМ:` · `ДОСТАВЛЕНО:` · `ПОДЪЁМ:` · `[ДОЛГ: …]` · every `## ` heading of this file · every path and command.
 **ЗАДАЧА. ТЫ ИЩЕШЬ ПРИЧИНУ, А НЕ ЧИНИШЬ НАЗВАННОЕ.** Аналитик отдал свой разбор целиком, и ТРИ его гипотезы уже опровергнуты фактами. Четвёртая не проверена: из песочницы аналитика живая база недостижима. **Не считай четвёртую истиной — проверь её, и если не подтвердится, ищи дальше. Опровергнуть аналитика здесь — полноценный успех.**
 
-**СИМПТОМ ВЛАДЕЛЬЦА 10.09:** Даня правит ПОСТОЯННОЕ распределение на четверг и НЕ ВИДИТ изменений в распределении на сегодня — 10 сентября, четверг.
+**СИМПТОМ ВЛАДЕЛЬЦА:** Даня правит ПОСТОЯННОЕ распределение на четверг и НЕ ВИДИТ изменений в распределении на текущий день. Какая это дата и какая сессия — снимай командой, а не из этого текста: `python3 -c "import sqlite3,datetime;c=sqlite3.connect('data/spetsmat.db');print(c.execute('select id, held_on from sessions order by held_on desc limit 3').fetchall())"`, и дальше работай с id той сессии, что вернулась.
 
 **ПРАВИЛО ВЛАДЕЛЬЦА, дословно:** «когда я нажимаю сохранить постоянное распределение, начиная с сегодняшнего дня распределение должно меняться так, как написано в постоянном, кроме конкретных вещей, если преподаватель или школьник отметили, что он отсутствует в будущем». И про старшинство: «есть слой автоматического распределения и слой того, что вносится руками. То, что вносится руками, важнее автоматического». То есть распределение на 10 сентября = постоянное на четверг ПЛЮС правки 10 сентября поверх.
 
@@ -135,17 +135,17 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/bootstr
 
 **ПОРЯДОК РАБОТЫ.**
 
-1. **ЗАМЕР НА БОЕВОЙ БАЗЕ ДО ВСЯКОЙ ПРАВКИ:** сколько строк `attendance` с непустым `teacher_id` на сессии 10 сентября и кто это по именам школьников. Ноль — четвёртая гипотеза мертва: скажи это громко и ищи причину заново.
+1. **ЗАМЕР НА БОЕВОЙ БАЗЕ ДО ВСЯКОЙ ПРАВКИ:** сколько строк `attendance` с непустым `teacher_id` на сессии текущего дня и кто это по именам школьников. Сессию и число берёшь КОМАНДОЙ: `select count(*) from attendance a join sessions s on s.id=a.session_id where s.held_on = <дата> and a.teacher_id is not null`. Ноль — четвёртая гипотеза мертва: скажи это громко и ищи причину заново.
 2. 🔴 **ВОСПРОИЗВЕДИ СЦЕНАРИЙ ДАНИ НА КОПИИ БАЗЫ, А НЕ НА САЙТЕ.** Требование владельца дословно: «меняя распределение где-то в тестовой версии, не на сайте, он сразу видел, как это меняется в распределении на сегодняшний день». Сделай копию боевой базы, подними на ней сервер, поменяй постоянное, посмотри день. Пока сценарий не воспроизведён на копии, причина не найдена, а угадана.
 3. **НАЗОВИ ПРИЧИНУ ОДНОЙ ФРАЗОЙ** с командой, которая её доказывает.
 4. **ПОЧИНИ, если причина в коде.** Если причина в ДАННЫХ (лежат ручные перекрытия) — код менять не надо, и это законный вывод; тогда вся работа уходит в кнопку.
-5. **КНОПКА «ПРИМЕНИТЬ ПОСТОЯННОЕ К ЭТОМУ ДНЮ».** Снимает перекрытия по принимающему за эту сессию; НЕ трогает отметки отсутствия и НЕ трогает статусы присутствия. Подтверждение с числом: «снять N ручных правок за 10 сентября?». Владелец: «аккуратное, только красивое».
+5. **КНОПКА «ПРИМЕНИТЬ ПОСТОЯННОЕ К ЭТОМУ ДНЮ».** Снимает перекрытия по принимающему за эту сессию; НЕ трогает отметки отсутствия и НЕ трогает статусы присутствия. Подтверждение с числом: «снять N ручных правок за этот день?», где N считается запросом в момент показа. Владелец: «аккуратное, только красивое».
 
 🔴 **ГРАНИЦА ЗОНЫ — ЧИТАЙ ВНИМАТЕЛЬНО. Разметка кнопки живёт в `veb/razdely/shkolniki.py`, и этот файл в зоне ПАРАЛЛЕЛЬНОЙ позиции `raspredelenie-kolonki`.** Не трогай его, пока она не влита: двое писателей в одном файле стоили этой фабрике трёх позиций из пяти за один вечер. Серверную часть, службу и тесты делай сразу. Разметку добавь ОТДЕЛЬНЫМ коммитом, когда оркестратор скажет, что соседняя позиция влилась; не дождался — отдай оркестратору готовый кусок разметки строкой в отчёте, он вставит сам.
 
 🔴 **КРИТЕРИЙ ГОТОВНОСТИ (может ПРОВАЛИТЬСЯ).**
 1. Причина названа ОДНОЙ ФРАЗОЙ, и рядом стоит команда, которая её доказывает. «Похоже» и «вероятно» не принимаются.
-2. Замер перекрытий на 10 сентября напечатан числом И именами. Ноль — тоже результат, но тогда в отчёте обязана стоять НОВАЯ найденная причина.
+2. Замер перекрытий на текущей сессии напечатан числом И именами, и рядом стоит команда, которой он снят. Ноль — тоже результат, но тогда в отчёте обязана стоять НОВАЯ найденная причина.
 3. 🔴 **СЦЕНАРИЙ ВОСПРОИЗВЕДЁН НА КОПИИ БАЗЫ:** поменял постоянное → показал день ДО и ПОСЛЕ, оба состояния напечатаны. Это главный пункт: без него заход не принят, что бы ни было в остальных.
 4. Три сценария из трёх, каждый отдельно: школьник С перекрытием, школьник БЕЗ перекрытия, преподаватель с отметкой ОТСУТСТВИЯ. У третьего постоянное применяться НЕ должно — это правило владельца.
 5. Кнопка снимает ровно перекрытия по принимающему. Напечатать три числа ДО и ПОСЛЕ: строк `attendance` всего, из них с `teacher_id`, отметок отсутствия. **Число отметок отсутствия ДО и ПОСЛЕ обязано СОВПАСТЬ** — иначе кнопка стёрла то, что человек сказал про себя.
@@ -282,6 +282,56 @@ grep -n '<как механизм назван в вызывающем коде>
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
 ## ПЛАН — (заполняет исполнитель)
+
+**Entry facts, measured before any edit (2026-09-10, worktree `zahod/sloi-postoyannoe-v-den`).**
+The live base is NOT on this laptop: `data/spetsmat.db` here and in the main checkout both
+hold `sessions = 0`. Production is `ivan@159.194.254.52:/opt/spetsmat-bot/data/spetsmat.db`
+(`deploy/vykatka.sh`), and its `-wal` is 4 MB, so a copy without the WAL would be a copy of
+yesterday. I snapshot db + wal together and work on that snapshot.
+
+**Step 1 — measurement on the live base (done before the plan was written, because the plan
+depends on the number).** Session of the current day is `id=2, held_on=2026-09-10` (Thursday).
+`attendance` rows with non-null `teacher_id` on it: **8**. Hypothesis 4 is therefore ALIVE.
+
+**Step 2 — reproduce Danya's scenario on the copy, with a real server.** Not on the site.
+Change the standing teacher of one pupil WITH an override and one WITHOUT, print the day
+before and after each.
+
+**Step 3 — name the cause in one phrase, with the command that proves it.**
+
+**Step 4 — fix, if the cause is in code.** Current reading: the cause is in DATA, and the code
+behaves as the owner's own rule says it must (manual layer beats standing). Then the whole work
+is the button, per §2 point 4.
+
+**Step 5 — the button «применить постоянное к этому дню».**
+- `core/services/sostav_na_den.py`: `Mesto` gains one honest field — whether the lesson row
+  carries a teacher of its own (`perekryt_prepodavatelem`); today it is inferred from
+  `segodnya != obychno`, which is NOT the same question and answers wrongly when the override
+  names the standing teacher. Plus a pure selector `perekrytiya_k_snyatiyu(sostav, absent_teachers)`.
+- `veb/server.py`: `GET /api/den/perekrytiya` (the number N for the confirmation, counted at the
+  moment it is shown) and `POST /api/den/primenit-postoyannoe` (applies it).
+- `tests/sostav/`: the three scenarios of the criterion plus the absence invariants.
+
+**Three exceptions the button must honour, and why each one exists.**
+1. Pupil marked absent (`attendance.status = 'не был'`) — his row is left untouched entirely.
+   The owner: standing applies «кроме конкретных вещей, если преподаватель или школьник
+   отметили, что он отсутствует».
+2. Pupil whose STANDING teacher is marked absent today (`teacher_attendance.status = 'не был'`) —
+   the override is kept. Removing it would hand the child back to a teacher who is not in the
+   building, which is the exact case criterion 4 names as «постоянное применяться НЕ должно».
+3. Pupil with no standing row for this day — the override is kept. «Apply standing» cannot mean
+   «apply nothing»: dropping it would only turn a placed child red and lose where he was.
+   This third one is MY reading, not the owner's words — it is named here, before the code, so it
+   can be overruled.
+
+**Objection to the criterion, raised before work, as §1 requires.** Criterion 7 asks for a live
+run on the production site after a deploy. Deploying to the school server is an outward-facing,
+lesson-affecting act that `deploy/vykatka.sh` itself refuses during a lesson; the owner did not
+ask this заход to deploy, and nothing in the зона is a mechanism the site needs today to show the
+standing edit. I will run the mechanism live on a server raised on the production SNAPSHOT — the
+same code, the same data, no publication — and report criterion 7 as met on the snapshot and NOT
+met on the production site, naming that plainly rather than deploying unasked.
+
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
