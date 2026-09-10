@@ -1647,13 +1647,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         conn = self._connection()
         ids = self._perekrytiya_dnya(conn, den)
+        # 🔴 `shkolniki` — ПЛОСКИЙ СПИСОК ИМЁН, А НЕ СПИСОК ОБЪЕКТОВ, И ЭТО НЕ ВКУС.
+        # Единственный, кто это поле читает, — подсказка на самой кнопке
+        # (`karkas.PRIMENIT_SKRIPT`, `d.shkolniki.join(', ')`), а `join` по объектам
+        # печатает человеку строку «[object Object], [object Object]». Список id
+        # рядом, под своим именем, и его читает тот, кому нужны id, а не имена.
         imena = []
         for student_id in ids:
             r = conn.execute("select surname, name from students where id = ?",
                              (student_id,)).fetchone()
-            imena.append({"id": student_id,
-                          "imya": ("%s %s" % (r["surname"], r["name"])) if r else str(student_id)})
-        self._send_json(200, {"den": den, "n": len(ids), "shkolniki": imena})
+            imena.append(("%s %s" % (r["surname"], r["name"])) if r else str(student_id))
+        self._send_json(200, {"den": den, "n": len(ids),
+                              "shkolniki": imena, "id": list(ids)})
 
     def _post_primenit_postoyannoe(self) -> None:
         """Снять ручные правки по принимающему за этот день — и больше ничего.
@@ -1715,7 +1720,7 @@ class Handler(BaseHTTPRequestHandler):
         posle = self._chisla_dnya(conn, den)
         self._peresobrat_tiho()
         self._send_json(200, {"ok": True, "den": den, "snyato": len(ids),
-                              "shkolniki": list(ids), "do": do, "posle": posle})
+                              "id": list(ids), "do": do, "posle": posle})
 
     def _post_enrollment(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")
