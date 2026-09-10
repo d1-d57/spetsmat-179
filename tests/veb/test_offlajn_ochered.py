@@ -235,6 +235,60 @@ def test_chisla_modulya_doehali_v_skript():
     assert "var STARYJ = %d *" % ochered.STARYJ_CHEREZ_MINUT in js
 
 
+# ------------------------------------------------ escape-последовательности в скриптах
+
+def test_skripty_stranicy_kompiliruyutsya_bez_predupreghdenij_ob_escape():
+    """🔴 ОДИНОЧНАЯ ОБРАТНАЯ КОСАЯ В НЕ-СЫРОЙ СТРОКЕ СО СКРИПТОМ — ЭТО ПОЛОМКА САЙТА.
+
+    `KONDUIT_SKRIPT` в `veb/obshchee/karkas.py` — обычная питоновская строка, и
+    JavaScript внутри неё полон регулярных выражений. `\\b` в такой строке становится
+    символом ЗАБОЯ, `\\s` — недопустимой escape-последовательностью; в одних версиях
+    Python это предупреждение, в других отказ импорта, и тогда страница не собирается
+    ВООБЩЕ.
+
+    ЦЕНА, ОПЛАЧЕННАЯ ЖИВЬЁМ В ЭТОМ ЖЕ ЗАХОДЕ: пост-проверка из ГЛАВНОЙ папки после
+    влития упала на `SyntaxError: invalid escape sequence`. В рабочей папке ровно тот
+    же код был зелёным на всех прогонах — там лежал уже скомпилированный `.pyc`, и
+    предупреждение компиляции просто не повторялось. То есть тест на «работает ли»
+    этого класса поломок не видит по построению; видит только компиляция начисто.
+    """
+    import py_compile
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    koren = Path(__file__).resolve().parents[2]
+    for fajl in ("veb/obshchee/karkas.py", "veb/razdely/konduit.py",
+                 "veb/razdely/ochered.py", "veb/razdely/kartochka.py"):
+        put = koren / fajl
+        shutil.rmtree(put.parent / "__pycache__", ignore_errors=True)
+        itog = subprocess.run(
+            [sys.executable, "-W", "error::DeprecationWarning",
+             "-W", "error::SyntaxWarning", "-c",
+             "import py_compile,sys; py_compile.compile(%r, doraise=True)" % str(put)],
+            capture_output=True, text=True)
+        assert itog.returncode == 0, (
+            "%s не компилируется начисто: %s" % (fajl, itog.stderr.strip()[-500:]))
+    assert py_compile  # использован выше через подпроцесс
+
+
+def test_v_skriptah_stranicy_net_upravlyayushchih_simvolov(stend):
+    """Ни одного управляющего символа в том, что уезжает в браузер.
+
+    Вторая половина той же проверки, и она смотрит не на исходник, а на ОТДАННУЮ
+    страницу: `\\b`, ставший забоем, компиляции не мешает вовсе — он просто молча
+    уезжает в регулярное выражение, которое после этого не совпадает ни с чем.
+    Разрешены только те управляющие, которые в тексте законны: перевод строки,
+    возврат каретки и табуляция.
+    """
+    _, telo, _ = _get(stend["url"] + "/", _kuka(stend["prepod"]))
+    stranica = telo.decode("utf-8")
+    plohie = sorted({c for c in stranica if ord(c) < 32 and c not in "\n\r\t"})
+    assert not plohie, "управляющие символы на странице: %r" % [hex(ord(c))
+                                                                for c in plohie]
+
+
 # ------------------------------------------------------------------- Р5: запись при 18
 
 def test_r5_vosemnadcat_odnovremennyh_zapisej_dohodyat_vse(stend):
