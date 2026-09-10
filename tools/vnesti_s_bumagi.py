@@ -52,14 +52,19 @@ def _odin(conn: sqlite3.Connection, zapros: str, parametry: tuple, chto: str):
     """Ровно одна строка или отказ. Ноль и два — разные болезни, и обе называются."""
     ryady = conn.execute(zapros, parametry).fetchall()
     if not ryady:
-        raise SystemExit("🔴 не нашлось: %s" % chto)
+        raise SystemExit("ОТКАЗ: ничего не найдено для '%s'. Проверь фамилию школьника, номер листка или дату занятия — возможно, опечатка в аргументе." % chto)
     if len(ryady) > 1:
-        raise SystemExit("🔴 нашлось %d вместо одного: %s — уточни" % (len(ryady), chto))
+        raise SystemExit("ОТКАЗ: найдено %d совпадений для '%s' вместо одного. Уточните фамилию или номер листка — возможно, в базе несколько похожих записей." % (len(ryady), chto))
     return ryady[0]
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Отметки с бумажного кондуита, через сервис.")
+    p = argparse.ArgumentParser(
+        description="Внести отметки с бумажного кондуита в базу школы. "
+                    "По умолчанию только показывает, что будет сделано (проба). "
+                    "Для записи нужна живая серверная база.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     p.add_argument("--den", required=True, help="день занятия, YYYY-MM-DD")
     p.add_argument("--shkolnik", required=True, help="фамилия")
     p.add_argument("--listok", required=True, help="номер листка, например 16A")
@@ -90,8 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     # тридцать шесть отметок исчезнут, ничем о себе не сообщив.
     kod = nazvat_i_proverit(conn, boevye=a.da)
     if kod != 0 and a.da and not a.vsyo_ravno:
-        print("отказ: писать можно только в живую боевую базу; см. строки выше. "
-              "Если ты уверен — повтори с --vsyo-ravno.")
+        print("ОТКАЗ: запись невозможна — дверь видит, что база не является живой боевой базой (серверной). Проверьте переменную SPETSMAT_BAZA или снимите копию штатной дверью (`core/istochnik.py --snyat-kopiyu`). Если вы уверены в правильности пути — повторите команду с добавлением `--vsyo-ravno`.")
         return 1
 
     shk = _odin(conn, "select id, surname, name from students where surname = ?",
@@ -111,8 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         "select id, label from problems where sheet_id = ?", (lst["id"],))}
     net = [m for m in metki if m not in est]
     if net:
-        print("🔴 в листке %s нет таких задач: %s" % (lst["number"], ", ".join(net)))
-        print("   есть: %s" % " ".join(sorted(est)))
+        print("ОТКАЗ: в листке '%s' нет задач '%s'. В этом листке есть только: %s. Проверьте номер задачи или номер листка." % (lst["number"], ", ".join(net), ", ".join(sorted(est))))
+        print("   Доступные задачи в этом листке: %s" % ", ".join(sorted(est)))
         return 1
 
     print()
@@ -125,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not a.da:
         print()
-        print("ПРОБА. Ничего не записано. Повтори с --da, если всё верно.")
+        print("ПРОБА (без записи). Ничего не изменено в базе. Чтобы выполнить запись на живой серверной базе — повторите команду с флагом `--da` (и проверьте, что SPETSMAT_BAZA указывает на серверную базу).")
         return 0
 
     # 🔴 КОПИЯ ПЕРЕД ЗАПИСЬЮ — ТОЧКА ОТКАТА, НАЗВАННАЯ ПУТЁМ. Дверь на запись
