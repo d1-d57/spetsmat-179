@@ -289,86 +289,13 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### A worktree's `data/spetsmat.db` is two migrations behind the live one, and the кондуит cannot be rendered on it at all
+ЦЕНА: two dead measurement runs and about twenty minutes at the start of a заход whose whole криterий готовности is «look at the rendered page». The failure surfaces as `sqlite3.OperationalError: no such table: mark_lesson_override` inside `veb/razdely/istoria.perebivki` — a table name three call frames away from the cause, which is that `data/spetsmat.db` is TRACKED in git and therefore checked out stale into every new worktree while `config.py` states the opposite («`.gitignore` already excludes it»). Cost is per POSITION, not per wave: every position that has to look at a page pays it again. Closed here only for myself, by copying the live база into `scratchpad/` and pointing my own runner at it — the репозиторий was left as it was.
+
+### Running the layout gate dirties a file that is in nobody's zone
+ЦЕНА: `docs/index.html` came back 1336 lines changed after the gate ran, and the зона contract of every position forbids touching it. Two exits exist, and one of them is a defect: restore it by hand (needs noticing), or let it ride into a commit — which is how foreign work travels into a position's commit. I noticed it because the final гит-гигиена prints `status --porcelain`; a position that trusted «я закоммитил» would have shipped it. The gate does not say anywhere that it writes into the tree it is judging.
+
 ## ПЛАН — (заполняет исполнитель)
-
-## ВОПРОСЫ — (заполняет исполнитель)
-> Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
-> ```
-> N. <текст находки>
->    ДОМ: <путь от корня репозитория | владелец>
->    ДОСТАВЛЕНО: нет
-> ```
-> 🔴 **`ДОМ:` — ОБЯЗАТЕЛЬНОЕ ПОЛЕ, И АДРЕС В НЁМ ОБЯЗАН СУЩЕСТВОВАТЬ В МОМЕНТ, КОГДА ТЫ ЕГО ПИШЕШЬ.** Путь, которого нет на диске, — не адрес: такую запись нельзя ни доставить, ни спросить, и она не чинится ничем. Замер 2026-09-06 по 632 файлам `kod_*.md`: 370 пунктов очереди из 1570 родились ровно так — больше, чем всех доставимых (195) вместе взятых. Проверить СВОЙ файл до отчёта — одна команда:
-> ```
-> python3 _generator/tools/bootstrap_zahod.py --proverit-doma <этот файл>
-> ```
-> rc=0 — все дома достижимы; rc=1 — назван дом, которого нет (команда печатает какой именно). Тот же разбор гоняет `Г7` приёмки, и у него храповик: у ЭТОГО захода база 0, поэтому первый же недостижимый дом здесь — красный на приёмке, а не запись, которую через неделю никто не найдёт.
-> `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
-> 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
-
-## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
-> 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
-> накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
-> **первая обязательна ВСЕГДА**: без заполненной секции отчёт не принимается (гейт Г12 `priyomka.py`).
->
-> 🔴 **ГАЛОЧКА — НЕ ИСТОЧНИК ИСТИНЫ.** Приёмка прогоняет те же команды заново и сравнивает
-> с заявленным; расходится — красный НЕЗАВИСИМО от галочки. *Цена: исполнитель добросовестно
-> написал «вливать не моя задача, это работа субагента, уже выполнена» при ВОСЬМИ невлитых ветках.*
->
-> 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
-> какие были. Пустой снимок = красный.
-
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
-```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
-```
-<сюда — вывод, дословно>
-
-**ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
-
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
-
-## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
-
-## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
-> 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
-> **Форма строки — жёсткая, по ней судит приёмка:** `### ПРАВКА N · ГГГГ-ММ-ДД ЧЧ:ММ · <что изменилось, одной фразой>`, дальше — что именно перечитать и что откатить, если уже сделано по старой редакции.
-> **Аналитик:** внёс правку — обязан ОТДЕЛЬНО послать владельцу короткое сообщение для пересылки исполнителю. Правка, лежащая только в файле, до работающего исполнителя не доезжает: он файл не перечитывает сам.
-> **Исполнитель:** прочитал правку — назови её номер в `## ОТЧЁТ` строкой `ПРАВКИ ПРОЧИТАНЫ: 1, 2`. Нет строки при непустом блоке = отчёт не принимается: неизвестно, по какой редакции работали.
-
-<правок нет>
-
-## ФАЗА ПРИЁМКИ — (заполняет АНАЛИТИК, не исполнитель)
-> 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
-> Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
-
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
-
-**ВЕТКА РАБОТЫ:** `zahod/konduit-panel`
-*(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
-
-**ЗАЯВКИ, ПОСТАВЛЕННЫЕ ЭТОЙ ПРИЁМКОЙ — ПРОДУБЛИРУЙ СЮДА ТО, ЧТО УЖЕ ЛЕЖИТ В СПИСКЕ:**
-> Адрес списка: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/_INFRA-git/zayavki`
-> Читается командой (из любой папки, в том числе из worktree): `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki`
-> Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
-> 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
-
-- `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
-
-*(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
 
 ### PLAN (written before any edit)
 
@@ -419,3 +346,128 @@ instead of editing it I drive its own `ZAMER` script over the four tabs from a s
 in `scratchpad/konduit-panel/`, i.e. the same measurement, four times.
 
 Committed part by part, one commit per edit group.
+
+## ВОПРОСЫ — (заполняет исполнитель)
+> Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
+> ```
+> N. <текст находки>
+>    ДОМ: <путь от корня репозитория | владелец>
+>    ДОСТАВЛЕНО: нет
+> ```
+> 🔴 **`ДОМ:` — ОБЯЗАТЕЛЬНОЕ ПОЛЕ, И АДРЕС В НЁМ ОБЯЗАН СУЩЕСТВОВАТЬ В МОМЕНТ, КОГДА ТЫ ЕГО ПИШЕШЬ.** Путь, которого нет на диске, — не адрес: такую запись нельзя ни доставить, ни спросить, и она не чинится ничем. Замер 2026-09-06 по 632 файлам `kod_*.md`: 370 пунктов очереди из 1570 родились ровно так — больше, чем всех доставимых (195) вместе взятых. Проверить СВОЙ файл до отчёта — одна команда:
+> ```
+> python3 _generator/tools/bootstrap_zahod.py --proverit-doma <этот файл>
+> ```
+> rc=0 — все дома достижимы; rc=1 — назван дом, которого нет (команда печатает какой именно). Тот же разбор гоняет `Г7` приёмки, и у него храповик: у ЭТОГО захода база 0, поэтому первый же недостижимый дом здесь — красный на приёмке, а не запись, которую через неделю никто не найдёт.
+> `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
+> 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
+
+1. A worktree's `data/spetsmat.db` is the copy from `HEAD`, and it is two tables behind the live one (18 против 20 — no `mark_lesson_override`, no `teacher_attendance`). Every page of this site that renders the кондуит dies on it with `sqlite3.OperationalError: no such table: mark_lesson_override` — that is, the layout gate `tools/gejt_verstki.py` cannot be run at all from a worktree, and neither can the server. The file is TRACKED (`git ls-files data/` lists it) although `config.py` says «`.gitignore` already excludes it», so the stale copy is checked out fresh into every new worktree. Either the база leaves git and `data/` gets a real `.gitignore` line, or the migrations are run on checkout — but as it stands, every position of every wave that has to look at a rendered page loses its first moves to this, and the failure names a table rather than the cause.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+2. Running `tools/gejt_verstki.py` (or the server) rewrites `docs/index.html` — 1336 lines in my run — and that file is in nobody's zone. Every position that verifies its work through the gate therefore ends its run with a dirty file outside its zone, and has exactly two ways out: notice it and restore it (what I did), or sweep it into a commit with `add .`, which the зона contract forbids for a good reason. The gate should either build into a temporary directory or say out loud that it dirties the tree.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+3. `tools/gejt_verstki.py` judges the кондуит on ONE tab — whichever opens by itself — while the кондуит has «Весь год», three листка, «Гробарий» and a panel per pupil. The критерий готовности of this заход asks for «три листка и гробарий, четыре из четырёх», which the gate as written cannot answer. I drove the gate's own `ZAMER` script over the four tabs from a runner of my own instead of editing the gate (not my zone); the tab list belongs IN the gate, as a fifth entry of `STRANICY` with a sub-tab to select.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+4. The shell paints `th{text-transform:uppercase}` over every `<th>` on the site (`veb/obshchee/karkas.py:1251`). That is right for a caption like «УЧЕНИК» and wrong for any DATA value a section puts in a header — it is what turned the кондуит's `1а` into `1А` and cost the owner a dictated complaint (H4.5). The rule cannot tell a caption from a datum, and every section that ever puts a value in a `<th>` will hit it again; the honest fix is a class for captions rather than a blanket rule on the tag.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+5. The laptop's `data/spetsmat.db` is BEHIND the server's, and not by a little: it carries ZERO problems with `kind = 'письменная'` (248 обязательных, 43 звезды, 296 обычных, 2 двойных), so the `†` glyph has nothing to draw on and appears only in the legend — while the LIVE site, opened under the owner's own login at the end of this заход, shows `†` on column 8 of листок 16A exactly as his screenshot `24` does. `deploy/vykatka.sh` says this in so many words («the laptop copy is not a fresher version of it but an older, different one») and never rolls `data/` out, so nothing is at risk — but it means every measurement any position makes on the laptop база is made on a smaller world than the one the owner looks at, and nothing on the laptop says so. Worth the owner deciding whether a read-only pull of the server база onto the laptop belongs in the deploy tool.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+6. `tests/ops/test_vykatka.py` — 5 of 16 red, all on the WORDING of the dry run's printed steps («the dry run never reached 'snapshot before the migration'»); the script itself prints «snapshot before the transfer» and its dry run finishes rc=0. `tests/room/` — 30 errors on a fixture. `tests/test_enrollment_scd2.py` 8, `tests/test_sostav.py` 3, `tests/svodka/test_vopros_prepodavatelyu.py` 1. None of these files mentions the кондуит (checked with grep) and none is in my zone; they were red before my first commit and are red after it, and I left them alone.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
+> 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
+> накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
+> **первая обязательна ВСЕГДА**: без заполненной секции отчёт не принимается (гейт Г12 `priyomka.py`).
+>
+> 🔴 **ГАЛОЧКА — НЕ ИСТОЧНИК ИСТИНЫ.** Приёмка прогоняет те же команды заново и сравнивает
+> с заявленным; расходится — красный НЕЗАВИСИМО от галочки. *Цена: исполнитель добросовестно
+> написал «вливать не моя задача, это работа субагента, уже выполнена» при ВОСЬМИ невлитых ветках.*
+>
+> 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
+> какие были. Пустой снимок = красный.
+
+**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+```
+git --no-optional-locks branch --no-merged <основная>     # невлитые
+git --no-optional-locks status --porcelain | wc -l        # не закоммичено
+git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
+python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+```
+🔴 **THE FULL SNAPSHOT WAS NOT TAKEN, AND THE REASON IS NOT MINE.** The оркестратор
+cancelled §0.1 in full — «СУБАГЕНТА ГИТ-КОНТУРА НЕ ЗАПУСКАЙ… данное указание сильнее
+текста захода» — and named ONE command to run in its place. That command was my first
+move, before any other, and here is its output verbatim:
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+
+The other three lines of the snapshot above (`status --porcelain`, `log @{u}..`,
+`git_zona.py zayavki`) were NOT taken at entry: the cancellation replaced the whole block
+with the single command, and taking them now, after the work, would be a snapshot of my
+own tree rather than of the входное состояние. I am saying so instead of back-filling
+plausible numbers — а снимок, снятый после работы и выданный за входной, хуже пустого.
+
+**ЧТО СДЕЛАНО** *(с хэшами)*
+**Nothing, and that is what the cancellation left legal.** No foreign branch was merged
+(there were none: the count above is 0), no заявка was closed, nothing outside my zone was
+committed — the субагент that does all of that was cancelled by the оркестратор, and the
+рights it carries were not transferred to me. My OWN branch is merged by me as the last
+move of the заход, and that is recorded in `## ОТЧЁТ`, not here.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да` — невлитых `zahod/`-веток на входе было **0**, вывод
+той единственной команды, которую оркестратор оставил вместо §0.1:
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
+```
+
+Долгов входа не было, поэтому закрывать было нечего; список поимённо неприменим — он
+требуется только к ответу `нет`.
+*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
+правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
+не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+
+## ОТЧЁТ — (заполняет исполнитель)
+**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
+*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
+**РОД АРТЕФАКТА:** `<исходник | собранный>`
+*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
+**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
+*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
+> 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
+> **Форма строки — жёсткая, по ней судит приёмка:** `### ПРАВКА N · ГГГГ-ММ-ДД ЧЧ:ММ · <что изменилось, одной фразой>`, дальше — что именно перечитать и что откатить, если уже сделано по старой редакции.
+> **Аналитик:** внёс правку — обязан ОТДЕЛЬНО послать владельцу короткое сообщение для пересылки исполнителю. Правка, лежащая только в файле, до работающего исполнителя не доезжает: он файл не перечитывает сам.
+> **Исполнитель:** прочитал правку — назови её номер в `## ОТЧЁТ` строкой `ПРАВКИ ПРОЧИТАНЫ: 1, 2`. Нет строки при непустом блоке = отчёт не принимается: неизвестно, по какой редакции работали.
+
+<правок нет>
+
+## ФАЗА ПРИЁМКИ — (заполняет АНАЛИТИК, не исполнитель)
+> 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
+> Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
+
+**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+
+**ВЕТКА РАБОТЫ:** `zahod/konduit-panel`
+*(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
+
+**ЗАЯВКИ, ПОСТАВЛЕННЫЕ ЭТОЙ ПРИЁМКОЙ — ПРОДУБЛИРУЙ СЮДА ТО, ЧТО УЖЕ ЛЕЖИТ В СПИСКЕ:**
+> Адрес списка: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/_INFRA-git/zayavki`
+> Читается командой (из любой папки, в том числе из worktree): `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki`
+> Ставится командой: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavka --rod <git-operaciya|pravka-koda> "<текст>"`
+> 🔴 Вопрос здесь НЕ «что ты хочешь сделать», а «что ты УЖЕ положил в очередь». Дубль сверяется с очередью по id машинно; намерение сверить не с чем.
+
+- `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
+
+*(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
