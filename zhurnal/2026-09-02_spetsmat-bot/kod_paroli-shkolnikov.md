@@ -283,6 +283,81 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Baseline taken BEFORE any work** (критерий 8): `python3 -m pytest tests/klyuchi tests/veb -q`
+→ `15 failed, 134 passed, 1 xfailed, 13 errors in 59.60s`. The 13 errors and 9 of the
+failures are playwright ones (no browser in this worktree); the list of the 28 names is in
+`## ОТЧЁТ`. This number is what "не ниже входа" is measured against.
+
+### 🔴 ОСПАРИВАЮ КРИТЕРИЙ ГОТОВНОСТИ ДО РАБОТЫ — ЗОНА НЕ СОДЕРЖИТ ТОГО, ЧЕМ ОН ПРОВЕРЯЕТСЯ
+
+The zone is `veb/vhod.py` `tools/` `core/services/` `tests/klyuchi/` `tests/veb/`.
+Everything that turns an authenticated pupil into a page lives OUTSIDE it, and I checked
+this by reading, not by assuming:
+
+* `veb/server.py:874 _kartochka()` decides what a card shows: `vhodivshij=vhod.rol(...) is
+  not None`. A pupil's own ticks appear only if this file learns the pupil role. READ-ONLY.
+* `veb/server.py:1155 _post_vhod()` decides where a successful login lands
+  (`Location: /kabinet if uid is not None else /`). READ-ONLY.
+* `veb/server.py:122 RAZDELY_S_MARSHRUTAMI` is a hardcoded tuple; a new section module can
+  only become reachable by being named in it. READ-ONLY. `veb/vhod.marshruty()` IS asked by
+  the server, but its handlers are invoked as `vhod.marshruty()[path]()` — zero arguments,
+  no headers — so a route declared from inside the zone cannot know who is asking.
+* `veb/razdely/kartochka.py` renders the card. READ-ONLY.
+
+So parts 2 (login → own card) and the browser half of part 3 (change password) are NOT
+buildable inside this zone, and criteria 1–4 and 9 cannot be met by me. I do not touch
+those files (`## КОНТРАКТ ЗОНЫ`: «Нашёл проблему вне зоны → в отчёт, не трогай»).
+
+**Предлагаемая поправка**: the zone should have carried `veb/server.py` and
+`veb/razdely/kartochka.py`, the way the sibling заход `poisk-i-kartochka` did — that заход
+is already merged, so nothing is holding those files now. Written up as an урок фабрике.
+
+### ЧТО Я ДЕЛАЮ ВМЕСТО ЭТОГО — ТРИ ЧАСТИ, КАЖДАЯ КОММИТИТСЯ ОТДЕЛЬНО
+
+**Часть 1 · ПАРОЛИ (полностью в зоне, `tools/sozdat_lichnye_paroli.py`).**
+Extend the existing minter to pupils by the same mechanism, not a second one.
+- Form: Latin initials, ИМЯ first then ФАМИЛИЯ, plus a two-digit number — the owner's
+  `ИФ17`. The number is RANDOM, not the row id: an id-derived password is derivable by
+  anyone holding the public roster, which is not a password at all. Uniqueness of the whole
+  string is enforced across the whole file.
+- Hashes MERGE into the existing `secrets/veb-lichnye-paroli.json`, they do not replace it —
+  otherwise minting pupils would silently invalidate all fourteen teacher passwords
+  (критерий 4). New flag `--kogo prepodavateli|shkolniki|vse`.
+- Plaintext list: its own `secrets/paroli-shkolnikov-<date>.txt`, mode 600, never printed.
+
+**Часть 2 · ГРАНИЦА, а не вход (в зоне, `veb/vhod.py`) — ГЛАВНОЕ МЕСТО ОТКАЗА.**
+The заход names the boundary, not the login, as the place that fails. The boundary is
+enforceable from inside the zone and I make it enforced BY CONSTRUCTION, so that the
+out-of-zone half cannot loosen it by accident:
+- `rol(headers)` keeps answering ONLY `prepod | organizator | None`. A pupil's cookie
+  yields `None`. Every existing gate — `veb/priyom.py:159` (ticking), `_kartochka`'s
+  `vhodivshij`, `_koren`, `_pravka_zapreshchena` — therefore treats a signed-in pupil
+  exactly as a guest, with no edit anywhere outside the zone. A pupil cannot tick
+  (критерий 3) and cannot read anyone's ticks, their own included.
+- `kto(headers)` keeps answering `teachers.id` only. A pupil's `u` is `students.id`, a
+  different namespace, and it must never leak into `admin:%d` / `prepod:%d`.
+- NEW `shkolnik(headers) -> Optional[int]` — the one door the future server position uses,
+  and the only place a pupil's identity is readable. It answers for the cookie's OWN pupil
+  and takes no id from the request, so "pupil A asks for pupil B" has no argument to pass.
+- Teacher entry is unchanged: the personal check runs first, the two common env passwords
+  stay behind it.
+
+**Часть 3 · СМЕНА ПАРОЛЯ (в зоне: `core/services/lichnye_paroli.py` + `tools/`).**
+- Own file `secrets/veb-smenennye-paroli.json`, mode 600, consulted BEFORE the minted one —
+  so a re-mint of the initial passwords cannot resurrect a password its owner has replaced
+  ("запоминается навсегда").
+- Service exposes `smenit(rod, uid, staryj, novyj)`; it verifies the current password
+  before writing, and never returns or logs either password.
+- `tools/smenit_parol.py` is its live call point. The browser form is the out-of-zone half.
+
+**Тесты** (`tests/veb/`, in zone) carry the boundary: pupil cookie → `rol()` is None,
+`kto()` is None, `shkolnik()` is the pupil; teacher cookie → `shkolnik()` is None; a pupil
+cookie forged from another pupil's id fails the signature; change-password rejects a wrong
+current password and makes the old one stop working.
+
+**Верификатор §3** runs at the end, on the live objects.
+**Выкатка** (критерий 9) is decided after the verifier: see `## ОТЧЁТ`.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
