@@ -279,6 +279,86 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+Baseline taken before any edit: `pytest tests/veb` 76/76 green; `tools/gejt_verstki.py`
+green (0/0/0 on all 4 pages, 639 elements inspected, matches the PRAVKA-1 snapshot
+exactly). Longest surname on the live-mirrored local DB re-checked: still
+"Тухватулин-Йалчын" (17 chars), unchanged since 09.09. Screenshots taken (admin and
+guest, day view and postoyannoe view, all three distribution pages) at 1440×900 to see
+the actual rendered defects rather than guess from source.
+
+Zone constraint noted: `veb/obshchee/karkas.py` (the canon CSS) is OUTSIDE my zone
+(read-only) — zone is `veb/razdely/` `veb/static/` `tests/veb/` only. So I cannot add
+rules to the canon stylesheet directly. Instead I will add ONE small extra `<style>`
+block, emitted exactly once (from `shkolniki.vid_vse()`, which is called exactly once
+per page render), living in a new zone file `veb/razdely/verstka_stili.py`. A `<style>`
+tag inside `<body>` is valid HTML5 and is honoured by browsers regardless of where it
+sits in the DOM; this only ADDS rules on top of the existing canon (reusing its class
+names and custom properties), never edits or duplicates it. Confirmed this note as a
+legitimate escape hatch, not an invented convention: the existing `konduit.py` already
+follows the same pattern of a section supplying its own extra CSS string.
+
+Screenshots confirmed which complaints are already closed by the `kanon-verstki`
+canon already merged into my branch, and which are still open:
+- Already fixed by canon (visually confirmed green in both admin and guest, day and
+  postoyannoe views): counters column (#6, `.sch`/`.tsch` already right-aligned in a
+  straight column) — verified in `принимающим` table and in group-page teacher cards.
+  Teacher names inside `.kol-pr` cards (group page right side) and inside the
+  `принимающим` table's `.tp` cell are NOT truncated either. Nothing to do for #6
+  beyond confirming it survives deploy.
+- Still open, confirmed by screenshot: #1 (teacher name truncated with ellipsis in the
+  per-day column of the STUDENT list — `.prep-imya` inside `.dv{flex:0 0 9.6rem}`, both
+  the guest text and the admin `<select class="org pr-sel">`, whose `max-width:11rem`
+  clips it the same way), #2 (short names like "Надя" look stranded because `.komu`
+  right-aligns text with no fixed column), #3 (`.obychno` span has ZERO CSS rule at
+  all in the canon — literally glued to the surname with no separating space, and
+  shows only 2-letter initials, not an icon+tooltip), #4 (`.dv` day boxes have no
+  `justify-content`, so "ПН"/"ЧТ" sit at the LEFT edge of a fixed 9.6rem box instead
+  of centred in an (after the fix) evenly-split remainder), #5 (`.kl` class-letter
+  span is glued inside `.kto` right after the name, not a separate flex child), #7
+  (`приходит` is a literal hardcoded header string in `prepodavateli.py`; the пн/чт
+  toggle buttons are rendered together in one combined `<td class="tdni">` column,
+  not inside each day's own `<td class="td-deti dv-{kl}">`), #8 (`.kol-pr .para`
+  padding is too small — 6 group teacher cards occupy roughly the top half of a
+  900px-tall viewport, screenshot shows ~340px of empty space below them).
+
+Order of work, cheapest/most-visible first per the task's own instruction
+("заметность × дешевизна"):
+
+1. #3 obychno: give it CSS (spacing, small icon, `cursor:help`), swap the visible text
+   for a single small glyph with the full name only in `title`. Cheapest, one file.
+2. #2 + #4 "Надя" / ПН·ЧТ centering: make `.dv` flex 1 1 0 (even split) instead of a
+   fixed 9.6rem, left-align the name text inside it, centre the header labels. Values
+   live in the new injected stylesheet, not in karkas.py.
+3. #7 "ПРИХОДИТ" + unlinked buttons: drop the literal header string, move each day's
+   attendance toggle into that day's own `<td class="td-deti dv-{kl}">` cell in
+   `prepodavateli.py`, only for the `not kt.den` (postoyannoe) branch — the занятие
+   branch already ties one toggle to one teacher correctly and is untouched.
+4. #5 class letter as its own column: pull `.kl` out of `.kto` into a third flex
+   child of `.para` in `shkolniki.py`, same `data-org="videt-klass"` gating as today
+   so the gost/admin byte-parity gate (`proverit_karkas`, out of my zone) still sees
+   the same admin-minus-marked-elements = guest structure it sees today.
+5. #1 truncated names, properly: widen the name strip. Width is derived from the
+   ALREADY-LOADED `kt.shk_dnya` rows inside `vid_vse()` (no new DB query — shkolniki.py
+   states explicitly it opens no database, and I will keep that true), expressed as a
+   CSS `ch`-based custom property with a safety margin, NOT a hardcoded constant. I
+   will screenshot the rendered result and note the actual achieved pixel width in the
+   report per criterion 2.
+6. #8 group-page card height: increase `.kol-pr .para` padding/spacing and give it a
+   visible card-like border so 5–6 cards actually fill the screen height.
+
+After each numbered step: screenshot before/after (admin + guest, the affected page),
+re-run `pytest tests/veb` and `tools/gejt_verstki.py`, commit that step's zone paths
+(§4, not batched at the end).
+
+Then: pull `tools/gejt_verstki.py` from `zahod/kanon-verstki` (done, PRAVKA 1),
+re-run it green, run the §3 verifier, deploy, live-check the three pages, run §4.1
+hygiene, write the report, and merge my own branch last per the WARNING block.
+
+Not disputing the readiness criterion — it matches what the screenshots show is
+actually broken, and the "closed X of 8" framing is exactly checkable against the
+list above.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -313,12 +393,30 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+NOTE (orchestrator override, this run): §0.1 git-contour subagent was cancelled by the orchestrator before this run started — reason given: 4 of 10 runs in the neighboring wave died on that exact call. Per the orchestrator's substitute instruction, the executor ran one command itself instead and pasted its output here. This section is normally filled by the git-contour subagent, not the executor; filled by the executor this time under that override.
+
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+```
+
+Additional commands run by the executor for context (not requested by the orchestrator, run to make the "да/нет" line below honest rather than a bare guess):
+```
+$ git --no-optional-locks branch --no-merged main
++ zahod/kanon-verstki
+$ git --no-optional-locks status --porcelain | wc -l
+0
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+fatal: no upstream configured for branch 'zahod/verstka-raspredeleniya'
+$ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki
+✅ заявок нет (open claims: 0)
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Nothing merged/committed/shipped/closed by this note — read-only self-check per the orchestrator's substitute instruction, no git_zona.py `check --zone` was run (that was not part of the substitute command).
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+*(1 unmerged `zahod/*` branch: `zahod/kanon-verstki` — a sibling zahod in the same queued wave (its tool `tools/gejt_verstki.py`, commit `0905fce`, is the layout gate this very task is told to reuse via `git checkout zahod/kanon-verstki -- tools/gejt_verstki.py`). Not mine to merge — merging a neighbor's branch is explicitly out of scope for this executor. Everything else checked is clean: 0 uncommitted, 0 open claims (`zayavki`). No `git_zona.py check --zone` was run here since it wasn't part of the orchestrator's substitute command; it will run as part of this zahod's own §4/§4.1 hygiene below.)*
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
@@ -337,7 +435,28 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > **Аналитик:** внёс правку — обязан ОТДЕЛЬНО послать владельцу короткое сообщение для пересылки исполнителю. Правка, лежащая только в файле, до работающего исполнителя не доезжает: он файл не перечитывает сам.
 > **Исполнитель:** прочитал правку — назови её номер в `## ОТЧЁТ` строкой `ПРАВКИ ПРОЧИТАНЫ: 1, 2`. Нет строки при непустом блоке = отчёт не принимается: неизвестно, по какой редакции работали.
 
-<правок нет>
+**ПРАВКА 1 — 10.09 01:24, оркестратор.**
+
+🔴 **ГЕЙТ ВЁРСТКИ, НА КОТОРЫЙ ТЫ ОПИРАЕШЬСЯ, УЖЕ СУЩЕСТВУЕТ.** Позиция P2 его не дописала,
+и оркестратор написал его сам: `tools/gejt_verstki.py`, коммит `0905fce` на ветке
+`zahod/kanon-verstki`. Твоя ветка от него отдельная, поэтому: возьми файл к себе командой
+`git checkout zahod/kanon-verstki -- tools/gejt_verstki.py` ПЕРВЫМ ходом и гоняй им свои
+страницы — свой параллельный гейт НЕ пиши, второй такой же рычаг хуже одного.
+
+Как гонять и что он печатает:
+
+```
+python3 tools/gejt_verstki.py          # три числа на страницу + ОХВАТ, rc=1 на красном
+python3 tools/gejt_verstki.py --slomat # самопроверка: ломает страницы, гейт обязан покраснеть
+```
+
+Числа «до» на живой базе (54 школьника, 9К=27, 9Л=27), сняты 10.09 01:18 — все нули на
+четырёх страницах из четырёх, осмотрено 639 элементов. Значит ЛЮБОЕ красное число после твоих
+правок — твоё, и его видно сразу.
+
+🔴 Восемь пунктов претензии владельца — это ТВОЯ работа и она НЕ про гейт: обрезанные фамилии,
+съехавшая Надя, слипшееся «обычно у», ПН и ЧТ не по центру, класс хвостом, счётчики россыпью,
+бессмысленное ПРИХОДИТ, карточки жмутся к верху. Гейт — линейка, а не работа.
 
 ## ФАЗА ПРИЁМКИ — (заполняет АНАЛИТИК, не исполнитель)
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.

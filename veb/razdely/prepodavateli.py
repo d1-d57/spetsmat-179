@@ -240,6 +240,10 @@ def vid_prepodavateli(kt):
     # третье повторение одного и того же на одном экране.
     ryady = []
     if not kt.den:
+        # 🔴 БЕЗ СЛОВА «ПРИХОДИТ» (владелец 09.09, п.7: «слово «ПРИХОДИТ» на
+        # вкладке принимающим бессмысленно»). Колонка, которую оно подписывало,
+        # тоже ушла — кнопки пн/чт теперь стоят ВНУТРИ своих дневных колонок
+        # (ниже), а не в отдельной общей, и подписывать пустоту нечем.
         ryady.append(
             '<tr class="prep-shapka"><td class="tp"></td>'
             + "".join(f'<td class="td-deti">{e(kt.DNI[k][3])}</td>'
@@ -248,7 +252,7 @@ def vid_prepodavateli(kt):
                       + ('<td class="tsch" data-org="videt-schyot"></td>'
                          if kt.mozhno("videt-schyot") else "")
                       for k in kt.DNI)
-            + '<td class="tdni">приходит</td><td class="tg">группа</td>'
+            + '<td class="tg">группа</td>'
             + '<td class="tk"></td></tr>')
     for x in vidimye_prepodavateli(kt):
         deti_yach = []
@@ -265,25 +269,36 @@ def vid_prepodavateli(kt):
             schyot = ('<td class="tsch%s" data-org="videt-schyot">%d</td>'
                       % ("" if 3 <= len(ego) <= 4 else " ploho", len(ego))) \
                      if kt.mozhno("videt-schyot") else ""
+            # 🔴 КНОПКА ПН/ЧТ — ВНУТРИ СВОЕЙ ЖЕ КОЛОНКИ ДНЯ, А НЕ В ОБЩЕЙ (владелец
+            # 09.09, п.7: «кнопки пн/чт не связаны со своими столбцами»). Было:
+            # обе кнопки склеены в одну строку и вынесены в отдельную колонку
+            # `tdni` в конце таблицы — дню понедельник кнопка «пн» не стояла под
+            # понедельничным списком фамилий. Только на ПОСТОЯННОМ (`not kt.den`):
+            # на занятии дня одна, и «сегодня его нет» остаётся своей колонкой
+            # ниже — там нечего распределять по дням, которых на занятии один.
+            otmetka_dnya = ""
+            if not kt.den:
+                otmetka_dnya = (galochka_dnya(kt, x, kl) if kt.ADMIN
+                                else metka_dnya(kt, x, kl))
             deti_yach.append(f'<td class="td-deti dv-{kl}">'
-                             + deti_prepoda(kt, x, ego, sl) + "</td>" + schyot)
-        if kt.den:
-            otmetka = otsutstvie_prepoda(kt, x) if kt.ADMIN else (
-                '<span class="den-metka%s" data-tolko-gost>нет</span>'
-                % ("" if x["id"] in kt.otsutstvuyut_prepoda else " pusto"))
-        else:
-            otmetka = "".join(
-                (galochka_dnya(kt, x, kl) if kt.ADMIN else metka_dnya(kt, x, kl))
-                for kl in kt.DNI)
+                             + deti_prepoda(kt, x, ego, sl) + otmetka_dnya
+                             + "</td>" + schyot)
         gostevoe = x["gruppa"] or "—"
         gruppa_yach = (vybor_gruppy_prepoda(x, gostevoe) if kt.ADMIN and not kt.den
                        else e(gostevoe))
         k = kt.kabinety_dnya[next(iter(kt.DNI))].get(x["gruppa"])
+        if kt.den:
+            otmetka = otsutstvie_prepoda(kt, x) if kt.ADMIN else (
+                '<span class="den-metka%s" data-tolko-gost>нет</span>'
+                % ("" if x["id"] in kt.otsutstvuyut_prepoda else " pusto"))
+            tdni_stolbec = f'<td class="tdni">{otmetka}</td>'
+        else:
+            tdni_stolbec = ""
         ryady.append(
             f'<tr data-i="{e(x["name"].lower())}" data-tid="{x["id"]}">'
             f'<td class="tp"><b>{e(x["name"])}</b></td>'
             + "".join(deti_yach)
-            + f'<td class="tdni">{otmetka}</td>'
+            + tdni_stolbec
             + f'<td class="tg">{gruppa_yach}</td>'
             + (f'<td class="tk"><span data-tolko-gost>'
                f'{kt.kab_html(next(iter(kt.DNI)), x["gruppa"])}'

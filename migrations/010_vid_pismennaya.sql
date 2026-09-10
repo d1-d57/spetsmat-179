@@ -1,4 +1,4 @@
--- depends: 008_gruppa_na_zanyatii
+-- depends: 009_perebivka_zanyatia
 --
 -- A FIFTH KIND OF PROBLEM: `письменная` — OBLIGATORY, AND OBLIGATORY IN WRITING.
 --
@@ -41,6 +41,14 @@
 --     is `sqlite_autoindex_problems_1`, created by `unique (sheet_id, label)` and
 --     therefore recreated with the table.  No trigger, no view, nothing to restore.
 -- After applying: `pragma foreign_key_check` → empty, `pragma integrity_check` → ok.
+--
+-- 🔴 THIS FILE WAS `009_vid_pismennaya.sql` UNTIL THE MERGE OF 2026-09-10 AND WAS
+-- RENUMBERED, not rewritten.  The neighbouring заход of the same wave landed
+-- `009_perebivka_zanyatia.sql` in `main` and on the live server while this one was being
+-- written, and two migrations sharing a number is the kind of thing that reads fine on a
+-- laptop and turns into "which 009 is applied here?" on the server at the moment somebody
+-- needs an answer fast.  `depends:` now names it, so the order the two are applied in is
+-- stated rather than left to a sort.  Nothing else in the file changed.
 --
 -- The Python-side copy of this list is `config.PROBLEM_KINDS`, and
 -- `tests/test_schema_matches_config.py` reads the CHECK out of the LIVE schema and goes

@@ -9,7 +9,7 @@
 > Это блок для владельца — то, чем тебя запустили. Исполнителю здесь делать нечего, твоё задание ниже.
 
 ```
-{ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add poisk-i-kartochka --branch zahod/poisk-i-kartochka || true; } && cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/poisk-i-kartochka && opencode run --auto --model openrouter/anthropic/claude-opus-5 'Твой заход — файл /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_poisk-i-kartochka.md. Прочитай ТОЛЬКО его и то, что он называет; остальной проект не изучай. План/вопросы/отчёт пиши в этот же файл внизу (## ПЛАН / ## ВОПРОСЫ / ## ОТЧЁТ). Ничего сверх задачи не трогай — «ничего сверх задачи» относится к СОДЕРЖАНИЮ работы; git-контур §0.1 — законное исключение, он про состояние репозитория и исполняется целиком.' < /dev/null 2>&1 | tee /tmp/zahod-poisk-i-kartochka.log
+{ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py worktree add poisk-i-kartochka --branch zahod/poisk-i-kartochka || true; } && cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/poisk-i-kartochka && opencode run --auto --model openrouter/anthropic/claude-opus-5 'ОТМЕНА ОДНОГО ПУНКТА ТВОЕГО ЗАХОДА, ЧИТАЙ ЭТО ПЕРВЫМ. СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ, и весь входной ритуал §0.1 НЕ ИСПОЛНЯЙ. Пункт ОТМЕНЁН оркестратором, данное указание сильнее текста захода. Причина замерена этой же волной 10.09: четыре позиции из четырёх на бесплатных моделях потратили ВЕСЬ прогон на входной ритуал и не написали ни строки кода; одна из них при логе 119 КБ честно доложила «содержательная работа не начата». Вместо всего блока §0.1 выполни САМ одну команду и вставь её вывод в ## ОТЧЁТ: git --no-optional-locks branch --no-merged main | grep -c zahod/ . В ## ГИГИЕНА ВХОДА заполни строку **ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** словом да или нет и вставь туда вывод той единственной команды. Дальше СРАЗУ иди в свою рабочую папку и работай по задаче: твой ход конечен, и ритуал съедает его целиком. Свою зону коммить ПО ХОДУ, а не последним ходом. | Дальше: Твой заход — файл /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/2026-09-02_spetsmat-bot/kod_poisk-i-kartochka.md. Прочитай ТОЛЬКО его и то, что он называет; остальной проект не изучай. План/вопросы/отчёт пиши в этот же файл внизу (## ПЛАН / ## ВОПРОСЫ / ## ОТЧЁТ). Ничего сверх задачи не трогай — «ничего сверх задачи» относится к СОДЕРЖАНИЮ работы; git-контур §0.1 — законное исключение, он про состояние репозитория и исполняется целиком.' < /dev/null 2>&1 | tee /tmp/zahod-poisk-i-kartochka.log
 ```
 
 🔴 БЛОК ВЫШЕ — МАШИННЫЙ: его достаёт и запускает надзорный оркестратор, подменив в нём модель на живую. РУКАМИ ЕГО НЕ ЗАПУСКАЮТ — запуск без надзора и был тем, чем оплатили ночь на 05.09 (три позиции из шести не изменили ни байта: модели выгорели по квоте, а перевыбирать их было нечему).
@@ -278,7 +278,136 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+Read the four named anchors (`veb/server.py`, `veb/razdely/lichnaya.py`,
+`veb/razdely/gruppy.py`, `veb/obshchee/karkas.py`) plus, to understand what
+already exists, `veb/razdely/glavnaya.py` (the current search box script),
+`veb/razdely/shkolniki.py` (`para_shk`, `gr_shk`, `kab_shk`), `veb/razdely/
+list_odin.py` (the pattern for a standalone page outside the shell — used as
+the template for the card), `veb/priyom.py` (the existing tick-marking door
+`/api/priyom`), `core/services/progress.py` (read-only surface only), and
+`tests/veb/test_server.py` / `test_priyom.py` / `test_kanon_verstki.py` for
+test conventions and the layout gate this заход must not break.
+
+**Disputing one premise before writing code**, as §1 invites: the "гейт вёрстки
+из захода kanon-verstki зелёный на карточке" clause in the readiness criterion
+cannot literally mean a NEW gate on the new `/kartochka/<id>` page — the gate
+file `tests/veb/test_kanon_verstki.py` is hard-wired to four specific existing
+screens (школьникам/принимающим/страница группы/кондуит) and does not know
+about a card that does not exist yet. Reading it as "the existing gate must
+stay green after this заход's changes to the distribution screens" instead —
+i.e. a no-regression requirement on `.poisk-verh` width and on the group tab's
+highlight markup, both of which touch screens the gate already measures.
+
+**Part 1 — wide search field.** The actual constraint is `.poisk-verh{max-
+width:34rem}` in `veb/obshchee/karkas.py` (the input itself already has
+`width:100%` inside it); raise that cap substantially and let it flex-grow
+more aggressively. `.menu` already wraps (`flex-wrap:wrap`), so a wider search
+box pushes neighbours to the next line rather than clipping anything.
+
+**Part 2 — search leads to the group page, no unclosable strip.** Today,
+picking a pupil from the top-nav search (`veb/razdely/glavnaya.py:poisk_skript`)
+writes into `#nashli`, an absolutely-positioned box that only clears on the
+next keystroke — never on an outside click, and it sits over the group
+tab's teacher column. Fix: split the search index into a pupils map (id +
+group letter) and the existing teachers/sheets map; picking a PUPIL now
+navigates (`location.href`) to `/raspredelenie?g=<letter>&sid=<id>` instead of
+opening the overlay. A tiny script on the shell reads `sid`/`g` from the
+query string, checks the matching group-tab radio (`t-В`/`t-Д`/`t-Н`, default
+`t-shk` when the pupil has no group), and highlights the row bearing that
+`data-sid` (a new attribute added to the row `<div>` in `shkolniki.para_shk` —
+same on every role, so it does not disturb `proverit_karkas()`'s byte
+comparison). Leaving the page is then just normal navigation — nothing to
+reset. Teacher search results keep the `#nashli` overlay (that read is not
+what the owner reported broken), but the existing outside-click handler is
+extended to also clear `#nashli`, so it stops being unclosable either way.
+
+**Part 3 — the pupil card, `/kartochka/<id>`.** A new standalone page
+(`veb/razdely/kartochka.py`, mirroring `list_odin.py`'s pattern: its own
+`<!doctype html>`, the site's shared stylesheet pulled via
+`_obshchij_stil()`, no shell/tabs) served by a new branch in
+`veb/server.py::do_GET`. Guest-visible top part: surname, name, class,
+group, room, and the teacher who takes them — reusing `_build_views()`'s
+existing per-student row (same source of truth as the group tab, no second
+query). Below that, ONLY for a signed-in viewer (`vhod.rol() is not None` —
+organiser or teacher, matching this заход's "вошедший" for now; pupil-
+password login is `paroli-shkolnikov`'s job per the STOP clause): the current
+academic year's sheets, one row per sheet, a tappable cell per problem.
+
+Tapping reuses the EXISTING `/api/priyom` door (`MarkingService` under it,
+already gated on "signed in" — see `veb/priyom.py:otmetka`) with the exact
+`{student, problem, target}` contract `veb/priyom.py`'s own inline script
+already speaks. This is the one place I am deliberately NOT adding a new
+mutation path: `core/services/progress.py` exposes read-only methods only
+(`grid`/`states_for`/`states_for_many`/`debts`/`graveyard`), and adding a
+write method there is `core/services/` — outside this заход's zone
+(`veb/razdely/`, `veb/server.py`, `veb/obshchee/`, `tests/veb/`). Calling the
+already-public `/api/priyom` HTTP door from a new page is well inside the
+zone and adds no second journal; growing `ProgressService` would not be.
+
+A guest gets none of the above — verified by grepping the guest response body
+for the absence of any tick/mark markup, per the readiness criterion's "гостю
+не пришло ни одной галочки".
+
+Exit: a `✕` link back to `/raspredelenie`, per the owner's explicit ask.
+
+**Order of commits (each committed as it lands, per §4):** Part 1, then Part
+2, then Part 3, then tests, then the pre-report full git hygiene (§ WARNING).
+
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. BLOCKING: merging `zahod/poisk-i-kartochka` into `main` conflicts in `veb/razdely/shkolniki.py`
+   — main moved since this branch's worktree was created (queue position, expected per
+   this заход's own "ТЫ В ОЧЕРЕДИ ИЗ ДВЕНАДЦАТИ ЗАХОДОВ" clause). Ticket already opened
+   by the tool itself.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. BLOCKING, MORE URGENT: the follow-up `vlit-v-osnovnuyu --abort` (the tool's own prescribed
+   recovery when a conflict cannot be judged) ALSO failed — `error: Entry
+   tests/veb/test_server.py not uptodate. Cannot merge. fatal: Could not reset index file to
+   revision 'HEAD'.` (rc=128). Nothing was destroyed (git refused safely), but the MAIN
+   checkout is now stuck mid-merge (`MERGE_HEAD` present) on top of the 16 already-dirty
+   paths that were there before I touched it. I did not attempt any further remedy (no
+   forced reset/stash of paths I do not have context for) — this needs a human or the
+   git-контур subagent with full context of the wave's concurrent state in that folder. A
+   dedicated ticket was filed for this specific failure (separate from #1's).
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. Because of #1/#2, the mandated order (commit → merge own branch into main → post-check
+   FROM THE MAIN FOLDER → deploy → live check) could not proceed past step 2. Deployment to
+   the production server (`bash deploy/vykatka.sh`) and живой прогон were NOT attempted —
+   deploying an unmerged branch's state ahead of a stuck merge seemed like exactly the kind
+   of "работа поверх неслучившегося влития" the tool's own stop message warns against. SSH
+   reachability to the production host was confirmed as a read-only diagnostic
+   (`ssh ... true` → rc 0) but no deploy command was run.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+4. The layout gate `tests/veb/test_kanon_verstki.py` cannot run live in this environment
+   TODAY, for a reason unrelated to this заход: the tracked `data/spetsmat.db` is missing
+   the table `mark_lesson_override` (from `migrations/009_perebivka_zanyatia.sql`, never
+   applied to that file — confirmed with `sqlite3 data/spetsmat.db "select name from
+   sqlite_master..."` before touching anything). Any page that reaches `veb/razdely/
+   konduit.py::_daty` (which the gate's four measured pages all do, since it always renders
+   the whole shell) crashes the server outright (`net::ERR_EMPTY_RESPONSE` under Playwright).
+   Verified this is pre-existing and not caused by my changes: applied migrations to a
+   throwaway COPY of the база (never wrote to the tracked file) and confirmed `sobrat_html`
+   for gost/admin/prepod all build and `proverit_karkas()` passes with my changes present.
+   ДОМ: владелец
+
+5. Factory-level observation, not about this task: commit `9272809 автосохранение
+   poisk-i-kartochka: снимок круга 10` appeared in this worktree's history on its own,
+   between my Part 2 and Part 3 commits, carrying exactly my in-progress Part 3 files
+   (`veb/server.py`, `veb/razdely/kartochka.py`, the `tests/veb/test_server.py` regex fix) —
+   content correct, but committed with a generic message by something other than me, ahead
+   of my own planned "add + commit -- <paths>" pair for that piece. This works against the
+   very discipline `disciplina-git` is built on (a reviewable commit per completed piece,
+   with a message that says why) — worth a look at whatever autosave/snapshot mechanism is
+   watching worktrees in this environment.
+   ДОМ: <эта арка>/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -312,23 +441,146 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+ORCHESTRATOR OVERRIDE (see top of this заход's launch message): the full §0.1
+git-contour ritual was cancelled for this run; ran ONE command instead, as instructed:
+
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+
+(the one unmerged `zahod/*` branch is `zahod/verstka-raspredeleniya`, a sibling
+заход, not mine — confirmed via `git --no-optional-locks branch --no-merged main`,
+which listed exactly `zahod/verstka-raspredeleniya`. My own branch
+`zahod/poisk-i-kartochka` has 0 commits ahead of `main` at the moment of this
+snapshot, so it correctly does not appear in `--no-merged`.)
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Nothing merged/pushed/gashenie yet — this is the entry snapshot, taken before any
+work in this заход. See `## ОТЧЁТ` at the end of the file for what was actually
+committed/merged/pushed by this заход's own work.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+*(орфографически "нет" по формальному критерию: 1 chужой невлитый `zahod/*` —
+`zahod/verstka-raspredeleniya`. This is NOT my debt to close: §0.1 of this same
+заход says explicitly "первая вернула не 0 — ничего чужого не вливай (свою ветку
+вольёшь последним ходом), назови число строкой в отчёте и работай дальше." Merging
+someone else's in-progress branch is outside my rights and would be exactly the
+kind of "чинить заодно чужое" this заход's own contract forbids. No other input
+debt was checked beyond the one command the orchestrator asked for — the fuller
+git-contour self-check (`git_zona.py check --zone`, `git_zona.py zayavki`) was
+explicitly skipped by the same override for this run.)
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**WHAT WAS DONE + WHY.** Three parts, all three done as CODE and covered by pytest; the
+production side (merge to main, deploy, live check) stopped part-way — see below and
+`## ВОПРОСЫ` #1–#3.
+
+1. **Wide search field.** The real constraint was `.poisk-verh{max-width:34rem}` in
+   `veb/obshchee/karkas.py` (the `<input>` itself already had `width:100%`); raised the
+   cap to `56rem` and grew its flex share. `.menu` already wraps, so neighbours move to a
+   second line instead of clipping.
+2. **Search leads to the pupil's group, no unclosable strip.** Split the search index
+   (`veb/razdely/glavnaya.py::poisk_skript`) into a `UCHENIKI` map (id + group letter) and
+   the existing teacher/sheet `KOMU` map. Picking a pupil now navigates to
+   `/raspredelenie?sid=<id>&g=<letter>` instead of writing into the floating `#nashli` box;
+   a small script on load checks the matching group-tab radio and highlights the row
+   carrying a new `data-sid` attribute (`veb/razdely/shkolniki.py::para_shk`, identical for
+   every role so `proverit_karkas()`'s byte comparison is untouched). Teacher/sheet answers
+   keep the inline box, and an outside click now also clears it (it had the same defect).
+3. **The pupil card, `/kartochka/<id>`** (`veb/razdely/kartochka.py`, new route in
+   `veb/server.py::_kartochka`, reusing `_build_views()` — the exact row the group tab
+   already shows, so the two can never disagree). Guest sees class/group/room/teacher.
+   A signed-in viewer (organiser or teacher — pupil login is `paroli-shkolnikov`'s job, per
+   this заход's own STOP clause) also sees this academic year's sheets and can tick a
+   problem right there, through the ALREADY-EXISTING `/api/priyom` door — no second write
+   path into the mark journal, and no new method on `core/services/progress.py` (outside
+   this заход's zone). An exit `✕` links back to `/raspredelenie`, per the owner's request.
+
+**HOW VERIFIED.**
+- `python3 -m pytest tests/veb -q --ignore=tests/veb/test_kanon_verstki.py`: **87 passed,
+  9 failed** — same 9 failures on the unmodified baseline (confirmed by stashing my three
+  changed files and re-running: identical 9, all `sqlite3.OperationalError: no such table:
+  mark_lesson_override`, a pre-existing gap in the tracked база unrelated to this заход).
+  Entry number (before any of my work, same ignore flag): 82 passed, 9 failed. Not below
+  entry — 5 more passing (the new `tests/veb/test_kartochka.py`).
+- `tests/veb/test_kartochka.py` (new, 5 tests, all passing): guest sees class/group/room/
+  teacher and NO mark markup at all (`grep`-level assertion, not inference from role) for
+  a pupil named, deliberately, «Фефелов» — the owner's own example; organiser AND teacher
+  cookies both see the sheets and can tick a cell through `/api/priyom`, verified end to
+  end (POST, then re-GET the card and see the ticked state in the markup); unknown id →
+  404; the exit link is present.
+- `tests/veb/test_server.py`'s existing `data-i` regex updated for the new `data-sid`
+  attribute sitting next to it on the same row (would otherwise silently stop matching —
+  masked today by the `mark_lesson_override` failure above, so fixed rather than left as a
+  landmine for the day that gap closes).
+- Sandboxed (never touching the tracked база): copied `data/spetsmat.db` to a scratch
+  file, ran `infra.db.apply_migrations` on the COPY, then `tools.sobrat_stranicu.
+  sobrat_html` for `gost`/`admin`/`prepod` and `proverit_karkas()` — all built, the karkas
+  byte-comparison passed. Extracted the search script and ran `node --check` on it —
+  syntax OK.
+- **Coverage: 3 of 3 code parts implemented and unit-tested; live verification (the
+  readiness criterion's five-pupil × two-role matrix, the boevoy search-to-group check
+  with a real URL, the layout gate, the pytest deploy check, the eyeballed live page) —
+  0 of those 5 live checks done**, blocked as described in `## ВОПРОСЫ` #1–#4.
+- **NOT covered even by the unit tests, said out loud:** same-surname pupils (the search
+  index and `UCHENIKI`/`KOMU` both key by display name — a pre-existing limitation, not
+  introduced here); an empty search query; searching by a teacher's name still shows the
+  old inline answer, not a navigation (deliberate — see Part 2 above); the card always
+  reads slot 1 (Monday), not "whichever lesson is nearest today" — same default `/api/
+  view` already uses with no slot given, but a real gap for a pupil whose Monday/Thursday
+  teachers differ.
+
+**НЕОБРАТИМОЕ.** None from my own zone work. One near-miss, caught and undone both times:
+running `tools.sobrat_stranicu.sobrat_html()` for a sandbox check, and separately running
+`pytest tests/veb` and the (failed) `test_kanon_verstki.py` attempt, each mutated the
+TRACKED `data/spetsmat.db` (schema-ensure side effects on read) — reverted with `git
+checkout -- data/spetsmat.db` immediately after noticing each time; `git diff --stat`
+confirmed binary-only churn, nothing else was ever staged from it. The one thing I could
+not undo myself: the git-контур incident in `## ВОПРОСЫ` #1/#2 — nothing was destroyed
+(git refused both times rather than clobbering anything), but the MAIN checkout is left
+mid-merge (`MERGE_HEAD` present) until a human resolves it; restore point is `ORIG_HEAD`
+in that checkout, untouched.
+
+**ПОВТОРЯЕМОСТЬ находок.** The `data-i` regex fix in `tests/veb/test_server.py` is a
+pattern that will recur: any future заход that adds an attribute next to `data-i` on that
+same row will hit the same masked-by-`mark_lesson_override` trap. Not filed as a queue
+item because there is no address for "the next заход that touches this line" — named here
+instead, plainly, as the thing to remember if this file is read later. The
+`mark_lesson_override` gap itself (## ВОПРОСЫ #4) WILL recur on every заход that tries to
+run `test_kanon_verstki.py` or anything touching `veb/razdely/konduit.py::_daty` against
+this tracked база, until someone applies migration 009 to it — that one is a заход-worthy
+fix, filed as ДОМ: владелец.
+
+**АРТЕФАКТ:** артефакта нет: этот заход — код (`исходник`), не собранный файл; продукт —
+изменения в `veb/razdely/`, `veb/server.py`, `veb/obshchee/karkas.py`, `tests/veb/`.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** four commits on `zahod/poisk-i-kartochka`, pushed to
+`origin/zahod/poisk-i-kartochka` (`git log --oneline @{u}..` → 0, confirmed):
+  - `cb9a1f8` — veb: widen the top-nav search field
+  - `72f876c` — veb: search leads to the pupil's group, not an unclosable strip
+  - `9272809` — автосохранение poisk-i-kartochka: снимок круга 10 *(NOT made by me — see
+    `## ВОПРОСЫ` #5; content is `veb/server.py`, `veb/razdely/kartochka.py`, and the
+    `tests/veb/test_server.py` regex fix, all reviewed above as if they were my own commit)*
+  - `8249a44` — veb: the pupil card, /kartochka/<id>
+  `git_zona.py check --zone` → ✅ for `veb/razdely/`, `veb/server.py`, `veb/obshchee/`,
+  `tests/veb/` (checked individually; the tool refuses more than one `--zone` per call).
+  **NOT merged into `main`** — see `## ВОПРОСЫ` #1/#2; branch intentionally left unmerged
+  per this заход's own instruction ("не понимаешь — abort, ветка остаётся невлитой").
+
+**INCOMPLETE, NAMED PLAINLY (a legal outcome per this заход's own rules):**
+- Merge into `main` — stopped on a real content conflict in `veb/razdely/shkolniki.py`;
+  the recovery abort then also failed on `main`'s own pre-existing dirty state.
+- Deploy to the boevoy server (`deploy/vykatka.sh`) and the eyeballed live check.
+- The readiness criterion's five-pupil × two-role live matrix and the boevoy
+  Фефелов→group-В URL check (done instead against a synthetic tmp база under pytest).
+- `tests/veb/test_kanon_verstki.py` green — cannot run at all against the tracked база
+  today (pre-existing `mark_lesson_override` gap), verified my changes don't regress it
+  via the sandboxed scratch-база build instead.
+- The §3 verifier subagent — its brief is to judge a LIVE render against the boevoy база;
+  with no deploy, there is nothing live yet for it to judge, so it was not called.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
@@ -336,7 +588,66 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > **Аналитик:** внёс правку — обязан ОТДЕЛЬНО послать владельцу короткое сообщение для пересылки исполнителю. Правка, лежащая только в файле, до работающего исполнителя не доезжает: он файл не перечитывает сам.
 > **Исполнитель:** прочитал правку — назови её номер в `## ОТЧЁТ` строкой `ПРАВКИ ПРОЧИТАНЫ: 1, 2`. Нет строки при непустом блоке = отчёт не принимается: неизвестно, по какой редакции работали.
 
-<правок нет>
+**ПРАВКА 1 — 10.09 03:07, оркестратор. Твой процесс мёртв (вышел 02:58:39), пишу законно.**
+
+🔴 **ТВОЯ РАБОТА ЦЕЛА. Ветка `zahod/poisk-i-kartochka`, вершина `8249a44`, вывезена на origin —
+проверено `git ls-remote`. Ничего переделывать с нуля не надо.**
+
+Что произошло. Ты влила свою ветку в ГЛАВНУЮ папку репозитория и умерла ПОСРЕДИ слияния:
+остался `MERGE_HEAD` и маркеры конфликта `<<<<<<< HEAD` в `veb/razdely/shkolniki.py:342`.
+Главная папка в этом состоянии не собиралась вовсе — `pytest` падал на сборе с
+`SyntaxError: invalid syntax`, то есть волна не могла ни проверить себя, ни выкатиться.
+
+Оркестратор конфликт разрешил, прогнал тесты и получил ДВА новых красных:
+`test_post_enrollment_moves_rather_than_overwrites` и
+`test_post_enrollment_with_same_teacher_is_a_no_change`, оба HTTP 500. Причина — не опечатка,
+а НАСТОЯЩИЙ СТЫК ДВУХ ПОЗИЦИЙ, и вот она дословно из ответа сервера:
+
+```
+{"error": "правка СОХРАНЕНА в базу, но публичная страница НЕ пересобрана:
+ AssertionError: каркас гостя и преподавателя разошёлся — страница не собрана:
+ каркас роли «prepod» разошёлся с гостевым на позиции 7611:
+     гость: …'</span></span></div><div class="para" data-i="агаркова ирина" data-sid="1">
+             <span class="kto"><b>Агаркова</b> Ирина</span>'
+     prepod: …'</span></span></div><div class…
+```
+
+То есть `proverit_karkas()` требует ПОБАЙТОВОГО равенства сборки гостя и преподавателя, и после
+слияния оно нарушается. Твой собственный комментарий утверждал обратное: «Атрибут стоит вне
+`data-org`/`data-gost`, поэтому он ОДИНАКОВ у гостя и у организатора и не портит побайтовое
+сравнение». Утверждение было верно на ТВОЕЙ ветке и перестало быть верным после слияния.
+
+🔴 **ПОЧЕМУ. Твоя ветка отошла от main ДО того, как позиция `verstka-raspredeleniya` (P3)
+починила вёрстку.** Её починка ПЕРЕНЕСЛА `{klass}` из середины `<span class="kto">` наружу,
+после `</span>`, и это не косметика: до починки гость видел на боевом сайте **48 обрезанных
+фамилий**, после — **0** (замер оркестратора headless-браузером без куки, до и после выкатки).
+Твоя сторона конфликта несла `data-sid` ВМЕСТЕ со старым местом `{klass}`. Взять её целиком
+значило бы молча откатить починку 48 фамилий, поэтому оркестратор взял `data-sid` от тебя и
+место `{klass}` от main — и на этом сочетании вылез стык.
+
+**СЛИЯНИЕ ОТКАЧЕНО** (`git merge --abort`), main вернулась к `ff8fafb`: 1107 passed,
+17 упавших — те же предсуществующие, что были на входе волны. Твоя ветка не тронута.
+
+**ЧТО СДЕЛАТЬ В ЭТОМ ЗАХОДЕ, по порядку:**
+1. Влей в СВОЮ рабочую папку свежую main (`git merge main` из
+   `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/poisk-i-kartochka`) и разреши конфликт
+   в `veb/razdely/shkolniki.py` САМА, зная то, что написано выше: место `{klass}` — от main,
+   `data-sid` — твоё.
+2. Почини расхождение каркаса. Смотри `proverit_karkas()` и то, как собираются роли: где-то
+   `data-sid` попадает в ветку, которая у ролей различается. Признак готовности — HTTP 200 на
+   `POST /api/enrollment`, а не отсутствие маркеров конфликта.
+3. Прогони `python3 -m pytest -q` целиком и добейся, чтобы упавших было **17, не больше**:
+   17 — предсуществующий фон волны (`tests/ops/test_vykatka.py`, `tests/test_enrollment_scd2.py`,
+   `tests/test_sostav.py`, `tests/svodka/test_vopros_prepodavatelyu.py`), их чинить НЕ надо.
+4. Прогони гейт вёрстки `python3 tools/gejt_verstki.py` — он в main. Должно остаться четыре
+   строки нулей; если карточка ломает вёрстку, это увидит он, а не ты.
+5. ТОЛЬКО ПОТОМ влей ветку в main и выкати.
+
+🔴 **И ГЛАВНОЕ ПРО ФОРМУ РАБОТЫ.** Ты вливала ветку, стоя В ГЛАВНОЙ ПАПКЕ. Из-за этого твоя
+незаконченная работа оказалась в главной папке, откуда идёт ВЫКАТКА НА БОЕВОЙ СЕРВЕР, — а
+выкатка в эту ночь идёт после каждой принятой позиции. Полшага до того, чтобы недоделанная
+карточка уехала школьникам. Влитие делай ИЗ СВОЕЙ рабочей папки или дверью
+`git_zona.py vlit-v-osnovnuyu`, которая проверяет состояние главной папки прежде, чем трогать её.
 
 ## ФАЗА ПРИЁМКИ — (заполняет АНАЛИТИК, не исполнитель)
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
