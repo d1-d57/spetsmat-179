@@ -343,11 +343,16 @@ def test_the_number_in_the_question_is_the_number_that_gets_removed(shkola):
 
     status, schet = _get(base + "/api/den/perekrytiya?den=" + THURSDAY)
     assert status == 200 and schet["n"] == 2
-    assert [x["id"] for x in schet["shkolniki"]] == ids[:2]
+    assert schet["id"] == ids[:2]
+    # 🔴 `shkolniki` — СТРОКИ, И ЭТО ПРОВЕРЯЕТСЯ ЗДЕСЬ, А НЕ ПОДРАЗУМЕВАЕТСЯ.  Кнопка
+    # печатает их прямо в подсказку через `join(', ')`; список объектов дал бы человеку
+    # «[object Object]», и ни один зелёный тест этого бы не заметил.
+    assert schet["shkolniki"] == ["Перекрытый-0 Перекрытый-0", "Перекрытый-1 Перекрытый-1"]
+    assert all(isinstance(x, str) for x in schet["shkolniki"])
 
     status, otvet = _post(base + "/api/den/primenit-postoyannoe", {"den": THURSDAY})
     assert status == 200 and otvet["snyato"] == schet["n"]
-    assert otvet["shkolniki"] == [x["id"] for x in schet["shkolniki"]]
+    assert otvet["id"] == schet["id"]
 
     # Pressed twice, it has nothing left to do: the second press is not a second removal.
     assert _post(base + "/api/den/primenit-postoyannoe", {"den": THURSDAY})[1]["snyato"] == 0
