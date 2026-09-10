@@ -959,6 +959,11 @@ def stili(kt) -> str:
 #s-kond .kond td[data-u].zhdyot{{opacity:.5}}
 #s-kond .kond-verh{{display:flex;align-items:baseline;justify-content:space-between;
   gap:1.5rem;flex-wrap:wrap}}
+/* Та же кнопочная форма, что и у «только мои» — новый цвет не заводится. */
+#s-kond .vnesti-knopka{{display:inline-block;margin-left:1rem;font-family:var(--sans);
+  font-weight:600;font-size:.95rem;color:var(--accent);padding:.35em 1rem;
+  border:1px solid var(--accent);border-radius:8px;text-decoration:none}}
+#s-kond .vnesti-knopka:hover{{background:var(--accent-soft)}}
 #s-kond .kond-moi{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1rem;
   color:var(--muted);padding:.35em 1rem;border:1px solid var(--rule);border-radius:8px;
   white-space:nowrap}}
@@ -1327,5 +1332,11 @@ def razdel(kt) -> str:
             f'{galka}{radio}'
             f'<div class="kond-verh"><div>'
             f'<h1>Кондуит</h1>'
+            # 🔴 КНОПКА «ВНЕСТИ ЗАДАЧИ» — САМЫЙ ДОРОГОЙ ЗАХОД ВОЛНЫ (владелец 09.09):
+            # текст/фото/голос → гипотеза → подтверждение → запись. Ссылка, а не форма
+            # тут же, по той же причине, по которой кондуит не несёт своего JS
+            # (`razdel.__doc__`): раздел целиком снимается со страницы гостя по
+            # `data-org`, и второй, пишущий, механизм внутри него — не его дело.
+            f'<a class="vnesti-knopka" href="/vnesti">Внести задачи</a>'
             f'</div>{metka_galki}</div>'
             f'{klassy}{slovar}{vkladki}{panely}{istoria}</section>')
