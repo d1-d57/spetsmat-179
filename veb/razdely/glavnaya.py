@@ -33,7 +33,7 @@ from veb.razdely.listki import (
     est,
     tekushchij,
 )
-from veb.razdely.shkolniki import gr_shk, kab_shk
+from veb.razdely.shkolniki import gr_shk
 
 
 DRAKON_SKRIPT = r"""
@@ -327,11 +327,19 @@ def poisk_skript(kt) -> str:
 // Поиск ищет и школьника, и преподавателя, подсказывает от двух букв: людей мало.
 const IMENA = {[e(f'{r["surname"]} {r["name"]}') for r in kt.shk] + [e(t["name"]) for t in kt.prep.values()]
                + [e(f'{n} {tema}') for n, tema, _ in L9] + [e(f'{n} {nz}') for n, nz, _ in L8_PERVOE + L8_VTOROE if n]!r};
-// Что показать по найденному. Для школьника — к кому и куда идти; для
-// преподавателя — его группа, старший, кабинет и сколько у него школьников.
+// Школьник → {{id, группа}}. Клик по школьнику теперь ВЕДЁТ на его группу, а не
+// пишет текст поверх страницы — владелец 09.09, дословно: «мне нужно не
+// открыть вот эту странную полоску, ... а перевести меня на страницу с
+// распределением группы В, чтобы я увидел Ивана Фефелова, с другой стороны —
+// его преподавателя». Группа пустой строкой — школьник нигде, и открывается
+// вкладка «школьникам», а не «В»/«Д»/«Н» (см. скрипт перехода ниже).
+const UCHENIKI = {{{",".join(
+  f'"{e(r["surname"])} {e(r["name"])}":{{"id":{r["id"]},"g":"{e(gr_shk(kt, r) or "")}"}}' for r in kt.shk
+)}}};
+// Что показать по найденному ПРЕПОДАВАТЕЛЮ или ЛИСТКУ — текстом на месте, как
+// и раньше: это не тот адрес, на который владелец пожаловался.
 const KOMU = {{{",".join(
-  [f'"{e(r["surname"])} {e(r["name"])}":"{e(kt.prep[r["teacher_id"]]["name"]) if r["teacher_id"] in kt.prep else "—"} · {e(gr_shk(kt, r) or "—")} · {e(kab_shk(kt, r) or "кабинет не назначен")}"' for r in kt.shk]
-+ [f'"{e(n)} {e(tema)}":"листок 9 класса · {" · ".join(z for z, f in vs if est("listki", f))}"' for n, tema, vs in L9]
+  [f'"{e(n)} {e(tema)}":"листок 9 класса · {" · ".join(z for z, f in vs if est("listki", f))}"' for n, tema, vs in L9]
 + [f'"{e(n)} {e(nz)}":"листок 8 класса"' for n, nz, fl in L8_PERVOE + L8_VTOROE if n and est("listki-8kl", fl)]
 + [f'"{e(t_["name"])}":"{e(", ".join(sorted(r["surname"] + " " + r["name"] for r in kt.shk if r["teacher_id"] == t_["id"])) or "школьников нет")} · {e(t_["gruppa"] or "—")} · {e(kt.kabinety.get(t_["gruppa"]) or "кабинет не назначен")}"' for t_ in kt.prep.values()]
 )}}};
@@ -344,10 +352,42 @@ poisk.addEventListener('input',e=>{{
 }});
 spisok.addEventListener('click',e=>{{
   if(e.target.tagName!=='DIV')return;
-  const n=e.target.textContent; poisk.value=n; spisok.hidden=true;
+  const n=e.target.textContent; spisok.hidden=true;
+  // 🔴 ШКОЛЬНИК — ПЕРЕХОДОМ, ПРЕПОДАВАТЕЛЬ/ЛИСТОК — ПО-СТАРОМУ, ТЕКСТОМ. Уйти с
+  // адреса распределения дальше можно как угодно (назад, другая вкладка меню) —
+  // сбрасывать здесь нечего, это обычная навигация браузера.
+  const uch = UCHENIKI[n];
+  if(uch){{
+    location.href = '/raspredelenie?sid=' + uch.id
+      + (uch.g ? '&g=' + encodeURIComponent(uch.g) : '');
+    return;
+  }}
+  poisk.value=n;
   nashli.innerHTML = KOMU[n] ? '<div class="otvet"><b>'+n+'</b> → '+KOMU[n]+'</div>' : '';
 }});
-document.addEventListener('click',e=>{{if(!e.target.closest('.podskazki'))spisok.hidden=true;}});
+// 🔴 УХОД КЛИКОМ МИМО ГАСИТ И ПОДСКАЗКИ, И ОТВЕТ. Раньше гас только `spisok`;
+// `nashli` (ответ по преподавателю/листку) оставался висеть, пока не наберут
+// новый запрос заново, — то самое «полоску невозможно закрыть, не сбросив
+// человека», только уже для НЕ-школьника. Дублирует часть жалобы 09.09, но
+// чинится тем же способом и в том же файле, что и переход школьника.
+document.addEventListener('click',e=>{{
+  if(!e.target.closest('.podskazki')){{spisok.hidden=true;nashli.innerHTML='';}}
+}});
+
+// 🔴 ПРИШЛИ ПО ССЫЛКЕ ИЗ ПОИСКА — ВКЛАДКА ГРУППЫ И ПОДСВЕТКА СТРОКИ. `sid`/`g`
+// читаются из адреса при каждой загрузке, а не запоминаются нигде: обычная
+// навигация, уйти можно куда угодно, ничего не сбрасывая. Работает на любом
+// адресе распределения — на занятии и на постоянном каркас один и тот же.
+(function(){{
+  const q = new URLSearchParams(location.search);
+  const sid = q.get('sid');
+  if(!sid) return;
+  const g = q.get('g');
+  const vk = g && document.getElementById('t-' + g);
+  if(vk) vk.checked = true;
+  const stroka = document.querySelector('[data-shk-id="' + CSS.escape(sid) + '"]');
+  if(stroka){{ stroka.classList.add('podsvechen'); stroka.scrollIntoView({{block:'center'}}); }}
+}})();
 
 // Поиск на РАСПРЕДЕЛЕНИИ: прячет строки, не совпавшие с фамилией или именем.
 // Работает разом во всех вкладках и в обеих половинах строки — искать надо там,

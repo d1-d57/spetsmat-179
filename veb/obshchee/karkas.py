@@ -1281,6 +1281,8 @@ tr:hover td{{background:var(--accent-soft)}}
   border:1px solid var(--rule);border-radius:0 0 9px 9px;max-height:18rem;overflow:auto}}
 .spisok div{{padding:.5em .9em;cursor:pointer}}
 .spisok div:hover{{background:var(--accent-soft);color:var(--accent)}}
+/* Строка школьника, на которую привёл поиск (`?sid=` — `glavnaya.poisk_skript`). */
+.podsvechen{{outline:2px solid var(--accent);border-radius:6px;background:var(--accent-soft)}}
 /* ТРИ КОЛОНКИ ВО ВЕСЬ ЭКРАН. Слева и посередине — школьник и его преподаватель,
    справа — преподаватель и его школьники. Разделены вертикальной линией.
    Списками, а не квадратиками: человек ищет свою фамилию по алфавиту. */
@@ -1668,8 +1670,12 @@ button.vtoraya:hover{{color:var(--text)}}
 .menu .im{{font-weight:600;font-size:1.05rem;margin-right:1.4rem;white-space:nowrap;
   color:var(--text);padding:0;background:none;cursor:default}}
 .menu .im:hover{{background:none}}
-.poisk-verh{{flex:1 1 18rem;max-width:34rem;margin:0 1.2rem;min-width:10rem}}
-.poisk-verh .poisk{{margin:0;font-size:1rem;padding:.42em .8em;width:100%}}
+/* 🔴 ШИРЕ, А НЕ ПРЕЖНИЕ 34REM. Владелец 09.09, дословно: «почему ты выбрал
+   какую-то очень узкую маленькую текстовую область? Хотя здесь места на
+   каждой странице много». `.menu` уже переносит строку по `flex-wrap:wrap`,
+   так что рост поля отодвигает соседей на вторую строку, а не режет их. */
+.poisk-verh{{flex:3 1 24rem;max-width:56rem;margin:0 1.2rem;min-width:10rem}}
+.poisk-verh .poisk{{margin:0;font-size:1rem;padding:.42em .8em;width:100%;max-width:none}}
 .poisk-verh .spisok{{top:2.6rem}}
 .poisk-verh #nashli{{position:absolute;left:0;right:0;top:2.6rem;z-index:19}}
 .verh-prava{{display:flex;align-items:center;gap:.5rem;margin-left:auto;white-space:nowrap}}
