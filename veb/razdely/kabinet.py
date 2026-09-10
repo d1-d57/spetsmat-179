@@ -71,7 +71,7 @@ from core.services.sostav_na_den import (
     slot_of,
 )
 from veb import vhod
-from veb.obshchee.karkas import VREMYA, e
+from veb.obshchee.karkas import VREMYA, e, menyu_ssylkami
 from veb.razdely.lichnaya import deti_na_datu, kabinet_na_datu, segodnya
 from veb.razdely.list_odin import _obshchij_stil
 
@@ -315,12 +315,21 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
 
 
 def _dokument(zagolovok: str, telo: str) -> str:
+    """Документ кабинета — С ВЕРХНИМ МЕНЮ, и это первое, о чём просил владелец 10.09.
+
+    Дословно (`TZ-DOBOR-10-09.md` H1.1): *«нет верхнего меню, из кабинета некуда
+    уйти, это плохо»*. Меню рисует `karkas.menyu_ssylkami` — одно место, где
+    записаны названия и адреса пунктов, общее с оболочкой; его стили приезжают
+    вместе со всей таблицей сайта через `_obshchij_stil()`, и ни одного своего
+    цвета здесь по-прежнему нет.
+    """
     return f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{e(zagolovok)}</title>
 <style>{_obshchij_stil()}{SVOI_STILI}</style></head>
 <body>
+{menyu_ssylkami("/kabinet")}
 {telo}
 </body></html>"""
 
