@@ -546,3 +546,175 @@ def test_samoproverka_lomaet_i_centr(server, brauzer):
                 "нашла — это ложно-зелёная самопроверка")
     finally:
         ctx.close()
+
+
+# ── 7. шесть дыр, через которые прошёл свежий верификатор 10.09 ───────────────
+#
+# 🔴 КАЖДАЯ НАЙДЕНА ПОРЧЕЙ ЖИВОЙ СТРАНИЦЫ, А НЕ ЧТЕНИЕМ КОДА, и две из них —
+# ЛОЖНО-КРАСНЫЕ, то есть противоположного знака: гейт объявлял нарушением канона
+# пиксели, которых нет.  Тесты держат обе стороны, чтобы починка осталась
+# починенной.
+
+def test_centr_v_kontrole_nahodka(server, brauzer):
+    """🔴 ПРОПУСК ВЕРИФИКАТОРА №1 И №2.  `INPUT` был выброшен из обхода целиком
+    (`sluzhebnyy`), а у `<select>` `chistyy()` вычитает `<option>` и оставляет
+    пустоту — и 198 центрированных селектов, и живое поле кабинета («чт 303»,
+    `veb/obshchee/karkas.py:1644`) гейт не называл ни на одном из 13 экранов.
+    Коробку контрола рисует браузер, и в проверках 1-2 его не судят по этой
+    причине; но ВЫКЛЮЧКА текста внутри коробки — наша, и правило канона про неё."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/raspredelenie", "t-В")
+    try:
+        do = _zamer(p)
+        est = p.evaluate("""() => ({
+            inp: document.querySelectorAll('.kab-pole input').length,
+            sel: document.querySelectorAll('select').length})""")
+        assert est["inp"] > 0 and est["sel"] > 0, (
+            f"на экране нет контролов ({est}) — тесту нечего центрировать")
+
+        p.evaluate("""() => document.querySelectorAll('select').forEach(
+            e => e.style.setProperty('text-align','center','important'))""")
+        p.wait_for_timeout(200)
+        posle = _zamer(p)
+        assert any("select" in d["put"].lower() for d in posle["centr"]), (
+            f"198 селектов поставлены по центру — у закрытого селекта видна "
+            f"выбранная строка, и она уехала в середину, — а гейт нашёл "
+            f"{len(posle['centr'])} против {len(do['centr'])} и ни одного select")
+
+        p.evaluate("""() => document.querySelectorAll('select').forEach(
+            e => e.style.removeProperty('text-align'))""")
+        p.wait_for_timeout(200)
+        assert len(_zamer(p)["centr"]) == len(do["centr"]), "не зеленеет обратно"
+    finally:
+        ctx.close()
+
+
+def test_centr_zhivogo_polya_kabineta(server, brauzer):
+    """Второй половиной того же пропуска: поле кабинета центрировано НА ЖИВОМ
+    САЙТЕ, ничего ломать не надо.  Тест держит, что гейт его называет."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/raspredelenie", "t-В")
+    try:
+        z = _zamer(p)
+        assert any("kab-inp" in d["put"] for d in z["centr"]), (
+            f"поле кабинета центрировано на живой странице, а среди находок его "
+            f"нет: {[d['put'] for d in z['centr']][:4]}")
+    finally:
+        ctx.close()
+
+
+def test_centr_v_psevdoelemente(server, brauzer):
+    """🔴 ПРОПУСК ВЕРИФИКАТОРА №3.  Текст псевдоэлемента не входит в
+    `textContent`, поэтому центрированный `::before` с настоящей надписью
+    оставлял `chistyy()` пустым, узел отсекался границей «нет своего текста», и
+    строка уезжала в середину при нулях по всем пяти проверкам."""
+    lomka = """()=>{const s=document.createElement('style');s.id='psev';
+        s.textContent='#v-shk .kol::before{content:"ЗАГОЛОВОК КОЛОНКИ";'
+        + 'display:block;text-align:center}';document.head.appendChild(s);}"""
+    chinka = "()=>document.getElementById('psev').remove()"
+    do, posle, chisto = _para(
+        brauzer, server, "гость", "/raspredelenie", "t-shk", lomka, chinka)
+    assert len(posle["centr"]) > len(do["centr"]), (
+        "надпись псевдоэлемента стоит по центру, а гейт показывает то же число, "
+        "что до порчи")
+    assert len(chisto["centr"]) == len(do["centr"]), "не зеленеет обратно"
+
+
+def test_centr_pod_nevidimym_kornem(server, brauzer):
+    """🔴 ПРОПУСК ВЕРИФИКАТОРА №4, и он структурный, а не про одно свойство.
+    `<div style="display:contents;text-align:center">` имеет НУЛЕВОЙ
+    прямоугольник: в кандидаты он не попадает и находкой стать не может, а всех
+    своих потомков глушил правилом «родитель центрирован — значит не корень».
+    Двенадцать блоков уехали в середину, гейт показал 0 → 0.  Подъём к корню
+    теперь ПРОПУСКАЕТ невидимых предков вместо того, чтобы на них
+    останавливаться."""
+    lomka = """()=>{document.querySelectorAll('#v-shk .para').forEach(pa=>{
+        const o=document.createElement('div');o.className='obyortka-testa';
+        o.style.display='contents';o.style.textAlign='center';
+        while(pa.firstChild) o.appendChild(pa.firstChild);
+        pa.appendChild(o);});}"""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        do = _zamer(p)
+        p.evaluate(lomka); p.wait_for_timeout(200)
+        posle = _zamer(p)
+        assert len(posle["centr"]) > len(do["centr"]), (
+            f"строки уехали в середину под обёрткой `display:contents`, а гейт "
+            f"показывает {len(do['centr'])} → {len(posle['centr'])}: обёртка "
+            "невидима, находкой стать не может, и потомков она глушила")
+        # Обёртка законно стоит в ПУТИ как предок — путь на то и путь; она не
+        # должна быть НАЗВАННЫМ узлом, то есть последним звеном.
+        assert not any(d["put"].split(" > ")[-1].startswith("div.obyortka-testa")
+                       for d in posle["centr"]), (
+            "названа сама невидимая обёртка — по такому адресу в разметке "
+            "чинить нечего")
+    finally:
+        ctx.close()
+
+
+def test_centr_bez_sdviga_ne_nahodka_no_poschitan(server, brauzer):
+    """🔴 ЛОЖНО-КРАСНОЕ ВЕРИФИКАТОРА №5 И №6, знак противоположный.  Кнопки
+    `#sohranit`/`#sbrosit` центрированы UA-стилем браузера (в `veb/**` правила
+    `button{text-align…}` нет вовсе) и сжаты по тексту: зазор [0,0] с обеих
+    сторон.  На экране «класс» ОБЕ находки были такими — целый экран объявлялся
+    нарушителем канона на пикселях, которых нет, а гейт, кричащий волком,
+    выключают.  Обе половины тут: находкой не считается И посчитан отдельно."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-start")
+    try:
+        z = _zamer(p)
+        knopok = p.evaluate("""() => [...document.querySelectorAll(
+            '#panel-pravok button')].filter(e => {
+                const r = e.getBoundingClientRect();
+                return r.width > 1 &&
+                       getComputedStyle(e).textAlign === 'center'; }).length""")
+        assert knopok >= 2, (
+            f"на экране «класс» не нашлось центрированных кнопок ({knopok}) — "
+            "ложно-красное, ради которого написан тест, воспроизвести нечем")
+        assert not any("sohranit" in d["put"] or "sbrosit" in d["put"]
+                       for d in z["centr"]), (
+            f"кнопка названа нарушением канона, хотя не сдвигает ни пикселя: "
+            f"{[d['put'] for d in z['centr']][:3]}")
+        assert z["bez_sdviga"] >= knopok, (
+            f"прощено молча: центрирований без сдвига насчитано "
+            f"{z['bez_sdviga']} при {knopok} кнопках. Молчаливое прощение "
+            "снаружи неотличимо от дырки в проверке")
+    finally:
+        ctx.close()
+
+
+def test_centr_sdvinutyy_ostayotsya_nahodkoy(server, brauzer):
+    """Вторая сторона того же правила: смягчение обязано касаться ТОЛЬКО
+    несдвинутого.  Тот же узел, которому дали ширину и которому теперь есть куда
+    двигать текст, обязан снова стать находкой — иначе «без сдвига не судим»
+    превращается в тихую амнистию всему центрированию сразу."""
+    lomka = """()=>document.querySelectorAll('#panel-pravok button').forEach(
+        b=>{b.style.setProperty('width','420px','important');
+            b.style.setProperty('text-align','center','important');})"""
+    chinka = """()=>document.querySelectorAll('#panel-pravok button').forEach(
+        b=>{b.style.removeProperty('width');
+            b.style.removeProperty('text-align');})"""
+    do, posle, chisto = _para(
+        brauzer, server, "организатор", "/glavnaya", "p-start", lomka, chinka)
+    assert len(posle["centr"]) > len(do["centr"]), (
+        f"кнопкам дали 420px, текст встал ровно посередине пустой полосы — "
+        f"а гейт показывает {len(do['centr'])} → {len(posle['centr'])}")
+    assert len(chisto["centr"]) == len(do["centr"]), "не зеленеет обратно"
+
+
+def test_centr_boksom_flexom(server, brauzer):
+    """Верификатор замерил: текст, лежащий прямо во флекс-контейнере с
+    `justify-content:center`, встаёт ровно туда же, куда его поставил бы
+    запрещённый `text-align:center` — зазор [0,120] → [60,60], пиксель в пиксель.
+    Одна другая строка CSS, и запрет обойдён легально."""
+    lomka = """()=>document.querySelectorAll('#v-shk .para .kto').forEach(e=>{
+        e.style.setProperty('display','flex','important');
+        e.style.setProperty('justify-content','center','important');})"""
+    chinka = """()=>document.querySelectorAll('#v-shk .para .kto').forEach(e=>{
+        e.style.removeProperty('display');
+        e.style.removeProperty('justify-content');})"""
+    do, posle, chisto = _para(
+        brauzer, server, "гость", "/raspredelenie", "t-shk", lomka, chinka)
+    assert len(posle["centr"]) > len(do["centr"]), (
+        "текст центрирован флексом — глазом неотличимо от `text-align:center`, "
+        "а гейт молчит")
+    assert any(d["chem"] == "justify-content:center" for d in posle["centr"]), (
+        "нашли, но не назвали, ЧЕМ центрировано — чинить нечего")
+    assert len(chisto["centr"]) == len(do["centr"]), "не зеленеет обратно"
