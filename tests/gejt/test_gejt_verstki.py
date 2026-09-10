@@ -225,3 +225,103 @@ def test_ekrany_razlichny(server, brauzer):
     assert len(set(rasp)) == len(rasp), (
         f"разные вкладки распределения дали одинаковый охват {vidy} — "
         "гейт меряет один и тот же экран под разными именами")
+
+
+# ── 5. the four holes a fresh verifier walked through on 2026-09-10 ───────────
+#
+# 🔴 EACH OF THESE WAS A REAL MISS, FOUND BY BREAKING THE PAGE, NOT BY READING THE
+# CODE.  They are here so that closing them stays closed: every one is again a
+# PAIR — the damage present and caught, the damage removed and quiet.
+
+def _para(brauzer, url, rol, put, radio, lomka, chinka):
+    ctx, p = _stranica(brauzer, url, rol, put, radio)
+    try:
+        do = _zamer(p)
+        p.evaluate(lomka); p.wait_for_timeout(200)
+        posle = _zamer(p)
+        p.evaluate(chinka); p.wait_for_timeout(200)
+        return do, posle, _zamer(p)
+    finally:
+        ctx.close()
+
+
+def test_obrezka_po_vysote(server, brauzer):
+    """`.kto{height:7px;overflow:hidden}` left twenty names as a seven-pixel smear,
+    unreadable on the screenshot, and the gate reported the same number it had
+    before the damage: check 1 compared only scrollWidth to clientWidth."""
+    do, posle, chisto = _para(
+        brauzer, server, "гость", "/raspredelenie", "t-shk",
+        "()=>document.querySelectorAll('#v-shk .kto').forEach(e=>{"
+        "e.dataset.h=e.style.height;e.style.height='7px';e.style.overflow='hidden';})",
+        "()=>document.querySelectorAll('#v-shk .kto').forEach(e=>{"
+        "e.style.height=e.dataset.h||'';e.style.overflow='';})")
+    assert len(posle["obrezka"]) > len(do["obrezka"]), (
+        "текст срезан снизу, а гейт показывает то же число, что до порчи")
+    assert any(d.get("storona") == "ввысь" for d in posle["obrezka"]), (
+        "обрезка найдена, но не опознана как вертикальная")
+    assert len(chisto["obrezka"]) == len(do["obrezka"]), "не зеленеет обратно"
+
+
+def test_uhod_vlevo_iz_klipayushchey_kartochki(server, brauzer):
+    """The mirror of the bug this file was rewritten for.  `scrollWidth` never grows
+    leftwards in a left-to-right document, so content walking out of a card's LEFT
+    edge is painted nowhere and was counted nowhere: the verifier emptied an entire
+    column and the gate stayed at (0,0,0,0), while the SAME shift to the right gave
+    a red."""
+    do, posle, chisto = _para(
+        brauzer, server, "организатор", "/raspredelenie", "t-Д",
+        "()=>document.querySelectorAll('.kol-pr .para').forEach(p=>{"
+        "p.style.overflow='hidden';[...p.children].forEach(c=>{"
+        "c.style.position='relative';c.style.left='-260px';});})",
+        "()=>document.querySelectorAll('.kol-pr .para').forEach(p=>{"
+        "p.style.overflow='';[...p.children].forEach(c=>{"
+        "c.style.position='';c.style.left='';});})")
+    assert posle["vyshli"], "содержимое ушло за левый край карточки, а гейт зелёный"
+    assert any(d["tip"] == "срезано слева" for d in posle["vyshli"])
+    assert posle["skroll"] == 0, (
+        "подстроен не тот дефект: скролл поймала бы и старая проверка 3")
+    assert not chisto["vyshli"], "не зеленеет обратно"
+
+
+def test_kontrol_ne_oslepljaet_predka(server, brauzer):
+    """🔴 THE REGRESSION.  Excluding a form control also excluded every ANCESTOR of
+    one — and on the organiser's screens that is nearly every row.  Squeezing the
+    left column so that names were visibly cut made the gate GREENER than it was
+    on the sound page.  The guest, whose rows carry no controls, saw the same
+    damage correctly: that asymmetry is the whole test."""
+    lomka = ("()=>document.querySelectorAll('#v-shk .kto').forEach(e=>{"
+             "e.style.maxWidth='150px';e.style.overflow='hidden';"
+             "e.style.whiteSpace='nowrap';e.style.textOverflow='ellipsis';})")
+    chinka = ("()=>document.querySelectorAll('#v-shk .kto').forEach(e=>{"
+              "e.style.maxWidth='';e.style.overflow='';"
+              "e.style.whiteSpace='';e.style.textOverflow='';})")
+    for rol in ("гость", "организатор"):
+        do, posle, chisto = _para(
+            brauzer, server, rol, "/raspredelenie", "t-shk", lomka, chinka)
+        assert len(posle["obrezka"]) > len(do["obrezka"]) + 5, (
+            f"{rol}: колонка имён раздавлена до 150px, обрезка "
+            f"{len(do['obrezka'])} → {len(posle['obrezka'])} — "
+            "у организатора в каждой строке <select>, и он не смеет ослеплять строку")
+        assert len(chisto["obrezka"]) == len(do["obrezka"]), f"{rol}: не зеленеет"
+
+
+def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
+    """`--slomat` announced «13 экранов из 13» while on five of them only the
+    h-scroll had fired.  Every breakage must now report whether it actually landed,
+    so a self-test can never pass on damage it failed to inflict."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        otchet = p.evaluate(gejt.LOMKA)
+        assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll"}, (
+            "поломка не отчитывается о том, села ли она")
+        p.wait_for_timeout(200)
+        z = _zamer(p)
+        for klyuch_lom, klyuch_zam in (("obrezka", "obrezka"), ("perenos", "perenos"),
+                                       ("vyhod", "vyshli")):
+            if otchet[klyuch_lom]:
+                assert z[klyuch_zam], (
+                    f"поломка «{klyuch_lom}» отчиталась, что села, а проверка "
+                    f"«{klyuch_zam}» ничего не нашла — это ложно-зелёная "
+                    "самопроверка, тот же класс, что и ложно-зелёный гейт")
+    finally:
+        ctx.close()
