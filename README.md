@@ -284,6 +284,9 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_dve-stranicy-raspredelenia.md`** (разделить навигацию: Распределение ведёт на ближайшее занятие с датой сверху, постоянное — отдельной страницей с колонками пн и чт)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_gejt-pravda.md`** (гейт вёрстки перестаёт врать: ловит обрезку и выход за контейнер)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_https-i-domen.md`** (HTTPS на math-kluychiki.ru: сертификат, редиректы с http и с IP, сторож на новый адрес)
 
 
@@ -297,6 +300,12 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_kanon-verstki.md`** (канон колонок плюс краснеющий гейт: без обрезки, без переносов, без горизонтального скролла)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_karkas-menyu-kabinet.md`** (верхнее меню с вкладкой Кабинет, полоса занятий вместо ссылок, главная без чужих кабинетов)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_konduit-panel.md`** (кондуит: одна верхняя панель, счётчик колонкой после фамилии, строчные буквы, звезда цветом, большая кнопка)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_listki-kak-baza-zadach.md`** (листок как база задач: страница листка вместо PDF, скачивание PDF и TeX, кондуит и состав из базы, отметки 05.09)
 
@@ -317,6 +326,12 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_privacy-i-terms.md`** (две недостающие страницы сайта — политика конфиденциальности и условия — по адресам, вписанным в консоль Google)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_profil-bezopasnosti.md`** (снять пометку «обманные страницы»: закрыть default_server, заголовки, robots.txt, пароль уходит по https)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_raspredelenie-kolonki.md`** (распределение: колонка значка, широкая плашка, школьники в ряд, счётчик столбцом, потолок красным)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_razmetka-bazy.md`** (разметка боевой базы видами задач: копия, импорт, проверка крестиков в кондуите)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_skleit-adminku-s-sajtom.md`** (свести рабочий редактор распределения и страницу правки на сайте в один шаблон с двумя режимами)
 
@@ -368,6 +383,9 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-noch.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-utro.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-vecher.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
