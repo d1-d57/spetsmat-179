@@ -151,6 +151,10 @@ def stranica(c, den: str) -> str:
         sessions=SqliteSessions(c),
         attendance=SqliteAttendance(c),
         roster=_Uchashchiesya(c),
+        # Отсутствие принимающего на день снимает прикрепление, аудиторию
+        # оставляет (владелец 10.09). Та же функция, что уже зовётся в
+        # `veb/server.py` для кнопки «применить постоянное».
+        otsutstvuyushchie_prepoda=lambda d: otsutstvuyushchie_prepodavateli(c, d),
     ).sostav(den)
     students, teachers = _spravochniki(c)
 
@@ -276,6 +280,10 @@ def sostav_dnya_strokami(c, den: str, postoyannye) -> list:
         sessions=SqliteSessions(c),
         attendance=SqliteAttendance(c),
         roster=_Uchashchiesya(c),
+        # Отсутствие принимающего на день снимает прикрепление, аудиторию
+        # оставляет (владелец 10.09). Та же функция, что уже зовётся в
+        # `veb/server.py` для кнопки «применить постоянное».
+        otsutstvuyushchie_prepoda=lambda d: otsutstvuyushchie_prepodavateli(c, d),
     ).sostav(den)
     po_id = {r["id"]: r for r in postoyannye}
     stroki = []

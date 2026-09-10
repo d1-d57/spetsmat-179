@@ -301,10 +301,30 @@ class SostavService:
     """
 
     def __init__(self, enrollment: EnrollmentRows, sessions: SessionsOfDay,
-                 attendance: DeviationRows, roster: Optional[Roster] = None) -> None:
+                 attendance: DeviationRows, roster: Optional[Roster] = None,
+                 otsutstvuyushchie_prepoda=None) -> None:
         self._enrollment = enrollment
         self._sessions = sessions
         self._attendance = attendance
+        # 🔴 ОТСУТСТВИЕ ПРИНИМАЮЩЕГО НА ДЕНЬ — ВЫЧИСЛЯЕМОЕ СОСТОЯНИЕ, А НЕ ЗАПИСЬ.
+        # Владелец 10.09: «сегодня нет Нади… она отмечается как отсутствующая, но в
+        # распределении её дети остаются закреплёнными за ней. Так не должно быть,
+        # они должны оставаться в той же аудитории, но без прикрепления к принимающему».
+        #
+        # Порт зовётся с датой и отдаёт множество id тех, кого сегодня нет
+        # (`veb/razdely/zanyatie.otsutstvuyushchie_prepodavateli`). Необязателен по
+        # той же причине, что и `roster`: без него служба отвечает ровно как прежде.
+        #
+        # 🔴 ЧЕГО ЗДЕСЬ НАМЕРЕННО НЕ СДЕЛАНО, И ЭТО ВАЖНЕЕ САМОЙ ПРАВКИ:
+        #   * НЕ пишется строка в слой занятия. `teacher_id = NULL` в строке
+        #     отклонения означает «перекрытия нет» — то есть постоянный преподаватель
+        #     ОСТАЁТСЯ, ровно то, от чего избавляемся. Записывать нечего: состояние
+        #     считается из `teacher_attendance`, где оно уже лежит.
+        #   * НЕ трогается `prepodavatel_ne_prihodit`: там только (teacher_id, slot),
+        #     даты нет вовсе, и это высказывание «по понедельникам не бывает». Слить
+        #     две породы отсутствия значило бы, что «заболел десятого» вычёркивает
+        #     человека из всех четвергов навсегда.
+        self._otsutstvuyushchie_prepoda = otsutstvuyushchie_prepoda
         # Необязателен НАМЕРЕННО: без него служба отвечает ровно как отвечала, и
         # дюжина зелёных тестов вокруг неё продолжает спрашивать то же самое.
         # С ним она отвечает полнее — «вот вся школа на этот день», включая тех,
@@ -320,6 +340,12 @@ class SostavService:
             return SostavDnya(den=den, slot=None, session_id=None, mesta=())
 
         standing = {row.student_id: row for row in self._enrollment.rows_valid_on(den, slot)}
+
+        # Кого из принимающих сегодня нет. Спрашивается ОДИН раз на состав, а не на
+        # каждого школьника: ответ один и тот же для всего дня.
+        net_segodnya = frozenset()
+        if self._otsutstvuyushchie_prepoda is not None:
+            net_segodnya = frozenset(self._otsutstvuyushchie_prepoda(den) or ())
 
         session = self._sessions.for_day(den)
         deviations = {}
@@ -344,8 +370,14 @@ class SostavService:
                 # No row — «как обычно».  This is the majority branch and it is the whole
                 # economy of the deviations model: 45 students, and on a quiet lesson the
                 # layer holds nothing at all.
+                #
+                # 🔴 ЕДИНСТВЕННОЕ УСЛОВИЕ, КОТОРЫМ ОТСУТСТВИЕ ПРИНИМАЮЩЕГО СНИМАЕТ
+                # ПРИКРЕПЛЕНИЕ. `room` СОХРАНЯЕТСЯ намеренно: ребёнок остаётся в той же
+                # аудитории — «они должны оставаться в той же аудитории, но без
+                # прикрепления к принимающему». Отклонения в слое нет и не заводится.
+                segodnya = None if obychno in net_segodnya else obychno
                 mesta.append(Mesto(student_id=student_id, obychno=obychno,
-                                   segodnya=obychno, room=room,
+                                   segodnya=segodnya, room=room,
                                    otmechen_otsutstvuyushchim=False, otklonenie=False,
                                    perekryt_prepodavatelem=False))
                 continue
@@ -357,6 +389,10 @@ class SostavService:
             # nobody by definition.
             segodnya = otklonenie.teacher_id if otklonenie.teacher_id is not None else obychno
             if absent:
+                segodnya = None
+            # То же условие для ветки с отклонением: и постоянный, и назначенный на
+            # сегодня принимающий одинаково может оказаться отсутствующим.
+            elif segodnya in net_segodnya:
                 segodnya = None
             mesta.append(Mesto(student_id=student_id, obychno=obychno,
                                segodnya=segodnya, room=room,
