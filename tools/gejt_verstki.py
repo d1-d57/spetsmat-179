@@ -295,7 +295,8 @@ ZAMER = r"""
                na_centr: 0, isklyucheno: 0, bez_sdviga: 0,
                pravil: 0, pravila_zhivye: [], pravila_pustye: [], pravil_nechitaemyh: 0,
                vidno_uzlov: 0, vidno_simvolov: 0, glavnoe: '', skryto_simvolov: 0,
-               polya: [], na_pole: 0, poley_bez_nabora: 0};
+               polya: [], na_pole: 0, poley_bez_nabora: 0,
+               kletki: [], na_kletku: 0, kletok_so_znachkom: 0, kletok_s_kontrolom: 0};
 
   out.skroll = Math.max(0,
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -456,6 +457,77 @@ ZAMER = r"""
         storona: vbok > 1 ? 'вширь' : 'ввысь',
         nado: vbok > 1 ? el.scrollWidth : el.scrollHeight,
         est: vbok > 1 ? el.clientWidth : el.clientHeight});
+  }
+
+  // ── 9. ОДНА КЛЕТКА — ОДИН НОСИТЕЛЬ ДАННЫХ ──────────────────────────────────
+  // 🔴 КАНОН ВЛАДЕЛЬЦА ДОСЛОВНО: «есть простая мысль, которая всегда
+  // проявляется: НЕЛЬЗЯ СМЕШИВАТЬ», и в приложении к колонкам — «всё должно быть
+  // расположено в колонках, не должно быть, чтобы кусочек информации цеплялся к
+  // тексту в предыдущей колонке».  Живое нарушение: «Агаркова Ирина ᴰ·ᴱ·» —
+  // инициалы принимающего надстрочником в клетке с фамилией школьника (O3).  У
+  // правила «никогда не центрируем» рычаг есть и оно держится; у «нельзя
+  // смешивать» рычага не было, и оно возвращается.
+  //
+  // 🔴 УЗКО И ПО МЕСТУ, ПОТОМУ ЧТО ШИРОКОЕ ПРАВИЛО ЗДЕСЬ ДАЁТ ЛОЖНО-КРАСНЫЕ, и
+  // это сказано прямо в ТЗ (Q4).  Красным объявляется ровно один, ИЗМЕРИМЫЙ род
+  // смешения: приписка, поднятая или опущенная относительно строки.  Замерено
+  // 11.09 по живым страницам, почему граница проходит именно здесь:
+  //   * `i.prin` («Н.В.» рядом с фамилией) — `vertical-align: super`. ЭТО ОНО.
+  //   * `span.iz` («/18» в счётчике «8/18») — `baseline`, шрифт мельче. Это ОДИН
+  //     факт, разбитый набором надвое, а не второй носитель: считать его
+  //     находкой значит краснеть на дроби.
+  //   * `span.det-f` (фамилии детей в клетке принимающего) — `baseline`, шрифт
+  //     тот же. Список в клетке — не приписка к соседнему тексту.
+  // Первый род красный; два других посчитаны отдельными числами и напечатаны —
+  // молчаливое прощение неотличимо от дырки в проверке.
+  // Своя копия проверки прозрачности: `prozr` объявлена ниже по скрипту, в
+  // проверке 4, и до её объявления она в мёртвой зоне. Дублируется одна строка,
+  // а не заводится общая: порядок проверок в этом файле — вопрос читаемости, и
+  // менять его ради экономии строки дороже, чем строка.
+  const prozrachno = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
+
+  const nad_strokoy = (el, s) =>
+      ['SUP', 'SUB'].includes(el.tagName) ||
+      ['super', 'sub'].includes(s.verticalAlign);
+
+  const kletki = vse.filter(el => ['TD', 'TH'].includes(el.tagName) && vidim(el));
+  out.na_kletku = kletki.length;
+  for (const kl of kletki) {
+    // Собственный текст клетки — всё, кроме приписок, контролов и служебного.
+    const bez = kl.cloneNode(true);
+    bez.querySelectorAll('sup, sub, select, input, textarea, button, style, script,'
+                       + ' option').forEach(n => n.remove());
+    // Клон не в документе, вычисленных стилей у него нет: приписки, поднятые
+    // НАБОРОМ, а не тегом, снимаются ниже, по оригиналу.
+    let svoy = (bez.textContent || '').trim().replace(/\s+/g, ' ');
+
+    const pripiski = [], znachki = [], kontroly = [];
+    for (const d of kl.querySelectorAll('*')) {
+      const tekst = (d.textContent || '').trim();
+      if (!tekst || !vidim(d)) continue;
+      const s = getComputedStyle(d);
+      if (['SELECT', 'INPUT', 'TEXTAREA', 'BUTTON'].includes(d.tagName)) {
+        kontroly.push(tekst); continue;
+      }
+      if (nad_strokoy(d, s)) {
+        pripiski.push({tag: d.tagName.toLowerCase(), tekst: tekst.slice(0, 24),
+                       chem: ['SUP', 'SUB'].includes(d.tagName)
+                             ? `<${d.tagName.toLowerCase()}>`
+                             : `vertical-align:${s.verticalAlign}`});
+        // Текст приписки в «своём» остаться не должен: `<i>` тегом не отсекается.
+        svoy = svoy.split(tekst).join('').trim();
+        continue;
+      }
+      if (!prozrachno(s.backgroundColor) ||
+          (parseFloat(s.borderLeftWidth) && parseFloat(s.borderRightWidth)))
+        znachki.push(tekst.slice(0, 24));
+    }
+    if (znachki.length && svoy) out.kletok_so_znachkom++;
+    if (kontroly.length && svoy) out.kletok_s_kontrolom++;
+    if (pripiski.length && svoy)
+      out.kletki.push({put: put(kl), svoy: svoy.slice(0, 40),
+                       pripiska: pripiski[0].tekst, chem: pripiski[0].chem,
+                       vsego: pripiski.length});
   }
 
   // ── 8. ПОЛЕ ВВОДА ШИРИНОЙ ПО САМОМУ ШИРОКОМУ ВОЗМОЖНОМУ ТЕКСТУ ─────────────
@@ -972,7 +1044,7 @@ LOMKA = r"""() => {
       return r.width > 1 && r.height > 1; };
   const iz = (sel) => [...document.querySelectorAll(sel)].filter(vidno);
   const otchet = {obrezka: false, perenos: false, vyhod: false, skroll: false,
-                  centr: false, pole: false};
+                  centr: false, pole: false, kletka: false};
 
   // 🔴 EVERY BREAKAGE VERIFIES THAT IT LANDED, AND TRIES AGAIN WHEN IT DID NOT.
   // The verifier caught the previous version rapporting a triumphant red on all
@@ -1197,6 +1269,27 @@ LOMKA = r"""() => {
     const r = s.getBoundingClientRect();
     otchet.pole = r.width > 1 && r.height > 1 && r.width < 40;
     if (!otchet.pole) s.remove();
+  }
+
+  // 9. ДВА НОСИТЕЛЯ В КЛЕТКЕ -- фамилия и приписка над строкой в одной клетке.
+  //    Клетка ВСТАВЛЯЕТСЯ по той же причине, что и поле в пункте 8: на кондуите
+  //    таких клеток уже 54 живых (это дефект O3, чинить его соседям), а на
+  //    экранах без единой таблицы ломать нечего вовсе. Вставленная клетка даёт
+  //    поломку ровно того рода, который проверка называет, на любом экране.
+  {
+    const gde = document.querySelector('main') || document.body;
+    const tb = document.createElement('table');
+    tb.id = 'proba-kletka';
+    const td = document.createElement('td');
+    td.append(document.createTextNode('Агаркова Ирина'));
+    const sup = document.createElement('sup');
+    sup.textContent = 'Н.В.';
+    td.append(sup);
+    const tr = document.createElement('tr'); tr.append(td); tb.append(tr);
+    gde.append(tb);
+    const r = td.getBoundingClientRect();
+    otchet.kletka = r.width > 1 && r.height > 1;
+    if (!otchet.kletka) tb.remove();
   }
 
   // 3. H-SCROLL -- push the document wider than the window.
@@ -1432,24 +1525,25 @@ def main() -> int:
     for beda in bedy_marshrutov:
         print(f"   🔴 МАРШРУТ БЕЗ ЭКРАНА: {beda}")
     print()
-    print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'поля':>6}{'переносы':>10}"
-          f"{'вышли':>8}{'центр':>7}{'скролл':>8}   охват узлов")
+    print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'поля':>6}{'клетки':>8}"
+          f"{'переносы':>10}{'вышли':>8}{'центр':>7}{'скролл':>8}   охват узлов")
     krasnyh, izmereno, uzlov, svedeno = len(bedy_marshrutov), 0, 0, 0
     for rol, imya, put, z, oshibka in itogi:
         if z is None:
             if (oshibka or "").startswith(SVEDENO):
                 svedeno += 1
-                print(f"{rol:<13}{imya:<15}{'·':>9}{'·':>6}{'·':>10}{'·':>8}"
-                      f"{'·':>7}{'·':>8}   {oshibka}")
+                print(f"{rol:<13}{imya:<15}{'·':>9}{'·':>6}{'·':>8}{'·':>10}"
+                      f"{'·':>8}{'·':>7}{'·':>8}   {oshibka}")
                 continue
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>10}{'—':>8}"
-                  f"{'—':>7}{'—':>8}   🔴 {oshibka}")
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>8}{'—':>10}"
+                  f"{'—':>8}{'—':>7}{'—':>8}   🔴 {oshibka}")
             krasnyh += 1
             continue
         izmereno += 1
         uzlov += z["vsego"]
         ploho = (len(z["obrezka"]) + len(z["perenos"]) + len(z["vyshli"])
-                 + len(z["centr"]) + len(z["polya"]) + (1 if z["skroll"] else 0))
+                 + len(z["centr"]) + len(z["polya"]) + len(z["kletki"])
+                 + (1 if z["skroll"] else 0))
         if ploho:
             krasnyh += 1
         # 🔴 ZERO NODES ON A LIVE SCREEN IS RED, NOT GREEN.  A walk that looked at
@@ -1457,8 +1551,8 @@ def main() -> int:
         # page unless the coverage is printed next to the verdict.
         if z["vsego"] == 0 or z["na_obrezku"] == 0 or z["na_centr"] == 0:
             krasnyh += 1
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>10}{'—':>8}"
-                  f"{'—':>7}{'—':>8}   "
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>8}{'—':>10}"
+                  f"{'—':>8}{'—':>7}{'—':>8}   "
                   f"🔴 ОХВАТ НОЛЬ: узлов {z['vsego']}, на обрезку "
                   f"{z['na_obrezku']}, на центр {z['na_centr']}")
             continue
@@ -1467,15 +1561,15 @@ def main() -> int:
         # страница: у всех проверок ноль находок ровно потому, что судить нечего.
         if pustoy_ekran(z, chisla["vsego"]):
             krasnyh += 1
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>10}{'—':>8}"
-                  f"{'—':>7}{'—':>8}   "
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>8}{'—':>10}"
+                  f"{'—':>8}{'—':>7}{'—':>8}   "
                   f"🔴 ПУСТОЙ ЭКРАН: в <{z['glavnoe']}> не видно ни одного узла с "
                   f"текстом, а в базе {chisla['vsego']} школьников"
                   + (f"; при этом СКРЫТО {z['skryto_simvolov']} знаков разметки — "
                      f"написано, но не показано" if z["skryto_simvolov"] else ""))
             continue
         print(f"{rol:<13}{imya:<15}{len(z['obrezka']):>9}{len(z['polya']):>6}"
-              f"{len(z['perenos']):>10}"
+              f"{len(z['kletki']):>8}{len(z['perenos']):>10}"
               f"{len(z['vyshli']):>8}{len(z['centr']):>7}{z['skroll']:>8}   "
               f"проверено {z['na_obrezku']}/{z['osmotreno']}/{z['na_vyhod']}/"
               f"{z['na_centr']} из {z['vsego']} · видно {z['vidno_uzlov']} узлов "
@@ -1489,6 +1583,15 @@ def main() -> int:
           "на ВЫХОД ЗА КОНТЕЙНЕР / на ЦЕНТР, из общего числа элементов страницы.")
     poley = sum(z["na_pole"] for _r, _i, _p, z, _o in itogi if z)
     bez_nabora = sum(z["poley_bez_nabora"] for _r, _i, _p, z, _o in itogi if z)
+    kletok = sum(z["na_kletku"] for _r, _i, _p, z, _o in itogi if z)
+    so_znachkom = sum(z["kletok_so_znachkom"] for _r, _i, _p, z, _o in itogi if z)
+    s_kontrolom = sum(z["kletok_s_kontrolom"] for _r, _i, _p, z, _o in itogi if z)
+    print(f"        клеток таблиц осмотрено {kletok}; кроме приписок над строкой "
+          f"в них нашлось: {so_znachkom} клеток, где рядом со своим текстом стоит "
+          f"элемент со своим фоном или рамкой, и {s_kontrolom} — где рядом стоит "
+          f"контрол. Эти два рода НЕ красные: список фамилий в клетке и дробь "
+          f"«8/18», набранная двумя кеглями, — один факт, а не два носителя, и "
+          f"красное на них было бы криком волком.")
     print(f"        полей ввода осмотрено {poley}; из них {bez_nabora} без "
           f"известного набора значений — у `<input>` без `list=` самого широкого "
           f"вводимого текста не существует, и такое поле судится только по тому, "
@@ -1563,6 +1666,12 @@ def main() -> int:
                 print(f"   {vid}{storona} · {rol} · {imya} · {d['put']} · "
                       f"«{d['tekst']}» · надо {d.get('nado', d.get('nuzhno'))} "
                       f"есть {d['est']}")
+        for d in z["kletki"][:8]:
+            print(f"   ДВА В КЛЕТКЕ · {rol} · {imya} · {d['put']} · "
+                  f"«{d['svoy']}» + приписка «{d['pripiska']}» ({d['chem']})")
+        if len(z["kletki"]) > 8:
+            print(f"   ДВА В КЛЕТКЕ · {rol} · {imya} · …и ещё "
+                  f"{len(z['kletki']) - 8} — напечатаны первые восемь")
         for d in z["polya"][:8]:
             print(f"   УЗКОЕ ПОЛЕ · {rol} · {imya} · {d['put']} · самый широкий "
                   f"из {d['variantov']} вариантов «{d['tekst']}» надо {d['nado']} "
@@ -1650,6 +1759,19 @@ def main() -> int:
           "только НЕСОБИРАЕМОЕ правило: все части на месте, связь невозможна."
           "\n · правило из листа, который браузер не отдал (чужой источник): "
           "считается отдельным числом, содержимое недоступно."
+          "\n · СМЕШЕНИЕ В КЛЕТКЕ, КРОМЕ ПРИПИСКИ НАД СТРОКОЙ. Красное — только "
+          "надстрочник и подстрочник (`<sup>`, `<sub>`, `vertical-align:super|sub`) "
+          "рядом со своим текстом клетки: он ИЗМЕРИМ. Список фамилий в клетке, "
+          "дробь «8/18», набранная двумя кеглями, значок со своим фоном — "
+          "считаются отдельными числами и печатаются, но находкой не являются: "
+          "«приписка» и «второй значок» в общем виде от обычного набора одной "
+          "мысли не отделимы, и широкое правило здесь дало бы ложно-красные "
+          "(так и сказано в ТЗ, Q4: формулировать узко и по месту)."
+          "\n · СМЕШЕНИЕ ВНЕ ТАБЛИЦЫ: строка распределения — это `div.para`, а не "
+          "клетка, и проверка 9 туда не смотрит вовсе."
+          "\n · ПОДСВЕТКА СТРОКИ, КОДИРУЮЩАЯ ДВА ПРИЗНАКА СРАЗУ (O1: «мой "
+          "школьник» и «сдал всё обязательное» одним цветом) — не измеряется: "
+          "цвет строки сам по себе не говорит, сколько смыслов в него вложено."
           "\n · ЭКРАН, НА КОТОРОМ ВИДНО МАЛО, А СКРЫТО МНОГО. Красное — только "
           "полный ноль видимых узлов с текстом; отношение «видно к скрыто» "
           "порогом не судится, потому что на распределении скрытых вкладок "
@@ -1668,6 +1790,7 @@ def main() -> int:
         # ДВОЕ: сколько раз поломку удалось нанести, и сколько раз её поймали.
         PROV = (("ОБРЕЗКА", "obrezka", "obrezka"),
                 ("УЗКОЕ ПОЛЕ", "polya", "pole"),
+                ("ДВА В КЛЕТКЕ", "kletki", "kletka"),
                 ("ПЕРЕНОС", "perenos", "perenos"),
                 ("ВЫШЛО ЗА КОНТЕЙНЕР", "vyshli", "vyhod"),
                 ("ЦЕНТР", "centr", "centr"),
@@ -1701,9 +1824,9 @@ def main() -> int:
         ne_seli = [f"{rol}/{imya}" for rol, imya, _p, z, _o in itogi if z
                    and not all(z.get("lomka", {}).get(k) for _n, _kk, k in PROV)]
         if ne_seli:
-            print("   ⚠ поломка села НЕ ЦЕЛИКОМ на экранах: " + ", ".join(ne_seli)
-                  + " — там испытаны не все пять проверок, и общий красный это"
-                    " скрывает.")
+            print(f"   ⚠ поломка села НЕ ЦЕЛИКОМ на экранах: " + ", ".join(ne_seli)
+                  + f" — там испытаны не все {len(PROV)} проверок, и общий красный"
+                    " это скрывает.")
         if bеda:
             print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: " + "; ".join(bеda)
                   + ". Проверка, которая ничего не поймала на подстроенном "

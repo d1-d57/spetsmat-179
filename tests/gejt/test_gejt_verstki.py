@@ -492,8 +492,12 @@ def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
     ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
     try:
         otchet = p.evaluate(gejt.LOMKA)
+        # 🔴 СПИСОК ПЕРЕЧИСЛЕН, А НЕ ВЫВЕДЕН ИЗ КОДА, НАРОЧНО: новая проверка
+        # обязана СЛОМАТЬ этот тест, пока ей не написали поломку. Выведи его из
+        # самого `LOMKA` — и проверка без поломки проедет молча, а это ровно то,
+        # ради чего файл написан.
         assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll", "centr",
-                               "pole"}, (
+                               "pole", "kletka"}, (
             "поломка не отчитывается о том, села ли она")
         p.wait_for_timeout(200)
         z = _zamer(p)
@@ -1118,5 +1122,107 @@ def test_input_bez_nabora_ne_sudirsya_na_shirinu(server, brauzer):
             "поле без набора значений не посчитано — молчаливое прощение "
             "неотличимо от дырки в проверке")
         assert z["polya"] == [], f"поле без набора объявлено узким: {z['polya']}"
+    finally:
+        ctx.close()
+
+
+# ── 9. одна клетка — один носитель данных (O3, Q4) ────────────────────────────
+
+def test_dva_nositelya_v_kletke_krasneyut_i_zeleneyut(server, brauzer):
+    """🔴 КАНОН ВЛАДЕЛЬЦА «НЕЛЬЗЯ СМЕШИВАТЬ», У КОТОРОГО НЕ БЫЛО РЫЧАГА.  Живое
+    нарушение — «Агаркова Ирина ᴰ·ᴱ·»: инициалы принимающего надстрочником в
+    клетке с фамилией школьника.  У правила «никогда не центрируем» рычаг есть, и
+    оно держится; у этого рычага не было, и оно возвращается.
+
+    Пара на кондуите: приписку убрали — находка ушла, вернули — вернулась."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        do = _zamer(p)
+        assert do["na_kletku"] > 0, "на кондуите не нашлось ни одной клетки"
+        assert do["kletki"], (
+            "живое нарушение O3 («Агаркова Ирина» + инициалы надстрочником) не "
+            "названо — проверка не испытана")
+        assert any("Агаркова" in d["svoy"] or "Аникина" in d["svoy"]
+                   for d in do["kletki"]), do["kletki"][:2]
+
+        p.evaluate("""() => { for (const i of document.querySelectorAll('td.kto i.prin'))
+            { i.setAttribute('data-bylo', '1'); i.remove(); } }""")
+        posle = _zamer(p)
+        assert posle["kletki"] == [], (
+            f"приписки убраны, а гейт всё ещё называет {len(posle['kletki'])} клеток")
+    finally:
+        ctx.close()
+
+
+def test_pripiska_lovitsya_i_tegom_i_naborom(server, brauzer):
+    """Приписка бывает `<sup>` и бывает `vertical-align:super` на любом теге —
+    живое нарушение сделано ВТОРЫМ способом (`i.prin`), и проверка, знающая один
+    только тег, прошла бы мимо него целиком."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        z = _zamer(p)
+        chem = {d["chem"] for d in z["kletki"]}
+        assert any("vertical-align" in c for c in chem), (
+            f"приписка, поднятая НАБОРОМ, не поймана: {chem}")
+        p.evaluate("""() => {
+            const td = document.createElement('td');
+            td.append(document.createTextNode('Проба Пробова'));
+            const s = document.createElement('sup'); s.textContent = 'П.П.';
+            td.append(s);
+            const tr = document.createElement('tr'); tr.append(td);
+            const tb = document.createElement('table'); tb.id = 'proba-tabl';
+            tb.append(tr);
+            (document.querySelector('main') || document.body).append(tb);
+        }""")
+        posle = _zamer(p)
+        tegom = [d for d in posle["kletki"] if "Проба" in d["svoy"]]
+        assert tegom and tegom[0]["chem"] == "<sup>", (
+            f"приписка, сделанная ТЕГОМ, не поймана: {posle['kletki'][-2:]}")
+    finally:
+        p.evaluate("""() => { const e = document.getElementById('proba-tabl');
+            if (e) e.remove(); }""")
+        ctx.close()
+
+
+def test_odin_fakt_dvumya_keglyami_ne_nahodka(server, brauzer):
+    """🔴 ГРАНИЦА, ИЗМЕРЕННАЯ, А НЕ ВЫБРАННАЯ.  Счётчик «8/18» набран двумя
+    кеглями (`span.iz` мельче), а список фамилий в клетке принимающего — своим
+    набором блоков.  Ни то, ни другое не приписка: это ОДИН факт, разбитый
+    набором, и красное на нём было бы красным на дроби.  Отличие измеримо —
+    `vertical-align`, — а не выбрано на глаз: `i.prin` это `super`, `span.iz` и
+    `span.det-f` это `baseline`."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        z = _zamer(p)
+        assert not [d for d in z["kletki"] if "/" in d["pripiska"]], (
+            f"дробь счётчика объявлена вторым носителем: "
+            f"{[d for d in z['kletki'] if '/' in d['pripiska']][:2]}")
+        vyravnivanie = p.evaluate("""() => {
+            const o = {};
+            for (const [imya, sel] of [['prin', 'td.kto i.prin'], ['iz', 'td.sch span.iz']]) {
+              const e = document.querySelector(sel);
+              o[imya] = e ? getComputedStyle(e).verticalAlign : null;
+            }
+            return o;
+        }""")
+        assert vyravnivanie["prin"] == "super", vyravnivanie
+        assert vyravnivanie["iz"] == "baseline", (
+            f"счётчик перестал быть baseline — границу проверки надо пересмотреть "
+            f"по замеру, а не по памяти: {vyravnivanie}")
+    finally:
+        ctx.close()
+
+
+def test_spisok_v_kletke_schitaetsya_no_ne_nahodka(server, brauzer):
+    """Клетка со списком фамилий (вкладка «принимающим») — не находка, но и не
+    молчание: она попадает в счётчик, который печатается каждым прогоном.
+    Молчаливое прощение неотличимо от дырки в проверке."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-prep")
+    try:
+        z = _zamer(p)
+        assert z["na_kletku"] > 0
+        assert z["kletki"] == [], f"ложная находка в клетке: {z['kletki'][:2]}"
+        assert z["kletok_so_znachkom"] > 0, (
+            "клетки со вторым элементом, у которого свой фон, не посчитаны вовсе")
     finally:
         ctx.close()
