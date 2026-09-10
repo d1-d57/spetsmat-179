@@ -548,25 +548,86 @@ PRAVKA_SKRIPT = r"""
      она уезжает немедленно; нет — это шаблон, и она ждёт кнопки. Ни одного второго
      обработчика: ниже по файлу все ветки зовут `pomenyalos`, и решение принимается
      здесь, один раз. */
+  /* 🔴 ПОСЛЕДНЕЕ ИЗВЕСТНОЕ ХОРОШЕЕ ЗНАЧЕНИЕ КАЖДОГО ОРГАНА, СНЯТОЕ ПРИ ЗАГРУЗКЕ.
+     Оно нужно ровно для одного: вернуть орган на место, когда сервер отказал. Снимок
+     остаётся верным всю жизнь страницы, потому что УСПЕШНАЯ немедленная правка её
+     перечитывает, а накопительная до кнопки «Сохранить» в базу не ходит вовсе. */
+  const bylo = new WeakMap();
+  function znachenie(el){
+    return (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+  }
+  function vernut_znachenie(el, v){
+    if(el.type === 'checkbox' || el.type === 'radio'){ el.checked = v; }
+    else { el.value = v; }
+    /* Вид органа обязан вернуться вместе со значением: обработчик `change` рисует
+       пустую строку и открытый замок сам, и без этого на экране осталась бы правка,
+       которой в базе нет, — та самая молчаливая потеря. */
+    if(el.classList.contains('otsut-chk') || el.classList.contains('totsut-chk')){
+      const o = el.closest('.otsut');
+      if(o) o.classList.toggle('pusto', !el.checked);
+    }
+    if(el.classList.contains('den-chk')){
+      const d = el.closest('.den-gal');
+      if(d) d.classList.toggle('pusto', !el.checked);
+    }
+  }
+  document.querySelectorAll('.org').forEach(function(el){
+    if(!bylo.has(el)) bylo.set(el, znachenie(el));
+  });
+
+  /* 🔴 ОТКАЗ СТОИТ, ПОКА ЕГО НЕ ЗАКРОЮТ. Ни таймера, ни перезагрузки поверх. */
+  function pokazat_otkaz(pochemu){
+    soob.className = 'soob ploho';
+    soob.innerHTML = '<button type="button" class="soob-x">Понятно</button>'
+      + '<span></span>';
+    soob.querySelector('span').textContent =
+      'НЕ СОХРАНИЛОСЬ: ' + pochemu + ' — значение вернулось к прежнему';
+  }
+  soob.addEventListener('click', function(ev){
+    if(!ev.target.closest('.soob-x')) return;
+    soob.className = 'soob';
+    soob.textContent = '';
+  });
+
   async function srazu(el, operacia){
     const ryad = el.closest('.para, tr');
     if(ryad) ryad.classList.add('idet');
-    let ok = false, dannye = {};
+    let ok = false, dannye = {}, pochemu = '';
+    /* 🔴 ТАЙМАУТ ЗДЕСЬ — ТА ЖЕ ПОЧИНКА, ЧТО УЖЕ СТОИТ В КОНДУИТЕ (`db50f4f`), И
+       ПО ТОЙ ЖЕ ЗАМЕРЕННОЙ ПРИЧИНЕ: при пропавшей сети `fetch` не отвечает ВООБЩЕ —
+       ни `then`, ни `catch`, он просто висит. Строка так и оставалась бы в классе
+       `idet` до перезагрузки страницы, и человек не узнал бы ни что правка не
+       уехала, ни что можно повторить. Десять секунд — потолок ожидания: занятие
+       идёт, и орган, молчащий дольше, бесполезен при любой причине молчания. */
+    const otsechka = new AbortController();
+    const budilnik = setTimeout(function(){ otsechka.abort(); }, 10000);
     try{
       const otvet = await fetch(operacia.put, {method:'POST',
         headers:{'Content-Type':'application/json'},
+        signal: otsechka.signal,
         body: JSON.stringify(operacia.telo)});
       ok = otvet.ok;
       try{ dannye = await otvet.json(); }catch(err){}
-    }catch(err){ ok = false; }
+      if(!ok) pochemu = dannye.error || ('сервер отказал (' + otvet.status + ')');
+    }catch(err){
+      ok = false;
+      pochemu = (err && err.name === 'AbortError')
+        ? 'сервер не ответил за 10 с' : 'связи с сервером нет';
+    }
+    clearTimeout(budilnik);
     if(ryad) ryad.classList.remove('idet');
     if(!ok){
-      /* Показываем ПРАВДУ базы, а не то, что человек только что нажал: страница
-         перечитывается, и на экране снова то, что действительно сохранено. */
-      soob.className = 'soob ploho';
-      soob.textContent = 'НЕ СОХРАНИЛОСЬ: ' + (dannye.error || 'сервер отказал')
-        + ' — показываю, что в базе';
-      setTimeout(function(){ location.reload(); }, 1200);
+      /* 🔴 НА ОТКАЗЕ СТРАНИЦА БОЛЬШЕ НЕ ПЕРЕЗАГРУЖАЕТСЯ. Требование владельца
+         (точка 4 задания): «правка не смеет исчезать молча на глазах человека».
+         Прежняя редакция показывала сообщение и через 1,2 с делала
+         `location.reload()` — сообщение затиралось раньше, чем его успевали
+         прочитать, и снаружи это выглядело как «правка слетела сама». Теперь
+         орган возвращается к прежнему значению ЗДЕСЬ, на месте, сообщение
+         называет ПРИЧИНУ и стоит, пока человек его не закроет.
+         Правда базы от этого не теряется: страница не перерисована, а вернулась
+         ровно к тому, что в базе и стоит, — правка ведь не уехала. */
+      vernut_znachenie(el, bylo.has(el) ? bylo.get(el) : znachenie(el));
+      pokazat_otkaz(pochemu || 'сервер отказал');
       return;
     }
     /* Счётчики, «некуда деть» и списки принимающих считает сервер, а не браузер:
@@ -974,67 +1035,119 @@ KONDUIT_SKRIPT = """
      возврат клетки в то, что стояло до тапа. */
   /* Знак в клетке → состояние, которым его вернуть. Обратная таблица к ZNAK. */
   var SOSTOYANIE_ZNAKA = {"": "empty", "\u2713": "solved", "x": "retracted"};
-  /* Отправка одной клетки. Зовётся и тапом, и кнопкой «Отменить»: дверь одна,
-     `/api/priyom`, и второго пути записи в кондуите по-прежнему нет. */
+  /* Адрес клетки на странице. Пара (школьник, задача) уникальна в решётке, и она же
+     лежит в записи очереди — по ней клетка находится и после перезагрузки. */
+  function kletka(m) {
+    if (!m) { return null; }
+    return document.querySelector('#s-kond .kond td[data-u="' + m.u
+                                  + '"][data-z="' + m.z + '"]');
+  }
+  /* Как назвать клетку человеку в сообщении об отказе. Фамилия — в первом столбце
+     строки, задача — в шапке того же столбца. Ни того, ни другого может не быть
+     (личная вкладка школьника устроена иначе), поэтому подпись необязательна. */
+  function podpis(td) {
+    try {
+      var ryad = td.closest("tr"), tabl = td.closest("table");
+      var kto = ryad && ryad.querySelector("td.kto b");
+      var shapka = tabl && tabl.tHead && tabl.tHead.rows[0];
+      var stolb = shapka && shapka.cells[td.cellIndex];
+      return [kto ? kto.textContent.trim() : "",
+              stolb ? stolb.textContent.trim() : ""].filter(Boolean).join(" · ");
+    } catch (e) { return ""; }
+  }
+
+  /* 🔴 ТАП БОЛЬШЕ НЕ ЖДЁТ СЕТЬ — ОН ЛОЖИТСЯ В ОЧЕРЕДЬ. Владелец 10.09: «если вдруг
+     пропал интернет, ты мог всё равно внести плюсик, поставить галочку, и она бы
+     вносилась в тот момент, когда интернет появится». Поэтому здесь больше нет ни
+     `fetch`, ни таймаута, ни класса `zhdyot`: всё это уехало в транспорт
+     (`veb/razdely/ochered.py`), вместе с прежней десятисекундной отсечкой, прежним
+     разбором ответа и прежним «клетка возвращается в кликабельное состояние».
+     ЗДЕСЬ ОСТАЛОСЬ РОВНО ДВА ДЕЙСТВИЯ, И ОБА МГНОВЕННЫЕ: нарисовать целевое
+     состояние и поставить запись в очередь. Клетка НЕ блокируется — блокировка была
+     нужна, только пока тап ждал ответа, а теперь ждать нечего: второй тап по той же
+     клетке это законная вторая запись, и уедут они по очереди, в порядке нажатий.
+     Дверь по-прежнему одна, `/api/priyom`, и второго пути записи в кондуите нет. */
   function otpravit(td, target, eto_otmena) {
-    if (td.classList.contains("zhdyot")) { return; }
-    var vernut = td.className, znak_byl = td.textContent;
-    td.classList.add("zhdyot");
-    /* 🔴 ТАЙМАУТ, БЕЗ КОТОРОГО КЛЕТКА ЗАЛИПАЕТ НАВСЕГДА. Владелец 10.09: «кондуит
-       виснет, нажимаю на клеточку, плюсик не появляется» — и рядом: «интернет
-       пропал, теперь вроде есть». Это одно и то же событие.
-       МЕХАНИЗМ, ЗАМЕРЕН: при пропавшей сети `fetch` не отвечает ВООБЩЕ — ни `then`,
-       ни `catch` не срабатывают, он просто висит. Класс `zhdyot` не снимается, а
-       первая строка обработчика молча отбрасывает клик по клетке в этом классе.
-       Итог: тёмная клетка, которая больше не реагирует ни на один тап до
-       перезагрузки страницы. Сервер при этом здоров — `POST /api/priyom` на пустой
-       клетке отвечает `{"zapisano": true}`, проверено.
-       Десять секунд — потолок ожидания: занятие идёт, и клетка, молчащая дольше,
-       бесполезна одинаково при любой причине молчания. */
-    var otsechka = new AbortController();
-    var budilnik = setTimeout(function () { otsechka.abort(); }, 10000);
-    fetch("/api/priyom", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      signal: otsechka.signal,
-      body: JSON.stringify({student: +td.dataset.u, problem: +td.dataset.z,
-                            target: target})
-    }).then(function (r) { clearTimeout(budilnik); return r.json(); }).then(function (otvet) {
-      td.classList.remove("zhdyot");
-      if (otvet && otvet.sostoyanie) {
-        narisovat(td, otvet.sostoyanie);
-        /* 🔴 ВЫДЕЛЕНИЕ «ПОСТАВЛЕНО МНОЙ СЕЙЧАС» ДОРИСОВЫВАЕТСЯ ЗДЕСЬ, А НЕ ЖДЁТ
-           ПЕРЕЗАГРУЗКИ. Класс `moya` ставит сервер при отрисовке страницы, но
-           `narisovat` перезаписывает `className` целиком — и только что
-           поставленная галочка оказывалась невыделенной до следующего открытия
-           страницы. То есть ровно та галочка, ради которой владелец и просил
-           выделение («что успел я на этом занятии»), его и не получала.
-           Пустая клетка выделения не несёт: выделять нечего. */
-        if (otvet.sostoyanie !== "empty") { td.classList.add("moya"); }
-        /* Отмена САМА отменяемой не становится: иначе кнопка превратилась бы в
-           переключатель двух состояний, и человек, ткнувший её дважды, вернул бы
-           ровно то, что отменял. */
-        if (!eto_otmena) {
-          poslednij = {td: td, sostoyanie: SOSTOYANIE_ZNAKA[znak_byl.trim()] || "empty"};
-          pokazat_otmenu(true);
-        }
-      }
-      else {
-        // Не записалось — клетка обязана вернуться к тому, что стоит в журнале,
-        // а не остаться с галочкой, которой в базе нет.
-        td.className = vernut; td.textContent = znak_byl;
-        td.title = (otvet && otvet.error) || "не записалось";
-      }
-    }).catch(function (oshibka) {
-      clearTimeout(budilnik);
-      /* Клетка ВОЗВРАЩАЕТСЯ в кликабельное состояние — это и есть починка: не
-         показать ошибку, а не отнять у человека возможность повторить тап. */
-      td.classList.remove("zhdyot");
-      td.className = vernut; td.textContent = znak_byl;
-      td.title = (oshibka && oshibka.name === "AbortError")
-        ? "сервер не ответил за 10 с — нажмите ещё раз"
-        : "не записалось: " + oshibka;
+    /* Метки транспорта в «то, к чему вернуть» не попадают: вернуть надо к состоянию
+       ЖУРНАЛА, а не к пунктиру, который эта же страница только что нарисовала. */
+    var vernut = td.className.replace(/\bv-ocheredi\b|\botkazano\b/g, "")
+                             .replace(/\s+/g, " ").trim();
+    var znak_byl = td.textContent;
+    /* Галочка загорается СРАЗУ, ещё до всякой сети — это и есть починка. Пунктир
+       `v-ocheredi` честно говорит, что сервер этого пока не подтвердил. */
+    narisovat(td, target);
+    /* 🔴 ВЫДЕЛЕНИЕ «ПОСТАВЛЕНО МНОЙ СЕЙЧАС» ДОРИСОВЫВАЕТСЯ ЗДЕСЬ. Класс `moya`
+       ставит сервер при отрисовке страницы, но `narisovat` перезаписывает
+       `className` целиком — и только что поставленная галочка оказывалась
+       невыделенной до следующего открытия страницы. То есть ровно та галочка, ради
+       которой владелец и просил выделение («что успел я на этом занятии»), его и не
+       получала. Пустая клетка выделения не несёт: выделять нечего. */
+    if (target !== "empty") { td.classList.add("moya"); }
+    td.classList.add("v-ocheredi");
+    td.removeAttribute("title");
+    /* Отмена САМА отменяемой не становится: иначе кнопка превратилась бы в
+       переключатель двух состояний, и человек, ткнувший её дважды, вернул бы
+       ровно то, что отменял. */
+    if (!eto_otmena) {
+      poslednij = {td: td, sostoyanie: SOSTOYANIE_ZNAKA[znak_byl.trim()] || "empty"};
+      pokazat_otmenu(true);
+    }
+    OCHERED.postavit({
+      put: "/api/priyom",
+      telo: {student: +td.dataset.u, problem: +td.dataset.z, target: target},
+      metka: {u: +td.dataset.u, z: +td.dataset.z, target: target,
+              vernut: vernut, znak: znak_byl, podpis: podpis(td)}
     });
   }
+
+  /* 🔴 ОЧЕРЕДЬ ПЕРЕЖИВАЕТ ПЕРЕЗАГРУЗКУ, ЗНАЧИТ ПЕРЕЖИВАЮТ И ГАЛОЧКИ. Страница,
+     перечитанная с сервера, знает только журнал — а в журнале ещё нет того, что
+     стоит в очереди. Без этой перерисовки человек увидел бы, как его отметки
+     «слетели» при обновлении, и это ровно та молчаливая потеря правки, которую
+     запрещает точка 4 задания. Записи применяются В ПОРЯДКЕ ОЧЕРЕДИ, поэтому по
+     каждой клетке побеждает последний нажатый тап — тот же, что победит на сервере. */
+  function perekrasit() {
+    return OCHERED.vse().then(function (zapisi) {
+      var byli = document.querySelectorAll("#s-kond .kond td.v-ocheredi");
+      for (var i = 0; i < byli.length; i++) { byli[i].classList.remove("v-ocheredi"); }
+      zapisi.forEach(function (z) {
+        var td = kletka(z.metka);
+        if (!td) { return; }
+        narisovat(td, z.metka.target);
+        if (z.metka.target !== "empty") { td.classList.add("moya"); }
+        td.classList.add("v-ocheredi");
+      });
+    }).catch(function () {});
+  }
+
+  OCHERED.podpisatsya(function (sob) {
+    if (sob.rod === "uehala") {
+      var td = kletka(sob.zapis.metka);
+      /* Ответ сервера — ПРАВДА журнала, и рисуется она, а не то, что нажал человек:
+         соседний преподаватель мог отметить ту же клетку раньше. */
+      if (td && sob.dannye && sob.dannye.sostoyanie) {
+        narisovat(td, sob.dannye.sostoyanie);
+        if (sob.dannye.sostoyanie !== "empty") { td.classList.add("moya"); }
+      }
+      perekrasit();
+    } else if (sob.rod === "otkaz") {
+      var otk = kletka(sob.zapis.metka);
+      if (otk) {
+        /* Причина стоит и на самой клетке: полосу отказов человек закроет, а
+           вопрос «какая именно клетка не сохранилась» останется. */
+        otk.className = sob.zapis.metka.vernut;
+        otk.textContent = sob.zapis.metka.znak;
+        otk.classList.add("otkazano");
+        otk.title = sob.pochemu || "не записалось";
+      }
+      perekrasit();
+    } else if (sob.rod === "postavlena") {
+      perekrasit();
+    }
+  });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", perekrasit);
+  } else { perekrasit(); }
 
   var poslednij = null;          // {td, sostoyanie} — куда и во что вернуть
   var knopka_otmeny = null;
@@ -1057,7 +1170,8 @@ KONDUIT_SKRIPT = """
       return;
     }
     var td = sob.target.closest("#s-kond .kond td[data-u]");
-    if (!td || td.classList.contains("zhdyot")) { return; }
+    /* Клетка больше не бывает заблокированной: тап не ждёт сети (см. `otpravit`). */
+    if (!td) { return; }
     var bylo = td.textContent.trim();
     otpravit(td, DALEE[bylo] || "solved", false);
   });
@@ -1174,9 +1288,16 @@ def skripty(kt, drakon_skript: str) -> str:
     # restores the tab the visitor last had open out of `sessionStorage`, inline and
     # immediately; standing before it, the address-driven switch would be overwritten
     # by yesterday's choice and `/raspredelenie/postoyannoe` would open on «Класс».
+    # 🔴 ОЧЕРЕДЬ СТОИТ ПЕРЕД КОНДУИТОМ, И ПОРЯДОК ЗДЕСЬ НЕСУЩИЙ. `KONDUIT_SKRIPT`
+    # зовёт `OCHERED.podpisatsya` в теле своей IIFE, то есть НЕМЕДЛЕННО при разборе
+    # страницы; стоя первым, он получил бы `OCHERED is not defined` и вместе с
+    # подпиской унёс бы весь свой скрипт — то есть и тап, и историю клетки, и липкую
+    # шапку. Импорт лежит внутри функции по той же причине, что и у самого кондуита
+    # ниже: каркас не имеет права знать, какие разделы существуют, на уровне модуля.
+    from veb.razdely.ochered import skript as ochered_skript
     return (drakon_skript + VHOD_SKRIPT
             + (PRAVKA_SKRIPT + PRIMENIT_SKRIPT if kt.ADMIN else "")
-            + (KONDUIT_SKRIPT if kt.mozhno("videt-konduit") else "")
+            + ((ochered_skript() + KONDUIT_SKRIPT) if kt.mozhno("videt-konduit") else "")
             + VKLADKA_SKRIPT)
 
 
@@ -1990,6 +2111,11 @@ body{{padding-bottom:2rem}}
   font-size:1.05rem;padding:.7rem 1.2rem;display:none}}
 .soob.idet{{display:block;background:var(--accent-soft);color:var(--text)}}
 .soob.ploho{{display:block;background:#c0392b;color:#fff;font-weight:600}}
+/* Кнопка закрытия отказа. Она есть, потому что отказ больше не гаснет сам:
+   пока человек её не нажал, сообщение стоит (см. `srazu` в `PRAVKA_SKRIPT`). */
+.soob .soob-x{{float:right;margin-left:1rem;font-family:var(--sans);font-size:.95rem;
+  font-weight:600;cursor:pointer;color:#fff;background:transparent;
+  border:1px solid rgba(255,255,255,.6);border-radius:6px;padding:.15em .7em}}
 /* Таблица преподавателей: колонки ровные, кабинет уходит вправо. */
 .prep-tab{{width:100%;border-collapse:collapse}}
 .prep-tab td{{padding:.55rem .8rem .55rem 0;border-bottom:1px solid var(--rule);
