@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import pytest
 
-from core.services.enrollment import EnrollmentService
-from fakes import FakeEnrollmentStore
+from core.services.enrollment import TEACHER_CEILING, EnrollmentService
+from fakes import FakeCalendar, FakeEnrollmentStore
 from infra.enrollment_repo import SqliteEnrollmentRepo
 
 
@@ -32,6 +32,24 @@ def store():
 def fake_enrollment(store):
     """The service over the dict store: the domain, without a database in the way."""
     return EnrollmentService(store)
+
+
+@pytest.fixture
+def calendar():
+    """Everybody attends everything by default; a test narrows it by reassigning."""
+    return FakeCalendar()
+
+
+@pytest.fixture
+def guarded_enrollment(store, calendar):
+    """The same dict store, with the day-attendance and ceiling refusals switched on.
+
+    A separate fixture rather than turning them on in ``fake_enrollment``: most of
+    ``test_service.py`` tests interval arithmetic that has nothing to do with either
+    rule, and turning them on there would make every one of those tests responsible
+    for a calendar it never mentions.
+    """
+    return EnrollmentService(store, calendar=calendar, ceiling=TEACHER_CEILING)
 
 
 @pytest.fixture

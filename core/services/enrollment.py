@@ -97,6 +97,25 @@ class UnknownSlot(EnrollmentError):
     """
 
 
+class TeacherNotAttending(EnrollmentError):
+    """Asked to put a student with a teacher on a lesson slot the teacher does not attend.
+
+    Live case that shaped this refusal: Ольга Рыжая is marked as not coming on Thursday,
+    and Юсуфов was assigned to her there anyway — through the form, by hand, because
+    nothing below the markup stopped it.  Checked here rather than only in the form so
+    that a page reload cannot reach the same write through a stale dropdown.
+    """
+
+
+class CeilingExceeded(EnrollmentError):
+    """Asked to give a teacher a student beyond ``TEACHER_CEILING`` in one lesson slot.
+
+    Live case: Вася Филянин carries six students on Monday and seven on Thursday against
+    a ceiling of five, entered by hand through the form.  Checked here, not only in the
+    form, for the same reason as ``TeacherNotAttending``.
+    """
+
+
 # ------------------------------------------------------------------ day arithmetic
 #
 # The three functions below are the ONLY place a calendar is consulted.  Everything else
@@ -188,7 +207,26 @@ def check_slot(slot: int) -> int:
     return slot
 
 
+#: The maximum number of students one receiving teacher may carry in one lesson slot.
+#: One named constant in one place, per the owner's 09.09 ruling — not five literals
+#: scattered across the callers that could each drift from the other four.
+TEACHER_CEILING = 5
+
+
 # ------------------------------------------------------------------------ the seam
+
+class TeacherCalendarPort(Protocol):
+    """Which lesson slots a teacher actually attends, as ``core/`` is allowed to see it.
+
+    A fact about the PERSON, not about ``enrollment``: a teacher who has nobody yet in a
+    slot still attends it, and ``enrollment`` rows alone cannot tell "will come, has
+    nobody" apart from "will not come" — the second half is exactly what this port
+    answers and ``enrollment`` cannot.
+    """
+
+    def attends(self, teacher_id: int, slot: int) -> bool:
+        """Does this teacher come in on this lesson slot?"""
+
 
 class EnrollmentPort(Protocol):
     """The store of enrollment intervals, as ``core/`` is allowed to see it.
@@ -293,8 +331,61 @@ class Move:
 class EnrollmentService:
     """Assignment, movement and resolution over half-open intervals per lesson day."""
 
-    def __init__(self, rows: EnrollmentPort) -> None:
+    def __init__(
+        self,
+        rows: EnrollmentPort,
+        *,
+        calendar: Optional[TeacherCalendarPort] = None,
+        ceiling: Optional[int] = None,
+    ) -> None:
         self._rows = rows
+        # Both optional and off by default, like ``SostavService``'s ``roster``: the
+        # interactive form wires them in and gets the two hard refusals below; the
+        # import tools and the bot correction paths — outside this заход's zone and
+        # writing data that predates either rule — keep writing exactly as before.
+        self._calendar = calendar
+        self._ceiling = ceiling
+
+    # ------------------------------------------------------------- the two hard rules
+
+    def enforce_calendar_and_ceiling(
+        self,
+        *,
+        teacher_id: int,
+        slot: int,
+        day: str,
+        excluding_enrollment_id: Optional[int] = None,
+    ) -> None:
+        """Refuse a write ``assign``/``move`` are about to make, before either makes it.
+
+        Public, and not folded silently into ``assign``/``move``: the same-day
+        in-place correction in ``veb/server.py`` writes ``enrollment`` directly,
+        bypassing both, and would otherwise be the page-reload loophole this
+        заход exists to close.
+
+        ``excluding_enrollment_id`` leaves the student's OWN standing row out of the
+        ceiling count — a move that only corrects the room, or an in-place edit of
+        today's own row, must not count the row it is about to replace as if it were
+        a stranger taking one more seat.
+        """
+        if self._calendar is not None and not self._calendar.attends(teacher_id, slot):
+            raise TeacherNotAttending(
+                "teacher %s does not attend slot %d: refused before the write"
+                % (teacher_id, slot)
+            )
+        if self._ceiling is not None:
+            carrying = [
+                row
+                for row in self._rows.rows_valid_on(day, slot)
+                if row.teacher_id == teacher_id and row.id != excluding_enrollment_id
+            ]
+            if len(carrying) + 1 > self._ceiling:
+                raise CeilingExceeded(
+                    "teacher %s already carries %d student(s) in slot %d on %s "
+                    "(ceiling %d): a %dth is refused"
+                    % (teacher_id, len(carrying), slot, day, self._ceiling,
+                       len(carrying) + 1)
+                )
 
     # ------------------------------------------------------------------- resolution
 
@@ -405,6 +496,9 @@ class EnrollmentService:
                     "%s): use move(), which keeps the history"
                     % (student_id, slot, standing.teacher_id, standing.valid_from)
                 )
+            self.enforce_calendar_and_ceiling(
+                teacher_id=teacher_id, slot=slot, day=valid_from
+            )
             return self._insert(
                 student_id=student_id,
                 teacher_id=teacher_id,
@@ -463,6 +557,10 @@ class EnrollmentService:
                     "splitting the interval would make one fact answer as two"
                     % (student_id, to_teacher_id, room, slot)
                 )
+            self.enforce_calendar_and_ceiling(
+                teacher_id=to_teacher_id, slot=slot, day=effective_from,
+                excluding_enrollment_id=standing.id,
+            )
             closed = self._rows.close(standing.id, valid_to=effective_from)
             opened = self._insert(
                 student_id=student_id,
