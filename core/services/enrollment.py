@@ -128,11 +128,18 @@ class TeacherAbsentOnDay(EnrollmentError):
 
 
 class CeilingExceeded(EnrollmentError):
-    """Asked to give a teacher a student beyond ``TEACHER_CEILING`` in one lesson slot.
+    """RETIRED 10.09 BY THE OWNER, AND KEPT DEFINED ON PURPOSE — nothing raises it.
 
-    Live case: Вася Филянин carries six students on Monday and seven on Thursday against
-    a ceiling of five, entered by hand through the form.  Checked here, not only in the
-    form, for the same reason as ``TeacherNotAttending``.
+    It used to mean: asked to give a teacher a student beyond ``TEACHER_CEILING`` in one
+    lesson slot.  The live case it was written for is the reason it is gone: Вася Филянин
+    really carries six students on Monday and seven on Thursday.  The ceiling was refusing
+    to record a state the school is already in, and the owner's ruling of 10.09 (ТЗ-ДОБОР
+    A1) is that the write always goes through and the overload shows as a red mark instead.
+
+    The class stays because ``veb/server.py`` catches ``EnrollmentError`` by the family
+    and a caller elsewhere may still name this member; deleting it would be a change to
+    files outside this заход's zone for no gain.  Anything that used to expect a refusal
+    should ask ``EnrollmentService.over_ceiling()`` and decide for itself.
     """
 
 
@@ -424,19 +431,62 @@ class EnrollmentService:
                 "teacher %s is marked absent on %s: refused before the write"
                 % (teacher_id, day)
             )
-        if self._ceiling is not None:
-            carrying = [
-                row
-                for row in self._rows.rows_valid_on(day, slot)
-                if row.teacher_id == teacher_id and row.id != excluding_enrollment_id
-            ]
-            if len(carrying) + 1 > self._ceiling:
-                raise CeilingExceeded(
-                    "teacher %s already carries %d student(s) in slot %d on %s "
-                    "(ceiling %d): a %dth is refused"
-                    % (teacher_id, len(carrying), slot, day, self._ceiling,
-                       len(carrying) + 1)
-                )
+        # 🔴 THE CEILING NO LONGER REFUSES ANYTHING, BY THE OWNER'S RULING OF 10.09
+        # (ТЗ-ДОБОР A1, задание §5: «потолок пяти: отказ на записи снять, остаётся
+        # красный признак»).  The count is still a fact worth SHOWING — a teacher
+        # carrying six is carrying six and the screen says so in red — but it is no
+        # longer a fact allowed to stop a write.  The rule was refusing the state the
+        # school is actually in: Вася Филянин really does carry six on Monday and
+        # seven on Thursday, and a door that refuses to record the truth does not make
+        # the truth smaller, it only makes the screen wrong.
+        #
+        # The ``ceiling`` argument stays on the constructor and ``TEACHER_CEILING``
+        # stays exported: ``veb/server.py`` (outside this заход's zone) passes both,
+        # and ``carrying_in_slot`` below answers with them.  What is gone is the
+        # ``raise``, and ONLY the ``raise`` — the calendar and presence refusals above
+        # are a different rule and the owner did not touch them.
+
+    def carrying_in_slot(
+        self,
+        *,
+        teacher_id: int,
+        slot: int,
+        day: str,
+        excluding_enrollment_id: Optional[int] = None,
+    ) -> int:
+        """How many students this teacher carries in one lesson slot on one day.
+
+        The number the red marker is about.  It used to live inside the refusal above
+        and had no way of being asked without triggering one; now that the refusal is
+        gone the count still has callers — anything that wants to say "this one is
+        over the line" without deciding what happens next.
+        """
+        return len([
+            row
+            for row in self._rows.rows_valid_on(day, slot)
+            if row.teacher_id == teacher_id and row.id != excluding_enrollment_id
+        ])
+
+    def over_ceiling(
+        self,
+        *,
+        teacher_id: int,
+        slot: int,
+        day: str,
+        excluding_enrollment_id: Optional[int] = None,
+    ) -> bool:
+        """Is this teacher over ``TEACHER_CEILING`` in this slot on this day?
+
+        ``False`` when no ceiling was wired in — the same off switch the refusal had,
+        kept for the same callers (import tools and the bot), because "is he over a
+        limit nobody set" has no true answer.
+        """
+        if self._ceiling is None:
+            return False
+        return self.carrying_in_slot(
+            teacher_id=teacher_id, slot=slot, day=day,
+            excluding_enrollment_id=excluding_enrollment_id,
+        ) > self._ceiling
 
     # ------------------------------------------------------------------- resolution
 
