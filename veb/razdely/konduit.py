@@ -1225,10 +1225,11 @@ def stili(kt) -> str:
    Ни одного нового цвета: `--faint` уже значит «фон, а не сообщение» по всей странице,
    и курсор `help` по-прежнему обещает подсказку, которая есть. */
 #s-kond .kond thead th.pr{{text-align:center;white-space:nowrap;font-size:.72rem;
-  padding:.5rem .3rem;border-bottom:2px solid var(--rule)}}
+  padding:.5rem .3rem;border-bottom:2px solid var(--rule);
+  border-left:1px solid var(--rule)}}
 #s-kond .kond tbody td.pr{{text-align:center;white-space:nowrap;width:3.4rem;
   min-width:3.4rem;padding:.3rem .35rem;border-bottom:1px solid var(--rule);
-  background:var(--bg)}}
+  border-left:1px solid var(--rule);background:var(--bg)}}
 #s-kond .kond td.pr .prin{{font-style:normal;font-family:var(--sans);font-size:.72rem;
   font-weight:600;color:var(--faint);cursor:help;white-space:nowrap}}
 #s-kond .kond td.pr .prin.net{{font-weight:400}}
