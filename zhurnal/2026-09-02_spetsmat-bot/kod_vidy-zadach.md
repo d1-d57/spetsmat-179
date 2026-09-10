@@ -280,6 +280,64 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+> Rewritten 2026-09-10 on RESTART AFTER AN INTERRUPTION. The previous pass stopped
+> immediately after §0.1 (git contour) and did NO content work: no code file was
+> touched, nothing was committed, `git log --oneline -20` on `zahod/vidy-zadach`
+> shows only the wave's own commits. Everything below is therefore still to do.
+> The plan of the interrupted pass is kept verbatim at the bottom for the record.
+
+**Baseline measured BEFORE work (commands, not memory):**
+* `python3 -m pytest tests/sheets -q` → **22 passed** (rc=0).
+* `python3 -m pytest tests -q` → 1044 passed, 17 failed, 13 skipped, 30 errors — the
+  inherited state of the tree; my gate is "not below this".
+* `git --no-optional-locks branch --no-merged main | grep -c zahod/` → **1** (my own).
+* Local `data/spetsmat.db` is at migration `005`; `006`, `007`, `008` are pending on it.
+  `marks` holds 15 900 rows, `problems` 589.
+* PDF text layer, counted directly: `†` — 16A 1, 16α 4, 16ℵ 0. Matches the заход.
+
+**Steps, in order, each its own commit.**
+
+1. **`migrations/009` + `config.PROBLEM_KINDS` + `core/services/sheets.py`** — the kind
+   `письменная` in the schema and in the model. `двойная` is left exactly as it is.
+2. **`tools/import_listka.py`** — carry `◦` / `†` / `⋆` out of the PDF into
+   `problems.kind`, per cell, sub-item markers overriding the problem's own.
+   Existing cells get their kind reconciled; no cell is created, moved or deleted,
+   and `marks` is never written to.
+3. **`tools/vidy_zadach.py`** — the command the готовности criterion asks for: per sheet
+   `обязательных N, письменных M, звёзд K, обычных L`, their sum against the sheet's cell
+   count, and what the parse does NOT cover.
+4. **`veb/razdely/konduit.py`** — the glyph beside the problem number in the conduit
+   header, and one legend on the page rather than one per cell.
+5. **`veb/razdely/konduit.py`** — tab order and defaults: «Весь год» first, then the
+   sheets; the newest sheet open by default, chosen by a query against `sheets`, not
+   written into the code; class buttons 8 then 9, 9 open.
+6. **`tests/sheets/`** — a test for step 2 against the real PDFs.
+7. Run the parse against the live database, deploy, look at the live page, run the §3
+   verifier subagent.
+
+**🔴 ONE FALSE PREMISE IN THE ZONE CONTRACT, NAMED BEFORE WORK, AS §1 REQUIRES.**
+The zone is `core/ seed/ tools/ veb/razdely/ migrations/ tests/sheets/`. The enumeration
+of problem kinds does not live in any of them: it lives in **`config.py` at the
+repository root**, and `tests/test_schema_matches_config.py` reads the CHECK list out of
+the LIVE schema and asserts it equals `config.PROBLEM_KINDS`. So "add the kind to the
+schema" and "do not touch anything outside the zone" cannot both be obeyed: a migration
+that widens the CHECK without the matching line in `config.py` turns that test red, which
+is precisely the "added a feature and broke the neighbour" the wave's главное требование
+forbids. I therefore edit `config.py` — one line, the tuple — commit it separately with
+the reason in the message, and name it in `## ОТЧЁТ` as a change that left the zone.
+Zone contract otherwise obeyed to the letter.
+
+**🔴 ONE THING IN THE TASK I CANNOT DELIVER AND WILL NOT FAKE.** Step 4 asks for the tab
+order «Весь год», «Гробарий», then the sheets. **There is no Гробарий tab in this tree** —
+`grep -rn 'робарий'` finds it only in `tools/import_konduit.py` (a worksheet of last
+year's workbook) and in `README.md:331`, which assigns "пустая вкладка гробария" to the
+NEIGHBOURING заход `kod_statistiki-i-grobarij.md`. Inventing it here would be doing my
+neighbour's work and would collide with his. I therefore deliver the order «Весь год» →
+sheets and leave the slot between them free, and I say so in the report rather than
+reporting step 4 as fully done.
+
+**Plan of the interrupted pass, kept verbatim:**
+
 1. Executed git-contour §0.1 fully (self-check + worktree entry); no content work started.
 2. Read anchor files named by the file: seed/sheets.json, core/services/sheets.py, core/models.py, docs/listki/16A-derevya.pdf / 16α / 16ℵ, veb/razdely/konduit.py / listki.py / list_odin.py — only these, project not studied.
 3. Next content steps (deferred): (a) introduce kind "письменная" in model + migration; (b) parse PDF markers ◦ / † for 16A, 16α, 16ℵ; (c) show marks in conduit; (d) set default tab = newest sheet per DB command; (e) class buttons 8 then 9, default 9.
