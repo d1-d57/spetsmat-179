@@ -68,6 +68,9 @@ class Metka(NamedTuple):
     host: str
     kogda: str
     otkuda: str
+    #: Абсолютный путь ФАЙЛА, для которого метка поставлена (миграция 012). Пустая
+    #: строка — метка старше 012 и боевой себя назвать не может: см. `proverit_metku`.
+    put: str = ""
 
 
 def etot_host() -> str:
@@ -83,12 +86,22 @@ def metka(conn: sqlite3.Connection) -> Optional[Metka]:
     """
     try:
         r = conn.execute(
-            "select rod, host, kogda, otkuda from istochnik_metka where id = 1").fetchone()
+            "select rod, host, kogda, otkuda, put from istochnik_metka where id = 1").fetchone()
     except sqlite3.Error:
-        return None
+        # Колонки `put` нет — база между миграциями 011 и 012. Читаем без неё, а
+        # решение «такая метка боевой не считается» принимает `proverit_metku`, а не
+        # это место: здесь мы только читаем, что написано.
+        try:
+            r = conn.execute(
+                "select rod, host, kogda, otkuda from istochnik_metka where id = 1").fetchone()
+        except sqlite3.Error:
+            return None
+        if not r:
+            return None
+        return Metka(str(r[0]), str(r[1] or ""), str(r[2] or ""), str(r[3] or ""), "")
     if not r:
         return None
-    return Metka(str(r[0]), str(r[1] or ""), str(r[2] or ""), str(r[3] or ""))
+    return Metka(str(r[0]), str(r[1] or ""), str(r[2] or ""), str(r[3] or ""), str(r[4] or ""))
 
 
 def pometit(conn: sqlite3.Connection, rod: str, otkuda: str = "") -> Metka:
@@ -100,12 +113,27 @@ def pometit(conn: sqlite3.Connection, rod: str, otkuda: str = "") -> Metka:
     if rod not in RODA:
         raise ValueError("род %r не из %s" % (rod, ", ".join(RODA)))
     kogda = _datetime.now(tz=_timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    novaya = Metka(rod, etot_host(), kogda, otkuda)
-    conn.execute("""
-        insert into istochnik_metka (id, rod, host, kogda, otkuda) values (1, ?, ?, ?, ?)
-          on conflict(id) do update set rod = excluded.rod, host = excluded.host,
-                                        kogda = excluded.kogda, otkuda = excluded.otkuda
-    """, (novaya.rod, novaya.host, novaya.kogda, novaya.otkuda))
+    # 🔴 ПУТЬ СПРАШИВАЕТСЯ У СОЕДИНЕНИЯ, А НЕ ПРИНИМАЕТСЯ АРГУМЕНТОМ. Тот же довод,
+    # что у `put_bazy`: аргумент говорит, что СОБИРАЛИСЬ пометить, соединение — что
+    # пометили на самом деле. Метка, чей путь можно передать со стороны, — пересказ.
+    novaya = Metka(rod, etot_host(), kogda, otkuda, put_bazy(conn))
+    try:
+        conn.execute("""
+            insert into istochnik_metka (id, rod, host, kogda, otkuda, put)
+              values (1, ?, ?, ?, ?, ?)
+              on conflict(id) do update set rod = excluded.rod, host = excluded.host,
+                                            kogda = excluded.kogda, otkuda = excluded.otkuda,
+                                            put = excluded.put
+        """, (novaya.rod, novaya.host, novaya.kogda, novaya.otkuda, novaya.put))
+    except sqlite3.OperationalError:
+        # База между 011 и 012. Пометить можно, но БЕЗ пути — и такая метка боевой
+        # не считается: накати миграции и пометь заново.
+        conn.execute("""
+            insert into istochnik_metka (id, rod, host, kogda, otkuda) values (1, ?, ?, ?, ?)
+              on conflict(id) do update set rod = excluded.rod, host = excluded.host,
+                                            kogda = excluded.kogda, otkuda = excluded.otkuda
+        """, (novaya.rod, novaya.host, novaya.kogda, novaya.otkuda))
+        novaya = novaya._replace(put="")
     conn.commit()
     return novaya
 
@@ -115,8 +143,10 @@ def opisat_metku(m: Optional[Metka]) -> str:
     if m is None:
         return "род: НЕ ПОМЕЧЕНА (база старше миграции 011)"
     hvost = ""
+    if m.put:
+        hvost += " · для файла: %s" % m.put
     if m.otkuda:
-        hvost = " · откуда: %s" % m.otkuda
+        hvost += " · откуда: %s" % m.otkuda
     return "род: %s · помечена на %s · когда: %s%s" % (
         m.rod, m.host or "—", m.kogda or "—", hvost)
 
@@ -147,6 +177,23 @@ def proverit_metku(conn: sqlite3.Connection, potok=None) -> int:
         print("🔴 БОЕВАЯ МЕТКА С ЧУЖОЙ МАШИНЫ: помечена на %s, открыта на %s. "
               "Файл унесли с сервера — это копия, как бы она себя ни называла."
               % (m.host, zdes), file=potok)
+        return 1
+    # 🔴 ХОСТА МАЛО, И ЭТО ЗАМЕР, А НЕ ОСТОРОЖНОСТЬ. Хост ловит копию, УНЕСЁННУЮ на
+    # другую машину, и не ловит `cp` НА ТОЙ ЖЕ машине — а на сервере `cp` делается
+    # именно там, где боевая и живёт. Проверкой на обход снято дословно: `cp
+    # boevaya.db chestnaya-cp.db` на той же машине давал `вердикт: БОЕВАЯ, СВЕЖАЯ,
+    # СВОЯ ✅`. Копия лежит по ДРУГОМУ пути по определению — иначе она не копия, а тот
+    # же файл; поэтому метка помнит файл, для которого поставлена (миграция 012).
+    if not m.put:
+        print("🔴 МЕТКА НЕ ЗНАЕТ СВОЕГО ФАЙЛА: она старше миграции 012 и потому не "
+              "отличит боевую от её `cp`-копии. Накати миграции и пометь заново: "
+              "`python3 core/istochnik.py --pometit боевая`.", file=potok)
+        return 1
+    otkryt = put_bazy(conn)
+    if m.put != otkryt:
+        print("🔴 БОЕВАЯ МЕТКА ОТ ДРУГОГО ФАЙЛА: поставлена для %s, а открыт %s. "
+              "Это копия — слово «боевая» приехало вместе с байтами."
+              % (m.put, otkryt), file=potok)
         return 1
     return 0
 
@@ -428,8 +475,21 @@ def _dver(argv=None) -> int:
         return 0
     try:
         conn = sqlite3.connect("file:%s?mode=ro" % put, uri=True)
+        # 🔴 `connect` НИЧЕГО НЕ ОТКРЫВАЕТ — ЭТО ПРОБА, БЕЗ КОТОРОЙ ДВЕРЬ ВРЁТ ПРИЧИНОЙ.
+        # sqlite3 соединяется лениво, первая ошибка приходит на первом запросе, а все
+        # чтения здесь обёрнуты в `except sqlite3.Error` и молча дают «пусто». Поэтому
+        # файл, который НЕ ЧИТАЕТСЯ ВОВСЕ, выглядел как «БАЗА ПУСТА · НЕ ПОМЕЧЕНА,
+        # накати миграции» — красное с неверным диагнозом, отправляющее читателя не туда.
+        # Живой случай, снятый проверкой на обход: `cp` WAL-базы без спутников `-wal`/
+        # `-shm`, открытый `mode=ro`, падает на `select 1` с «unable to open database
+        # file», а дверь советовала накатывать миграции.
+        conn.execute("select 1").fetchone()
     except sqlite3.Error as exc:
-        print("🔴 не удалось открыть базу %s: %s" % (put, exc), file=sys.stderr)
+        print("🔴 базу %s не удалось ПРОЧИТАТЬ: %s\n"
+              "   Частая причина: это WAL-база, скопированная `cp` без спутников\n"
+              "   `-wal`/`-shm`. Копии снимаются штатной дверью, а не `cp`:\n"
+              "   python3 core/istochnik.py --snyat-kopiyu <путь>"
+              % (put, exc), file=sys.stderr)
         return 2
 
     nazvat(conn)
