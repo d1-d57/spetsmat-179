@@ -548,25 +548,86 @@ PRAVKA_SKRIPT = r"""
      она уезжает немедленно; нет — это шаблон, и она ждёт кнопки. Ни одного второго
      обработчика: ниже по файлу все ветки зовут `pomenyalos`, и решение принимается
      здесь, один раз. */
+  /* 🔴 ПОСЛЕДНЕЕ ИЗВЕСТНОЕ ХОРОШЕЕ ЗНАЧЕНИЕ КАЖДОГО ОРГАНА, СНЯТОЕ ПРИ ЗАГРУЗКЕ.
+     Оно нужно ровно для одного: вернуть орган на место, когда сервер отказал. Снимок
+     остаётся верным всю жизнь страницы, потому что УСПЕШНАЯ немедленная правка её
+     перечитывает, а накопительная до кнопки «Сохранить» в базу не ходит вовсе. */
+  const bylo = new WeakMap();
+  function znachenie(el){
+    return (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+  }
+  function vernut_znachenie(el, v){
+    if(el.type === 'checkbox' || el.type === 'radio'){ el.checked = v; }
+    else { el.value = v; }
+    /* Вид органа обязан вернуться вместе со значением: обработчик `change` рисует
+       пустую строку и открытый замок сам, и без этого на экране осталась бы правка,
+       которой в базе нет, — та самая молчаливая потеря. */
+    if(el.classList.contains('otsut-chk') || el.classList.contains('totsut-chk')){
+      const o = el.closest('.otsut');
+      if(o) o.classList.toggle('pusto', !el.checked);
+    }
+    if(el.classList.contains('den-chk')){
+      const d = el.closest('.den-gal');
+      if(d) d.classList.toggle('pusto', !el.checked);
+    }
+  }
+  document.querySelectorAll('.org').forEach(function(el){
+    if(!bylo.has(el)) bylo.set(el, znachenie(el));
+  });
+
+  /* 🔴 ОТКАЗ СТОИТ, ПОКА ЕГО НЕ ЗАКРОЮТ. Ни таймера, ни перезагрузки поверх. */
+  function pokazat_otkaz(pochemu){
+    soob.className = 'soob ploho';
+    soob.innerHTML = '<button type="button" class="soob-x">Понятно</button>'
+      + '<span></span>';
+    soob.querySelector('span').textContent =
+      'НЕ СОХРАНИЛОСЬ: ' + pochemu + ' — значение вернулось к прежнему';
+  }
+  soob.addEventListener('click', function(ev){
+    if(!ev.target.closest('.soob-x')) return;
+    soob.className = 'soob';
+    soob.textContent = '';
+  });
+
   async function srazu(el, operacia){
     const ryad = el.closest('.para, tr');
     if(ryad) ryad.classList.add('idet');
-    let ok = false, dannye = {};
+    let ok = false, dannye = {}, pochemu = '';
+    /* 🔴 ТАЙМАУТ ЗДЕСЬ — ТА ЖЕ ПОЧИНКА, ЧТО УЖЕ СТОИТ В КОНДУИТЕ (`db50f4f`), И
+       ПО ТОЙ ЖЕ ЗАМЕРЕННОЙ ПРИЧИНЕ: при пропавшей сети `fetch` не отвечает ВООБЩЕ —
+       ни `then`, ни `catch`, он просто висит. Строка так и оставалась бы в классе
+       `idet` до перезагрузки страницы, и человек не узнал бы ни что правка не
+       уехала, ни что можно повторить. Десять секунд — потолок ожидания: занятие
+       идёт, и орган, молчащий дольше, бесполезен при любой причине молчания. */
+    const otsechka = new AbortController();
+    const budilnik = setTimeout(function(){ otsechka.abort(); }, 10000);
     try{
       const otvet = await fetch(operacia.put, {method:'POST',
         headers:{'Content-Type':'application/json'},
+        signal: otsechka.signal,
         body: JSON.stringify(operacia.telo)});
       ok = otvet.ok;
       try{ dannye = await otvet.json(); }catch(err){}
-    }catch(err){ ok = false; }
+      if(!ok) pochemu = dannye.error || ('сервер отказал (' + otvet.status + ')');
+    }catch(err){
+      ok = false;
+      pochemu = (err && err.name === 'AbortError')
+        ? 'сервер не ответил за 10 с' : 'связи с сервером нет';
+    }
+    clearTimeout(budilnik);
     if(ryad) ryad.classList.remove('idet');
     if(!ok){
-      /* Показываем ПРАВДУ базы, а не то, что человек только что нажал: страница
-         перечитывается, и на экране снова то, что действительно сохранено. */
-      soob.className = 'soob ploho';
-      soob.textContent = 'НЕ СОХРАНИЛОСЬ: ' + (dannye.error || 'сервер отказал')
-        + ' — показываю, что в базе';
-      setTimeout(function(){ location.reload(); }, 1200);
+      /* 🔴 НА ОТКАЗЕ СТРАНИЦА БОЛЬШЕ НЕ ПЕРЕЗАГРУЖАЕТСЯ. Требование владельца
+         (точка 4 задания): «правка не смеет исчезать молча на глазах человека».
+         Прежняя редакция показывала сообщение и через 1,2 с делала
+         `location.reload()` — сообщение затиралось раньше, чем его успевали
+         прочитать, и снаружи это выглядело как «правка слетела сама». Теперь
+         орган возвращается к прежнему значению ЗДЕСЬ, на месте, сообщение
+         называет ПРИЧИНУ и стоит, пока человек его не закроет.
+         Правда базы от этого не теряется: страница не перерисована, а вернулась
+         ровно к тому, что в базе и стоит, — правка ведь не уехала. */
+      vernut_znachenie(el, bylo.has(el) ? bylo.get(el) : znachenie(el));
+      pokazat_otkaz(pochemu || 'сервер отказал');
       return;
     }
     /* Счётчики, «некуда деть» и списки принимающих считает сервер, а не браузер:
@@ -2030,6 +2091,11 @@ body{{padding-bottom:2rem}}
   font-size:1.05rem;padding:.7rem 1.2rem;display:none}}
 .soob.idet{{display:block;background:var(--accent-soft);color:var(--text)}}
 .soob.ploho{{display:block;background:#c0392b;color:#fff;font-weight:600}}
+/* Кнопка закрытия отказа. Она есть, потому что отказ больше не гаснет сам:
+   пока человек её не нажал, сообщение стоит (см. `srazu` в `PRAVKA_SKRIPT`). */
+.soob .soob-x{{float:right;margin-left:1rem;font-family:var(--sans);font-size:.95rem;
+  font-weight:600;cursor:pointer;color:#fff;background:transparent;
+  border:1px solid rgba(255,255,255,.6);border-radius:6px;padding:.15em .7em}}
 /* Таблица преподавателей: колонки ровные, кабинет уходит вправо. */
 .prep-tab{{width:100%;border-collapse:collapse}}
 .prep-tab td{{padding:.55rem .8rem .55rem 0;border-bottom:1px solid var(--rule);
