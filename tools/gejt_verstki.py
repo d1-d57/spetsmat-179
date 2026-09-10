@@ -8,7 +8,7 @@ and did not hold three times, because it had no lever: nothing turned red when a
 page broke it.  A rule without a carrier is a hope (`skills/disciplina-kachestvo`).
 This gate is the carrier.  It boots the real server on the real database, opens
 every screen in a headless Chromium at the reference viewport, in every role that
-can see it, and asks four questions that a human asks by looking:
+can see it, and asks five questions that a human asks by looking:
 
   1. CLIPPING      -- is there an element whose visible box is narrower than its
                       own text needs, so the text is cut?
@@ -17,9 +17,22 @@ can see it, and asks four questions that a human asks by looking:
   3. H-SCROLL      -- is the document wider than the window?
   4. ESCAPED       -- is there an element standing OUTSIDE the card that owns it,
                       where nothing clips it and no scrollbar reveals it?
+  5. CENTRED       -- is there text set centred?  «НИКОГДА по центру мы не
+                      центрируем» is a rule of this project's canon, and this is
+                      the check that carries it.
 
-All four zero on every screen -- green.  Anything else -- red, with the offending
+All five zero on every screen -- green.  Anything else -- red, with the offending
 selectors printed, because a gate that says only "red" gets ignored.
+
+🔴 WHY CHECK 5 EXISTS (owner, 2026-09-10 11:4x).  Centring came back for the
+FOURTH time, and the owner named the cause himself: «центрирование на нашем сайте
+надо прям где-то вставить в какой-то стандартный канон.  НИКОГДА по центру мы не
+центрируем».  A rule that lives as a sentence in a document has been re-broken
+three times; a rule that turns a gate red cannot come back silently.  It is
+measured on the RENDER like everything else here -- centring arrives from a class
+and from inheritance alike, and grepping the markup for `text-align` would miss
+both.  The exceptions are a single named list inside the measuring script, one
+name and one reason each, and only what the owner called an exception out loud.
 
 🔴 WHY THIS FILE WAS REWRITTEN ON 2026-09-10.  The gate reported «обрезанных у
 гостя 48 → 0» while the owner was looking at «Тухватулин-Йалчын …» clipped on the
@@ -44,7 +57,7 @@ each one alone was enough to produce that zero:
 
 Run:  python3 tools/gejt_verstki.py            (green -> rc=0, red -> rc=1)
       python3 tools/gejt_verstki.py --slomat   (self-test: forces a violation of
-                                                EVERY one of the four checks; the
+                                                EVERY one of the five checks; the
                                                 gate MUST go red; rc=0 when it
                                                 correctly caught them all)
       python3 tools/gejt_verstki.py --ekran Д  (one screen, by name substring)
@@ -95,8 +108,9 @@ EKRANY = [
 # boxes after CSS, fonts and layout, not the source.
 ZAMER = r"""
 () => {
-  const out = {obrezka: [], perenos: [], vyshli: [], skroll: 0,
-               osmotreno: 0, vsego: 0, na_obrezku: 0, na_vyhod: 0};
+  const out = {obrezka: [], perenos: [], vyshli: [], centr: [], skroll: 0,
+               osmotreno: 0, vsego: 0, na_obrezku: 0, na_vyhod: 0,
+               na_centr: 0, isklyucheno: 0};
 
   out.skroll = Math.max(0,
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -370,6 +384,69 @@ ZAMER = r"""
     }
   }
 
+  // ── 5. ЦЕНТРИРОВАНИЕ ───────────────────────────────────────────────────────
+  // 🔴 ПРАВИЛО КАНОНА, А НЕ ГЕОМЕТРИЯ: «НИКОГДА по центру мы не центрируем»
+  // (владелец, 10.09 11:4x).  Дефект возвращался ЧЕТЫРЕЖДЫ, пока правило жило
+  // текстом в документе, — поэтому оно здесь, рядом с четырьмя, которые краснеют.
+  //
+  // МЕРИТСЯ РЕНДЕР, А НЕ РАЗМЕТКА.  Центрирование приходит и из класса, и по
+  // наследству от предка, и строка `text-align` в исходнике может не иметь к
+  // ЭТОМУ элементу никакого отношения; `getComputedStyle` знает правду обо всех
+  // трёх случаях сразу.
+  //
+  // 🔴 НАЗЫВАЕТСЯ КОРЕНЬ ЦЕНТРИРОВАННОГО ПОДДЕРЕВА, А НЕ ВСЁ ПОДДЕРЕВО.
+  // `text-align` наследуется: одна строка CSS на карточке красит центром каждого
+  // её потомка.  Замерено живьём 10.09 на кондуите — 1199 центрированных узлов
+  // при 42 настоящих местах.  Список на тысячу строк никто не читает, и чинить
+  // по нему нечего: чинится ОДНО правило, у корня.  Корень — элемент, чей
+  // родитель не центрирован.
+  const ISKLYUCHENIYA = [
+    // 🔴 В ЭТОТ СПИСОК ПОПАДАЕТ ТОЛЬКО ТО, ЧТО ВЛАДЕЛЕЦ НАЗВАЛ ЯВНЫМ
+    // ИСКЛЮЧЕНИЕМ ВСЛУХ.  Сомневаешься — НЕ вноси, пусть краснеет: лишнее
+    // красное стоит одной строки в отчёте, а лишнее исключение возвращает
+    // дефект молча, и ровно так правило умирало трижды до этого гейта.
+    {imya: 'номер задачи в клетке кондуита (H4.6)',
+     sel: '#s-kond .kond th.zn',
+     dom: 'veb/razdely/konduit.py:988',
+     prichina: 'принято владельцем 10.09 11:3x дословно «мне всё нравится»: '
+             + 'номер задачи стоит в клетке решётки, и клетка читается столбцом '
+             + 'сверху вниз, а не строкой слева направо'},
+  ];
+
+  const centrirovan = (s) =>
+      s.textAlign === 'center' || s.textAlign === '-webkit-center' ||
+      // 🔴 И `text-align-last` ТОЖЕ.  Он центрирует ту же строку другим
+      // свойством, и проверка, знающая только `text-align`, оставляла бы дырку,
+      // через которую то же самое центрирование возвращается легально.
+      s.textAlignLast === 'center';
+
+  // 🔴 `<html>` И `<body>` — В СПИСКЕ КАНДИДАТОВ.  Обход идёт по `body *`, и
+  // `body{text-align:center}` центрировал бы ВСЮ страницу, не дав ни одного
+  // корня: у каждого потомка родитель тоже центрирован, и проверка молчала бы
+  // ровно на самом большом нарушении, какое бывает.
+  const na_centr = [document.documentElement, document.body, ...vidimye];
+  out.na_centr = na_centr.length;
+
+  for (const el of na_centr) {
+    if (!centrirovan(getComputedStyle(el))) continue;
+    const p = el.parentElement;
+    if (p && centrirovan(getComputedStyle(p))) continue;   // не корень поддерева
+    // 🔴 ГРАНИЦА ИЗМЕРЕНИЯ, А НЕ ПОБЛАЖКА: у элемента без собственного видимого
+    // текста центрировать нечего, читатель ничего центрированного не видит, и в
+    // отчёте нечего процитировать.  Это, а не милость к кондуиту, отсекает 1095
+    // ПУСТЫХ клеток решётки; правило одно и то же на всех экранах.  Названо
+    // вслух в списке «НЕ ПРОВЕРЯЕТСЯ ЭТИМ ГЕЙТОМ».
+    const tekst = chistyy(el);
+    if (!tekst) continue;
+    const isk = ISKLYUCHENIYA.find(i => el.matches(i.sel));
+    if (isk) { out.isklyucheno++; continue; }
+    const s = getComputedStyle(el);
+    out.centr.push({
+        put: put(el), tekst,
+        chem: (s.textAlign === 'center' || s.textAlign === '-webkit-center')
+              ? 'text-align:center' : 'text-align-last:center'});
+  }
+
   return out;
 }
 """
@@ -386,7 +463,8 @@ LOMKA = r"""() => {
   const vidno = (el) => { const r = el.getBoundingClientRect();
       return r.width > 1 && r.height > 1; };
   const iz = (sel) => [...document.querySelectorAll(sel)].filter(vidno);
-  const otchet = {obrezka: false, perenos: false, vyhod: false, skroll: false};
+  const otchet = {obrezka: false, perenos: false, vyhod: false, skroll: false,
+                  centr: false};
 
   // 🔴 EVERY BREAKAGE VERIFIES THAT IT LANDED, AND TRIES AGAIN WHEN IT DID NOT.
   // The verifier caught the previous version rapporting a triumphant red on all
@@ -457,6 +535,22 @@ LOMKA = r"""() => {
     if ([...kogo].some(x => x.getBoundingClientRect().left < rod.left - 1)) {
       otchet.vyhod = true; break;
     }
+  }
+
+  // 5. ЦЕНТРИРОВАНИЕ -- поставить `center` там, где его не было.  Ломается ИМЕННО
+  //    КОРЕНЬ: проверка называет элемент, чей родитель не центрирован, поэтому
+  //    поломка, посаженная внутрь уже центрированного поддерева, была бы поломкой
+  //    того, о чём проверка молчит нарочно, — и самопроверка мерила бы объявленное
+  //    слепое пятно вместо зрения.
+  for (const c of iz('.kto, .para, li, p, td.kto, .komu').slice(0, 200)) {
+    const rod = c.parentElement;
+    const centr = (e) => e && ['center', '-webkit-center']
+        .includes(getComputedStyle(e).textAlign);
+    if (centr(c) || centr(rod)) continue;
+    if (!(c.textContent || '').trim()) continue;
+    c.style.setProperty('text-align', 'center', 'important');
+    if (centr(c)) { otchet.centr = true; break; }
+    c.style.removeProperty('text-align');
   }
 
   // 3. H-SCROLL -- push the document wider than the window.
@@ -591,37 +685,44 @@ def main() -> int:
     print(f"база: {db}")
     print()
     print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'переносы':>10}"
-          f"{'вышли':>8}{'скролл':>8}   охват узлов")
+          f"{'вышли':>8}{'центр':>7}{'скролл':>8}   охват узлов")
     krasnyh, izmereno, uzlov = 0, 0, 0
     for rol, imya, put, z, oshibka in itogi:
         if z is None:
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>8}   🔴 {oshibka}")
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}"
+                  f"{'—':>8}   🔴 {oshibka}")
             krasnyh += 1
             continue
         izmereno += 1
         uzlov += z["vsego"]
         ploho = (len(z["obrezka"]) + len(z["perenos"]) + len(z["vyshli"])
-                 + (1 if z["skroll"] else 0))
+                 + len(z["centr"]) + (1 if z["skroll"] else 0))
         if ploho:
             krasnyh += 1
         # 🔴 ZERO NODES ON A LIVE SCREEN IS RED, NOT GREEN.  A walk that looked at
         # nothing reports no defects, and that is indistinguishable from a clean
         # page unless the coverage is printed next to the verdict.
-        if z["vsego"] == 0 or z["na_obrezku"] == 0:
+        if z["vsego"] == 0 or z["na_obrezku"] == 0 or z["na_centr"] == 0:
             krasnyh += 1
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>8}   "
-                  f"🔴 ОХВАТ НОЛЬ: узлов {z['vsego']}, на обрезку {z['na_obrezku']}")
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}{'—':>8}   "
+                  f"🔴 ОХВАТ НОЛЬ: узлов {z['vsego']}, на обрезку "
+                  f"{z['na_obrezku']}, на центр {z['na_centr']}")
             continue
         print(f"{rol:<13}{imya:<15}{len(z['obrezka']):>9}{len(z['perenos']):>10}"
-              f"{len(z['vyshli']):>8}{z['skroll']:>8}   "
-              f"проверено {z['na_obrezku']}/{z['osmotreno']}/{z['na_vyhod']} "
-              f"из {z['vsego']}")
+              f"{len(z['vyshli']):>8}{len(z['centr']):>7}{z['skroll']:>8}   "
+              f"проверено {z['na_obrezku']}/{z['osmotreno']}/{z['na_vyhod']}/"
+              f"{z['na_centr']} из {z['vsego']}")
 
     print()
     print(f"ОХВАТ: проверено {izmereno} экранов из {dolzhno_byt}; "
           f"осмотрено элементов {uzlov}")
-    print("        три числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
-          "на ВЫХОД ЗА КОНТЕЙНЕР, из общего числа элементов страницы.")
+    print("        четыре числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
+          "на ВЫХОД ЗА КОНТЕЙНЕР / на ЦЕНТР, из общего числа элементов страницы.")
+    isk = sum(z["isklyucheno"] for _r, _i, _p, z, _o in itogi if z)
+    if isk:
+        print(f"        центрирований прощено по именованному списку исключений: "
+              f"{isk}. Список — в `ZAMER`, константа `ISKLYUCHENIYA`: имя, "
+              f"селектор, дом в разметке и причина на каждое.")
     if izmereno == 0:
         print("🔴 ОХВАТ НОЛЬ при живом сервере — это КРАСНЫЙ, а не зелёный: "
               "гейт ничего не измерил.")
@@ -640,6 +741,12 @@ def main() -> int:
             print(f"   ВЫШЛО · {rol} · {imya} · {d['put']} · «{d['tekst']}» · "
                   f"влево {d['vlevo']} вправо {d['vpravo']} · "
                   f"из {d['rod']} ({d['tip']})")
+        for d in z["centr"][:8]:
+            print(f"   ЦЕНТР · {rol} · {imya} · {d['put']} · «{d['tekst']}» · "
+                  f"{d['chem']}")
+        if len(z["centr"]) > 8:
+            print(f"   ЦЕНТР · {rol} · {imya} · …и ещё {len(z['centr']) - 8} — "
+                  f"напечатаны первые восемь")
 
     print()
     print("НЕ ПРОВЕРЯЕТСЯ ЭТИМ ГЕЙТОМ: цвет и контраст, читаемость, подстановка "
@@ -679,8 +786,18 @@ def main() -> int:
           "\n · элемент, схлопнутый в ноль (высота или ширина меньше пикселя): "
           "`vidim()` считает его невидимым, а не сломанным."
           "\n · экраны, где `--slomat` не сумел нанести поломку: он теперь "
-          "называет их сам отдельной строкой — на них испытаны не все четыре "
-          "проверки.")
+          "называет их сам отдельной строкой — на них испытаны не все пять "
+          "проверок."
+          "\n · ЦЕНТРИРОВАНИЕ БОКСА, а не текста: `justify-content:center`, "
+          "`align-items:center`, `margin:0 auto`. Проверка 5 судит ВЫКЛЮЧКУ "
+          "ТЕКСТА (`text-align`, `text-align-last`) — карточка, поставленная "
+          "по середине полосы флексом, ей не видна."
+          "\n · центрирование элемента БЕЗ собственного видимого текста: "
+          "центрировать в нём нечего и процитировать в отчёте нечего. Это "
+          "граница измерения, а не исключение, и она одна и та же на всех "
+          "экранах: ею же отсеиваются 1095 пустых клеток решётки кондуита."
+          "\n · центрирование, приходящее ТОЛЬКО в состоянии, которого нет в "
+          "покое (`:hover`, раскрытый список, окно входа): гейт меряет покой.")
 
     if args.slomat:
         # 🔴 «КРАСНЫЙ» ЕЩЁ НЕ ЗНАЧИТ «ВСЕ ЧЕТЫРЕ РАБОТАЮТ», А «13 ИЗ 13» НЕ ЗНАЧИТ
@@ -691,6 +808,7 @@ def main() -> int:
         PROV = (("ОБРЕЗКА", "obrezka", "obrezka"),
                 ("ПЕРЕНОС", "perenos", "perenos"),
                 ("ВЫШЛО ЗА КОНТЕЙНЕР", "vyshli", "vyhod"),
+                ("ЦЕНТР", "centr", "centr"),
                 ("СКРОЛЛ", "skroll", "skroll"))
         nanesli = {imya: 0 for imya, _, _ in PROV}
         poymali = {imya: 0 for imya, _, _ in PROV}
@@ -722,14 +840,14 @@ def main() -> int:
                    and not all(z.get("lomka", {}).get(k) for _n, _kk, k in PROV)]
         if ne_seli:
             print("   ⚠ поломка села НЕ ЦЕЛИКОМ на экранах: " + ", ".join(ne_seli)
-                  + " — там испытаны не все четыре проверки, и общий красный это"
+                  + " — там испытаны не все пять проверок, и общий красный это"
                     " скрывает.")
         if bеda:
             print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: " + "; ".join(bеda)
                   + ". Проверка, которая ничего не поймала на подстроенном "
                     "нарушении, не ловит и настоящее.")
             return 1
-        print(f"\n✅ САМОПРОВЕРКА: каждая из четырёх проверок поймала КАЖДУЮ "
+        print(f"\n✅ САМОПРОВЕРКА: каждая из пяти проверок поймала КАЖДУЮ "
               f"нанесённую ей поломку. Красных экранов {krasnyh} из {izmereno}.")
         return 0
 
@@ -737,7 +855,7 @@ def main() -> int:
         print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон "
               f"(измерено {izmereno} из {dolzhno_byt} обещанных).")
         return 1
-    print(f"\n✅ ЗЕЛЁНЫЙ: {izmereno} экранов, все четыре числа нули на каждом.")
+    print(f"\n✅ ЗЕЛЁНЫЙ: {izmereno} экранов, все пять чисел нули на каждом.")
     return 0
 
 
