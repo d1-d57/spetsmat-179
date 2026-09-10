@@ -1047,8 +1047,27 @@ def svoy_dom(baza_url: str, adres: str) -> bool:
     Отдельной функцией, а не строкой внутри прогона, ровно потому, что это
     ПРАВИЛО, а не подробность: его можно испытать литералами, без сети и без
     браузера, и оно не зависит от того, отвечает ли сегодня чужой хост.
+
+    🔴 НЕ ГОЛЫЙ `startswith`: `http://127.0.0.1:54321x/` начинается с адреса
+    гейта и сервером гейта не является. Хвост обязан быть пустым или начинаться
+    с разделителя пути. Найдено собственным тестом на литералах, не рассуждением.
     """
-    return adres.startswith(baza_url)
+    if not adres.startswith(baza_url):
+        return False
+    hvost = adres[len(baza_url):]
+    return hvost == "" or hvost[0] in "/?#"
+
+
+def klyuch_ekrana(baza_url: str, adres: str, radio: str | None) -> tuple:
+    """Чем один измеренный экран отличается от другого: путь, на котором браузер
+    ОСТАНОВИЛСЯ, плюс выбранная вкладка.
+
+    По этому ключу переадресация сводится к своей цели: `/glavnaya` отвечает 302
+    на `/` (`veb/server.py:718`), и мерить её отдельно значит написать то же
+    число второй раз. Раздутый охват врёт в ту же сторону, что и заниженный.
+    """
+    put = (adres[len(baza_url):] or "/") if svoy_dom(baza_url, adres) else adres
+    return (put.split("?")[0], radio)
 
 
 def progon(baza_url: str, slomat: bool, otbor: str | None,
@@ -1101,7 +1120,7 @@ def progon(baza_url: str, slomat: bool, otbor: str | None,
                                       f"— измерен был бы ЧУЖОЙ документ"))
                         continue
                     kuda = page.url[len(baza_url):] or "/"
-                    klyuch = (kuda.split("?")[0], radio)
+                    klyuch = klyuch_ekrana(baza_url, page.url, radio)
                     if klyuch in vidennoe:
                         itogi.append((rol, imya, put, None,
                                       f"{SVEDENO} переадресация на {kuda} — уже "

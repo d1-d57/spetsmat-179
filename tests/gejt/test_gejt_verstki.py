@@ -339,15 +339,29 @@ def test_pereadresaciya_svoditsya_a_ne_schitaetsya_vtorym_ekranom(server, brauze
     """`/glavnaya`, `/listki`, `/listki-8` отвечают 302 на `/`.  Раз список
     экранов строится из роутов, они приходят в него сами — и обязаны СВЕСТИСЬ к
     цели, а не дать по второму «зелёному экрану» с тем же числом: раздутый охват
-    врёт ровно в ту же сторону, что и охват заниженный."""
-    ekrany = [("корень", "/", None, ("организатор",)),
-              ("/glavnaya", "/glavnaya", None, ("организатор",))]
-    itogi, dolzhno = gejt.progon(server, False, None, ekrany)
-    assert dolzhno == 2
-    svedeno = [o for _r, _i, _p, z, o in itogi if z is None and (o or "").startswith(gejt.SVEDENO)]
-    izmereno = [i for _r, i, _p, z, _o in itogi if z is not None]
-    assert len(svedeno) == 1, f"переадресация не свелась: {itogi}"
-    assert izmereno == ["корень"], f"измерены не те экраны: {izmereno}"
+    врёт ровно в ту же сторону, что и охват заниженный.
+
+    Обе половины: правило — на литералах, факт переадресации — на живом сервере.
+    (`gejt.progon` здесь позвать нельзя: он открывает СВОЙ `sync_playwright`, а
+    в этом модуле один уже открыт фикстурой `brauzer`, и Playwright запрещает
+    вложение — ошибка выглядела бы как поломка гейта, а её там нет.)"""
+    baza = "http://127.0.0.1:54321"
+    assert (gejt.klyuch_ekrana(baza, baza + "/", None)
+            == gejt.klyuch_ekrana(baza, baza + "/?den=2026-09-10", None)), (
+        "запрос в адресе не делает экран другим экраном")
+    assert (gejt.klyuch_ekrana(baza, baza + "/", "p-start")
+            != gejt.klyuch_ekrana(baza, baza + "/", "p-kond")), (
+        "разные вкладки одной страницы — разные экраны")
+
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", None)
+    try:
+        assert p.url == server + "/", (
+            f"`/glavnaya` больше не переадресует на корень (стоит {p.url}) — "
+            "сведение экранов надо пересмотреть")
+        assert (gejt.klyuch_ekrana(server, p.url, None)
+                == gejt.klyuch_ekrana(server, server + "/", None))
+    finally:
+        ctx.close()
 
 
 def test_spisok_ekranov_ne_perepisan_rukami():
