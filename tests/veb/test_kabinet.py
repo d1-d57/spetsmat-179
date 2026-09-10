@@ -17,6 +17,7 @@ import json
 import os
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 from http.server import ThreadingHTTPServer
@@ -47,14 +48,21 @@ def running_server(tmp_path):
     db_path = tmp_path / "spetsmat.db"
     apply_migrations(db_path, config.MIGRATIONS_DIR)
     connection = connect(db_path)
+    # 🔴 THREE COLUMNS THE MIGRATIONS DO NOT CREATE AND THE LIVE БАЗА HAS. `teachers` comes
+    # out of `migrations/` as `id, tg_id, name, aka, is_owner`; `aktiven`, `gruppa` and
+    # `kabinet` are added at runtime by `veb/server.py`. A fixture without them is not a
+    # smaller live база but a DIFFERENT one, and `lichnaya.kabinet_na_datu` — which joins
+    # `teachers.gruppa` to `kabinet_na_den` — throws `no such column` on it.
     connection.execute("alter table teachers add column aktiven integer not null default 1")
+    connection.execute("alter table teachers add column gruppa text")
+    connection.execute("alter table teachers add column kabinet text")
 
     t1 = connection.execute(
-        "insert into teachers (name, aka, aktiven) "
-        "values ('Лена Мирошниченко', 'ЕМ', 1)").lastrowid
+        "insert into teachers (name, aka, aktiven, gruppa, kabinet) "
+        "values ('Лена Мирошниченко', 'ЕМ', 1, 'В', '203')").lastrowid
     t2 = connection.execute(
-        "insert into teachers (name, aka, aktiven) "
-        "values ('Петров Олег', 'ПО', 1)").lastrowid
+        "insert into teachers (name, aka, aktiven, gruppa, kabinet) "
+        "values ('Петров Олег', 'ПО', 1, 'В', '203')").lastrowid
 
     s1 = connection.execute(
         "insert into students (surname, name, class, status) "
@@ -163,15 +171,52 @@ def test_the_grid_is_the_next_lessons_and_carries_no_written_down_date(running_s
     assert f'data-den="{vchera}"' not in telo, "вчерашнего в сетке быть не может"
 
 
-def test_login_with_a_personal_password_lands_in_the_cabinet(running_server):
-    """Owner 09.09: «когда я нажимаю Вход, я попадаю … в свой личный кабинет»."""
-    parol = vhod._lichnye_paroli() if hasattr(vhod, "_lichnye_paroli") else None
-    # The password store is not part of this fixture, so the redirect is checked at the
-    # level the route decides it: `uid is not None` -> `/kabinet`.
-    assert parol is None or isinstance(parol, dict)
-    status, _body, headers = _get(
-        f'{running_server["baza"]}/kabinet', _kuka("organizator", running_server["t1"]))
-    assert status == 200, "старший по аудитории входит как organizator и кабинет видит"
+def test_login_with_a_personal_password_lands_in_the_cabinet(running_server, monkeypatch):
+    """Owner 09.09: «когда я нажимаю Вход, я попадаю … в свой личный кабинет».
+
+    The password store lives in `secrets/` and is not part of this fixture, so the door
+    is opened by replacing the ONE function that answers «кто это» — the redirect under
+    test is the line that reads its answer, and nothing else about the entry is faked.
+    """
+    monkeypatch.setattr(vhod, "proverit_parol",
+                        lambda _p: ("prepod", running_server["t1"]))
+    status, _body, headers = _get_vhod(running_server["baza"], "чей-угодно")
+    assert status == 302
+    assert headers["Location"] == "/kabinet"
+
+
+def test_login_with_a_COMMON_password_still_lands_on_the_site(running_server, monkeypatch):
+    """`uid is None` names nobody, and a cabinet with nobody in it is not a landing."""
+    monkeypatch.setattr(vhod, "proverit_parol", lambda _p: ("prepod", None))
+    status, _body, headers = _get_vhod(running_server["baza"], "общий")
+    assert status == 302
+    assert headers["Location"] == "/"
+
+
+def test_a_senior_entering_as_organizator_lands_there_too(running_server, monkeypatch):
+    """Three of the fifteen are seniors and enter as `organizator` WITH a uid."""
+    monkeypatch.setattr(vhod, "proverit_parol",
+                        lambda _p: ("organizator", running_server["t1"]))
+    status, _body, headers = _get_vhod(running_server["baza"], "старший")
+    assert status == 302
+    assert headers["Location"] == "/kabinet"
+
+
+def _get_vhod(baza: str, parol: str):
+    """POST the entry form the way a BROWSER does it, and do not follow the 302."""
+    class _Bez(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+
+    telo = urllib.parse.urlencode({"parol": parol}).encode("utf-8")
+    req = urllib.request.Request(
+        baza + "/vhod", data=telo, method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.build_opener(_Bez).open(req) as r:
+            return r.status, r.read(), dict(r.headers)
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read(), dict(exc.headers)
 
 
 # ------------------------------------------------------------------- marking an absence
