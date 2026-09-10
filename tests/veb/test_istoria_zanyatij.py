@@ -13,6 +13,7 @@ import threading
 import urllib.error
 import urllib.request
 from datetime import date, timedelta
+from html.parser import HTMLParser
 from http.server import ThreadingHTTPServer
 
 import config
@@ -27,8 +28,27 @@ from veb import vhod
 #: Two lessons already in the past relative to "today" as this suite runs, so
 #: `zanyatie_zaversheno` needs no clock injection: any day before this week's Monday is
 #: unambiguously over by every reading of the timetable.
-MONDAY = (date.today() - timedelta(days=14)).isoformat()
-FRIDAY = (date.today() - timedelta(days=10)).isoformat()
+#:
+#: 🔴 ЭТО ДОЛЖНЫ БЫТЬ ДНИ ЗАНЯТИЙ, А НЕ ПРОСТО ДНИ, И РАНЬШЕ ИМИ НЕ БЫЛИ. Здесь
+#: стояло `date.today() - timedelta(days=14)` под именем `MONDAY` и `-10` под именем
+#: `FRIDAY`. Понедельником первое оказывается ровно в те дни, когда сегодня
+#: понедельник; в остальные шесть дней недели обе даты попадают куда угодно — при
+#: сборке этой правки 11.09 они были ПЯТНИЦЕЙ (28.08) и ВТОРНИКОМ (01.09).
+#: `SLOTY_ZANYATIJ` знает только пн и чт, `slot_of` отвечает `None` на любой другой
+#: день, `SostavService.sostav` возвращает пустой состав — и в решётке нет НИ ОДНОЙ
+#: клетки «был». Два теста из шести падали шесть дней в неделю, и падали на данных
+#: фикстуры, а не на коде страницы. Дни считаются от сегодняшнего назад до
+#: ближайших пн и чт, то есть остаются днями занятий в любой день прогона.
+def _proshedshij(iso_den_nedeli: int, ne_pozzhe_chem_dnej_nazad: int = 7) -> str:
+    """Ближайший ПРОШЕДШИЙ день недели `iso_den_nedeli`, не сегодня."""
+    d = date.today() - timedelta(days=ne_pozzhe_chem_dnej_nazad)
+    while d.isoweekday() != iso_den_nedeli:
+        d -= timedelta(days=1)
+    return d.isoformat()
+
+
+MONDAY = _proshedshij(1)          # понедельник — слот 1 в `SLOTY_ZANYATIJ`
+FRIDAY = _proshedshij(4)          # четверг — слот 2; имя оставлено прежним
 
 
 @pytest.fixture
@@ -170,3 +190,52 @@ def test_teacher_marked_absent_reads_as_absent_even_with_a_students_override(run
     assert status == 200
     telo = body.decode("utf-8")
     assert 'class="ist-net"' in telo
+
+
+# --------------------------------------------------------------------------- родство
+
+
+class _Rodstvo(HTMLParser):
+    """Кто чей ребёнок: минимальный разбор, отвечающий на один вопрос.
+
+    🔴 ВОПРОС РОВНО ОДИН И ОН НЕ ПРО ОФОРМЛЕНИЕ: сёстры ли переключатели вкладок и
+    панели, которые они показывают. Правило `#iv-shk:checked~#is-shk` — комбинатор
+    СЕСТРЫ; пока переключатели лежали в `<body>`, а панели в `<main>`, оно не
+    совпадало никогда, и обе таблицы были невидимы при любой отметке. Это и есть
+    «кнопки не нажимаются, я ничего не вижу» владельца.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.stek: list = []
+        self.roditel: dict = {}
+
+    def handle_starttag(self, tag, attrs):
+        d = dict(attrs)
+        if d.get("id"):
+            self.roditel[d["id"]] = self.stek[-1] if self.stek else None
+        if tag not in ("input", "br", "img", "meta", "link", "hr"):
+            self.stek.append(d.get("id") or tag)
+
+    def handle_endtag(self, tag):
+        if self.stek:
+            self.stek.pop()
+
+
+def _roditeli(telo: str) -> dict:
+    p = _Rodstvo()
+    p.feed(telo)
+    return p.roditel
+
+
+def test_the_tab_switches_and_the_panels_are_siblings(running_server):
+    """Селектор `~` требует сестру: переключатель и панель — один родитель."""
+    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    assert status == 200
+    rod = _roditeli(body.decode("utf-8"))
+    for pereklyuchatel, panel in (("iv-shk", "is-shk"), ("iv-prep", "is-prep")):
+        assert rod[pereklyuchatel] == rod[panel], (
+            f"{pereklyuchatel} и {panel} должны быть сёстрами, а лежат в "
+            f"{rod[pereklyuchatel]} и {rod[panel]}: правило `~` не совпадёт никогда")
+    # И метки тоже: подсветка выбранной кнопки — тот же комбинатор.
+    assert rod["iv-shk"] == rod.get("ist-vkladki"), "метки вкладок — тоже сёстры"

@@ -255,13 +255,27 @@ def stranica(c: sqlite3.Connection) -> str:
 <title>История занятий — Ключики</title>
 <style>{_obshchij_stil(put_bazy(c))}{SVOI_STILI}</style></head>
 <body>
-<input class="rd" type="radio" name="ist-vid" id="iv-shk" checked hidden>
-<input class="rd" type="radio" name="ist-vid" id="iv-prep" hidden>
 <main class="istoria">
+  <!-- 🔴 ПЕРЕКЛЮЧАТЕЛИ СТОЯТ ЗДЕСЬ, ВНУТРИ `<main>`, И ЭТО НЕ ОФОРМЛЕНИЕ — ЭТО
+       ПРИЧИНА, ПО КОТОРОЙ СТРАНИЦА БЫЛА МЕРТВА. Два `<input>` лежали в `<body>`,
+       ПЕРЕД `<main>`, а панели `#is-shk` / `#is-prep` и метки `.ist-vkladki` —
+       внутри него. Комбинатор `~` требует СЕСТРУ; племянница ему не подходит
+       никогда. Значит из двух правил работало ровно одно — то, что гасит панели
+       (`#is-shk,#is-prep` → display none); второе, `#iv-shk:checked~#is-shk`,
+       не совпадало ни при какой отметке. Обе таблицы были невидимы ВСЕГДА, и по той
+       же одной причине была мертва подсветка выбранной кнопки. Отсюда слова
+       владельца: «кнопки не нажимаются, я ничего не вижу».
+       Замер до правки (рендер 1440×900 на копии боевой базы, playwright):
+       `#is-shk` → `display:none`, `#is-prep` → `display:none`, видимых строк 0 и 0,
+       и клик по «Преподавателям» ничего из этого не менял.
+       Починка ОДНА и она здесь: переключатели, метки и панели стали сёстрами.
+       Ни одно правило CSS при этом не изменилось — изменилось РОДСТВО узлов. -->
+  <input class="rd" type="radio" name="ist-vid" id="iv-shk" checked hidden>
+  <input class="rd" type="radio" name="ist-vid" id="iv-prep" hidden>
   <h1>История</h1>
   <p class="podpis">{e(podpis)} · галочка — инициалы принимавшего, наведение — полное имя;
     у преподавателя наведение показывает, кого он в этот день принимал</p>
-  <nav class="ist-vkladki">
+  <nav class="ist-vkladki" id="ist-vkladki">
     <label for="iv-shk">Школьники</label>
     <label for="iv-prep">Преподаватели</label>
   </nav>
