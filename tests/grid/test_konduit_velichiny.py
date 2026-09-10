@@ -55,6 +55,23 @@ def mir(connection):
     return seed_world(connection, students=5, sheets=(LISTOK,))
 
 
+@pytest.fixture
+def uchebnyj_den(monkeypatch):
+    """Пятница — не учебный день, и без этой оснастки «мой школьник» не существует.
+
+    🔴 ЭТО НЕ УДОБСТВО, А КРАСНОЕ, КОТОРОЕ УЖЕ СТОЯЛО.  `_moi_deti` спрашивает
+    `deti_na_datu(..., segodnya())`, а та на дне без слота отвечает пустым списком
+    («не учебный день: постоянных строк не применяется ни одной»,
+    `veb/razdely/lichnaya.py:168`).  Значит любой тест про «моих» ЗЕЛЁН по понедельникам
+    и четвергам и КРАСЕН в остальные пять дней недели, ничего не сообщая о коде: замер
+    11.09 (пятница) — `test_being_mine_and_having_closed…` красный на `"moi"`, при
+    целом механизме.  День занятия здесь называется явно, и результат перестаёт зависеть
+    от того, когда запустили прогон.
+    """
+    monkeypatch.setattr(konduit, "segodnya", lambda: "2026-09-14")   # понедельник
+    return "2026-09-14"
+
+
 def kontekst(connection, prepod_id=None) -> Kontekst:
     """A `Kontekst` carrying exactly the fields the кондуит reads.
 
@@ -137,9 +154,18 @@ def test_a_retracted_obligatory_is_not_counted_as_handed_in(mir, connection, mar
 # ------------------------------------------------------- величина 2: строка светится
 
 
-def test_the_row_glows_exactly_for_the_pupil_who_closed_his_obligatory(
+def test_no_row_glows_for_having_closed_the_obligatory_problems(
     mir, connection, marking
 ):
+    """The owner's edit of 10.09 (O1), read as the property it is: the row does not glow.
+
+    This test USED to assert the opposite — «светится ровно строка того, кто закрыл
+    обязательные» — and it was right until 10.09, when the owner looked at the live page
+    and said: «я хочу видеть своих школьников, и я их вижу. А теперь ещё вижу почему-то
+    школьников, которые просто всё сдали — это не нужно… Ты сейчас выделяешь всю строчку —
+    не надо».  The pupil below closes every obligatory problem of the листок, which is
+    exactly the state that used to light his row up.
+    """
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     for zadacha in (zadachi[0], zadachi[1], zadachi[2]):
         otmetit(marking, mir.student_ids[0], zadacha)
@@ -149,8 +175,9 @@ def test_the_row_glows_exactly_for_the_pupil_who_closed_his_obligatory(
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
     stroki = re.findall(r'<tr( class="[^"]*")?><td class="kto">', kusok)
-    goryat = [i for i, klass in enumerate(stroki) if "gotov" in (klass or "")]
-    assert goryat == [0], "светится ровно строка того, кто закрыл обязательные"
+    assert stroki, "строки школьников вообще нарисованы"
+    assert not [k for k in stroki if k], "ни одна строка не несёт класса вовсе"
+    assert "gotov" not in kusok, "класс подсветки не остался нигде в разметке"
 
 
 def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marking):
@@ -164,11 +191,15 @@ def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marki
     assert schyotchiki(kusok) == [None, None, None], "листок без обязательных пишет точку"
 
 
-def test_being_mine_and_having_closed_are_both_visible_at_once(
-    mir, connection, marking
+def test_the_row_carries_the_one_priznak_of_whose_child_it_is_and_no_other(
+    mir, connection, marking, uchebnyj_den
 ):
-    """The two marks ADD UP.  The previous expression («свой» OR «чужой») had no room for
-    a third class, and adding one without losing the first is the whole of this check.
+    """One признак, one носитель (O1, and the owner's канон «нельзя смешивать», Q4).
+
+    The pupil below is BOTH the teacher's own child AND has closed every obligatory
+    problem — the case where the two marks used to be added onto one row (this test
+    asserted that sum until 10.09).  Now the row says «мой» and says nothing else; the
+    second fact is drawn in its own column and is checked there.
     """
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     for zadacha in zadachi[:3]:
@@ -177,9 +208,7 @@ def test_being_mine_and_having_closed_are_both_visible_at_once(
     # 🔴 СТРОКА НА ОБА СЛОТА, И ЭТО НЕ ИЗБЫТОЧНОСТЬ. С 10.09 «мой» считается ПО ДНЮ:
     # кондуит спрашивает ту же службу, что распределение (требование владельца —
     # «изменение в текущем расписании на сегодня не обновляет кабинет и вкладку в
-    # кондуите»). Строка одного слота делала бы результат зависимым от того, на какой
-    # день недели пришёлся прогон, а этот тест — про СЛОЖЕНИЕ двух меток, и день ему
-    # безразличен.
+    # кондуите»).
     for slot in (1, 2):
         connection.execute(
             "insert into enrollment (student_id, teacher_id, room, slot, valid_from) "
@@ -189,7 +218,7 @@ def test_being_mine_and_having_closed_are_both_visible_at_once(
     kusok = panel(konduit.razdel(kontekst(connection, prepod_id=prepod)),
                   str(mir.sheet_ids[0]))
     pervaya = re.search(r'<tr class="([^"]*)"><td class="kto">', kusok).group(1)
-    assert "moi" in pervaya and "gotov" in pervaya, pervaya
+    assert pervaya.split() == ["moi"], pervaya
 
 
 # ------------------------------------------------- величина 3: сколько сдало задачу
