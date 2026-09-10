@@ -277,6 +277,103 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**ZONE CONFLICT, NAMED BEFORE WORK: the «История» tab cannot become a SIXTH shell tab.**
+The site's tab machinery (the radio buttons, the menu row, the lazy per-capability imports
+for «Кондуит»/«Моё») all live in `veb/obshchee/karkas.py::obolochka()`, which is outside
+this заход's zone. The exact same conflict already happened for «Кондуит» and «Моё», and
+the codebase's own resolution is on record in `veb/razdely/kartochka.py`'s docstring: build
+a STANDALONE page (own `<!doctype html>`, `_obshchij_stil()` from `veb/razdely/list_odin.py`)
+instead of a sixth tab, and record the missing menu wiring as a debt for whoever owns
+`tools/`/`karkas.py`. I am following that precedent rather than touching `karkas.py`.
+Consequence: today the page is reachable only by its own URL (`/istoria`), not by a menu
+label. Recorded as a queue item below, home `veb/obshchee/karkas.py` (owner decides whether
+the link is worth a small out-of-zone правка by whoever owns that file next).
+
+**Route registration:** self-registered via the existing `marshruty()` seam
+(`RAZDELY_S_MARSHRUTAMI` in `veb/server.py`, already used by `veb.razdely.istoria` — the
+UNRELATED «cell history» feature). One line added to that tuple; no other edit to
+`do_GET`/`do_POST`.
+
+**Naming collision avoided:** `veb/razdely/istoria.py` already exists and means something
+different — "history of one mark-journal cell" (right-click / long-press panel on
+Кондуит), added 09.09, with its own `/api/istoria*` routes. My file is
+`veb/razdely/istoria_zanyatij.py` ("history of lessons attended"), route `/istoria`. Not
+editing `istoria.py`.
+
+**Definition of "был" (present), stated per the ЗАДАЧА's own requirement, checked against
+the live база before drawing anything:**
+A student counts as present at a past lesson unless an `attendance` row names them absent
+(`status = 'не был'`) for that `session_id`. No `attendance` row at all is the DEFAULT and
+means "as usual" (present, with their standing teacher) — this is not my invention: it is
+the exact rule the existing write path already encodes (`veb/server.py` lines ~1442-1481,
+`status = est["status"] if est is not None else PRISUTSTVUET`, and a row is deleted rather
+than kept whenever it resolves back to plain presence with no deviation). Composition per
+day is therefore not reinvented: `core.services.sostav_na_den.SostavService.sostav(den)`
+already answers exactly this (`Mesto.otmechen_otsutstvuyushchim`, `.segodnya` = who taught
+them that day, override-or-standing), and «История» reads it once per past date instead of
+opening a second reading of the same tables. Checked live (see ниже): session 2026-09-07 on
+the боевая база carries 6 `attendance` rows (5 overrides + 1 absence) against 57 students —
+the other 51 are present-by-default, exactly as this rule says.
+
+For TEACHERS: "был" = taught at least one present student that day
+(`sostav.po_prepodavatelyam()[teacher_id]` non-empty) AND not explicitly marked absent that
+day (`teacher_attendance.status = 'не был'` for that `session_id`, read directly — no
+existing port covers it, so a small local SQLite adapter is added next to the page, same
+shape as `veb/razdely/zanyatie.py::otsutstvuyushchie_prepodavateli`, which already reads the
+same query for the same table one file over). **Named limitation (criterion 6):** a teacher
+who structurally never comes on a given weekday (`dni_prepodavatelej`) reads identically to
+one who skipped it — the data does not distinguish "day off" from "absent" for teachers, and
+the ЗАДАЧА asked for a binary check/cross, not a third state. Stated here rather than invented
+away.
+
+**Coverage gap (criterion 3), named in advance:** `Mesto.nekuda_det` — present, but the
+composition assigned nobody to teach them. This is not "absent" and not a clean "present with
+$X$": it is drawn as a third, visually distinct marker and counted separately in the report,
+not folded into either galochka or krestik.
+
+**Roster scope:** active roster only (`students.status is null or status <> 'left'`), the
+same predicate every other section on this site already uses (`shkolniki.shkolniki`,
+`zanyatie._Uchashchiesya`, `konduit._uchastniki`) — not reinvented for this position. Same
+for teachers: `teachers.aktiven = 1`.
+
+**"Прошедшее" (past), stated precisely because today (2026-09-10) is itself a lesson day
+that has not started yet at the time this заход runs** (checked live: server clock 2026-09-10
+04:15 MSK, lesson starts 13:10 MSK — hours in `KONEC_ZANYATIA`,
+`core/services/sostav_na_den.py`, already the canon for this exact question elsewhere on the
+site). A session's date counts as past iff `held_on < today`, or `held_on == today` AND the
+local clock is at/after that weekday's `KONEC_ZANYATIA`. Checked live on the боевая база:
+`sessions` holds exactly 2 rows, 2026-09-07 (Mon, past) and 2026-09-10 (Thu, today, not yet
+over) — so the table opens on ONE column right now, and the second appears on its own once
+tonight's lesson ends; no code change needed for that to happen. Cancelled sessions
+(`kind = 'отменённое'`) are excluded from the column count — a cancelled lesson has nobody to
+mark present or absent.
+
+**Grid rendering:** follows the established «people × date-columns» shape already live in
+`veb/razdely/konduit.py::_obzor` (sticky first column, compact fixed-width date columns,
+plain `<table>`) rather than the newer `.kolonki`/`.kolonka` canon in
+`veb/static/kanon.css` — that file's own docstring says converting `veb/razdely/**` markup to
+the new canon is EXPLICITLY the separate, not-yet-done work of `verstka-raspredeleniya`/P8-P10,
+outside this заход's scope. No horizontal scroll either way (canon rule 4, still binding):
+one column per lesson is ~3em, same budget конduit already proved workable at twenty-one
+листок columns.
+
+**Access:** signed-in only (`vhod.rol(h.headers) is not None`), matching Кондуит's gate for
+the same reason — full names and per-lesson attendance is not guest-page data. `karkas.py`'s
+`VOZMOZHNOSTI` capability table is out of zone, so this is a plain role check inside my own
+route handler, not a new named capability.
+
+**Files:**
+1. `core/services/istoria_poseshchenij.py` — pure composition (no sqlite/no HTML), tested by
+   `tests/sessions/`.
+2. `veb/razdely/istoria_zanyatij.py` — standalone page + its own tiny sqlite adapters (teacher
+   absence reader) + `marshruty()`.
+3. `veb/server.py` — one line: add `"veb.razdely.istoria_zanyatij"` to
+   `RAZDELY_S_MARSHRUTAMI`.
+4. Tests in `tests/sessions/` (service) and `tests/veb/` (route/page, booted server like
+   `test_kartochka.py`).
+5. Deploy (`deploy/vykatka.sh`), verify against the real боевая база (already confirmed
+   reachable and readable over SSH), then §3 verifier.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -305,21 +402,26 @@ grep -n '<как механизм назван в вызывающем коде>
 > какие были. Пустой снимок = красный.
 
 **СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+
+> §0.1 was cancelled by the orchestrator (see the cancellation note at the top of the
+> dispatch). Replacement command run instead, exactly as instructed:
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+$ git --no-optional-locks branch --no-merged main
++ zahod/statistiki-i-grobarij
 ```
-<сюда — вывод, дословно>
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Nothing merged/committed/exported/closed at entry — the git-circuit subagent step (§0.1) was
+cancelled by the orchestrator. Only the one replacement command above was run.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+*One unmerged branch: `zahod/statistiki-i-grobarij` — a SIBLING заход's branch, not mine
+(confirmed by name; my own branch `zahod/istoria-zanyatij` does not appear in the list because
+it has not diverged from `main` yet). Not mine to merge or touch — named here per §0.1's own
+instruction ("Первая вернула не 0 — НИЧЕГО чужого не вливай… назови число строкой в ОТЧЁТ и
+работай дальше").*
 
 ## ОТЧЁТ — (заполняет исполнитель)
 **АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
