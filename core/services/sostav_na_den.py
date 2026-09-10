@@ -111,6 +111,36 @@ def nearest_lesson(today: str, *, lesson_over: bool = False) -> str:
     raise AssertionError("SLOTY_ZANYATIJ is empty: every week would have no lesson")
 
 
+def blizhajshie_zanyatiya(ot: str, skolko: int) -> list:
+    """The next ``skolko`` lesson days, starting from ``ot`` inclusive if it is one.
+
+    The grid a teacher ticks his future absences into is a list of DATES, and this is
+    the one place that knows which dates those are.  Written here rather than in the
+    web layer for the same reason ``slot_of`` is here: ``SLOTY_ZANYATIJ`` is the fact,
+    and a screen that stepped through the calendar itself would be a second opinion
+    about which days are lesson days — the exact defect this module's own docstring
+    opens by naming.
+
+    Inclusive of ``ot`` when ``ot`` is a lesson day, because the day of a lesson is
+    still a day a teacher may say he will not come to; whether it is too late to say
+    so is a question about the CLOCK, not about the calendar, and belongs to the
+    caller that has one.
+    """
+    if skolko <= 0:
+        return []
+    moment = date.fromisoformat(ot)
+    dni = []
+    # 7 days per lesson week times the number wanted, plus one week of slack, is a
+    # bound that cannot loop forever however ``SLOTY_ZANYATIJ`` is later edited.
+    for step in range(0, 7 * skolko + 7):
+        kandidat = moment + timedelta(days=step)
+        if kandidat.isoweekday() in SLOTY_ZANYATIJ:
+            dni.append(kandidat.isoformat())
+            if len(dni) == skolko:
+                break
+    return dni
+
+
 def data_po_umolchaniyu(now=None) -> str:
     """The date the lesson screen opens on.
 

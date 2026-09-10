@@ -119,7 +119,7 @@ LISTKI_DIR = KOREN_PROEKTA / "docs" / "listki"
 # if it answered.
 RAZDELY_S_MARSHRUTAMI = ("veb.priyom", "veb.razdely.priyom", "veb.razdely.pravovye",
                          "veb.razdely.istoria", "veb.razdely.istoria_zanyatij",
-                         "veb.razdely.vnesenie")
+                         "veb.razdely.vnesenie", "veb.razdely.kabinet")
 
 
 def _marshruty_razdelov() -> dict:
@@ -439,6 +439,38 @@ def _gruppy_vseh_prepodavatelej(connection: sqlite3.Connection) -> dict[int, str
     except sqlite3.OperationalError:
         return {}
     return {row["id"]: row["gruppa"] for row in rows if row["gruppa"]}
+
+
+class _OtsutstvieNaDatuAdapter:
+    """``TeacherPresencePort`` over ``teacher_attendance`` — read-only.
+
+    🔴 THE SAME ROW THE ORGANISER'S «отсутствует» TICK WRITES, AND THAT IS WHY THE
+    FREEZE NEEDED NO NEW TABLE.  ``veb/server.py::_post_zanyatie`` already writes
+    ``teacher_attendance(session_id, teacher_id, status='не был')`` when the organiser
+    ticks a teacher out of today's lesson, and ``karkas.sobrat_kontekst`` already reads
+    it back into ``Kontekst.otsutstvuyut_prepoda``, which is what puts the word
+    «отсутствует» on the distribution screen.  A teacher ticking a future cell in his own
+    cabinet writes the identical row, so «на распределении на эту дату он отмечен
+    отсутствующим» is not a second feature — it is the same fact arriving by a second
+    door.
+
+    A date with no ``sessions`` row has no absence either: the lesson has not been opened
+    yet, and «no row» is the honest answer rather than a guess.
+    """
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def otsutstvuet(self, teacher_id: int, day: str) -> bool:
+        from core.services.sostav_na_den import OTSUTSTVUET
+
+        ryad = self._connection.execute(
+            "select 1 from teacher_attendance ta "
+            "join sessions s on s.id = ta.session_id "
+            "where s.held_on = ? and ta.teacher_id = ? and ta.status = ?",
+            (day, teacher_id, OTSUTSTVUET),
+        ).fetchone()
+        return ryad is not None
 
 
 class _PrepodavatelDenAdapter:
@@ -1118,7 +1150,16 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         self.send_response(302)
-        self.send_header("Location", "/")
+        # 🔴 ВОШЁЛ ЛИЧНЫМ ПАРОЛЕМ — ПОПАДАЕТ В СВОЙ КАБИНЕТ, А НЕ НА «КЛАСС».
+        # Владелец 09.09, дословно: *«когда я нажимаю Вход, я попадаю не на страницу
+        # класс, в которой куча информации, которая мне не нужна, и не на страницу
+        # листки-распределение-кондуит, а на какой-то свой личный кабинет»*. Развилка
+        # здесь именно по `uid`, а не по роли: трое из пятнадцати принимающих —
+        # старшие по аудиториям и входят своим паролем в роли `organizator`
+        # (`karkas._razobrat_rezhim`), и им кабинет нужен ровно так же. Общий пароль
+        # (`uid is None`) не называет человека, показывать ему в кабинете нечего, и
+        # он по-прежнему попадает на сайт.
+        self.send_header("Location", "/kabinet" if uid is not None else "/")
         cookie_value = vhod._make_cookie(role, uid)
         # 🔴 `Secure` СТАВИТСЯ, ТОЛЬКО ЕСЛИ ЗАПРОС ПРИШЁЛ ПО HTTPS — и ставится
         # обязательно, иначе шифрование наполовину бессмысленно. Домен с 06.09 живёт
@@ -1471,6 +1512,21 @@ class Handler(BaseHTTPRequestHandler):
             # переопределения, а не «ни к кому».
             syroj = p.get("teacher_id")
             teacher_id = None if syroj in (None, "", 0) else int(syroj)
+            # 🔴 ЗАМОРОЖЕНО ЗНАЧИТ ОТКАЗ НА ЗАПИСИ, А НЕ СЕРАЯ КНОПКА. Владелец 09.09
+            # про отметку в личном кабинете: *«это будет уже заморожено, потому что
+            # это человек сказал»*. Постоянный слой отказывает в
+            # `EnrollmentService.enforce_calendar_and_ceiling`, а ЭТА дверь пишет
+            # слой ЗАНЯТИЯ и до той службы не доходит вовсе — без этой проверки
+            # запрет обходился бы выпадающим списком на экране занятия, то есть
+            # ровно там, где школьников и раздают. Снятие переопределения
+            # (`teacher_id is None`) не запрещается никогда: увести ребёнка ОТ
+            # отсутствующего — это то, ради чего запрет и существует.
+            if teacher_id is not None and \
+                    _OtsutstvieNaDatuAdapter(conn).otsutstvuet(teacher_id, den):
+                self._send_json(409, {"error":
+                    "преподаватель отметил, что его не будет в этот день — "
+                    "назначение заморожено"})
+                return
             status = est["status"] if est is not None else PRISUTSTVUET
             obychnyj = conn.execute(
                 "select teacher_id from enrollment where student_id = ? and slot = ? "
@@ -1562,7 +1618,8 @@ class Handler(BaseHTTPRequestHandler):
         # write historical or already-corrected data that predates both rules, and
         # are out of this заход's zone to change.
         service = EnrollmentService(
-            repo, calendar=_PrepodavatelDenAdapter(conn), ceiling=TEACHER_CEILING
+            repo, calendar=_PrepodavatelDenAdapter(conn), ceiling=TEACHER_CEILING,
+            presence=_OtsutstvieNaDatuAdapter(conn),
         )
         try:
             move = service.move(
