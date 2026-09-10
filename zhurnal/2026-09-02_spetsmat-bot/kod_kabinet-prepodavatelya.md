@@ -283,6 +283,79 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**READ FIRST: ONE PREMISE OF THE ЗАДАНИЕ IS DISPUTED, AND PART 3 IS DELIVERED IN THE
+SHAPE THE ZONE ALLOWS.** Part 3 asks for a tab «Кабинет» standing in the menu row beside
+«Класс / Листки / Распределение / Кондуит». That menu row, the radio inputs that drive it
+and the capability table `VOZMOZHNOSTI` all live in `veb/obshchee/karkas.py::obolochka()`,
+which is NOT in the zone of this заход (`veb/razdely/` `veb/server.py` `core/services/`
+`tests/veb/`). The same collision has already happened twice in this codebase, and its own
+resolution is on record in `veb/razdely/istoria_zanyatij.py` (the заход immediately before
+this one) and in `veb/razdely/kartochka.py`: build a STANDALONE page with its own route
+declared by the section's `marshruty()`, and record the missing menu label as a debt for
+whoever owns `karkas.py`. This заход follows that precedent rather than reaching outside
+its zone during a wave of twelve sequential positions that share that very file. What the
+owner asked for functionally — *«когда я нажимаю Вход, я попадаю … в свой личный
+кабинет»* — is delivered in full and in-zone: `POST /vhod` redirects a person who signed
+in with a PERSONAL password to `/kabinet` instead of `/`. What is NOT delivered is the
+label in the menu row; it is one line in `karkas.py` and is named in `## ВОПРОСЫ` with a
+reachable house. Reaching `/kabinet` from the site is kept alive from inside the zone by a
+link in the front-page block (part 2).
+
+**Part 1 — «ЛЕНА», НЕ «ЕЛЕНА».** The name is DATA, not code: `teachers.name` id=6 on the
+live база (`grep` over the tree finds it only in tests and in comments quoting it). Fix it
+on the live база by `update`, take a backup of the row first, and prove it with the same
+`select` afterwards. `data/` is never rolled out by `deploy/vykatka.sh` (its own
+`NE_VYKATYVAEM` list), so the laptop copy is deliberately left alone — writing it would
+also leave a tracked file dirty outside the zone. Then run the layout gate to prove the
+surname no longer wraps.
+
+**Part 2 — БЛОК «СЛЕДУЮЩИЙ СПЕЦМАТ».** `veb/razdely/glavnaya.py` (in zone). The block
+exists as `.blok-listok`; it is widened to its own panel with its own background and its
+lines are spelled out in full: weekday word, full date, time, sheet name, rooms of all
+three groups. Every value keeps coming from `kt` (i.e. from the база) — nothing is typed
+in. Styles are emitted as a `<style>` string from the section itself, the way
+`veb/razdely/verstka_stili.py` and `konduit.stili()` already do, because the stylesheet is
+in `karkas.py`. 🔴 The card is under the machine lock `proverit_shemu()`: no `<b>`,
+no `class="tihoe" | "net" | "gr" | "kab" | "ver"` between `<div class="blok-listok">` and
+`<div class="blok-vedut">`. The `<style>` therefore goes ABOVE the card, not inside it,
+and size/background — which the lock does not police — carry the whole enlargement.
+
+**Part 3 — /kabinet.** New section `veb/razdely/kabinet.py` + one name in
+`RAZDELY_S_MARSHRUTAMI` in `veb/server.py`. Shows: the next lesson (date, weekday, time,
+sheet), MY room on it, MY pupils on it, a link to `/istoria`, and the grid of part 4.
+Room and pupils are read through `veb/razdely/lichnaya.py`'s existing
+`kabinet_na_datu` / `deti_na_datu` — the two functions whose docstring names the three
+properties of `enrollment`; they are not rewritten. Past lessons are NOT shown: they
+belong to `/istoria`, which the previous заход delivered, and this page links to it.
+
+**Part 4 — ОТМЕТКА БУДУЩЕГО ОТСУТСТВИЯ.** Storage already exists and is not invented
+twice: `teacher_attendance(session_id, teacher_id, status)` with status «не был», which
+`veb/server.py` already writes for the organiser's «отсутствует» tick and
+`karkas.Kontekst.otsutstvuyut_prepoda` already reads onto the distribution screen. So the
+mark a teacher puts in his own cabinet is THE SAME ROW the organiser's tick writes — one
+fact, one table, and «отсутствует» appears on `/raspredelenie?den=…` for free.
+Two pieces are new:
+  * the door. `/api/zanyatie` is behind `_pravka_zapreshchena()` («правит только
+    организатор») and a teacher would get 403 there, so the cabinet declares its own
+    POST route, which writes ONE person's row — the person who is signed in — and refuses
+    a past date and a non-lesson date.
+  * the freeze. `core/services/enrollment.py` gains a `TeacherPresencePort` and a
+    `TeacherAbsent` refusal beside the two `pravila-raspredeleniya` already added there
+    (`TeacherNotAttending`, `CeilingExceeded`), raised from the SAME public
+    `enforce_calendar_and_ceiling(...)` — its `day` argument is already what is needed.
+    `veb/server.py` wires the adapter into `/api/enrollment` (both branches, the service
+    one and the raw-SQL same-day one, exactly as `pravila-raspredeleniya` did) and into
+    the teacher-override branch of `/api/zanyatie`. The rule of that заход is REUSED, not
+    written a second time.
+
+**ORDER AND COMMITS.** Four parts in the order given, one commit each, зона paths only.
+Baseline of `python3 -m pytest tests/veb -q` taken BEFORE any work: **15 failed, 93 passed,
+1 xfailed, 13 errors** (the 13 errors are playwright-driven `test_kanon_verstki.py`; a
+large part of the 15 comes from the laptop `data/spetsmat.db` lagging three migrations
+behind the live one — `no such table: mark_lesson_override`). The list is saved and
+compared file-by-file at the end.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

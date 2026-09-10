@@ -282,6 +282,59 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**GIT-CONTOUR (§0.1) SELF-CHECK, run instead of the subagent per the orchestrator's
+cancellation (matches §0.1 point 1, which already replaces the subagent with two
+commands) — see `## ГИГИЕНА ВХОДА` below for the fuller snapshot that was still taken by
+hand, read-only, because a claimed "all clear" that the acceptance step re-derives and
+finds wrong is exactly the failure `## ГИГИЕНА ВХОДА`'s own docstring warns about:**
+- `git --no-optional-locks branch --no-merged main | grep -c 'zahod/'` → `0`
+- `git_zona.py check --zone veb/razdely/ --zone core/services/ --zone veb/server.py --zone tests/photo/ --zone tests/voice/ --zone tests/text/ --zone tests/veb/` → ✅ (note: the command as literally written in this file's own §0.1/§4.1, with all zone paths after a single `--zone`, is rejected by `git_zona.py`'s argparse — `--zone` takes exactly one value and must be repeated. Recorded as a factory lesson below.)
+
+**SCOPE.** Build the "Внести задачи" feature entirely inside `veb/razdely/` (new module) plus one line in `veb/server.py`'s route registry, reusing `core/services/{raspoznavanie,golos,bystryj_tekst,marking}.py` and `infra/{llm,asr}.py` as-is (read-only, not my zone). A new section `veb/razdely/vnesenie.py` declares its own `marshruty()` (the established pattern from `veb/priyom.py`): `GET /vnesti` (the page, three tabs: text/photo/voice) and four `POST /api/vnesti/*` doors (`tekst`, `foto`, `golos` build a draft and return it as JSON; `zapisat` writes confirmed cells through `MarkingService`, never directly). `veb/razdely/konduit.py` gets one link to `/vnesti`.
+
+**WHY EACH CHANNEL IS SAFE FROM THE FLAKY OUTBOUND LINK (owner's #1 requirement — nothing
+breaks, nothing is lost):**
+- Text channel (`bystryj_tekst.build_draft`) makes NO external call at all — it is pure
+  local fuzzy matching, so it cannot be hurt by the network. Safest channel, built first.
+- Photo (`infra.llm.VisionModel`) and voice (`infra.asr.YandexSpeechKitTranscriber`)
+  already carry retries/timeouts/spend-limit handling (§7 of `infra/llm.py`) — that part
+  is out of my zone and not to be re-implemented. My job at the router level: catch every
+  `LlmError` / `TranscriptionUnavailable` that survives those retries, answer the browser
+  with a clear JSON error, and never clear the browser's own copy of the typed text /
+  chosen file — the input textarea and file input are left untouched by a failed request,
+  so "повторить" is just clicking the button again with nothing to re-enter. No server-side
+  temp storage of the raw upload is needed for that guarantee, since the browser already
+  holds the only copy until the human confirms and it is written.
+
+**WRITE PATH.** A JSON draft going back to the browser normalises both shapes the core
+services return (`raspoznavanie.DraftRow` for photo vs `golos.DraftRow`/`bystryj_tekst.TextRow`
+for text and voice) into one row/cell shape the confirmation table renders and edits.
+`POST /api/vnesti/zapisat` takes the human-edited cells (never the original draft) and
+calls `MarkingService.give` per ticked cell, keyed by an idempotency key built from the
+source's own content digest (`Prepared.sha256` for photo, `Draft.audio_sha256` for voice/text)
+plus (student, problem) — the same device already used by `veb/priyom.py`'s taps and by
+every channel's own idempotency, so a retried submission (network blip on the confirm
+POST) cannot double-write. Nothing is written until this door is called; the draft door
+never touches `MarkJournal`.
+
+**DELIBERATELY OUT OF SCOPE (not asked for by ЗАДАЧА/КРИТЕРИЙ, not touched):** the
+"прочерк → явка" (attendance) path `bystryj_tekst.py` already computes
+(`attendance_intents`) is READ by my code (so a dash-only row is shown to the human and
+never silently dropped) but is NOT wired to `SessionsService` — writing attendance needs
+a `sessions` row (lesson) that no page in this zone currently creates, and the готовности
+criterion tests marks only. A dash row is shown, confirmable per-row as "был, ничего не
+сдал", but confirming it currently records nothing (documented in `## ОТЧЁТ`, not silently
+dropped): this is the one place the задание's own "ничего сверх задачи" cuts against
+completeness, and зона/время decide it stays a named gap rather than a new SessionsService
+wiring invented on top of an unrelated feature.
+
+**ORDER OF WORK, each committed separately (§4):**
+1. `veb/razdely/vnesenie.py` — text channel end to end (page shell, draft JSON, confirm/write), wired into `veb/server.py`'s registry and linked from `konduit.py`. Commit.
+2. Photo channel added to the same module (upload as base64 JSON, `raspoznavanie.prepare` + `infra.llm.VisionModel` via `bot.app.build_vision` factory, reused not forked). Commit.
+3. Voice channel added the same way (`infra.asr.build_transcriber`, reused). Commit.
+4. Tests: `tests/veb/test_vnesenie.py` (three per channel, per КРИТЕРИЙ point 1) plus a forced-failure test per external channel (point 2) using an injected failing transport, not a live flaky call. Commit.
+5. Live run: deploy, one entry from a phone-width browser against the real site, forced external-API failure verified live if the channel's failure mode is exercisable without breaking the live journal.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -311,20 +364,54 @@ grep -n '<как механизм назван в вызывающем коде>
 
 **СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c 'zahod/'   # (main repo)
+0
+
+$ git --no-optional-locks status --porcelain | wc -l                  # (main repo)
+23
+
+$ git --no-optional-locks log --oneline @{u}.. | wc -l                # (this branch, zahod/vnesenie-zadach)
+fatal: no upstream configured for branch 'zahod/vnesenie-zadach'
+(0 real commits — no upstream exists yet because this branch has never been pushed; the
+worktree was freshly created for this заход and nothing has been committed to it before
+this session, so there is nothing that could be unpushed.)
+
+$ python3 .../git_zona.py zayavki
+Открытых заявок: 8 (git-operaciya, all pre-existing, all opened 2026-09-10 by other
+заходы/сессии of tonight's wave before this заход started) + a long "ждут захода-разработчика"
+backlog list (28 items, none addressed to git-контур rights, none addressed to this зона).
 ```
-<сюда — вывод, дословно>
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Nothing merged/committed/pushed/closed as part of this hygiene pass — see "ВСЕ ДОЛГИ
+ВХОДА ЗАКРЫТЫ" below: none of the 8 open заявки are mine to close, and none block this
+зона. `git_zona.py check --zone` on this заход's own зона (7 paths) → ✅ clean, confirmed
+with the corrected repeated-`--zone` invocation (see `## ПЛАН`).
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+
+Listed by name, per line 325's own rule (`нет` is legal only with a poimyonno list of
+what's left and why it's not closeable with THIS заход's rights):
+1. 8 open `git-operaciya` заявки in `zhurnal/_INFRA-git/zayavki` (`2026-09-10T0157-otkaz-...`,
+   `...0233-main-zahod-data-i-istoria-kletki`, `...0252-otkaz-zahod-poisk-i-kartochka-main-1`,
+   `...0256-users-...spetsmat-bot` [main repo mid-merge, a failed `vlit-v-osnovnuyu --abort`],
+   `...0340-main-main-14-...`, `...0346-zahod-vidy-zadach-main-reset-git`,
+   `...0434-main-spetsmat-bot-origin-6-...`, `...0444-main-9-...`) — every one of them is
+   either a merge conflict between OTHER заходы, a request to push `main` (owner's decision
+   per WARNING §4 — a заход never pushes `main`), or the main repo's own mid-merge incident
+   (`MERGE_HEAD` stuck after a previous `--abort` itself failed) — none is inside this
+   заход's зона (`veb/razdely/` `core/services/` `veb/server.py` `tests/{photo,voice,text,veb}/`)
+   and none is closeable by an ordinary заход's rights (they explicitly need "решение
+   владельца" or a git-контур pass with merge/push rights this заход does not have).
+2. `main`'s working tree carries 23 uncommitted paths (10 of them the wave's own open
+   `kod_*.md` заход files, deliberately left open per this file's own line 40 "клапан
+   открыт"; the rest are other заходы' in-flight work in their own worktrees showing up
+   in `main`'s porcelain status because they haven't merged yet) — not mine to touch or
+   commit, outside my зона.
+Neither item is closeable with this заход's rights; both pre-date this session (opened
+2026-09-10, before this заход's worktree was created) and are the responsibility of
+git-контур / the owner, not of an ordinary заход. This заход's OWN зона is verified clean
+throughout (see `## ОТЧЁТ`'s hygiene numbers at the end).
 
 ## ОТЧЁТ — (заполняет исполнитель)
 **АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
