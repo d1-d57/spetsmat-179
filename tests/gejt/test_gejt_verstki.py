@@ -220,15 +220,32 @@ def test_zdorovyy_ekran_zelyonyy(server, brauzer, rol, put, radio, ekran):
 
 # ── 4. coverage: a walk that looked at nothing must not read as clean ─────────
 
-@pytest.mark.parametrize("imya,put,radio,roli", [(e[0], e[1], e[2], e[3])
-                                                 for e in gejt.EKRANY])
+# 🔴 ЭКРАНЫ БОЛЬШЕ НЕ КОНСТАНТА, И ЭТО ПРОВЕРЯЕТСЯ ОТДЕЛЬНО ОТ ИХ СОДЕРЖИМОГО.
+# `gejt.EKRANY` собирается при импорте из РОУТОВ живого `veb/server.py`; когда
+# источник не назван, список законно пуст, и параметризация пустым списком тихо
+# не выполняет НИ ОДНОГО теста — то самое «ноль находок значит не смотрел», от
+# которого написан весь этот файл.  Поэтому пустой список — отдельный пропуск с
+# причиной, а не молчание.
+_EKRANY = gejt.EKRANY or [(None, None, None, None)]
+
+
+@pytest.mark.parametrize("imya,put,radio,roli", _EKRANY)
 def test_ohvat_ne_nol(server, brauzer, imya, put, radio, roli):
     """Every screen the gate claims to judge must exist, open, and hand the walks
     a non-zero number of nodes.  🔴 This is the test that would have caught the
     second cause on its own: the table named `p-rasp`/`p-start`/`p-kond`, which
     are the SITE radios (`name="str"`), while the tabs inside распределение are
     `t-shk`/`t-prep`/`t-В`/`t-Д`/`t-Н` (`name="vk"`).  The gate opened the same
-    default view four times and never reached a group tab at all."""
+    default view four times and never reached a group tab at all.
+
+    🔴 ПРОВЕРКА 4 (ВЫХОД ЗА КОНТЕЙНЕР) ЗДЕСЬ НЕ ТРЕБУЕТСЯ, И ЭТО НЕ ПОБЛАЖКА.
+    Её население — элементы, у которых ЕСТЬ видимый контейнер-предок (рамка, фон
+    или клип); на странице без карточек (`/vhod`, `/privacy`, карточка школьника
+    у гостя) таких нет ни одного законно, и требовать их значило бы красить
+    здоровые страницы.  Число печатается гейтом в колонке охвата на каждом
+    экране, так что ноль виден и без падения теста."""
+    if put is None:
+        pytest.skip("источник не назван: `gejt.EKRANY` пуст, строить экраны не из чего")
     rol = roli[0]
     ctx, p = _stranica(brauzer, server, rol, put, radio)
     try:
@@ -236,28 +253,118 @@ def test_ohvat_ne_nol(server, brauzer, imya, put, radio, roli):
         assert z["vsego"] > 0, f"{imya}: на странице ноль элементов"
         assert z["na_obrezku"] > 0, f"{imya}: проверке ОБРЕЗКИ не досталось узлов"
         assert z["osmotreno"] > 0, f"{imya}: проверке ПЕРЕНОСА не досталось узлов"
-        assert z["na_vyhod"] > 0, f"{imya}: проверке ВЫХОДА не досталось узлов"
+        assert z["na_centr"] > 0, f"{imya}: проверке ЦЕНТРА не досталось узлов"
     finally:
         ctx.close()
 
 
 def test_ekrany_razlichny(server, brauzer):
-    """Two screens of the same page must not be the same screen.  When the radio
-    ids were wrong every row of the table measured the identical DOM and the four
+    """Two TABS of распределение must not be the same screen.  When the radio ids
+    were wrong every row of the table measured the identical DOM and the four
     numbers agreed perfectly — which reads exactly like four clean pages."""
     vidy = {}
     for imya, put, radio, roli in gejt.EKRANY:
-        if "гость" not in roli:
+        if "гость" not in roli or put != "/raspredelenie":
             continue
         ctx, p = _stranica(brauzer, server, "гость", put, radio)
         try:
             vidy[imya] = _zamer(p)["na_obrezku"]
         finally:
             ctx.close()
-    rasp = [v for k, v in vidy.items() if k != "класс"]
-    assert len(set(rasp)) == len(rasp), (
+    assert len(vidy) >= 5, f"вкладок распределения найдено {len(vidy)}, ждали пять"
+    assert len(set(vidy.values())) == len(vidy), (
         f"разные вкладки распределения дали одинаковый охват {vidy} — "
         "гейт меряет один и тот же экран под разными именами")
+
+
+# ── 4.1 the list of screens itself: it is DERIVED, and that is testable ───────
+
+def test_spisok_ekranov_stroitsya_iz_routov():
+    """🔴 ГЛАВНАЯ ПРОВЕРКА ЭТОЙ ПРАВКИ, И ОНА НЕ ПРО ВЁРСТКУ.  До 11.09 список
+    экранов был десятью рукописными строками, и `/istoria` с `/kabinet` в нём
+    отсутствовали ПОЛНОСТЬЮ — ноль вхождений обоих слов в файле гейта.  Так
+    страница с 321 строкой кода и 29 зелёными тестами дожила невидимой до
+    владельца: гейт был формально прав, его туда не посылали.
+
+    Здесь проверяется не «в списке есть две нужные строки» (это лечится
+    дописыванием двух строк и ломается на третьей), а что список ПОРОЖДЁН
+    маршрутами: каждый маршрут-страница обязан дать хотя бы один экран."""
+    marshruty = gejt.marshruty_sayta()
+    assert "/istoria" in marshruty, "маршрут истории не найден в `veb/server.py`"
+    assert "/kabinet" in marshruty, "маршрут кабинета не найден в `veb/server.py`"
+    assert "/raspredelenie" in marshruty and "/" in marshruty
+
+    try:
+        db = gejt.zhivaya_baza()
+    except SystemExit as otkaz:
+        pytest.skip("источник не назван: %s" % str(otkaz).splitlines()[0])
+    ekrany, bedy = gejt.sobrat_ekrany(db)
+    assert bedy == [], f"маршруты, не ставшие экраном: {bedy}"
+
+    stranicy = {p for p, rod in marshruty.items() if rod == "stranica"}
+    pokryto = {put for _i, put, _r, _rl in ekrany}
+    ne_pokryto = stranicy - pokryto
+    assert not ne_pokryto, (
+        f"маршрут есть, экрана нет: {sorted(ne_pokryto)} — ровно так «список "
+        f"отстаёт от сайта», из-за чего мёртвая история дожила до владельца")
+
+    # ...и хвостовые маршруты подставили ЖИВОЙ объект, а не выдуманный.
+    for pref in gejt.HVOSTY:
+        assert any(put.startswith(pref) and put != pref for put in pokryto), (
+            f"маршрут «{pref}» открывается по хвосту, а экрана с живым хвостом нет")
+
+
+def test_ekran_ushedshiy_s_servera_ne_izmeryaetsya():
+    """🔴 ГЕЙТ ОБЯЗАН МЕРИТЬ ТОТ САЙТ, КОТОРЫЙ САМ И ПОДНЯЛ.  Найдено 11.09 первым
+    прогоном по роутам: гостю корень отдаёт `docs/index.html`, а это заглушка
+    переадресации на `http://math-kluychiki.ru/` (`docs/index.html:13`, `:34`),
+    и браузер уходил туда.  Четыре экрана гостя печатали одинаковые
+    46/45/72/78 из 2063 — числа настоящие, документ ЧУЖОЙ, и роль гостя завели
+    десятого числа именно затем, чтобы смотреть на страницу без пароля.
+
+    Правило испытывается литералами, без сети: доступен ли сегодня чужой хост —
+    не то, от чего должен зависеть зелёный цвет теста."""
+    baza = "http://127.0.0.1:54321"
+    assert gejt.svoy_dom(baza, baza + "/raspredelenie")
+    assert gejt.svoy_dom(baza, baza + "/")
+    assert not gejt.svoy_dom(baza, "http://math-kluychiki.ru/")
+    assert not gejt.svoy_dom(baza, "http://127.0.0.1:54322/")
+    # 🔴 И ПРЕФИКС НЕ ОБМАНЫВАЕТСЯ ХОСТОМ, КОТОРЫЙ НАЧИНАЕТСЯ ТАК ЖЕ: порт 54321
+    # против 543210 — разные серверы.  Сравнение по началу строки здесь законно
+    # ровно потому, что за адресом гейта всегда идёт «/» или конец строки.
+    assert not gejt.svoy_dom(baza, "http://127.0.0.1:54321x/")
+
+
+def test_pereadresaciya_svoditsya_a_ne_schitaetsya_vtorym_ekranom(server, brauzer):
+    """`/glavnaya`, `/listki`, `/listki-8` отвечают 302 на `/`.  Раз список
+    экранов строится из роутов, они приходят в него сами — и обязаны СВЕСТИСЬ к
+    цели, а не дать по второму «зелёному экрану» с тем же числом: раздутый охват
+    врёт ровно в ту же сторону, что и охват заниженный."""
+    ekrany = [("корень", "/", None, ("организатор",)),
+              ("/glavnaya", "/glavnaya", None, ("организатор",))]
+    itogi, dolzhno = gejt.progon(server, False, None, ekrany)
+    assert dolzhno == 2
+    svedeno = [o for _r, _i, _p, z, o in itogi if z is None and (o or "").startswith(gejt.SVEDENO)]
+    izmereno = [i for _r, i, _p, z, _o in itogi if z is not None]
+    assert len(svedeno) == 1, f"переадресация не свелась: {itogi}"
+    assert izmereno == ["корень"], f"измерены не те экраны: {izmereno}"
+
+
+def test_spisok_ekranov_ne_perepisan_rukami():
+    """Список остаётся ПРОИЗВОДНЫМ.  Тест ловит откат к константе: если завтра
+    кто-то снова впишет экраны руками, `marshruty_sayta()` перестанет быть их
+    источником, и вот это равенство разойдётся."""
+    try:
+        db = gejt.zhivaya_baza()
+    except SystemExit as otkaz:
+        pytest.skip("источник не назван: %s" % str(otkaz).splitlines()[0])
+    ekrany, _ = gejt.sobrat_ekrany(db)
+    marshruty = gejt.marshruty_sayta()
+    for _imya, put, _radio, _roli in ekrany:
+        znakom = put in marshruty or any(
+            put.startswith(pref) for pref in gejt.HVOSTY)
+        assert znakom, (f"экран «{put}» не происходит ни от одного маршрута — "
+                        f"список снова пишется руками")
 
 
 # ── 5. the four holes a fresh verifier walked through on 2026-09-10 ───────────

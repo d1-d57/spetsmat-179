@@ -80,6 +80,11 @@ os.environ.setdefault("SPETSMAT_VEB_SECRET", "gate-secret-key-32bytes-long!!")
 
 ETALON = {"width": 1440, "height": 900}
 
+# Метка строки отчёта, которая НЕ красная: экран свёлся к другому, а не упал.
+# Отдельный знак, а не разбор текста сообщения: сообщение читает человек,
+# а решение «красное или нет» принимает машина, и им нужен разный носитель.
+SVEDENO = "\u21a6"
+
 # 🔴 THE RENDER IGNORES THE CONNECTION THIS GATE HANDS THE SERVER.  Every page
 # route rebuilds its context through `veb.obshchee.karkas.DATA`, a module-level
 # constant pointing at `<repo>/data/spetsmat.db`.  So the base the gate judges is
@@ -95,30 +100,191 @@ def baza() -> Path:
     import config
     return config.DB_PATH
 
-# One entry per SCREEN the gate judges: name, path, the radio to select before
-# measuring, and the roles that can see it.
+# ── THE LIST OF SCREENS IS DERIVED FROM THE ROUTES, NEVER TYPED OUT ──────────
+# 🔴 WHY.  Until 2026-09-11 `EKRANY` was ten hand-written lines, and `/istoria`
+# and `/kabinet` were not among them -- zero occurrences of either word in this
+# file.  That is how a page with 321 lines of code and 29 green tests could stay
+# invisible on screen until the owner found it himself: the gate was formally
+# right, it had never been sent there.  A hand-written list falls behind the site
+# BY CONSTRUCTION, and the fix is not to add two more lines but to stop writing
+# the list.  Route exists -> screen is judged.
+#
+# `veb/server.py` is not this position's zone and declares its page routes as
+# inline `if path == "..."` branches rather than as a table, so they are READ out
+# of it instead of copied: the AST of `Handler.do_GET` is walked for every string
+# compared against `path` (`==`, `in (...)`, `.startswith(...)`).  A route added
+# there tomorrow arrives here by itself, with nobody editing this file.  The two
+# registries the same method consults -- `server._marshruty_razdelov()` and
+# `vhod.marshruty()` -- are ASKED, not parsed: they already are tables.
+OBE = ("гость", "организатор")
+
+# Not screens, and each says why.  Everything else that is discovered IS a screen.
+NE_EKRANY = {
+    "/api/":       "машинная дверь: отдаёт JSON, вёрстки у неё нет",
+    "/static/":    "файлы, а не страница",
+    "/materials/": "выдача PDF, а не страница",
+}
+
+# 🔴 РОЛЬ СУЖАЕТСЯ ТОЛЬКО ИМЕНЕМ И ТОЛЬКО С ПРИЧИНОЙ.  По умолчанию экран мерится
+# в ОБЕИХ ролях: гость -- это тот, кого владелец фотографирует.  Страница, которая
+# вошедшему показывает раздел, а гостю -- приглашение «Войти», в роли гостя не
+# экран, а заглушка, и мерить её значило бы объявлять пустым то, что пусто нарочно.
+ROLI_MARSHRUTA = {
+    "/istoria": (("организатор",), "у гостя -- заглушка «Войти» "
+                 "(`veb/razdely/istoria_zanyatij.py:314`), а не раздел"),
+    "/kabinet": (("организатор",), "у гостя -- заглушка со ссылкой на вход "
+                 "(`veb/razdely/kabinet.py:484`)"),
+    "/priyom":  (("организатор",), "у гостя -- «Войти» "
+                 "(`veb/priyom.py:404`)"),
+    "/vnesti":  (("организатор",), "страница открыта преподавателям "
+                 "(`veb/razdely/vnesenie.py:546`)"),
+}
+
+# Tabs are an OVERLAY on a route, never the source of the list: a route with no
+# entry here is still measured, once, as it opens.  Roles here narrow the route's
+# own roles and never widen them.
 #   `name="str"` radios switch the SITE SECTION: p-start · p-rasp · p-lich · p-kond
 #   `name="vk"`  radios switch the TAB inside распределение: t-shk · t-prep · t-В/Д/Н
-# `None` means the screen is whatever the page shows on arrival.
-OBE = ("гость", "организатор")
-EKRANY = [
-    ("школьникам",   "/raspredelenie", "t-shk",   OBE),
-    ("принимающим",  "/raspredelenie", "t-prep",  OBE),
-    ("группа В",     "/raspredelenie", "t-В",     OBE),
-    ("группа Д",     "/raspredelenie", "t-Д",     OBE),
-    ("группа Н",     "/raspredelenie", "t-Н",     OBE),
-    ("класс",        "/glavnaya",      "p-start", OBE),
-    ("кондуит",      "/glavnaya",      "p-kond",  ("организатор",)),
-    # 🔴 ПОСТОЯННОЕ РАСПРЕДЕЛЕНИЕ ДОБАВЛЕНО 10.09 (Д4). Его здесь НЕ БЫЛО ВОВСЕ —
+VKLADKI = {
+    "/": [("класс", "p-start", None),
+          ("кондуит", "p-kond", ("организатор",))],
+    "/raspredelenie": [("школьникам", "t-shk", None),
+                       ("принимающим", "t-prep", None),
+                       ("группа В", "t-В", None),
+                       ("группа Д", "t-Д", None),
+                       ("группа Н", "t-Н", None)],
+    # 🔴 ПОСТОЯННОЕ РАСПРЕДЕЛЕНИЕ ДОБАВЛЕНО 10.09 (Д4). Его здесь НЕ БЫЛО ВОВСЕ --
     # целый раздел сайта, обе вкладки, не измерялся гейтом ни разу. При этом
     # владелец жаловался на обрезку фамилий именно там ТРИЖДЫ (G3.2, G3.4, J2.3),
     # а гейт в это же время печатал «обрезка 0» и был формально прав: он туда не
-    # ходил. Четвёртое лицо одного класса за волну — «ноль находок» означало
-    # «не смотрел», а читалось как «чисто» (G0 — не видел узла, J1 — не знал
-    # правила, здесь — не ходил на экран).
-    ("постоянное · школьникам",  "/raspredelenie/postoyannoe", "t-shk",  OBE),
-    ("постоянное · принимающим", "/raspredelenie/postoyannoe", "t-prep", OBE),
-]
+    # ходил. Четвёртое лицо одного класса за волну -- «ноль находок» означало
+    # «не смотрел», а читалось как «чисто» (G0 -- не видел узла, J1 -- не знал
+    # правила, здесь -- не ходил на экран).
+    "/raspredelenie/postoyannoe": [("постоянное · школьникам", "t-shk", None),
+                                   ("постоянное · принимающим", "t-prep", None)],
+}
+
+
+def _hvost_kartochki(db) -> str:
+    """A LIVE pupil, not an invented id: the card of a pupil who is not in the base
+    renders «не найдено», and measuring that would be measuring the 404."""
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        r = c.execute("select id from students where status='active' "
+                      "order by id limit 1").fetchone()
+    finally:
+        c.close()
+    return str(r[0]) if r else ""
+
+
+def _hvost_listka(_db) -> str:
+    """A sheet that is really published, taken from `docs/listki`."""
+    papka = KOREN / "docs" / "listki"
+    if not papka.is_dir():
+        return ""
+    for f in sorted(papka.glob("*.pdf")):
+        return f.stem.split("-")[0]
+    return ""
+
+
+# A route whose tail names an object.  The supplier hands the gate a LIVE tail out
+# of the base or the disk.  🔴 A discovered prefix route with no supplier here is
+# RED, not skipped: «не знаю, что подставить» and «здесь нечего проверять» are the
+# same silence, and this file exists because that silence was read as «чисто».
+HVOSTY = {
+    "/kartochka/": (_hvost_kartochki, "карточка школьника открывается по id"),
+    "/listki/":    (_hvost_listka,    "страница листка открывается по номеру"),
+    "/listok/":    (_hvost_listka,    "второе имя того же адреса, которое не "
+                                      "перехватывает nginx (`veb/server.py:729`)"),
+}
+
+
+def marshruty_sayta() -> dict:
+    """`{путь: род}` -- every route the live server answers a GET on.
+
+    Род: `stranica` (a screen), `hvost` (a prefix that needs an object id),
+    `ne-ekran` (a machine door or a file).  Nothing is dropped silently: a route
+    the gate cannot turn into a screen still comes back, with its род saying why.
+    """
+    import ast
+
+    najdeno: dict = {}
+
+    def rod(put: str) -> str:
+        for pref, _ in NE_EKRANY.items():
+            if put.startswith(pref):
+                return "ne-ekran"
+        return "stranica"
+
+    # 1. the branches of `Handler.do_GET`, read out of the source
+    derevo = ast.parse((KOREN / "veb" / "server.py").read_text(encoding="utf-8"))
+    for uzel in ast.walk(derevo):
+        if not (isinstance(uzel, ast.FunctionDef) and uzel.name == "do_GET"):
+            continue
+        for n in ast.walk(uzel):
+            if (isinstance(n, ast.Compare) and isinstance(n.left, ast.Name)
+                    and n.left.id == "path"):
+                for op, cmp in zip(n.ops, n.comparators):
+                    esli = []
+                    if isinstance(op, ast.Eq) and isinstance(cmp, ast.Constant):
+                        esli = [cmp.value]
+                    elif isinstance(op, ast.In) and isinstance(cmp, (ast.Tuple, ast.List)):
+                        esli = [e.value for e in cmp.elts if isinstance(e, ast.Constant)]
+                    for p in esli:
+                        if isinstance(p, str) and p.startswith("/"):
+                            najdeno.setdefault(p, rod(p))
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr == "startswith"
+                    and isinstance(n.func.value, ast.Name) and n.func.value.id == "path"):
+                for a in n.args:
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                        najdeno[a.value] = ("ne-ekran" if rod(a.value) == "ne-ekran"
+                                            else "hvost")
+
+    # 2. the registries, asked rather than parsed
+    import veb.server as server
+    from veb import vhod
+    for p in list(server._marshruty_razdelov()) + list(vhod.marshruty()):
+        najdeno.setdefault(p, rod(p))
+    return najdeno
+
+
+def sobrat_ekrany(db) -> tuple[list, list]:
+    """`(экраны, беды)`.  Экран -- `(имя, путь, радио, роли)`, ровно тот кортеж,
+    которым была рукописная константа: всё, что ниже, не заметило подмены.
+
+    Беды -- строки о маршрутах, которые НЕ стали экраном.  Пустой список беды
+    здесь не значит «всё хорошо»: он значит «каждый найденный маршрут стал
+    экраном», и число экранов печатается рядом с числом маршрутов.
+    """
+    ekrany, bedy = [], []
+    for put, rod_ in sorted(marshruty_sayta().items()):
+        if rod_ == "ne-ekran":
+            continue
+        if rod_ == "hvost":
+            postavshchik = HVOSTY.get(put)
+            if not postavshchik:
+                bedy.append(f"маршрут «{put}» открывается по хвосту, а подставить "
+                            f"нечего: допиши поставщика в `HVOSTY`")
+                continue
+            hvost = postavshchik[0](db)
+            if not hvost:
+                bedy.append(f"маршрут «{put}»: поставщик хвоста ничего не вернул "
+                            f"({postavshchik[1]})")
+                continue
+            put = put + hvost
+        roli = OBE
+        suzheno = ROLI_MARSHRUTA.get(put.rstrip("/") or "/")
+        if suzheno:
+            roli = suzheno[0]
+        vkl = VKLADKI.get(put)
+        if not vkl:
+            ekrany.append((put, put, None, roli))
+            continue
+        for imya, radio, svoi_roli in vkl:
+            ekrany.append((imya, put, radio, svoi_roli or roli))
+    return ekrany, bedy
+
 
 # The measuring script.  It runs inside the page, so it sees the RENDER: computed
 # boxes after CSS, fonts and layout, not the source.
@@ -617,12 +783,62 @@ LOMKA = r"""() => {
 
   // 1. CLIPPING -- squeeze a text box shut. Deliberately prefers a NON-LEAF node
   //    (`.kto` wraps a `<b>`), the exact shape the walk used to drop.
+  // 🔴 ЦЕЛЬ ОБЯЗАНА ИМЕТЬ СОБСТВЕННЫЙ ТЕКСТ ВНЕ КОНТРОЛА.  Проверка 1 судит по
+  // прямоугольникам ТЕКСТА элемента и вычитает содержимое `<select>`/`<option>`/
+  // `<input>` (`rects_teksta`), поэтому строка распределения, весь текст которой
+  // лежит в селектах, для неё пуста — сжать её можно, а поймать нечего.  Пока
+  // этой границы здесь не было, самопроверка ставила `🔴 ПРОПУСТИЛА 1` на
+  // «постоянное · принимающим» и обвиняла зрение гейта в собственном промахе.
+  // Прямоугольники СОБСТВЕННОГО текста, минус то, что рисует браузер, — та же
+  // граница, что у `rects_teksta` в `ZAMER`, повторённая здесь нарочно: это
+  // другой контекст исполнения, общей функции у них нет, и расхождение обязано
+  // быть видно как расхождение.
+  const rezhet_bukvu = (el) => {
+    const VNE = ['SELECT','OPTION','TEXTAREA','INPUT','BUTTON','STYLE','SCRIPT'];
+    const rects = [];
+    const hod = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        if (!(n.nodeValue || '').trim()) return NodeFilter.FILTER_REJECT;
+        for (let p = n.parentElement; p && p !== el.parentElement; p = p.parentElement)
+          if (VNE.includes(p.tagName)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    for (let n = hod.nextNode(); n; n = hod.nextNode()) {
+      const d = document.createRange(); d.selectNodeContents(n);
+      for (const b of d.getClientRects()) if (b.width > 0 && b.height > 0) rects.push(b);
+    }
+    if (!rects.length) return false;
+    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+    const l = r.left + parseFloat(s.borderLeftWidth);
+    const pr = r.right - parseFloat(s.borderRightWidth);
+    const tp = r.top + parseFloat(s.borderTopWidth);
+    const bt = r.bottom - parseFloat(s.borderBottomWidth);
+    return rects.some(b => b.right - pr > 1 || l - b.left > 1
+                        || b.bottom - bt > 1 || tp - b.top > 1);
+  };
+
+  const svoy_tekst_est = (el) => {
+    const k = el.cloneNode(true);
+    k.querySelectorAll('select, option, input, textarea, button, style, script')
+     .forEach(n => n.remove());
+    return (k.textContent || '').trim().length > 0;
+  };
   for (const k of iz('.kto, td, th, li, .para').slice(0, 40)) {
+    if (!svoy_tekst_est(k)) continue;
     k.style.setProperty('max-width', '8px', 'important');
     k.style.setProperty('overflow', 'hidden', 'important');
     k.style.whiteSpace = 'nowrap'; k.style.textOverflow = 'ellipsis';
     k.style.display = k.tagName === 'TD' || k.tagName === 'TH' ? 'block' : k.style.display;
-    if (k.scrollWidth > k.clientWidth + 1) { otchet.obrezka = true; break; }
+    // 🔴 «КОРОБКА ПЕРЕПОЛНЕНА» — ЕЩЁ НЕ «ТЕКСТ ОБРЕЗАН», и разница ровно та, из-за
+    // которой проверка 1 не считает находкой ни `<option>`, ни декорацию в SVG:
+    // `scrollWidth` растёт от чего угодно, а режется БУКВА.  Замерено 11.09 на
+    // «постоянное · принимающим»: сжатая `td.td-deti` дала scrollWidth 63 при
+    // clientWidth 32, а собственный текст клетки («пн») спокойно уместился в
+    // 32px — гейт молчал совершенно правильно, а самопроверка засчитывала это
+    // себе в пропуск.  Условие приземления теперь ДОСЛОВНО то же, по которому
+    // судит `ZAMER`: прямоугольники СВОЕГО текста выходят за padding box.
+    if (k.scrollWidth > k.clientWidth + 1 && rezhet_bukvu(k)) { otchet.obrezka = true; break; }
     k.style.removeProperty('max-width'); k.style.removeProperty('overflow');
     k.style.whiteSpace = ''; k.style.textOverflow = ''; k.style.display = '';
   }
@@ -649,6 +865,16 @@ LOMKA = r"""() => {
     if (w.clientWidth <= 0) continue;
     const slova = (w.textContent || '').trim().split(/\s+/);
     if (slova.length < 2 || w.scrollWidth > w.clientWidth + 1) continue;
+    // 🔴 И ЭЛЕМЕНТ ОБЯЗАН СТОЯТЬ В ОДНУ СТРОКУ ДО ПОЛОМКИ.  Иначе `<br>` ставится
+    // туда, где перенос УЖЕ был законным (ширина его потребовала), проверка 2
+    // молчит совершенно правильно, а самопроверка засчитывает это себе в
+    // пропуск.  Найдено 11.09 на `/istoria`, где текстовых узлов всего четыре и
+    // промах стал видно сразу; на широких экранах он просто прятался за
+    // множеством других целей.
+    const do_r = document.createRange(); do_r.selectNodeContents(w);
+    const do_verhi = new Set([...do_r.getClientRects()]
+        .filter(b => b.width > 0 && b.height > 0).map(b => Math.round(b.top)));
+    if (do_verhi.size !== 1) continue;
     w.textContent = '';
     w.append(document.createTextNode(slova.slice(0, -1).join(' ')),
              document.createElement('br'),
@@ -664,15 +890,45 @@ LOMKA = r"""() => {
   // 4. ESCAPED -- pills walk out of the LEFT edge of the card that owns them,
   //    exactly as in the owner's screenshot `13`, and the document does NOT
   //    scroll on that account, so checks 1-3 stay blind to it.
+  // 🔴 БЛИЖАЙШИЙ ВИДИМЫЙ КОНТЕЙНЕР СДВИНУТОГО УЗЛА ОБЯЗАН БЫТЬ ИМЕННО `pa`.
+  // Проверка 4 поднимается от элемента до ПЕРВОГО предка, который клипует,
+  // красит рамку с двух сторон или свой фон, — и судит по НЕМУ.  Сдвигая `<b>`
+  // внутри `.kto` (а `.kto` клипует), поломка выводила узел за `.kto`, а не за
+  // карточку, и попадала в объявленную границу проверки; самопроверка при этом
+  // писала «ПРОПУСТИЛА 1» на «постоянное · школьникам».  Та же логика, что в
+  // `ZAMER`, повторена здесь нарочно: это ДРУГОЙ контекст исполнения, общей
+  // функции у них нет, и расхождение обязано быть видно как расхождение.
+  const prozr_l = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
+  const konteyner_l = (el) => {
+    const s = getComputedStyle(el);
+    if (s.overflowX !== 'visible' || s.overflowY !== 'visible') return true;
+    if ((parseFloat(s.borderLeftWidth) && parseFloat(s.borderRightWidth)) ||
+        parseFloat(s.borderTopLeftRadius)) return true;
+    return !prozr_l(s.backgroundColor);
+  };
+  const blizhayshiy = (el) => {
+    for (let n = el.parentElement; n && n !== document.body; n = n.parentElement)
+      if (konteyner_l(n)) return n;
+    return null;
+  };
   const cel = iz('.kol-pr .para').length ? iz('.kol-pr .para') : iz('.para');
   for (const pa of cel) {
     pa.style.background = 'rgba(255,255,255,.06)';
     pa.style.borderRadius = '8px';
     const deti = pa.querySelectorAll('.deti-ryad span, .komu.deti span, .komu, b');
-    const kogo = deti.length ? deti : pa.children;
+    // 🔴 И СДВИНУТЫЙ УЗЕЛ ОБЯЗАН ОСТАТЬСЯ ВИДИМЫМ.  Поломки применяются к одной
+    // и той же странице одна за другой, и сжатие из пункта 1 успевает схлопнуть
+    // строку до 8px: `span.komu` внутри неё получает нулевую ширину, `vidim()`
+    // в `ZAMER` считает такой узел невидимым (и правильно — читать там нечего),
+    // а самопроверка писала «ПРОПУСТИЛА 1» на «постоянное · школьникам».
+    const zhivoy = (x) => { const r = x.getBoundingClientRect();
+        return r.width > 1 && r.height > 1; };
+    const kogo = [...(deti.length ? deti : pa.children)]
+        .filter(x => zhivoy(x) && blizhayshiy(x) === pa);
+    if (!kogo.length) { pa.style.background = ''; pa.style.borderRadius = ''; continue; }
     const rod = pa.getBoundingClientRect();
-    [...kogo].forEach(x => { x.style.position = 'relative'; x.style.left = '-120px'; });
-    if ([...kogo].some(x => x.getBoundingClientRect().left < rod.left - 1)) {
+    kogo.forEach(x => { x.style.position = 'relative'; x.style.left = '-120px'; });
+    if (kogo.some(x => zhivoy(x) && x.getBoundingClientRect().left < rod.left - 1)) {
       otchet.vyhod = true; break;
     }
   }
@@ -785,10 +1041,21 @@ def kuka() -> dict:
     return {"name": vhod.COOKIE_NAME, "value": vhod._make_cookie("organizator")}
 
 
-def progon(baza_url: str, slomat: bool, otbor: str | None) -> tuple[list, int]:
+def svoy_dom(baza_url: str, adres: str) -> bool:
+    """Осталась ли страница на сервере, который поднял гейт.
+
+    Отдельной функцией, а не строкой внутри прогона, ровно потому, что это
+    ПРАВИЛО, а не подробность: его можно испытать литералами, без сети и без
+    браузера, и оно не зависит от того, отвечает ли сегодня чужой хост.
+    """
+    return adres.startswith(baza_url)
+
+
+def progon(baza_url: str, slomat: bool, otbor: str | None,
+           vse_ekrany: list) -> tuple[list, int]:
     from playwright.sync_api import sync_playwright
 
-    ekrany = [e for e in EKRANY if not otbor or otbor.lower() in e[0].lower()]
+    ekrany = [e for e in vse_ekrany if not otbor or otbor.lower() in e[0].lower()]
     itogi = []
     with sync_playwright() as pw:
         brauzer = pw.chromium.launch()
@@ -797,12 +1064,50 @@ def progon(baza_url: str, slomat: bool, otbor: str | None) -> tuple[list, int]:
             if not svoi:
                 continue
             ctx = brauzer.new_context(viewport=ETALON)
-            if rol == "организатор":
-                ctx.add_cookies([{**kuka(), "url": baza_url}])
             page = ctx.new_page()
+            vidennoe: dict = {}
             for imya, put, radio, _roli in svoi:
                 try:
+                    # 🔴 КУКА ОБНОВЛЯЕТСЯ ПЕРЕД КАЖДЫМ ПЕРЕХОДОМ, А НЕ ОДИН РАЗ НА
+                    # КОНТЕКСТ.  Список экранов теперь строится из роутов, и среди
+                    # роутов есть `/vyhod`, который СТИРАЕТ куку (`veb/server.py:691`):
+                    # один заход на него — и все следующие экраны организатора
+                    # молча меряются глазами гостя, с честными числами и не тем
+                    # содержимым.  Пока список был рукописным, такого роута в нём
+                    # быть не могло, и одна `add_cookies` на контекст была верна.
+                    if rol == "организатор":
+                        ctx.add_cookies([{**kuka(), "url": baza_url}])
                     page.goto(baza_url + put, wait_until="networkidle", timeout=20000)
+                    # 🔴 ПЕРЕАДРЕСАЦИЯ СВОДИТСЯ К ЦЕЛИ, А НЕ СЧИТАЕТСЯ ВТОРЫМ
+                    # ЭКРАНОМ.  `/glavnaya`, `/listki`, `/listki-8` отвечают 302 на
+                    # `/` — измерять их отдельно значит трижды написать одно и то же
+                    # число и раздуть охват работой, которой не было.  Куда именно
+                    # ведёт роут, спрашивается У БРАУЗЕРА после перехода: таблицы
+                    # переадресаций здесь нет и устареть нечему.
+                    # 🔴 ЭКРАН, УШЕДШИЙ С СЕРВЕРА ГЕЙТА, — КРАСНОЕ, А НЕ ЭКРАН.
+                    # Найдено 11.09 первым же прогоном по роутам: гостю корень
+                    # отдаёт `docs/index.html`, а это заглушка-переадресация —
+                    # `<meta refresh>` плюс `location.replace("http://math-
+                    # kluychiki.ru/")` (`docs/index.html:13`, `:34`). Браузер
+                    # уходил на ЧУЖОЙ САЙТ, и гейт честно мерил его: четыре
+                    # экрана гостя («класс», «/glavnaya», обе вкладки постоянного)
+                    # давали одни и те же 46/45/72/78 из 2063 — числа настоящие,
+                    # страница не та. Роль гостя завели 10.09 именно потому, что
+                    # владелец фотографирует сайт БЕЗ пароля; ровно этот экран и
+                    # не измерялся ни разу.
+                    if not svoy_dom(baza_url, page.url):
+                        itogi.append((rol, imya, put, None,
+                                      f"экран ушёл с сервера гейта на {page.url} "
+                                      f"— измерен был бы ЧУЖОЙ документ"))
+                        continue
+                    kuda = page.url[len(baza_url):] or "/"
+                    klyuch = (kuda.split("?")[0], radio)
+                    if klyuch in vidennoe:
+                        itogi.append((rol, imya, put, None,
+                                      f"{SVEDENO} переадресация на {kuda} — уже "
+                                      f"измерено как «{vidennoe[klyuch]}»"))
+                        continue
+                    vidennoe[klyuch] = imya
                     if radio:
                         if not page.query_selector("#" + radio):
                             itogi.append((rol, imya, put, None,
@@ -842,16 +1147,23 @@ def main() -> int:
     # «нашёл дефект», так что опечатка в имени экрана выглядела снаружи как
     # находка.  Второй такой же исход — argparse на неизвестном флаге, он и так
     # отдаёт 2.  Найдено `check_tool_contract.py`, не рассуждением.
-    if args.ekran and not [e for e in EKRANY if args.ekran.lower() in e[0].lower()]:
+    db = zhivaya_baza()
+    # 🔴 СПИСОК ЭКРАНОВ СТРОИТСЯ ЗДЕСЬ, ИЗ РОУТОВ, И ПРОВЕРКА ИМЕНИ ЭКРАНА ИДЁТ
+    # ПОСЛЕ: пока список был константой, опечатку в `--ekran` можно было отловить
+    # до всего, а маршруты живут в `veb/server.py` и в реестрах разделов, которые
+    # надо сперва спросить.
+    marshrutov = len([p for p, r in marshruty_sayta().items() if r != "ne-ekran"])
+    ekrany_sayta, bedy_marshrutov = sobrat_ekrany(db)
+
+    if args.ekran and not [e for e in ekrany_sayta if args.ekran.lower() in e[0].lower()]:
         print(f"позвали неверно: экрана «{args.ekran}» нет. Есть: "
-              + ", ".join(e[0] for e in EKRANY), file=sys.stderr)
+              + ", ".join(e[0] for e in ekrany_sayta), file=sys.stderr)
         return 2
 
-    db = zhivaya_baza()
     chisla = chisla_bazy(db)
     httpd, conn, t, url = podnyat_server(db)
     try:
-        itogi, dolzhno_byt = progon(url, args.slomat, args.ekran)
+        itogi, dolzhno_byt = progon(url, args.slomat, args.ekran, ekrany_sayta)
     finally:
         httpd.shutdown(); httpd.server_close(); t.join(); conn.close()
 
@@ -859,12 +1171,22 @@ def main() -> int:
           f"живая база: {chisla['vsego']} школьников, "
           f"по классам {chisla['po_klassam']}, крупнейший класс {chisla['krupneyshiy']}")
     print(f"база: {db}")
+    print(f"экраны построены из РОУТОВ, не из списка: маршрутов-страниц "
+          f"{marshrutov} → экранов {len(ekrany_sayta)} "
+          f"(вкладки — надстройка над маршрутом, `VKLADKI`)")
+    for beda in bedy_marshrutov:
+        print(f"   🔴 МАРШРУТ БЕЗ ЭКРАНА: {beda}")
     print()
     print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'переносы':>10}"
           f"{'вышли':>8}{'центр':>7}{'скролл':>8}   охват узлов")
-    krasnyh, izmereno, uzlov = 0, 0, 0
+    krasnyh, izmereno, uzlov, svedeno = len(bedy_marshrutov), 0, 0, 0
     for rol, imya, put, z, oshibka in itogi:
         if z is None:
+            if (oshibka or "").startswith(SVEDENO):
+                svedeno += 1
+                print(f"{rol:<13}{imya:<15}{'·':>9}{'·':>10}{'·':>8}{'·':>7}"
+                      f"{'·':>8}   {oshibka}")
+                continue
             print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}"
                   f"{'—':>8}   🔴 {oshibka}")
             krasnyh += 1
@@ -890,7 +1212,8 @@ def main() -> int:
               f"{z['na_centr']} из {z['vsego']}")
 
     print()
-    print(f"ОХВАТ: проверено {izmereno} экранов из {dolzhno_byt}; "
+    print(f"ОХВАТ: проверено {izmereno} экранов из {dolzhno_byt} обещанных "
+          f"(+{svedeno} сведено к другим переадресацией); "
           f"осмотрено элементов {uzlov}")
     print("        четыре числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
           "на ВЫХОД ЗА КОНТЕЙНЕР / на ЦЕНТР, из общего числа элементов страницы.")
@@ -1050,13 +1373,15 @@ def main() -> int:
     # формально прав. Число экранов, число ролей и число осмотренных узлов делают
     # зелёное проверяемым: зелёное на двух экранах и зелёное на семнадцати — разные
     # утверждения, и теперь их видно не читая исходник.
-    roli = sorted({r for _, _, _, rr in EKRANY for r in rr})
+    roli = sorted({r for _, _, _, rr in ekrany_sayta for r in rr})
     # Замер лежит четвёртым в кортеже `(роль, экран, путь, замер, беда)`;
     # у экранов, упавших до замера, он `None` — их узлы не считаются, и это верно:
     # неосмотренный экран не должен раздувать охват.
     uzlov = sum((z or {}).get("osmotreno", 0) for _, _, _, z, _ in itogi)
-    ohvat = (f"ОХВАТ: экранов {izmereno} из {dolzhno_byt} обещанных · "
-             f"ролей {len(roli)} ({', '.join(roli)}) · осмотрено узлов {uzlov}")
+    ohvat = (f"ОХВАТ: экранов {izmereno} из {dolzhno_byt} обещанных "
+             f"(+{svedeno} сведено переадресацией) · маршрутов-страниц "
+             f"{marshrutov} · ролей {len(roli)} ({', '.join(roli)}) · "
+             f"осмотрено узлов {uzlov}")
     if krasnyh:
         print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон.")
         print(f"   {ohvat}")
@@ -1064,6 +1389,22 @@ def main() -> int:
     print(f"\n✅ ЗЕЛЁНЫЙ: {izmereno} экранов, все пять чисел нули на каждом.")
     print(f"   {ohvat}")
     return 0
+
+
+
+
+# 🔴 ГОТОВЫЙ СПИСОК ДЛЯ ТЕХ, КТО ЗОВЁТ ЭТОТ МОДУЛЬ КАК БИБЛИОТЕКУ (тесты гейта
+# параметризуются им на СБОРЕ, когда базы может не быть вовсе).  Пустой список
+# здесь значит «источник не назван» и ничего больше: сам гейт этой переменной не
+# пользуется — `main()` строит список заново и падает громко, если не смог.
+def _ekrany_pri_importe() -> list:
+    try:
+        return sobrat_ekrany(zhivaya_baza())[0]
+    except Exception:
+        return []
+
+
+EKRANY = _ekrany_pri_importe()
 
 
 if __name__ == "__main__":
