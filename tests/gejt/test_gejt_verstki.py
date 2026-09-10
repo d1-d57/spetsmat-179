@@ -959,6 +959,44 @@ def test_pravilo_zhdushchee_sostoyaniya_ne_nazyvaetsya_nesobiraemym(server, brau
         ctx.close()
 
 
+def test_chast_bez_imeni_ne_ulika(server, brauzer):
+    """🔴 ГРАНИЦА, НАЙДЕННАЯ НА СОБСТВЕННОЙ НАХОДКЕ, А НЕ РАССУЖДЕНИЕМ.  Первая
+    редакция проверки объявила несобираемым `.spisok div` — а это
+    `<div class="spisok" id="spisok" hidden>` (`veb/obshchee/karkas.py:2286`),
+    который наполняет скрипт поиска: правило ЖДЁТ СВОЕГО СОСТОЯНИЯ.  Причина
+    промаха общая: часть `div` совпадает на любой странице всегда, поэтому «все
+    части на месте» с ней выполняется само собой и уликой не служит.  Теперь
+    уликой считается только ИМЕНОВАННАЯ часть — с `#`, `.` или `[атрибутом]`."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        p.evaluate("""() => {
+            const pusto = document.createElement('div');
+            pusto.className = 'proba-spisok';        // есть, но БЕЗ детей
+            const a = document.createElement('span'); a.className = 'proba-a';
+            a.textContent = 'а';
+            const b = document.createElement('span'); b.className = 'proba-b';
+            b.textContent = 'б';
+            document.body.append(pusto, a, b);       // соседи, а не вложенные
+            const st = document.createElement('style'); st.id = 'proba-stil3';
+            st.textContent = '.proba-spisok div{color:red}'
+                           + '.proba-a .proba-b{color:blue}';
+            document.head.append(st);
+        }""")
+        _zh, pustye = _pravila(p)
+        assert pustye.get(".proba-spisok div") is False, (
+            "правило с БЕЗЫМЯННОЙ частью (`div`) объявлено несобираемым — так "
+            "выпадающий список, наполняемый скриптом, станет ложным красным")
+        assert pustye.get(".proba-a .proba-b") is True, (
+            "правило, у которого ОБЕ части именованы, обе на странице и никогда "
+            "не вложены, несобираемым не названо — проверка ослепла")
+    finally:
+        p.evaluate("""() => { for (const s of ['proba-stil3'])
+            { const e = document.getElementById(s); if (e) e.remove(); }
+            for (const c of ['.proba-spisok', '.proba-a', '.proba-b'])
+              document.querySelectorAll(c).forEach(e => e.remove()); }""")
+        ctx.close()
+
+
 def test_pravilo_zhivoe_na_sosednem_ekrane_ne_mertvoe(server, brauzer):
     """🔴 РЕШЕНИЕ ПРИНИМАЕТСЯ ПО ВСЕМ ЭКРАНАМ, А НЕ ПО ОДНОМУ, И ЭТО ИЗМЕРИМО.
     Лист стилей один на весь сайт, поэтому «ноль совпадений на ЭТОМ экране» не
