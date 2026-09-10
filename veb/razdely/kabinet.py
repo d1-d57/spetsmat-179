@@ -213,33 +213,12 @@ SVOI_STILI = """
 .kab-deti{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));
   gap:.1rem 2rem;margin:1rem 0 0}
 .kab-deti div{padding:.35rem 0;border-bottom:1px solid var(--rule);font-size:1.2rem}
-/* 🔴 ПОЛОСА ЗАНЯТИЙ — ОДНА СТРОКА КНОПОК С ДАТАМИ С НАЧАЛА ГОДА, НА ВЕСЬ ЭКРАН.
-   Владелец 10.09 (H1.6), дословно: «строка кнопок с датами занятий с начала года
-   … зелёный — я был, красный — не был … на будущее можно поставить, что меня не
-   будет … наведение показывает, какие были школьники».
-   Клетки переносятся на вторую строку, когда их станет больше, чем помещается:
-   к маю их около семидесяти, и горизонтальная прокрутка — то, что гейт вёрстки
-   считает красным. */
-.kab-polosa{display:flex;flex-wrap:wrap;gap:.4rem;margin:.9rem 0 0}
-.kab-den{font-family:var(--sans);font-size:1.05rem;font-weight:600;
-  padding:.5em .9em;border-radius:10px;border:1px solid var(--rule);
-  background:var(--panel);color:var(--muted);white-space:nowrap;line-height:1}
-/* Прошлое: два состояния и ни одного третьего. Правится оно не здесь — в
-   кабинете прошлое вообще не правится (владелец: «прошлое никто не меняет»), и
-   дверь `/api/kabinet/otsutstvie` отказывает на дате раньше сегодняшней. */
-.kab-den.byl{color:var(--zel);border-color:var(--zel);background:var(--zel-fon)}
-.kab-den.ne-byl{color:var(--krasn);border-color:var(--krasn);background:var(--krasn-fon)}
-/* Будущее: клетка сама себе выключатель. Флажок спрятан, а не убран — им
-   работают клавиатура и `:focus-visible`, и он же несёт дату для двери. */
-.kab-den.vperyod{cursor:pointer;color:var(--text)}
-.kab-den.vperyod:hover{border-color:var(--accent);color:var(--accent)}
-.kab-den input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-.kab-den input:focus-visible+.kab-den-tekst{outline:2px solid var(--accent);
-  outline-offset:3px;border-radius:3px}
-.kab-den.vperyod.netu{color:var(--krasn);border-color:var(--krasn);
-  background:var(--krasn-fon);text-decoration:line-through}
-.kab-polosa-kak{font-family:var(--sans);font-size:1rem;color:var(--muted);
-  margin:.6rem 0 0}
+/* 🔴 ПОЛОСЫ КНОПОК ЗДЕСЬ БОЛЬШЕ НЕТ, И ЕЁ ПРАВИЛА СНЯТЫ ВМЕСТЕ С НЕЙ.
+   `.kab-polosa`, `.kab-den` и их состояния описывали строку плашек с датами
+   (владелец 10.09, H1.6). Разметка её больше не порождает — на её месте таблица
+   занятий (`.kab-tablica` ниже, L1.3), — и правило, которому не с чем совпасть,
+   это не запас на будущее, а третье место, где записан цвет «был». Цвет и
+   поведение переехали целиком: `.kab-zanyatie.byl` / `.ne-byl` / `.vperyod`. */
 .kab-beda{color:var(--krasn);font-family:var(--sans);font-size:1rem;margin:.8rem 0 0;
   min-height:1.2em}
 /* 🔴 ПОЛОСА КНОПОК ЗАМЕНЕНА ТАБЛИЦЕЙ ЗАНЯТИЙ (L1.3, владелец 10.09): «строки —
@@ -291,8 +270,7 @@ SVOI_STILI = """
 @media(max-width:900px){.kab-tablica{columns:2}}
 @media(max-width:640px){.kab-tablica{columns:1}}
 @media(max-width:640px){.kab-stranica{padding:1.1rem 1rem 3rem}
-  .kab-listok{font-size:1.6rem}
-  .kab-den{font-size:.95rem;padding:.45em .7em}}
+  .kab-listok{font-size:1.6rem}}
 """
 
 #: The tick writes at once, exactly as the lesson screen does — the owner's ruling of
