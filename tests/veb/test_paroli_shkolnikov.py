@@ -82,13 +82,21 @@ def chekanit(baza, tajniki, kogo, *dopolnitelno):
 
 
 def paroli_iz_spiska(put: Path) -> dict:
-    """`{фамилия: пароль}` out of the plaintext list the owner hands out."""
+    """`{фамилия или имя: пароль}` out of the plaintext list the owner hands out.
+
+    The two lists are shaped differently, and the teachers' one is why this is not a `split()`:
+    a teacher is written down by full name («Ваня Яковлев»), so the first whitespace-separated
+    token is a given name, not the key.  The word «аудитория» is the fixed marker after it.
+    """
     otvet = {}
     for stroka in put.read_text(encoding="utf-8").splitlines():
         if not stroka.strip() or stroka.startswith("#"):
             continue
-        chasti = stroka.split()
-        otvet[chasti[0]] = chasti[-1]
+        if "аудитория" in stroka:
+            imya = stroka.split("аудитория")[0].strip()
+        else:
+            imya = stroka.split()[0]
+        otvet[imya] = stroka.split()[-1]
     return otvet
 
 
@@ -179,3 +187,151 @@ def test_oba_fajla_600(baza, tmp_path):
     assert chekanit(baza, tajniki, "shkolniki").returncode == 0
     for put in tajniki.iterdir():
         assert put.stat().st_mode & 0o777 == 0o600, put
+
+
+# ------------------------------------------------------------------ часть 2: граница
+
+
+@pytest.fixture
+def tri_shkolnika(baza, tmp_path, monkeypatch):
+    """Mint for the fixture база and point `veb.vhod` at the result.
+
+    Returns `{фамилия: (uid, пароль)}` for the three pupils and the two teachers.
+    """
+    tajniki = tmp_path / "secrets"
+    assert chekanit(baza, tajniki, "vse").returncode == 0
+    monkeypatch.setenv("SPETSMAT_VEB_LICHNYE", str(tajniki / "veb-lichnye-paroli.json"))
+    monkeypatch.setenv("SPETSMAT_VEB_SMENENNYE", str(tajniki / "veb-smenennye-paroli.json"))
+    monkeypatch.setenv("SPETSMAT_VEB_SECRET", "test-secret-key-32bytes!")
+
+    zapisi = json.loads((tajniki / "veb-lichnye-paroli.json").read_text())["lyudi"]
+    po_imeni = {}
+    for spisok, klyuch in ((tajniki / next(p.name for p in tajniki.iterdir()
+                                           if p.name.startswith("paroli-shkolnikov-")), "shkolnik"),
+                           (tajniki / next(p.name for p in tajniki.iterdir()
+                                           if p.name.startswith("paroli-prepodavatelej-")), None)):
+        for imya, parol in paroli_iz_spiska(spisok).items():
+            zapis = next(z for z in zapisi
+                         if (z.get("familiya") or z.get("imya")) == imya
+                         and (z["rol"] == "shkolnik") == (klyuch == "shkolnik"))
+            po_imeni[imya] = (zapis["uid"], parol)
+    po_imeni["_tajniki"] = tajniki
+    return po_imeni
+
+
+def test_shkolnik_vhodit_i_ego_uznayut(tri_shkolnika):
+    """Three pupils sign in, and each cookie names the pupil it was made for -- nobody else."""
+    for familiya in ("Агаркова", "Фомин", "Шарова"):
+        uid, parol = tri_shkolnika[familiya]
+        otvet = vh.proverit_parol(parol)
+        assert otvet == ("shkolnik", uid), familiya
+        golova = kuka(vh._make_cookie("shkolnik", uid))
+        assert vh.shkolnik(golova) == uid
+
+
+def test_shkolnik_ne_poluchaet_roli_i_potomu_nichego_ne_vidit(tri_shkolnika):
+    """🔴 ГЛАВНОЕ МЕСТО ОТКАЗА.  A pupil's cookie is valid and gives `rol()` None.
+
+    Every gate on this site — ticking (`veb/priyom.py:159`), the card's `vhodivshij`
+    (`veb/server.py:893`), editing, the root page — is `rol(...) is None`.  So this one
+    assertion is what says a signed-in pupil can neither see nor set a single mark, anybody's
+    own included, without a line changing in any of those files.
+    """
+    uid, parol = tri_shkolnika["Агаркова"]
+    golova = kuka(vh._make_cookie("shkolnik", uid))
+    assert vh.rol(golova) is None
+    assert vh._check_password(parol) is None
+    # ... and the pupil is still recognised as themselves.
+    assert vh.shkolnik(golova) == uid
+
+
+def test_uid_shkolnika_ne_utekaet_v_kto(tri_shkolnika):
+    """`kto()` means `teachers.id`.  A pupil id arriving there would name a different person.
+
+    `students.id` 1 and `teachers.id` 1 are both real rows in the fixture база, which is the
+    whole reason this cannot be left to "the roles are different, it will be fine".
+    """
+    uid, _ = tri_shkolnika["Агаркова"]
+    assert uid == 1
+    assert vh.kto(kuka(vh._make_cookie("shkolnik", uid))) is None
+    # ... and symmetrically, a teacher is not a pupil.
+    assert vh.shkolnik(kuka(vh._make_cookie("prepod", 1))) is None
+    assert vh.kto(kuka(vh._make_cookie("prepod", 1))) == 1
+
+
+def test_shkolnik_a_ne_mozhet_poprosit_dannye_shkolnika_b(tri_shkolnika):
+    """🔴 Критерий 2, and it is checked with somebody else's identifier, not by reasoning.
+
+    Pupil A holds A's cookie and wants B.  There are exactly two things A can do: pass B's id
+    (there is no parameter for it — `shkolnik(headers)` takes headers and nothing else), or
+    edit the cookie to say B.  The second is what this test does, byte by byte, and it fails
+    on the signature before any id is read.
+    """
+    a_uid, _ = tri_shkolnika["Агаркова"]
+    b_uid, _ = tri_shkolnika["Фомин"]
+    assert a_uid != b_uid
+
+    a_kuka = vh._make_cookie("shkolnik", a_uid)
+    assert vh.shkolnik(kuka(a_kuka)) == a_uid
+
+    # A rewrites the payload to name B and keeps A's signature.
+    import base64
+    telo, podpis = a_kuka.rsplit(".", 1)
+    razobrano = json.loads(base64.urlsafe_b64decode(telo + "=" * (-len(telo) % 4)))
+    razobrano["u"] = b_uid
+    poddelka = base64.urlsafe_b64encode(json.dumps(razobrano).encode()).decode().rstrip("=")
+    assert vh.shkolnik(kuka("%s.%s" % (poddelka, podpis))) is None
+
+    # A promotes itself to a staff role, same trick.
+    razobrano["u"], razobrano["r"] = a_uid, "organizator"
+    poddelka = base64.urlsafe_b64encode(json.dumps(razobrano).encode()).decode().rstrip("=")
+    assert vh.rol(kuka("%s.%s" % (poddelka, podpis))) is None
+
+    # A guesses B's password by shape.  Ninety candidates; none of them is A's business, and
+    # the ones that are wrong answer nothing at all.
+    _, b_parol = tri_shkolnika["Фомин"]
+    nachalo = b_parol.rstrip("0123456789")
+    lozhnye = ["%s%s" % (nachalo, n) for n in range(10, 100) if "%s%s" % (nachalo, n) != b_parol]
+    assert all(vh.proverit_parol(p) is None for p in lozhnye[:12])
+
+
+def test_vhod_prepodavatelej_posle_pravki_rabotaet(tri_shkolnika):
+    """🔴 Критерий 4 in the suite; the live half is in `## ОТЧЁТ`."""
+    for imya in ("Ваня Яковлев", "Пётр Петров"):
+        uid, parol = tri_shkolnika[imya]
+        rol_i_kto = vh.proverit_parol(parol)
+        assert rol_i_kto is not None, imya
+        assert rol_i_kto[0] in vh.ROLI_PERSONALA
+        assert rol_i_kto[1] == uid
+    # The senior of an auditorium is still the organiser, by the rule and not by a list.
+    assert vh.proverit_parol(tri_shkolnika["Ваня Яковлев"][1])[0] == "organizator"
+
+
+def test_obshchie_paroli_iz_okruzheniya_zhivy(tri_shkolnika, monkeypatch):
+    monkeypatch.setenv("SPETSMAT_VEB_PAROL_PREPOD", "teacher-pass")
+    monkeypatch.setenv("SPETSMAT_VEB_PAROL_ORG", "org-pass")
+    assert vh.proverit_parol("teacher-pass") == ("prepod", None)
+    assert vh.proverit_parol("org-pass") == ("organizator", None)
+
+
+def test_neverny_parol_stoit_ne_dorozhe_chem_do_shkolnikov(tri_shkolnika):
+    """The bucketing, checked as behaviour: a wrong password is hashed against the adults and
+    the pupils sharing its initials, not against every pupil in the school.
+
+    Counted rather than timed — a timing assertion on a laptop under load is a flake.
+    """
+    schyot = {"n": 0}
+    nastoyashchij = vh._hesh_kandidata
+
+    def schitat(*args, **kwargs):
+        schyot["n"] += 1
+        return nastoyashchij(*args, **kwargs)
+
+    vh._hesh_kandidata = schitat
+    try:
+        assert vh.proverit_parol("ZZ99") is None
+        vzroslyh = 2
+        # the two teachers, plus the pupils whose initials are literally "ZZ" (none)
+        assert schyot["n"] == vzroslyh
+    finally:
+        vh._hesh_kandidata = nastoyashchij

@@ -12,6 +12,34 @@ the passwords and applies the rule "senior of an auditorium = administrator" aga
 
 The two common passwords from the environment KEEP WORKING, unchanged, behind the personal ones.
 Losing them would lock all fourteen people out, and one of them is easy to overlook.
+
+PUPILS, added 2026-09-10 (заход `paroli-shkolnikov`).  Fifty-four pupils get a personal password
+of their own, minted by the same script.  Their role is `shkolnik`, and the boundary between them
+and the fifteen adults is drawn HERE, in this file, by what the three identity functions are
+willing to answer:
+
+    rol(headers)       -> 'prepod' | 'organizator' | None      pupils get None
+    kto(headers)       -> teachers.id | None                   pupils get None
+    shkolnik(headers)  -> students.id | None                   adults get None
+
+🔴 `rol()` ANSWERING `None` FOR A SIGNED-IN PUPIL IS THE WHOLE SAFETY ARGUMENT, AND IT IS AN
+ARGUMENT ABOUT CODE THAT WAS NEVER EDITED.  Every gate on this site asks `rol()`: ticking a
+problem (`veb/priyom.py:159`), seeing anybody's marks at all (`veb/server.py:893`), editing
+(`veb/server.py::_pravka_zapreshchena`), the root page (`veb/server.py::_koren`).  Because a
+pupil's cookie makes every one of them answer exactly what a guest's absence of cookie answers,
+a pupil cannot tick and cannot read a single mark -- their own included -- and NOT ONE of those
+files had to be changed for that to be true.  A boundary that holds because four other files
+each remembered to check a role is a boundary that fails the first time a fifth file forgets.
+
+🔴 `kto()` AND `shkolnik()` READ DIFFERENT TABLES AND MUST NEVER BE MERGED.  `uid` means
+`teachers.id` under an adult role and `students.id` under `shkolnik`; id 3 is a person in both.
+`veb/server.py` builds `"admin:%d" % kto(...)` out of the first one, so a pupil id arriving
+there would name a teacher who is not the person who logged in.
+
+🔴 NEITHER FUNCTION TAKES AN IDENTIFIER FROM THE REQUEST.  `shkolnik(headers)` answers for the
+cookie's own pupil and has no parameter a caller could pass somebody else's id into.  "Pupil A
+asks for pupil B" is therefore not a request this file can be persuaded to answer -- there is no
+argument to put B in.
 """
 
 from __future__ import annotations
@@ -21,6 +49,7 @@ import hmac
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -60,7 +89,30 @@ def _fajl_lichnyh() -> Path:
         return Path(iz_sredy)
     return Path(__file__).resolve().parent.parent / "secrets" / "veb-lichnye-paroli.json"
 
+
+def _fajl_smenennyh() -> Path:
+    """Where a password somebody CHOSE FOR THEMSELVES lives.  A second file, on purpose.
+
+    `tools/sozdat_lichnye_paroli.py` rewrites the minted file whenever the owner mints a kind of
+    person afresh.  A password a pupil chose has to survive that -- «смена пароля на свой, и он
+    запоминается навсегда» -- and the only way it survives is by not being in the file that gets
+    rewritten.  See `core/services/lichnye_paroli.py`, which owns the writing half.
+    """
+    iz_sredy = os.environ.get("SPETSMAT_VEB_SMENENNYE", "")
+    if iz_sredy:
+        return Path(iz_sredy)
+    return Path(__file__).resolve().parent.parent / "secrets" / "veb-smenennye-paroli.json"
+
 # ------------------------------------------------------------------ cookie constants
+
+#: The roles that mean "a member of staff": everything this site could already do before pupils
+#: existed is gated on one of these two, and `rol()` answers with nothing else.
+ROLI_PERSONALA = ("prepod", "organizator")
+
+#: Every role a signed cookie may legitimately carry.  `shkolnik` is here so that a pupil's
+#: cookie VERIFIES; it is deliberately absent from `ROLI_PERSONALA` so that verifying gets a
+#: pupil precisely nothing beyond being recognised as themselves.
+ROLI = ROLI_PERSONALA + ("shkolnik",)
 
 COOKIE_NAME = "spetsmat_veb"
 COOKIE_MAX_AGE_DAYS = 30
@@ -114,6 +166,12 @@ def rol(headers) -> Optional[str]:
     """Role from cookie in request headers: 'prepod' | 'organizator' | None.
 
     None means "not allowed": the caller must redirect to /vhod.
+
+    🔴 A PUPIL'S COOKIE ANSWERS `None` HERE, AND EVERY CALLER IS MEANT TO BELIEVE IT.  It is a
+    perfectly valid, correctly signed, unexpired cookie; it just does not name anybody who may
+    do anything.  This is the single line that keeps a signed-in pupil from ticking a problem
+    and from reading a mark -- see the module docstring for why the answer is given here rather
+    than by asking four other files to remember a new role.
     """
     cookie_value = _kuka_iz_zagolovkov(headers)
     if cookie_value is None:
@@ -134,8 +192,40 @@ def kto(headers) -> Optional[int]:
     cookie_value = _kuka_iz_zagolovkov(headers)
     if cookie_value is None:
         return None
+    return _uid_pri_roli(cookie_value, ROLI_PERSONALA)
+
+
+def shkolnik(headers) -> Optional[int]:
+    """Which PUPIL the cookie belongs to: `students.id`, or None when it is not a pupil's.
+
+    🔴 THIS IS THE ONLY WAY A PUPIL'S IDENTITY IS READABLE, AND IT TAKES NO IDENTIFIER.  The
+    answer comes out of the signed cookie and nowhere else, so the request cannot name whose
+    card it wants: an attempt by pupil A to be served pupil B has no field to carry B in, and
+    a cookie edited to say B fails the HMAC before this function ever sees a number.
+
+    An adult's cookie answers None here, exactly as a pupil's answers None in `kto()`.  The two
+    ids live in different tables and the roles beside them are the only thing telling them apart.
+
+    Nobody calls this yet: the page a pupil lands on is `veb/razdely/kartochka.py` and the route
+    to it is in `veb/server.py`, both outside this заход's zone.  It is the door they will use.
+    """
+    cookie_value = _kuka_iz_zagolovkov(headers)
+    if cookie_value is None:
+        return None
+    return _uid_pri_roli(cookie_value, ("shkolnik",))
+
+
+def _uid_pri_roli(cookie_value: str, roli: tuple) -> Optional[int]:
+    """The `u` a valid cookie carries, but only when its role is one of `roli`.
+
+    One body for `kto` and `shkolnik` so that the two cannot drift apart: an id accepted under
+    the wrong role is exactly the defect both of them exist to prevent, and two copies of this
+    test would be two chances to fix only one.
+    """
     payload = _payload_kuki(cookie_value)
     if payload is None:
+        return None
+    if payload.get("r") not in roli:
         return None
     uid = payload.get("u")
     if isinstance(uid, bool) or not isinstance(uid, int):
@@ -254,7 +344,10 @@ def _payload_kuki(raw: str) -> Optional[dict]:
         return None
     role = payload.get("r")
     ts = payload.get("t")
-    if role not in ("prepod", "organizator") or ts is None:
+    # 🔴 `ROLI`, NOT `ROLI_PERSONALA`: a pupil's cookie has to VERIFY here, or `shkolnik()`
+    # could never recognise anybody.  What it does not do is escape this function as a role —
+    # `_verify_cookie` below narrows it back down, and that is what `rol()` returns.
+    if role not in ROLI or ts is None:
         return None
     # 30-day expiry
     if time.time() - ts > COOKIE_MAX_AGE_SECONDS:
@@ -263,11 +356,17 @@ def _payload_kuki(raw: str) -> Optional[dict]:
 
 
 def _verify_cookie(raw: str) -> Optional[str]:
-    """The ROLE a cookie carries, and nothing beyond it.  The server depends on exactly that."""
+    """The STAFF role a cookie carries, and nothing beyond it.  The server depends on that.
+
+    🔴 THE NARROWING IS HERE ON PURPOSE AND MUST NOT BE MOVED UP INTO `_payload_kuki`.  A pupil's
+    cookie is valid and `_payload_kuki` says so; it is this function — the one `rol()` answers
+    out of — that declines to hand a pupil's role to code written when only adults existed.
+    """
     payload = _payload_kuki(raw)
     if payload is None:
         return None
-    return payload.get("r")
+    role = payload.get("r")
+    return role if role in ROLI_PERSONALA else None
 
 
 def _make_cookie(role: str, uid: Optional[int] = None) -> str:
@@ -316,13 +415,42 @@ def _lyudi() -> list:
     return lyudi
 
 
-def _shema_hesha() -> tuple:
+def _smenennye() -> list:
+    """Entries from `secrets/veb-smenennye-paroli.json` — passwords people chose for themselves.
+
+    Same failure policy as `_lyudi()`: an absent file is the ordinary state (nobody has changed
+    anything yet), and a broken one says so on stderr and is treated as empty rather than taking
+    the entry down.  The cost of treating it as empty is that whoever changed their password
+    falls back to the minted one; the cost of raising would be that nobody can log in at all.
+    """
+    put = _fajl_smenennyh()
+    try:
+        raw = put.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    except OSError as oshibka:
+        print("veb/vhod.py: changed passwords file %s unreadable: %s" % (put, oshibka),
+              file=sys.stderr)
+        return []
+    try:
+        soderzhimoe = json.loads(raw)
+        lyudi = soderzhimoe["lyudi"]
+        if not isinstance(lyudi, list):
+            raise ValueError("'lyudi' is not a list")
+    except (ValueError, KeyError, TypeError) as oshibka:
+        print("veb/vhod.py: changed passwords file %s is malformed: %s" % (put, oshibka),
+              file=sys.stderr)
+        return []
+    return lyudi
+
+
+def _shema_hesha(put: Optional[Path] = None) -> tuple:
     """(scheme name, parameters) taken from the file, so that a re-mint with other ones just works.
 
     The scheme is written down rather than assumed: a file hashed one way and read another way
     would reject every password in it, and the only visible symptom would be "nobody can log in".
     """
-    put = _fajl_lichnyh()
+    put = _fajl_lichnyh() if put is None else put
     try:
         soderzhimoe = json.loads(put.read_text(encoding="utf-8"))
         shema = str(soderzhimoe.get("shema") or "pbkdf2_hmac_sha256")
@@ -357,20 +485,67 @@ def _hesh_kandidata(submitted: str, sol: bytes, shema: str, parametry: dict) -> 
     return None
 
 
+#: What a pupil password looks like: Latin initials then digits, e.g. `IA17`.  Used ONLY to pick
+#: which entries are worth hashing against, never to decide whether a password is right.
+_FORMA_SHKOLNIKA = re.compile(r"^([A-Za-z]{1,8})([0-9]{1,4})$")
+
+
+def _kandidaty(submitted: str) -> list:
+    """`[(запись, схема, параметры)]` — every entry this password could belong to, in order.
+
+    🔴 THIS FUNCTION EXISTS BECAUSE THE COST IS LINEAR IN PEOPLE AND THE PEOPLE JUST QUADRUPLED.
+    The salt is per person, so a submitted password has to be hashed once per entry it is
+    checked against: fourteen teachers cost about 0.86 s for a password matching nobody
+    (measured on the server, 61.6 ms per PBKDF2 round at 200 000 iterations).  Adding
+    fifty-four pupils would have made that 4.2 s, on a server that runs one thread per request
+    — i.e. a wrong password from one pupil freezes the site for everybody for four seconds.
+
+    So the pupil entries are BUCKETED by their initials, which the minting script stores in
+    clear beside the hash.  A password of the pupil shape is checked against the pupils sharing
+    its letters — typically one to three — and then against the adults.  Worst case is about
+    seventeen rounds, i.e. no worse than the site was before pupils existed.  The initials leak
+    nothing: the same names are printed on the public half of the site.  The secret is the
+    number, and the number is still hashed.
+
+    🔴 A CHANGED PASSWORD COMES FIRST AND ITS OWNER'S MINTED ONE IS DROPPED.  «Смена пароля на
+    свой — и он запоминается навсегда»: if the old minted password kept working beside the new
+    one, changing it would add a password rather than replace it, and the piece of paper the
+    pupil was handed would go on being a way in for whoever picked it up.
+    """
+    shema_m, parametry_m = _shema_hesha()
+    shema_s, parametry_s = _shema_hesha(_fajl_smenennyh())
+
+    smenennye = [z for z in _smenennye() if isinstance(z, dict)]
+    zamenili = {(z.get("rol"), z.get("uid")) for z in smenennye}
+
+    otchekanennye = [z for z in _lyudi() if isinstance(z, dict)
+                     and (z.get("rol"), z.get("uid")) not in zamenili]
+
+    sovpadenie = _FORMA_SHKOLNIKA.match(submitted or "")
+    nachalo = sovpadenie.group(1).upper() if sovpadenie else None
+
+    deti = [z for z in otchekanennye if z.get("rol") == "shkolnik"]
+    vzroslye = [z for z in otchekanennye if z.get("rol") != "shkolnik"]
+    v_vedre = [z for z in deti if nachalo and str(z.get("nachalo", "")).upper() == nachalo]
+    # An entry minted before `nachalo` existed cannot be bucketed and must not become
+    # unreachable because of it: it goes in the tail, hashed like an adult's.
+    bez_klyucha = [z for z in deti if not z.get("nachalo")]
+
+    poryadok = [(z, shema_s, parametry_s) for z in smenennye]
+    poryadok += [(z, shema_m, parametry_m) for z in v_vedre + vzroslye + bez_klyucha]
+    return poryadok
+
+
 def _proverit_lichnyj(submitted: str) -> Optional[tuple]:
     """(role, uid) of the person whose personal password this is, or None.
 
-    The salt is per person, so a candidate has to be hashed once per person: fourteen hashes at
-    about 62 ms each in the worst case (a password that matches nobody), on a server that runs one
-    thread per request.  An unsalted digest of a password a human can read out loud falls to a
-    dictionary in minutes; that is the whole reason the cost is paid at all.
+    An unsalted digest of a password a human can read out loud falls to a dictionary in
+    minutes; that is the whole reason the per-person salt, and the cost `_kandidaty` bounds,
+    are paid at all.
     """
     if not submitted:
         return None
-    shema, parametry = _shema_hesha()
-    for chelovek in _lyudi():
-        if not isinstance(chelovek, dict):
-            continue
+    for chelovek, shema, parametry in _kandidaty(submitted):
         try:
             sol = bytes.fromhex(chelovek["sol"])
             ozhidaemyj = str(chelovek["hesh"])
@@ -384,7 +559,7 @@ def _proverit_lichnyj(submitted: str) -> Optional[tuple]:
         if not hmac.compare_digest(poluchennyj, ozhidaemyj):
             continue
         rol_cheloveka = chelovek.get("rol")
-        if rol_cheloveka not in ("prepod", "organizator"):
+        if rol_cheloveka not in ROLI:
             return None
         uid = chelovek.get("uid")
         return (rol_cheloveka, int(uid) if isinstance(uid, int) else None)
@@ -394,6 +569,10 @@ def _proverit_lichnyj(submitted: str) -> Optional[tuple]:
 def proverit_parol(submitted: str) -> Optional[tuple]:
     """Everything the entry knows about a submitted password: (role, uid) or None.
 
+    The role is `prepod`, `organizator` or — since 2026-09-10 — `shkolnik`; `uid` is
+    `teachers.id` under the first two and `students.id` under the third, and the caller has to
+    keep them apart the way `kto()` and `shkolnik()` do.
+
     `uid` is None for the two common passwords — they belong to nobody in particular, and that is
     a legitimate answer, not a missing one.
 
@@ -402,8 +581,8 @@ def proverit_parol(submitted: str) -> Optional[tuple]:
     is not set up — which is every developer machine in this project, and any server whose
     EnvironmentFile ever goes missing.
 
-    Nobody calls this yet.  The position that owns `veb/server.py` will; `_check_password` below
-    is the same answer with the person dropped, which is what the server asks for today.
+    `veb/server.py::_post_vhod` is the caller: it signs the cookie out of this answer, so this
+    is where a pupil becomes a signed-in pupil rather than nobody.
     """
     lichnyj = _proverit_lichnyj(submitted)
     if lichnyj is not None:
@@ -420,13 +599,19 @@ def proverit_parol(submitted: str) -> Optional[tuple]:
 
 
 def _check_password(submitted: str) -> Optional[str]:
-    """'prepod' | 'organizator' | None — the one line `veb/server.py` calls, unchanged.
+    """'prepod' | 'organizator' | None — the older, narrower answer, kept for its callers.
 
-    The server must not be able to tell that personal passwords now exist: it is held by a
-    neighbouring session and its signature is a contract.
+    🔴 A PUPIL'S PASSWORD ANSWERS `None` HERE, AND THAT IS THE SAFE ANSWER RATHER THAN A GAP.
+    This function returns a role to be gated on, and every gate that reads one understands only
+    the two staff roles; handing it `shkolnik` would mean each of those gates has to remember
+    to reject a role it has never heard of.  A caller that wants to let a pupil in asks
+    `proverit_parol` and gets the person as well — which is what `veb/server.py::_post_vhod`
+    already does.
     """
     otvet = proverit_parol(submitted)
-    return None if otvet is None else otvet[0]
+    if otvet is None or otvet[0] not in ROLI_PERSONALA:
+        return None
+    return otvet[0]
 
 
 # ------------------------------------------------------------------ guard
