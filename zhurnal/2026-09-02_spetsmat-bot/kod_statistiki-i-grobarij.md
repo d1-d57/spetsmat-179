@@ -283,6 +283,83 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Read, and nothing beyond it:** `core/services/progress.py`, `core/services/svodka.py`,
+`veb/razdely/konduit.py`, `core/services/marking.py`, `core/services/sheets.py`,
+`tests/svodka/`, `tests/grid/` — plus what those name and what the zone contract names.
+`core/services/history.py` was read as well: `marking.py` does not carry the technical
+pair at all, `history.tehnicheskie` / `history.schyot_sobytij` do, and the задача names
+that отсев by its price, so the file that actually holds it had to be read.
+
+**Numbers taken by command BEFORE the work (they are the baselines the criterion compares against):**
+
+* `git --no-optional-locks branch --no-merged main | grep -c zahod/` → `0`
+* `python3 -m pytest tests/svodka tests/grid -q` → `1 failed, 96 passed` (the one red is
+  `tests/svodka/test_vopros_prepodavatelyu.py::test_only_the_teachers_of_that_day_are_asked`
+  and it is red on the branch as inherited, before a line of mine)
+* live база `159.194.254.52:/opt/spetsmat-bot/data/spetsmat.db` — `marks 16188`,
+  `students 57`, on the roll `53`, `problems 595`, `sheets 21`, `enrollment 247`
+
+**PREMISES SPOKEN OUT LOUD, because the work is wrong if any of them is wrong.**
+
+1. **Обязательные = `config.OBLIGATORY_KINDS`, which already reads `("обязательная",
+   "письменная")`.** The задача says «кружки И крестики вместе», the sheet prints `◦`
+   обязательная and `†` письменная, and `veb/razdely/konduit.ZNACHKI` already draws both.
+   So there is nothing to widen: I read the constant, I do not retype the pair.
+2. **Scope of «сдал из скольких» is THE CUT THE ROW IS DRAWN IN**: on a листок panel it is
+   that листок's обязательные, on «Весь год» it is the обязательные of that class's листки.
+   A single global number printed on a per-листок table would answer a question the table
+   is not asking.
+3. **«Сдало» = credited (`is_credited`, the cell stands at SOLVED)**, counted over the
+   pupils ON THE ROLL — the same list the grid draws — so the number on screen can be
+   checked by counting `✓` in its own column. `retract` is not credited; that is
+   `progress.graveyard`'s own rule and I keep it.
+4. **Two thresholds, both the owner's own words, and they do not meet.** «Закрыта классом»
+   is `сдало > 3`; гробарий is `сдало < 3`. Exactly 3 is neither — that is not a bug I am
+   inventing, it is what the two sentences say, and both are implemented literally off the
+   one constant `config.GRAVEYARD_THRESHOLD = 3`. Named in `## ВОПРОСЫ`.
+5. **Гробарий scope = 9 класс, cumulative over its HISTORICAL листки**, historical meaning
+   «a newer листок of that class has been issued». Today the 9-class листки are 16A/16α/16ℵ,
+   all issued 2026-09-03 and all newest ⇒ nothing is historical ⇒ the tab is EMPTY, by the
+   rule and not by a hardcoded emptiness. On Monday листок 17 is issued and 16 fills it by
+   itself, which is exactly what the owner asked for. 8 класс (18 листки of 2025-09-01) gets
+   no гробарий tab: its course is over, nothing will ever supersede its листки, and a
+   гробарий over it would open on hundreds of last-year rows — the opposite of «пустая
+   вкладка». Named in `## ВОПРОСЫ`.
+6. **Технические пары do not touch these four величины, and that is a claim I check rather
+   than assume.** `history.tehnicheskie` marks a `retract`/`erratum` that undoes a button
+   press less than 60 s old. All four величины are read off the PROJECTION (the last event
+   of a pair), never off an event count — and a technical pair leaves the projection where
+   it was. I prove it with a count printed before and after the отсев instead of asserting it.
+
+**CRITERION 5, DISPUTED BEFORE THE WORK, exactly as §1 asks.** «Найди хотя бы одного
+школьника, закрывшего ВСЕ обязательные» is written as if there were one global set of
+обязательные. Under premise 2 the answer depends on the cut, so I answer it in the form the
+screen actually has: the count of glowing rows on EVERY panel, per листок and per class,
+printed as «N из 53» for each — never a single number that hides which table it came from.
+That is more, not less, than the criterion asks, and it cannot be tuned by choosing a
+threshold.
+
+**PARTS — in order, each its own commit.**
+
+1. **`core/services/progress.py`** — the projections themselves, as pure functions over
+   states already fetched (the кондуит fetches the whole rectangle once; a second read per
+   величина would be four more reads of the same journal): «сдано обязательных из скольких»,
+   «сколько человек сдало задачу», «закрыта классом», and the гробарий record with the first
+   solvers. + tests. COMMIT.
+2. **величины 1 and 2** — the counter left of every pupil and the glowing row, in `_listok`
+   and `_obzor`. Colour out of the closed palette of `doc/DIZAJN-ZAKREPLENO.md §2`, no new
+   token. + tests. COMMIT.
+3. **величина 3** — «сколько человек сдало» in the column header of a листок, with
+   «закрыта классом» marked. + tests. COMMIT.
+4. **величина 4** — инициалы принимающего beside the surname (NOT a column, the owner's
+   decision), hover опening имя · группа · кабинет. Room comes from
+   `lichnaya.kabinet_na_datu`, the one function for it, imported and not rewritten. + tests. COMMIT.
+5. **величина 5** — вкладка «Гробарий», empty today, saying that it is empty and when it
+   fills. + tests that it FILLS when a листок becomes historical. COMMIT.
+6. **Verification and выкатка** — прямой SQL against the live база for all four величины with
+   both numbers printed side by side, `pytest tests/svodka tests/grid`, `bash deploy/vykatka.sh`,
+   the §3 верификатор subagent, then commit → влитие → пост-проверка → гашение → вывоз.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
