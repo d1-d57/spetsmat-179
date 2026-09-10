@@ -101,7 +101,7 @@ def baza() -> Path:
     return config.DB_PATH
 
 # ── THE LIST OF SCREENS IS DERIVED FROM THE ROUTES, NEVER TYPED OUT ──────────
-# 🔴 WHY.  Until 2026-09-11 `EKRANY` was ten hand-written lines, and `/istoria`
+# 🔴 WHY.  Until 2026-09-11 `EKRANY` was nine hand-written lines, and `/istoria`
 # and `/kabinet` were not among them -- zero occurrences of either word in this
 # file.  That is how a page with 321 lines of code and 29 green tests could stay
 # invisible on screen until the owner found it himself: the gate was formally
