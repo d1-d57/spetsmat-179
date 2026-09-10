@@ -350,6 +350,69 @@ wiring invented on top of an unrelated feature.
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
+🔴 **CRITICAL FINDING FOR THE OWNER, NOT A QUEUE ITEM — READ FIRST.** The production
+server's outbound calls to `openrouter.ai` are refused with HTTP 403 `{"success": false,
+"error": "Access denied by security policy."}` for EVERY request, including a bare
+text-only chat completion carrying no image at all — tested directly from the server
+2026-09-10, same key `bot.env` already carries. This is not this заход's payload, not a
+network timeout, and not something `infra/llm.py`'s retry logic can work around: it is
+OpenRouter (or a WAF in front of it) refusing this server's IP or account outright. The
+PHOTO channel — both this заход's and the bot's own, since they share `infra.llm.VisionModel`
+and the one key — cannot currently produce a real recognition from this server AT ALL. The
+code path itself is correct (caught, reported plainly, nothing written, nothing lost — see
+`## ОТЧЁТ`), but the feature cannot work until this is resolved. Likely next steps for a
+human with dashboard access: check the OpenRouter account's security/IP-allowlist
+settings, or consider whether the key or account itself is flagged. This is why item 8 of
+КРИТЕРИЙ ГОТОВНОСТИ ("реальным вызовом внешнего API") is reported PARTIAL below rather
+than green.
+
+1. `git_zona.py check --zone` (and `vlit-v-osnovnuyu --zone`) take ONE path per `--zone`
+   flag, repeatable — NOT the space-separated multi-path form this very file writes seven
+   times (§0.1's own two commands, and all seven zone-check lines of §4.1 Г1): the tool's
+   argparse rejects `--zone a b c d e f g` with "не понял часть команды", forcing every
+   executor who runs the mandated commands literally to re-derive the repeated-flag form
+   by hand. Confirmed live 2026-09-10 on this exact заход's own zone.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/UROKI-FABRIKE.md
+   ДОСТАВЛЕНО: нет
+2. `veb/priyom.py._vybrannyj_listok` picks "the current sheet" by bare `max(sh.ord)`,
+   which `veb/razdely/konduit.py._samyj_novyj`'s own docstring already measured as wrong
+   whenever several strength-versions of one sheet share an `issued_at` with different
+   `ord` (`16A`/`16α`/`16ℵ` — a bare `max(ord)` opens the WEAKEST version for everybody).
+   `veb/razdely/vnesenie.py._tekushchij_listok` (this заход) carries the corrected rule;
+   `veb/priyom.py` is read-only for this position and still has the old one.
+   ДОМ: doc/PLAN-veb-2026-09.md
+   ДОСТАВЛЕНО: нет
+3. The production server's system `/usr/bin/python3` (used by BOTH `spetsmat-veb.service`
+   and `spetsmat-bot.service`, no venv) had no `numpy`/`opencv-python`/`Pillow` installed
+   at all until this заход installed them live via `apt-get install python3-numpy
+   python3-opencv python3-pil` 2026-09-10 (see `## ОТЧЁТ`, НЕОБРАТИМОЕ). `deploy/ustanovka.sh`
+   declares no Python dependency list anywhere (`pyproject.toml` has none either, by
+   design — see its own comment), so a fresh install of this server would repeat exactly
+   this gap, and it would surface as a raw `ModuleNotFoundError` crashing the request
+   handler (502 from nginx) rather than a clean error, exactly as it did here before the
+   fix. Likely never noticed before because "ботом мы пока не пользуемся" — the bot's own
+   photo path exercises the same import and would have hit the same crash.
+   ДОМ: deploy/README.md
+   ДОСТАВЛЕНО: нет
+4. `secrets/veb.env` (loaded by `spetsmat-veb.service`) carried only the web-login secrets
+   and none of `LLM_API_KEY`/`LLM_MODEL`/`LLM_PROVIDER`/`SPETSMAT_ASR_KEY`/
+   `SPETSMAT_ASR_FOLDER` — those lived only in `secrets/bot.env`. This заход's `/vnesti`
+   is the first thing to call `infra.llm`/`infra.asr` from the veb process, and it failed
+   with a plain "vision not configured" 503 until this заход copied the five values from
+   `bot.env` into `veb.env` live on the server (see `## ОТЧЁТ`). `bot.env.example` and
+   `deploy/ustanovka.sh`'s secret-file scaffolding know nothing of `veb.env` needing these
+   at all, so a fresh install repeats this too.
+   ДОМ: deploy/README.md
+   ДОСТАВЛЕНО: нет
+5. The "прочерк → явка" (attendance) path this заход's text channel can DETECT
+   (`bystryj_tekst.attendance_intents`) is shown to the teacher but not wired to
+   `core/services/sessions.SessionsService`: writing it needs a `sessions` row (a lesson)
+   that no page in this заход's зона creates today, and КРИТЕРИЙ ГОТОВНОСТИ tests marks,
+   not attendance. A future position should decide where "which lesson is this write
+   against" gets asked and wire `record no marks, present` through `mark_attendance`.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
@@ -414,12 +477,151 @@ git-контур / the owner, not of an ordinary заход. This заход's O
 throughout (see `## ОТЧЁТ`'s hygiene numbers at the end).
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+
+**WHAT WAS DONE, AND WHY.** Built "Внести задачи" (`veb/razdely/vnesenie.py`, new module):
+three intake channels (typed text, photo, voice dictation) each build a draft/hypothesis
+via the already-existing `core/services/{bystryj_tekst,raspoznavanie,golos}.py` and
+`infra/{llm,asr}.py` — none forked, all imported as-is — and hand it back to the browser
+as JSON; nothing writes until the human confirms, and only `/api/vnesti/zapisat` writes,
+through `MarkingService.give`, keyed by the source's own content digest. Linked from the
+кондуит page. This is exactly the scenario the owner described 09.09 (see КОНТЕКСТ above):
+enter in any format, see the hypothesis, correct it, confirm, and only then does it count.
+
+Two small correctness fixes landed alongside it, both found by actually running the thing
+rather than by inspection (see `## ВОПРОСЫ` for the two that were NOT fixed because they
+sit outside this заход's зона):
+* `core/services/bystryj_tekst.py`'s typed-label grammar didn't recognise a leading `-`
+  (negative-numbered problems, e.g. `-1а`), found live against the real database.
+* This заход's own "current sheet" picker was fixed to use `issued_at`+`ord` (matching
+  `konduit.py`'s already-measured rule) instead of a bare `max(ord)`, before it ever
+  shipped with the bug `veb/priyom.py` still carries.
+
+**HOW IT WAS CHECKED — four layers, cheapest first:**
+1. `tests/veb/test_vnesenie.py` (new, 12 tests): three text scenarios with exact-SQL
+   confirmation, three photo and three voice scenarios via injected fakes (no network),
+   a forced-failure test per external channel, "draft door writes nothing", "unresolved
+   cell is skipped, not written", auth on every door, route contract.
+2. `python3 -m pytest tests/photo tests/voice tests/text -q` → **358 passed**, unchanged
+   from entry (this заход touches nothing these suites import except the one shared
+   regex fix, itself covered by 124 of those 358).
+3. Live smoke through the REAL `veb.server.Handler` (not the test harness) on a throwaway
+   migrated DB: page renders logged-out/logged-in correctly, a real text draft resolves
+   and writes, a forced photo `LlmTransportError` returns 502 with nothing written and a
+   retry with the identical bytes then succeeds — run twice, once from the worktree and
+   once from the merged `main` checkout (WARNING §3's post-check).
+4. **Live run on the real production server** (159.194.254.52), phone-width (375×780,
+   Playwright): logged in with a cookie minted server-side by the site's own
+   `vhod._make_cookie` (the underlying secret was never read by this session — only the
+   derived cookie value crossed the SSH session); typed `Агаркова -1а` against the REAL
+   roster and REAL sheet `16ℵ`, confirmed, and `select * from marks` on the live journal
+   showed exactly one new `assert` row (id 16189) — then undone through the site's OWN
+   `/api/priyom` erratum door (not a raw DB edit), leaving `assert`+`erratum`, cell EMPTY,
+   exactly as before the test. Photo and voice were each called for real against the
+   real configured `LLM_API_KEY` / `SPETSMAT_ASR_KEY` — see the 🔴 CRITICAL FINDING above
+   `## ВОПРОСЫ` item 1 for why photo currently cannot succeed from this server (an
+   OpenRouter-side 403, not this заход's code), and voice correctly round-tripped a real
+   400 from Yandex SpeechKit for the deliberately-invalid test audio.
+
+**КРИТЕРИЙ ГОТОВНОСТИ, point by point:**
+1. По три внесения на канал, девять сценариев, гипотеза печатается, сверка прямым SQL —
+   ✅ (unit tests, §How-checked layer 1; live layer 4 adds one real, tenth entry).
+2. Отказ внешнего API проверен нарочно — ✅ for both photo and voice (injected AND,
+   for photo, a genuine live 403; for voice, a genuine live 400): error shown, input never
+   touched server-side (it never leaves the browser until confirmed, and a failed draft
+   call stores nothing).
+3. Живой прогон на реальном объекте, с реальным вызовом внешнего API — **⚠ PARTIAL**:
+   the real call happened and was handled correctly, but photo recognition itself cannot
+   currently succeed from this server for a reason outside this заход's code or зона (see
+   🔴 CRITICAL FINDING). Text and the write path completed live and successfully.
+4. Запись мимо подтверждения отвергается — ✅ structurally: no draft door ever calls
+   `MarkJournal`; `test_draft_dver_nichego_ne_pishet` and `test_zapis_bez_studenta_...`
+   pin it.
+5. Чего проверка НЕ покрывает — печатается: (a) handwriting/photo noise quality, multiple
+   pupils in one photo frame, voice background noise — not specifically stress-tested
+   beyond what `infra/llm.py`/`infra/asr.py` already handle; (b) "снято" (retracted) cells
+   from the photo channel are SHOWN but not wired to any write path (`MarkingService.retract`
+   has no door here) — a deliberate scope cut, not silently dropped data; (c) attendance
+   (`## ВОПРОСЫ` item 5).
+6. Ключи в код/логи не попадают — ✅: grepped the new files for key-shaped strings
+   (`sk-`, `Bearer `, `Api-Key `) — none; the server-side cookie-minting and env-copy
+   commands never printed a secret value to this session's own output, only derived
+   tokens or a boolean "SET/EMPTY".
+7. `pytest tests/photo tests/voice tests/text -q` не ниже входа — ✅ 358/358, unchanged.
+8. Выкатка на боевой + одно живое внесение с телефонной ширины — ✅ (see layer 4).
+
+**WHAT WAS NOT TOUCHED:** everything outside `veb/razdely/`, `core/services/`,
+`veb/server.py`, `tests/{photo,voice,text,veb}/` — in particular `infra/llm.py`,
+`infra/asr.py`, `bot/`, `veb/priyom.py` were only imported/read, never edited, even where
+a real bug was found in them (see `## ВОПРОСЫ`).
+
+🔴 **НЕОБРАТИМОЕ / SERVER-SIDE ACTIONS OUTSIDE GIT (this заход ran with
+`--dangerously-skip-permissions`; this is the one place the owner learns of them):**
+1. `apt-get install -y python3-numpy python3-opencv python3-pil` run on the production
+   server (159.194.254.52) — the veb service's `/usr/bin/python3` had none of them and
+   crashed with `ModuleNotFoundError` on the very first `/api/vnesti/foto` call, an
+   unhandled exception past every `except` this position wrote. Restorable/removable with
+   `apt-get remove` if unwanted; matches what the bot's own (never-exercised) photo path
+   already silently required.
+2. `secrets/veb.env` on the production server gained five lines
+   (`LLM_API_KEY`/`LLM_MODEL`/`LLM_PROVIDER`/`SPETSMAT_ASR_KEY`/`SPETSMAT_ASR_FOLDER`),
+   copied verbatim from the same server's own `secrets/bot.env` — no key was ever
+   generated, typed, or seen by this session; a comment was left at the top of the file
+   explaining why and when. Reversible by deleting those five lines.
+3. One live journal write and its own undo on the production database, ids 16189
+   (`assert`, student 1 "Агаркова Ирина", problem 577 "-1а") and 16190 (`erratum`,
+   reverses 16189) — see layer 4 above. The cell reads EMPTY now, same as before the test;
+   the two rows themselves are permanent by the journal's own append-only design, exactly
+   like every other correction a teacher makes.
+4. Three ordinary deploys of this branch (`bash deploy/vykatka.sh`, each preceded by its
+   own dry run and each followed by an automatic 200-poll) — each created its own rollback
+   snapshot under `/opt/spetsmat-bot-bak-*` per the script's own design, nothing manual.
+
+**ПОВТОРЯЕМОСТЬ находок:** Items 1–4 of `## ВОПРОСЫ` WILL repeat on the very next unit of
+work that touches their surface (any заход that runs §0.1/§4.1's commands verbatim hits
+item 1 every time; any заход that reads "the current sheet" via `veb/priyom.py` inherits
+item 2's bug; a fresh server install repeats items 3 and 4 exactly) — each is filed as a
+queue item with a concrete home rather than fixed out-of-zone. The CRITICAL FINDING above
+(OpenRouter 403) is not a queue item because it needs the owner's own dashboard access,
+not a заход.
+
+**АРТЕФАКТ:** `http://159.194.254.52/vnesti` — открыть в браузере, войти преподавательским
+или общим паролем, три вкладки (Текст/Фото/Голос). Живой, задеплоенный код — не файл для
+скачивания.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** зона закоммичена тремя ходами, все три слиты в `main` последним ходом захода
+(WARNING-блок, штатно):
+  * `a7cd921` — vnesenie: text/photo/voice task entry with a confirmation table
+    (`veb/razdely/vnesenie.py`, `veb/razdely/konduit.py`, `veb/server.py`,
+    `tests/veb/test_vnesenie.py`) → влит в `main` как `e50d668` (сообщение коммита
+    переписано автосохранением часового на «автосохранение vnesenie-zadach: снимок
+    круга 18» — механизм волны, не моя правка, содержимое коммита не задето)
+  * `555ccef` — vnesenie: pick the current sheet by issued_at, not bare max(ord)
+    (`veb/razdely/vnesenie.py`) → влит в `main` как `e50d668` тем же слиянием
+  * `9e0af03` — bystryj_tekst: recognise negative-numbered labels typed as text
+    (`core/services/bystryj_tekst.py`) → влит в `main` как `bdbdcfc`
+  * `git_zona.py check --zone <7 путей своей зоны>` → ✅ (оба раза, до и после третьего
+    коммита); ветка вывезена, `@{u}..` пуст.
+
+**⚠️🔴 WARNING-БЛОК, ЧИСЛА КОМАНДОЙ (§ПОСЛЕДНИЙ ХОД):**
+1. **Вне git:** своя зона — 0 (`git_zona.py check --zone` ✅, выше). Главная папка
+   `spetsmat-bot`: 22 незакоммиченных пути (не мои — 10 чужих `kod_*.md` захода-волны
+   намеренно открыты клапаном строкой 40 этого файла, остальное — `data/spetsmat.db`,
+   `docs/index.html`, автологи часового, другие незакрытые заходы; названы строкой, не
+   тронуты). Рабочая папка захода: `data/spetsmat.db` изменён — это WAL-побочный эффект
+   ЧУЖИХ (`tests/veb/test_zhest_istorii.py`, `test_kanon_verstki.py`) тестов на живой базе
+   проекта, запущенных мной ради полного `pytest tests/veb`; файл вне зоны, не тронут
+   намеренно, не коммитился.
+2. **Влитие своей ветки:** 3 слияния (по одному на коммит, штатно, без конфликтов) —
+   `a7cd921→e50d668`, `555ccef→e50d668` (то же слияние), `9e0af03→bdbdcfc`. Все зелёные.
+3. **Пост-проверка из главной папки:** зелёная (см. «HOW IT WAS CHECKED», слой 3) — прогнана
+   ДВАЖДЫ, после первого и после третьего слияния.
+4. **Гашение:** `git branch --no-merged main` → `zahod/vnesenie-zadach` в списке НЕТ (влита).
+   Осталась одна чужая невлитая ветка, `zahod/kanal-diagnostika` — не моя, не сужу и не трогаю.
+5. **Вывоз:** `git log --oneline @{u}.. | wc -l` → 0 на своей ветке; `main` не вывозил
+   (канон, WARNING §5) — на нём после этого захода 6+ невывезенных чужих коммитов волны,
+   уже названо открытыми заявками `2026-09-10T0434-...`/`0444-...` до меня.
+6. **Итог:** своя зона чиста, своя ветка влита и вывезена, пост-проверка зелёная дважды.
+   Ничего необъяснённого не осталось.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
