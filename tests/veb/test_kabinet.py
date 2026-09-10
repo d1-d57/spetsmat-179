@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import threading
 import urllib.error
 import urllib.parse
@@ -528,5 +529,42 @@ def test_the_cabinet_sums_itself_up_in_one_line(running_server):
         f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
     telo = body.decode("utf-8")
     assert 'class="kab-svodka"' in telo
-    assert "с начала года: занятий" in telo
+    assert "с начала года: занятий с вашими школьниками" in telo
     assert "принято сдач" in telo and "работал со школьниками" in telo
+
+
+def test_the_summary_does_not_count_a_lesson_the_teacher_did_not_teach(running_server):
+    """Находка верификатора: сводка складывала календарь с работой.
+
+    «занятий N» считалось днями пн/чт с 1 сентября — то есть у преподавателя,
+    у которого в один из этих дней не было НИ ОДНОГО школьника, стояло на единицу
+    больше занятий, чем он вёл. Замер на боевых данных: у 13 принимающих из 14
+    календарных дней 3, а своих — 2. Здесь то же самое проверяется на фикстуре:
+    первое число обязано считать дни СО СВОИМИ школьниками, а не дни календаря.
+    """
+    import re
+
+    from core.services.sostav_na_den import slot_of
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+    from veb.razdely.lichnaya import deti_na_datu
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    chisla = re.search(r"занятий с вашими школьниками (\d+) из (\d+)", telo)
+    assert chisla, "сводка обязана называть оба числа"
+    svoi, kalendar = int(chisla.group(1)), int(chisla.group(2))
+
+    conn = sqlite3.connect(str(running_server["put"]))
+    conn.row_factory = sqlite3.Row
+    try:
+        proshlo = proshedshie_zanyatiya(segodnya())
+        svoi_zhdyom = sum(1 for d in proshlo
+                          if slot_of(d) is not None
+                          and deti_na_datu(conn, running_server["t1"], d))
+    finally:
+        conn.close()
+    assert kalendar == len(proshlo), "второе число — дни календаря"
+    assert svoi == svoi_zhdyom, (
+        f"своих дней {svoi}, а по базе их {svoi_zhdyom}: сводка считает не то")
+    assert svoi <= kalendar

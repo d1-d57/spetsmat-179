@@ -484,7 +484,10 @@ SVOI_STILI = """
    «обычное» над каждым столбцом была бы шумом ровно поверх них. */
 .ist-tabl th.ist-zn .ist-rod{display:block;font-size:.68rem;font-weight:600;
   letter-spacing:.02em;color:var(--warm);text-transform:none}
-.ist-tabl th.ist-zn .ist-rod-tiho{color:var(--faint);font-weight:400}
+/* 🔴 `--muted`, А НЕ `--faint`, И ЭТО ЗАМЕР ВЕРИФИКАТОРА, А НЕ ВКУС. На `--faint`
+   подпись давала контраст 2.16:1 при пороге AA 4.5:1 — самый слабый текст на
+   странице, и ровно на нём стоит слово, ради которого столбец подписан. */
+.ist-tabl th.ist-zn .ist-rod-tiho{color:var(--muted);font-weight:400}
 .ist-otmeneno{font-family:var(--sans);font-size:.92rem;color:var(--warm);margin:.8rem 0 0}
 /* Клетка — МЕСТО: знак и два пустых, поимённо названных гнезда под оценку и
    комментарий. Пустые гнёзда ничего не рисуют и ничего не занимают. */
