@@ -87,11 +87,18 @@ def server(tmp_path):
         ).lastrowid
         for surname in ("Асеев", "Яшин")
     ]
-    connection.execute(
-        "insert into enrollment (student_id, teacher_id, room, slot, valid_from, valid_to) "
-        "values (?, ?, '203', 1, '2026-09-01', ?)",
-        (student_ids[0], teacher_id, config.OPEN_END_DATE),
-    )
+    # 🔴 СТРОКА НА ОБА СЛОТА. С 10.09 «свой» считается ПО ДНЮ: приём, кондуит и
+    # кабинет спрашивают ту же службу, что распределение (требование владельца —
+    # «изменение в текущем расписании на сегодня не обновляет кабинет и вкладку в
+    # кондуите»). Строка одного слота делала бы тест зависимым от того, на какой день
+    # недели пришёлся прогон: в понедельник зелёный, в четверг красный. Проверяется
+    # здесь не день, а то, что свои дети идут сверху и помечены.
+    for slot in (1, 2):
+        connection.execute(
+            "insert into enrollment (student_id, teacher_id, room, slot, valid_from, valid_to) "
+            "values (?, ?, '203', ?, '2026-09-01', ?)",
+            (student_ids[0], teacher_id, slot, config.OPEN_END_DATE),
+        )
     connection.commit()
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), _handler_klass())

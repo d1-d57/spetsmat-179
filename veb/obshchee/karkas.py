@@ -956,11 +956,25 @@ KONDUIT_SKRIPT = """
     var target = DALEE[bylo] || "solved";
     var vernut = td.className, znak_byl = td.textContent;
     td.classList.add("zhdyot");
+    /* 🔴 ТАЙМАУТ, БЕЗ КОТОРОГО КЛЕТКА ЗАЛИПАЕТ НАВСЕГДА. Владелец 10.09: «кондуит
+       виснет, нажимаю на клеточку, плюсик не появляется» — и рядом: «интернет
+       пропал, теперь вроде есть». Это одно и то же событие.
+       МЕХАНИЗМ, ЗАМЕРЕН: при пропавшей сети `fetch` не отвечает ВООБЩЕ — ни `then`,
+       ни `catch` не срабатывают, он просто висит. Класс `zhdyot` не снимается, а
+       первая строка обработчика молча отбрасывает клик по клетке в этом классе.
+       Итог: тёмная клетка, которая больше не реагирует ни на один тап до
+       перезагрузки страницы. Сервер при этом здоров — `POST /api/priyom` на пустой
+       клетке отвечает `{"zapisano": true}`, проверено.
+       Десять секунд — потолок ожидания: занятие идёт, и клетка, молчащая дольше,
+       бесполезна одинаково при любой причине молчания. */
+    var otsechka = new AbortController();
+    var budilnik = setTimeout(function () { otsechka.abort(); }, 10000);
     fetch("/api/priyom", {
       method: "POST", headers: {"Content-Type": "application/json"},
+      signal: otsechka.signal,
       body: JSON.stringify({student: +td.dataset.u, problem: +td.dataset.z,
                             target: target})
-    }).then(function (r) { return r.json(); }).then(function (otvet) {
+    }).then(function (r) { clearTimeout(budilnik); return r.json(); }).then(function (otvet) {
       td.classList.remove("zhdyot");
       if (otvet && otvet.sostoyanie) { narisovat(td, otvet.sostoyanie); }
       else {
@@ -970,9 +984,14 @@ KONDUIT_SKRIPT = """
         td.title = (otvet && otvet.error) || "не записалось";
       }
     }).catch(function (oshibka) {
+      clearTimeout(budilnik);
+      /* Клетка ВОЗВРАЩАЕТСЯ в кликабельное состояние — это и есть починка: не
+         показать ошибку, а не отнять у человека возможность повторить тап. */
       td.classList.remove("zhdyot");
       td.className = vernut; td.textContent = znak_byl;
-      td.title = "не записалось: " + oshibka;
+      td.title = (oshibka && oshibka.name === "AbortError")
+        ? "сервер не ответил за 10 с — нажмите ещё раз"
+        : "не записалось: " + oshibka;
     });
   });
 
@@ -1233,6 +1252,16 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
 # наоборот тому, зачем пункт заведён.
 MENYU_PUNKT_KABINETA = '<a class="ssyl ssyl-kab" href="/kabinet">Кабинет</a>'
 
+#: 🔴 ВХОД НА `/istoria` — H5.1, И ЭТО ВОССТАНОВЛЕНИЕ, А НЕ НОВАЯ СТРАНИЦА.
+#: Владелец 10.09: «вкладка История занятий не видна. Может быть, сделана, но по
+#: кнопке не подключена». Измерено: страница `veb/razdely/istoria_zanyatij.py` — 321
+#: строка и 29 зелёных тестов, отдаёт 200 и 70 923 байта, а `grep -c 'href="/istoria'`
+#: давал НОЛЬ на главной, ноль в кабинете, ноль в распределении. Существующая
+#: страница, которой для пользователя не существовало.
+#: Условие показа — то же `prepod_id`, что у «Кабинета»: страница за входом
+#: (`pokazat_istoriyu` не пускает гостя), и гостю пункт был бы дверью в отказ.
+MENYU_PUNKT_ISTORII = '<a class="ssyl ssyl-ist" href="/istoria">История</a>' 
+
 
 def menyu_ssylkami(tut: str = "") -> str:
     """Верхнее меню для страницы, которая НЕ собрана оболочкой.
@@ -1257,8 +1286,16 @@ def menyu_ssylkami(tut: str = "") -> str:
 
     return ('<nav class="menu">\n'
             '  <span class="im">Ключики</span>\n  '
+            # 🔴 «ИСТОРИЯ» СТОИТ ЗДЕСЬ ЖЕ, А НЕ ОТДЕЛЬНОЙ ПРАВКОЙ В `kabinet.py`
+            # (H5.1). Эта функция — ОДНО место, где записаны названия и адреса
+            # пунктов для страниц вне оболочки; добавить пункт в кабинете отдельно
+            # значило бы завести второй список пунктов, который разойдётся с первым
+            # на следующей же правке. Страница `/istoria` существовала и работала
+            # (321 строка, 29 зелёных тестов, 200 и 81 238 байт), а входа на неё не
+            # было НИ ОДНОГО: `grep -c 'href="/istoria'` давал ноль везде.
             + "\n  ".join((punkt("/", "Класс"),
                            punkt("/kabinet", "Кабинет"),
+                           punkt("/istoria", "История"),
                            punkt("/#s-list", "Листки"),
                            punkt("/raspredelenie", "Распределение"),
                            punkt("/#s-kond", "Кондуит")))
@@ -1309,7 +1346,8 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
     lichnaya = lich_vhod = lich_stili = ""
     start_vybran = " checked"
     # Пункт «Кабинет» — по `prepod_id`, разбор условия у `MENYU_PUNKT_KABINETA`.
-    kab_metka = ('\n  ' + MENYU_PUNKT_KABINETA) if kt.prepod_id is not None else ""
+    kab_metka = ('\n  ' + MENYU_PUNKT_KABINETA + '\n  ' + MENYU_PUNKT_ISTORII) \
+        if kt.prepod_id is not None else ""
     if tolko_raspredelenie:
         # Раздел на этой странице один; открывать нечего, кроме него.
         start_vybran, rasp_vybran = "", " checked"
