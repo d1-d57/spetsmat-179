@@ -254,7 +254,10 @@ ROLI_PREPODAVATELEJ = ("organizator", "prepod")
 
 def main() -> int:
     razbor = argparse.ArgumentParser(description=__doc__)
-    razbor.add_argument("--db", default="data/spetsmat.db", help="path to the база")
+    # 🔴 БЕЗ УМОЛЧАНИЯ-ПУТИ: см. `doc/ISTOCHNIK-BAZY.md`. Умолчание от корня
+    # репозитория — второе имя базы мимо `config`, которое среда не перебивает.
+    razbor.add_argument("--db", default=None,
+                        help="база; без него — та, что назвала переменная SPETSMAT_BAZA")
     razbor.add_argument("--secrets", default="secrets", help="directory the files go into")
     razbor.add_argument("--data", default=datetime.now(timezone.utc).strftime("%Y%m%d"),
                         help="date suffix of the plaintext list, ГГГГММДД")
@@ -269,7 +272,17 @@ def main() -> int:
                         help="whose passwords to mint; the others are left untouched")
     argumenty = razbor.parse_args()
 
-    db_path = Path(argumenty.db).resolve()
+    # Назвали базу флагом — источник не спрашиваем вовсе: у вызывающего адрес уже
+    # есть. Не назвали — спрашиваем, и корень репозитория кладём в `sys.path` сами:
+    # файл запускают из `tools/`, и своим корнем он видит `tools/`.
+    if argumenty.db:
+        db_path = Path(argumenty.db).resolve()
+    else:
+        koren = str(Path(__file__).resolve().parent.parent)
+        if koren not in sys.path:
+            sys.path.insert(0, koren)
+        import config
+        db_path = config.DB_PATH.resolve()
     katalog = Path(argumenty.secrets)
     fajl_heshej = katalog / "veb-lichnye-paroli.json"
     spiski = {

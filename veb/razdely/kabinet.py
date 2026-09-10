@@ -73,6 +73,7 @@ from core.services.sostav_na_den import (
 from veb import vhod
 from veb.obshchee.karkas import VREMYA, e, menyu_ssylkami
 from veb.razdely.lichnaya import deti_na_datu, kabinet_na_datu, segodnya
+from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
 
 #: How many lessons forward the grid of future absences shows.  Eight is four calendar
@@ -288,7 +289,7 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
         return _dokument("Кабинет", '<div class="kab-stranica">'
                                     '<h1>Кабинет</h1>'
                                     '<p class="net">Такого преподавателя нет в базе.</p>'
-                                    '</div>')
+                                    '</div>', put_bazy(c))
 
     # 🔴 ОТМЕТКИ СПРАШИВАЮТСЯ СРАЗУ ЗА ВСЮ ПОЛОСУ, ОДНИМ ЗАПРОСОМ. Раньше их брали
     # только на восемь дней вперёд, потому что и рисовали только их; полоса красит
@@ -394,10 +395,10 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
     <p class="kab-beda" id="kab-beda"></p>
   </div>
 </div>{SKRIPT}"""
-    return _dokument("Кабинет — " + kto["name"], telo)
+    return _dokument("Кабинет — " + kto["name"], telo, put_bazy(c))
 
 
-def _dokument(zagolovok: str, telo: str) -> str:
+def _dokument(zagolovok: str, telo: str, baza=None) -> str:
     """Документ кабинета — С ВЕРХНИМ МЕНЮ, и это первое, о чём просил владелец 10.09.
 
     Дословно (`TZ-DOBOR-10-09.md` H1.1): *«нет верхнего меню, из кабинета некуда
@@ -410,7 +411,7 @@ def _dokument(zagolovok: str, telo: str) -> str:
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{e(zagolovok)}</title>
-<style>{_obshchij_stil()}{SVOI_STILI}</style></head>
+<style>{_obshchij_stil(baza)}{SVOI_STILI}</style></head>
 <body>
 {menyu_ssylkami("/kabinet")}
 {telo}
@@ -430,7 +431,12 @@ def _soedinenie(h) -> sqlite3.Connection:
     svoj = getattr(h, "_connection", None)
     if callable(svoj):
         return svoj()
-    db_path = getattr(getattr(h, "server", None), "db_path", config.DB_PATH)
+    # 🔴 `getattr(x, "db_path", config.DB_PATH)` — ЛОВУШКА, И ОНА СРАБОТАЛА.
+    # Значение по умолчанию у `getattr` вычисляется ДО того, как проверено
+    # наличие атрибута, поэтому обращение к источнику происходило даже там, где
+    # база уже названа сервером. `or` короткозамкнут: спрашиваем источник только
+    # тогда, когда сервер базу НЕ назвал.
+    db_path = getattr(getattr(h, "server", None), "db_path", None) or config.DB_PATH
     raw = sqlite3.connect(str(db_path), check_same_thread=False, isolation_level=None)
     raw.execute("pragma foreign_keys = on")
     raw.execute("pragma journal_mode = WAL")
@@ -479,7 +485,8 @@ def pokazat_kabinet(h) -> bool:
         _otdat_html(h, 403, _dokument(
             "Кабинет", '<div class="kab-stranica"><h1>Кабинет</h1>'
             '<p class="net">Нужно войти.</p>'
-            '<p class="kab-gde"><a href="/vhod">Вход</a></p></div>'))
+            '<p class="kab-gde"><a href="/vhod">Вход</a></p></div>',
+            getattr(getattr(h, "server", None), "db_path", None)))
         return True
     if kto is None:
         _otdat_html(h, 200, _dokument(
@@ -487,7 +494,8 @@ def pokazat_kabinet(h) -> bool:
             '<p class="net">Вход по общему паролю: система не знает, кто именно вошёл. '
             'Свой кабинет, своих школьников и отметку отсутствия показывает личный '
             'пароль.</p>'
-            '<p class="kab-gde"><a href="/">На заглавную</a></p></div>'))
+            '<p class="kab-gde"><a href="/">На заглавную</a></p></div>',
+            getattr(getattr(h, "server", None), "db_path", None)))
         return True
     c = _soedinenie(h)
     try:

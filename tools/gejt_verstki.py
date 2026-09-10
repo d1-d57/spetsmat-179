@@ -86,7 +86,14 @@ ETALON = {"width": 1440, "height": 900}
 # ALWAYS the one checked out next to it -- there is no honest way to aim the gate
 # elsewhere, and pretending otherwise with a `--baza` flag would be a third way to
 # lie.  Stated here so nobody spends an hour finding it again.
-BAZA = KOREN / "data" / "spetsmat.db"
+# 🔴 АДРЕС, А НЕ ИМЯ. Здесь стоял путь от корня репозитория — то самое второе
+# имя, из-за которого одна строка указывала на разные файлы на сервере и на
+# машине владельца, и указывала успешно. Источник называет переменная среды
+# `SPETSMAT_BAZA`; не названа — отказ с двумя законными адресами, а не фантом.
+# Разбор — `doc/ISTOCHNIK-BAZY.md`.
+def baza() -> Path:
+    import config
+    return config.DB_PATH
 
 # One entry per SCREEN the gate judges: name, path, the radio to select before
 # measuring, and the roles that can see it.
@@ -723,9 +730,10 @@ LOMKA = r"""() => {
 
 def zhivaya_baza() -> Path:
     """The real project database -- every active pupil, not three invented rows."""
-    if not BAZA.exists():
-        raise SystemExit(f"нет живой базы: {BAZA}")
-    return BAZA
+    put = baza()
+    if not put.exists():
+        raise SystemExit(f"нет живой базы: {put}")
+    return put
 
 
 def chisla_bazy(db: Path) -> dict:

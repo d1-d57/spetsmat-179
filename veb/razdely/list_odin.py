@@ -20,6 +20,7 @@ in the existing custom properties.
 from __future__ import annotations
 
 import re
+import sys
 import sqlite3
 
 from veb.obshchee.karkas import e
@@ -27,7 +28,7 @@ from veb.obshchee.karkas import e
 _STIL: str | None = None
 
 
-def _obshchij_stil() -> str:
+def _obshchij_stil(baza=None) -> str:
     """The site's stylesheet, taken from the site.
 
     Building the front page costs ~10 ms and is cached for the life of the process; the
@@ -37,7 +38,26 @@ def _obshchij_stil() -> str:
     global _STIL
     if _STIL is None:
         from tools.sobrat_stranicu import sobrat_html
-        soderzhimoe = re.search(r"<style>(.*?)</style>", sobrat_html("gost"), re.S)
+        # Таблица стилей от ДАННЫХ не зависит, но собирается вместе со страницей,
+        # а страница читает базу. Значит и здесь базу называет звавший.
+        #
+        # 🔴 СТРАНИЦА, УПАВШАЯ ИЗ-ЗА СВОЕЙ ЖЕ ТАБЛИЦЫ СТИЛЕЙ, — ХУЖЕ СТРАНИЦЫ БЕЗ
+        # ОФОРМЛЕНИЯ, И ЭТО НЕ ПРЕДПОЛОЖЕНИЕ. До 10.09 оболочка собиралась из
+        # `data/spetsmat.db`, лежавшей в репозитории; база оттуда ушла по решению
+        # владельца, и любая база победнее (свежая, тестовая, только что
+        # восстановленная) роняет сборку оболочки на первом же недостающем куске
+        # данных — замерено: `KeyError: 'Д'` на базе, где заведена одна группа.
+        # Карточка школьника при этом отдавала не «страницу без палитры», а обрыв
+        # соединения: 500 без тела. Отказ печатается в `stderr` — молчаливая
+        # деградация здесь была бы тем же самым фантомом, только в оформлении.
+        try:
+            stranica_sajta = sobrat_html("gost", baza=baza)
+        except Exception as beda:                       # noqa: BLE001
+            print("⚠ таблица стилей сайта не собралась (%s: %s) — страница выйдет "
+                  "без палитры сайта; данные это НЕ затрагивает"
+                  % (type(beda).__name__, beda), file=sys.stderr)
+            stranica_sajta = ""
+        soderzhimoe = re.search(r"<style>(.*?)</style>", stranica_sajta, re.S)
         _STIL = soderzhimoe.group(1) if soderzhimoe else ""
     return _STIL
 
@@ -127,7 +147,7 @@ def zagolovok(nomer: str, tema: str) -> str:
     return "%s. %s" % (nomer, tema) if tema else nomer
 
 
-def stranica(listok: dict, bloki_listka: list[dict]) -> str:
+def stranica(listok: dict, bloki_listka: list[dict], baza=None) -> str:
     """The whole page for one sheet."""
     nomer = listok["number"]
     tema = listok["title"] or ""
@@ -156,7 +176,7 @@ def stranica(listok: dict, bloki_listka: list[dict]) -> str:
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{e(imya)} — Ключики</title>
-<style>{_obshchij_stil()}{SVOI_STILI}</style></head>
+<style>{_obshchij_stil(baza)}{SVOI_STILI}</style></head>
 <body>
 <div class="menu"><span class="im">Ключики</span><a class="nazad" href="/">ко всем листкам</a></div>
 <main class="listok">

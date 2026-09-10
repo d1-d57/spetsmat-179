@@ -41,7 +41,14 @@ from datetime import date
 from dataclasses import dataclass, field
 
 KOREN = pathlib.Path(__file__).resolve().parent.parent.parent
-DATA = KOREN / "data" / "spetsmat.db"
+# 🔴 АДРЕС, А НЕ ИМЯ. Здесь стоял путь от корня репозитория — то самое второе
+# имя, из-за которого одна строка указывала на разные файлы на сервере и на
+# машине владельца, и указывала успешно. Источник называет переменная среды
+# `SPETSMAT_BAZA`; не названа — отказ с двумя законными адресами, а не фантом.
+# Разбор — `doc/ISTOCHNIK-BAZY.md`.
+def data() -> pathlib.Path:
+    import config
+    return config.DB_PATH
 
 # 🔴 ДНИ ЗАНЯТИЙ БЕРУТСЯ ИЗ ОДНОГО ДОМА — `veb/sobrat_fajl.py`. Вписанные руками
 # `DATA_NA` и `DATA_SLOVAMI` отсюда убраны: их никто не читал, а датой они
@@ -258,8 +265,15 @@ def _razobrat_rezhim(rezhim: str) -> tuple:
         return rol, None
 
 
-def sobrat_kontekst(rezhim: str = "gost", den=None) -> Kontekst:
+def sobrat_kontekst(rezhim: str = "gost", den=None, baza=None) -> Kontekst:
     """Read the database once and hand back everything the sections will need.
+
+    🔴 `baza` — НЕ УДОБСТВО, А ЗАКРЫТИЕ ВТОРОГО ИСТОЧНИКА. Оболочка сайта читала
+    базу САМА, модульной константой, и потому обслуживала запрос НЕ ИЗ ТОГО файла,
+    который назвали серверу: один запрос — две базы, и ни одна строка страницы об
+    этом не говорила. Пока обе указывали на `data/spetsmat.db`, расхождение было
+    невидимо; стоило базе получить адрес — оно вылезло сразу. Теперь базу называет
+    тот, кто её знает, а `None` значит «спроси источник» (`config.DB_PATH`).
 
     This is the only place that talks to the database on behalf of the shell.
     A section that needs a query of its own owns that query — see
@@ -288,7 +302,7 @@ def sobrat_kontekst(rezhim: str = "gost", den=None) -> Kontekst:
     mogu = VOZMOZHNOSTI[rol]
 
 
-    c = sqlite3.connect(DATA)
+    c = sqlite3.connect(str(baza) if baza else data())
     c.row_factory = sqlite3.Row
 
 

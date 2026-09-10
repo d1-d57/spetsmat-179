@@ -12,7 +12,7 @@
   2. заполняет его из ЖИВОГО enrollment — по фактическому кабинету преподавателя;
   3. печатает связку и молчит про руководителей: кто из троих чей, решает владелец.
 
-ЗАПУСК:  python3 tools/privyazka_kabinetov.py [--baza data/spetsmat.db]
+ЗАПУСК:  SPETSMAT_BAZA=<путь> python3 tools/privyazka_kabinetov.py [--baza ПУТЬ]
 КОДЫ:    0 — связка полная · 1 — есть преподаватель без кабинета или кабинет без руководителя
 """
 import argparse
@@ -27,9 +27,14 @@ def kolonki(c, tablica):
 
 def main(argv=None):
     p = argparse.ArgumentParser()
-    p.add_argument("--baza", default="data/spetsmat.db")
+    # 🔴 БЕЗ УМОЛЧАНИЯ-ПУТИ. Умолчание `data/spetsmat.db` было вторым именем базы
+    # мимо `config`, и переменная среды его не перебивала. `None` означает
+    # «спроси источник», а источник умеет отказать. См. `doc/ISTOCHNIK-BAZY.md`.
+    p.add_argument("--baza", default=None,
+                   help="база; без него — та, что назвала переменная SPETSMAT_BAZA")
     a = p.parse_args(argv)
-    c = sqlite3.connect(a.baza)
+    import config
+    c = sqlite3.connect(str(a.baza) if a.baza else str(config.DB_PATH))
     # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09). Путь и дата последней
     # ЗАПИСИ внутри базы; красное, если база старше последнего занятия. Дата ФАЙЛА
     # для этого не годится: копирование и rsync её обновляют, не добавив ни строки.

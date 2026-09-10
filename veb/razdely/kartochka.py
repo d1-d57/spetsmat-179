@@ -29,6 +29,7 @@ one of the site's sections and needs none of their radio-tab machinery.
 from __future__ import annotations
 
 from veb.obshchee.karkas import e
+from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
 
 SVOI_STILI = """
@@ -163,7 +164,7 @@ def stranica(c, row: dict, *, vhodivshij: bool) -> str:
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{e(imya)} — Ключики</title>
-<style>{_obshchij_stil()}{SVOI_STILI}</style></head>
+<style>{_obshchij_stil(put_bazy(c))}{SVOI_STILI}</style></head>
 <body>
 <main class="kartochka">
   <a class="zakryt" href="/raspredelenie" title="закрыть" aria-label="закрыть">&#10005;</a>

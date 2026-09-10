@@ -17,9 +17,106 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
-#: The live database.  Kept under ``data/`` because ``.gitignore`` already excludes it;
-#: overridden per-connection in tests, which use a file in a temp directory.
-DB_PATH = ROOT / "data" / "spetsmat.db"
+# ------------------------------------------------------------------ THE DATABASE
+#
+# 🔴 THE DATABASE HAS AN ADDRESS, NOT A NAME.  Until 2026-09-10 this file said
+#
+#     DB_PATH = ROOT / "data" / "spetsmat.db"
+#
+# -- a path relative to the repository.  One name, and on the server and on the owner's
+# laptop it pointed at two DIFFERENT files, and it pointed SUCCESSFULLY.  Nothing ever
+# failed; a phantom answered quietly instead.  The price was paid on 2026-09-10: four
+# false reports to the owner ("problem 14a does not exist", "there is no session on
+# 07.09", "the ticks were not entered", "title disagrees with number"), three of them
+# read out of a dead local copy that called itself the database.
+#
+# The project had already learnt this lesson once and had not applied it here.
+# ``KONDUIT_XLSX`` below is overridden by the environment and refuses in plain words,
+# and its comment spells out the same price: a sandbox path baked into a tool, "a path
+# that does not exist on any machine this project runs on".  The database was the last
+# piece of state still addressed from the repository root.
+#
+# So: no default.  The environment names the file, or the tool REFUSES with a non-zero
+# exit code and prints the two legal answers.  A refusal is cheap; a phantom is not.
+
+#: The one environment variable that names the database.  There is no second name --
+#: a second name would be a second source, which is the very thing being fixed.
+BAZA_ENV = "SPETSMAT_BAZA"
+
+#: The live database on the server.  Printed inside the refusal so that the reader is
+#: not left guessing what to type.  It is a STRING, not a ``Path``: this machine is not
+#: the server and resolving it here would say nothing.
+BAZA_NA_SERVERE = "/srv/spetsmat/data/spetsmat.db"
+
+
+class IstochnikNeNazvan(SystemExit, Exception):
+    """Refusal: nobody said WHICH database, so there is no honest answer to give.
+
+    🔴 IT INHERITS FROM ``SystemExit`` ON PURPOSE.  Twenty files under ``tools/``,
+    ``veb/`` and ``ops/`` reach for the database.  A plain exception would print a
+    traceback about ``config`` -- diagnostics for a programmer, not an answer for the
+    person holding a paper conduit -- and would need a ``try/except`` bolted onto each
+    of the twenty call sites, which is twenty places to forget one.  ``SystemExit``
+    carrying a message prints that message to stderr, exits non-zero, and shows no
+    traceback, in all twenty at once.
+
+    🔴 AND IT INHERITS FROM ``Exception`` TOO, WHICH IS NOT BELT AND BRACES BUT A BUG
+    THIS CLASS ALREADY CAUSED.  ``SystemExit`` alone descends from ``BaseException``,
+    so it walks straight THROUGH every ``except Exception`` guard in the project -- and
+    this codebase has guards that exist for exactly the opposite reason: the "rebuild
+    the public page quietly" path swallows failures on purpose, because the write to
+    the database has already happened and a 500 there would say "not saved" over saved
+    data.  With ``SystemExit`` alone that guard stopped guarding.  The dual base keeps
+    both properties: the interpreter still treats it as an exit (message on stderr,
+    non-zero code, no traceback), and ordinary error handling still catches it.
+    Measured, not reasoned: ``tests/veb/test_kabinet.py`` fell over on precisely this.
+    """
+
+
+def _tekst_otkaza() -> str:
+    """The refusal, with BOTH legal answers spelled out.  A refusal that does not say
+    what to do instead is just a failure with better manners."""
+    return (
+        "🔴 ИСТОЧНИК НЕ НАЗВАН: переменная среды %s не выставлена.\n"
+        "   База больше не адресуется путём от корня репозитория: одно имя указывало\n"
+        "   на разные файлы на сервере и на этой машине — и указывало успешно.\n"
+        "   ДВА ЗАКОННЫХ ОТВЕТА:\n"
+        "     1) боевая база живёт на сервере: %s=%s\n"
+        "     2) не на сервере — сними копию ШТАТНОЙ ДВЕРЬЮ и укажи её явно:\n"
+        "        SPETSMAT_BAZA=<боевая> python3 core/istochnik.py --snyat-kopiyu ~/spetsmat-kopia.db\n"
+        "        %s=~/spetsmat-kopia.db\n"
+        "   Боевых чисел копия не даёт и на сервере себя не заменяет — она помечена\n"
+        "   внутри себя (`род: копия`), и дверь источника это печатает."
+        % (BAZA_ENV, BAZA_ENV, BAZA_NA_SERVERE, BAZA_ENV)
+    )
+
+
+def put_bazy() -> Path:
+    """The database this process is allowed to open, or a refusal.
+
+    Asked as a FUNCTION and not stored as a constant so that the answer is taken at the
+    moment of use: a test that sets the variable for one case, and a shell that exports
+    it after this module was imported, both get the truth rather than whatever the
+    environment happened to hold at import time.
+    """
+    syroj = os.environ.get(BAZA_ENV, "").strip()
+    if not syroj:
+        raise IstochnikNeNazvan(_tekst_otkaza())
+    return Path(syroj).expanduser()
+
+
+def __getattr__(imya: str):
+    """``config.DB_PATH`` still exists as a name -- and now it can REFUSE.
+
+    Twenty files already say ``config.DB_PATH``; renaming the attribute in all of them
+    would be a large edit whose only effect is churn.  PEP 562 lets the name stay and
+    the meaning change: the attribute is no longer a stored constant but a question,
+    and a question asked with no environment set answers "I refuse, here is where the
+    database actually is".
+    """
+    if imya == "DB_PATH":
+        return put_bazy()
+    raise AttributeError("module %r has no attribute %r" % (__name__, imya))
 
 #: Where ``001_init.sql`` and its successors live.  Plain SQL under yoyo-migrations.
 MIGRATIONS_DIR = ROOT / "migrations"

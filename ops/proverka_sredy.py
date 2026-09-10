@@ -144,7 +144,18 @@ def check_pragmas(db_path: Path | str | None = None) -> OneCheck:
 
 
 def check_disk(path: Path | str | None = None, minimum: int = MIN_FREE_BYTES) -> OneCheck:
-    target = Path(path) if path is not None else config.DB_PATH.parent
+    # 🔴 «ИСТОЧНИК НЕ НАЗВАН» — ЭТО КРАСНЫЙ ПУНКТ ПРОВЕРКИ, А НЕ ТРАССИРОВКА.
+    # Свободное место меряется ПОД БАЗОЙ, а база с 10.09 не имеет молчаливого
+    # умолчания. Проверяльщик среды, падающий с трассировкой, сообщает о себе, а не
+    # о среде: непроверенная среда — это находка, и выглядеть она должна как находка.
+    if path is None:
+        try:
+            path = config.DB_PATH.parent
+        except SystemExit as otkaz:
+            return OneCheck("disk", False,
+                            "источник не назван, мерить свободное место не под чем: %s"
+                            % str(otkaz).splitlines()[0])
+    target = Path(path)
     while not target.exists() and target != target.parent:
         target = target.parent
     usage = shutil.disk_usage(target)
@@ -203,7 +214,12 @@ def check_versions() -> OneCheck:
 
 
 def check_all(db_path: Path | str | None = None) -> Verdict:
-    return Verdict(checks=(check_pragmas(db_path), check_disk(), check_certs(), check_versions()))
+    # Назвали базу — мерим место ПОД НЕЙ. Раньше `check_disk()` звался пустым и шёл
+    # к `config.DB_PATH` мимо того, что только что назвал вызывающий: две разные базы
+    # в одном вердикте, и ни одна строка отчёта об этом не говорила.
+    pod_bazoj = Path(db_path).parent if db_path is not None else None
+    return Verdict(checks=(check_pragmas(db_path), check_disk(pod_bazoj),
+                           check_certs(), check_versions()))
 
 
 def main(argv: list[str] | None = None) -> int:

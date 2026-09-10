@@ -48,6 +48,7 @@ from infra.room_repo import SqliteAttendance, SqliteSessions
 from infra.sessions_repo import SqliteSessionBook
 from veb import vhod
 from veb.obshchee.karkas import e
+from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
 
 #: Сколько занятий назад просить у базы. Учебный год держит два занятия в неделю; 400
@@ -252,7 +253,7 @@ def stranica(c: sqlite3.Connection) -> str:
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>История занятий — Ключики</title>
-<style>{_obshchij_stil()}{SVOI_STILI}</style></head>
+<style>{_obshchij_stil(put_bazy(c))}{SVOI_STILI}</style></head>
 <body>
 <input class="rd" type="radio" name="ist-vid" id="iv-shk" checked hidden>
 <input class="rd" type="radio" name="ist-vid" id="iv-prep" hidden>
@@ -279,7 +280,12 @@ def _soedinenie(h) -> sqlite3.Connection:
     svoj = getattr(h, "_connection", None)
     if callable(svoj):
         return svoj()
-    db_path = getattr(getattr(h, "server", None), "db_path", config.DB_PATH)
+    # 🔴 `getattr(x, "db_path", config.DB_PATH)` — ЛОВУШКА, И ОНА СРАБОТАЛА.
+    # Значение по умолчанию у `getattr` вычисляется ДО того, как проверено
+    # наличие атрибута, поэтому обращение к источнику происходило даже там, где
+    # база уже названа сервером. `or` короткозамкнут: спрашиваем источник только
+    # тогда, когда сервер базу НЕ назвал.
+    db_path = getattr(getattr(h, "server", None), "db_path", None) or config.DB_PATH
     raw = sqlite3.connect(str(db_path), check_same_thread=False, isolation_level=None)
     raw.execute("pragma foreign_keys = on")
     raw.execute("pragma journal_mode = WAL")

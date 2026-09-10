@@ -58,7 +58,14 @@ EKRANY = {"noutbuk": {"width": 1440, "height": 900},
 @pytest.fixture(scope="module")
 def stend():
     """Один сервер, один браузер, обе ширины: Chromium стоит секунду на запуск."""
-    db = zhivaya_baza()
+    # 🔴 БЕЗ НАЗВАННОГО ИСТОЧНИКА — ПРОПУСК, А НЕ ОШИБКА ФИКСТУРЫ. Эти проверки судят
+    # РЕНДЕР живой страницы, а живая страница собирается из живой базы; база ушла из
+    # git 10.09 по решению владельца, и на машине, где `SPETSMAT_BAZA` не выставлена,
+    # открывать нечего. Отказ источника — `SystemExit`, и ловится он здесь явно.
+    try:
+        db = zhivaya_baza()
+    except SystemExit as otkaz:
+        pytest.skip("источник не назван: %s" % str(otkaz).splitlines()[0])
     httpd, conn, potok, url = podnyat_server(db)
     try:
         with sync_playwright() as pw:

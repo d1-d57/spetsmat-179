@@ -20,11 +20,12 @@
 
 from __future__ import annotations
 
+import socket
 import sqlite3
 import sys
-from datetime import date as _date
+from datetime import date as _date, datetime as _datetime, timezone as _timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import NamedTuple, Optional, Tuple
 
 #: Таблицы и колонки, по которым судится «когда в эту базу писали в последний раз».
 #: Список НЕ полон намеренно: сюда входит только то, что меняется на занятии.
@@ -41,6 +42,113 @@ from typing import Optional, Tuple
     ("attendance_pometki", "kogda"),
     ("enrollment", "valid_from"),
 )
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# МЕТКА ВНУТРИ БАЗЫ: файл сам говорит, что он такое
+#
+# 🔴 ОДНОЙ СВЕЖЕСТИ ДЛЯ ЭТОГО МАЛО, И ЭТО НЕ ОСТОРОЖНОСТЬ, А ЗАМЕР. В понедельник
+# утром ЖИВАЯ боевая база тоже «отстаёт» от последнего занятия — записей после
+# пятницы в ней нет, — и признак шумит ровно в тот момент, когда на него смотрят.
+# Поэтому род базы записан ВНУТРИ неё (миграция 011), а не выводится из даты.
+#
+# 🔴 РОД БЕЗ ХОСТА НИЧЕГО НЕ СТОИТ. `cp boevaya.db kopiya.db` уносит слово «боевая»
+# дословно, и копия проходит любую проверку, которую слово может выдержать в
+# одиночку. Пара «род + хост, на котором род поставлен» такого не позволяет:
+# боевая, открытая не на своей машине, — это унесённая копия по построению.
+
+#: Три рода. Значения — данные, ограничены CHECK'ом в миграции 011.
+RODA = ("боевая", "копия", "тест")
+
+
+class Metka(NamedTuple):
+    """Что база говорит о себе сама."""
+
+    rod: str
+    host: str
+    kogda: str
+    otkuda: str
+
+
+def etot_host() -> str:
+    """Имя машины, на которой идёт этот процесс."""
+    return socket.gethostname()
+
+
+def metka(conn: sqlite3.Connection) -> Optional[Metka]:
+    """Метка базы или `None`, если база старше миграции 011.
+
+    `None` — НЕ «всё в порядке». Это база, которая о себе не сказала ничего, и
+    судится она строже помеченной: см. `proverit_metku`.
+    """
+    try:
+        r = conn.execute(
+            "select rod, host, kogda, otkuda from istochnik_metka where id = 1").fetchone()
+    except sqlite3.Error:
+        return None
+    if not r:
+        return None
+    return Metka(str(r[0]), str(r[1] or ""), str(r[2] or ""), str(r[3] or ""))
+
+
+def pometit(conn: sqlite3.Connection, rod: str, otkuda: str = "") -> Metka:
+    """Поставить метку. Боевая ставится ОДИН раз, на сервере, руками.
+
+    Хост и время берутся у машины, а не у звавшего: метка, чьи поля можно передать
+    аргументом, — это не свидетельство, а пересказ.
+    """
+    if rod not in RODA:
+        raise ValueError("род %r не из %s" % (rod, ", ".join(RODA)))
+    kogda = _datetime.now(tz=_timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    novaya = Metka(rod, etot_host(), kogda, otkuda)
+    conn.execute("""
+        insert into istochnik_metka (id, rod, host, kogda, otkuda) values (1, ?, ?, ?, ?)
+          on conflict(id) do update set rod = excluded.rod, host = excluded.host,
+                                        kogda = excluded.kogda, otkuda = excluded.otkuda
+    """, (novaya.rod, novaya.host, novaya.kogda, novaya.otkuda))
+    conn.commit()
+    return novaya
+
+
+def opisat_metku(m: Optional[Metka]) -> str:
+    """Одна строка о роде базы — то, что человек читает вместо догадки."""
+    if m is None:
+        return "род: НЕ ПОМЕЧЕНА (база старше миграции 011)"
+    hvost = ""
+    if m.otkuda:
+        hvost = " · откуда: %s" % m.otkuda
+    return "род: %s · помечена на %s · когда: %s%s" % (
+        m.rod, m.host or "—", m.kogda or "—", hvost)
+
+
+def proverit_metku(conn: sqlite3.Connection, potok=None) -> int:
+    """🔴 МОЖНО ЛИ БРАТЬ ИЗ ЭТОГО ФАЙЛА БОЕВЫЕ ЧИСЛА. 0 — да, 1 — нет.
+
+    Ровно четыре ответа, и три из них отрицательные:
+      * `боевая` на том хосте, где она помечена — да;
+      * `боевая` на ЧУЖОМ хосте — нет: это унесённая копия, слово приехало вместе
+        с файлом;
+      * `копия` / `тест` — нет, и это же нормальное состояние такого файла;
+      * метки нет вовсе — нет: база о себе не сказала, а молчание не есть согласие.
+    """
+    potok = potok or sys.stderr
+    m = metka(conn)
+    if m is None:
+        print("🔴 БАЗА НЕ ПОМЕЧЕНА: род неизвестен, боевых чисел она не даёт. "
+              "Накати миграции (`infra/db.py::apply_migrations`) и пометь явно.",
+              file=potok)
+        return 1
+    if m.rod != "боевая":
+        print("🔴 ЭТО НЕ БОЕВАЯ БАЗА: %s. Числа из неё описывают её саму, "
+              "а не школу." % opisat_metku(m), file=potok)
+        return 1
+    zdes = etot_host()
+    if m.host and m.host != zdes:
+        print("🔴 БОЕВАЯ МЕТКА С ЧУЖОЙ МАШИНЫ: помечена на %s, открыта на %s. "
+              "Файл унесли с сервера — это копия, как бы она себя ни называла."
+              % (m.host, zdes), file=potok)
+        return 1
+    return 0
 
 
 def poslednyaya_zapis(conn: sqlite3.Connection) -> Optional[str]:
@@ -101,6 +209,10 @@ def nazvat(conn: sqlite3.Connection, potok=None) -> Tuple[str, Optional[str]]:
     put = put_bazy(conn)
     posl = poslednyaya_zapis(conn)
     print(f"источник: {put} · последняя запись: {posl or '—'}", file=potok)
+    # 🔴 РОД ПЕЧАТАЕТСЯ ВСЕГДА, А НЕ ТОЛЬКО КОГДА ОН ПЛОХОЙ. Строка, появляющаяся
+    # лишь при беде, приучает к своему отсутствию: читатель перестаёт её искать и
+    # не замечает, что её нет. Здесь она стоит рядом с путём каждый раз.
+    print(opisat_metku(metka(conn)), file=potok)
     return put, posl
 
 
@@ -128,7 +240,7 @@ def proverit_svezhest(conn: sqlite3.Connection, potok=None) -> int:
     return 0
 
 
-def nazvat_i_proverit(conn: sqlite3.Connection, potok=None) -> int:
+def nazvat_i_proverit(conn: sqlite3.Connection, potok=None, boevye: bool = False) -> int:
     """Одной строкой то, что обязан сделать КАЖДЫЙ инструмент, печатающий числа.
 
     🔴 ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ, А НЕ ДВА ВЫЗОВА НА КАЖДОМ ВЫЗЫВАЮЩЕМ. Их
@@ -142,7 +254,14 @@ def nazvat_i_proverit(conn: sqlite3.Connection, potok=None) -> int:
     """
     potok = potok or sys.stdout
     nazvat(conn, potok)
-    return proverit_svezhest(conn, potok)
+    kod = proverit_svezhest(conn, potok)
+    if boevye:
+        # 🔴 ДВА РАЗНЫХ ВОПРОСА, И ВТОРОЙ ЗАДАЁТСЯ НЕ ВСЕГДА. «Свежая ли база» спрашивают
+        # все; «боевая ли она» — только тот, кто собирается выдать числа за числа ШКОЛЫ
+        # или в неё написать. Разбор бумаги на тестовой копии — законная работа, и
+        # требовать от неё боевой метки значило бы запретить пробу.
+        kod = max(kod, proverit_metku(conn, potok))
+    return kod
 
 
 class SvidetelRaboty:
@@ -203,8 +322,41 @@ class SvidetelRaboty:
         )
 
 
+def snyat_kopiyu(otkuda, kuda) -> Path:
+    """ШТАТНАЯ ДВЕРЬ ЗА КОПИЕЙ: снять и ТУТ ЖЕ пометить `копия`.
+
+    🔴 СНЯТИЕ И ПОМЕТКА — ОДИН ХОД, А НЕ ДВА. Копия, помеченная вторым ходом,
+    существует между ходами как файл со словом «боевая» внутри: достаточно одного
+    обрыва, чтобы такая копия осталась на диске навсегда. Здесь метка ставится до
+    того, как путь возвращён звавшему.
+
+    `VACUUM INTO`, а не `cp`: в режиме WAL часть закоммиченного лежит в `-wal`
+    рядом, и `cp` даёт рваный файл плюс два осиротевших спутника — он открывается,
+    выглядит целым и восстанавливает «почти» (полный разбор — `ops/rezervnaya_kopia.py`).
+    """
+    otkuda = Path(otkuda).expanduser().resolve()
+    kuda = Path(kuda).expanduser()
+    if not otkuda.exists():
+        raise FileNotFoundError("нечего копировать: %s нет на диске" % otkuda)
+    kuda.parent.mkdir(parents=True, exist_ok=True)
+    if kuda.exists():
+        kuda.unlink()          # VACUUM INTO отказывается писать в существующий файл
+    istochnik_conn = sqlite3.connect(str(otkuda))
+    try:
+        istochnik_conn.execute("vacuum into '%s'" % str(kuda).replace("'", "''"))
+    finally:
+        istochnik_conn.close()
+    kogda = _datetime.now(tz=_timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    kopia_conn = sqlite3.connect(str(kuda))
+    try:
+        pometit(kopia_conn, "копия", otkuda="%s на %s, снята %s" % (otkuda, etot_host(), kogda))
+    finally:
+        kopia_conn.close()
+    return kuda
+
+
 # ───────────────────────────────────────────────────────────────────────────────
-# ДВЕРЬ: `python3 core/istochnik.py [путь]`
+# ДВЕРЬ: `python3 core/istochnik.py [--pometit РОД] [--snyat-kopiyu ПУТЬ]`
 #
 # 🔴 МОЛЧАЩАЯ ДВЕРЬ НЕОТЛИЧИМА ОТ СЛОМАННОЙ. Первая версия этого файла при прямом
 # запуске печатала НОЛЬ строк и выходила с кодом 0 — владелец запустил её в 14:09 и
@@ -212,16 +364,21 @@ class SvidetelRaboty:
 # находок» читается как «чисто», а на деле означает «никто не смотрел». Инструмент,
 # который умеет назвать источник, ОБЯЗАН называть его и когда спрашивают его самого.
 #
-# Код возврата: 0 — база свежая, 1 — мёртвая или пустая, 2 — открыть не удалось.
+# Код возврата: 0 — база боевая, своя и свежая; 1 — не боевая, чужая или мёртвая;
+#               2 — открыть не удалось или источник не назван вовсе.
 
 def _dver(argv=None) -> int:
     import argparse
     import os
 
     razbor = argparse.ArgumentParser(
-        description="Назвать источник: путь базы, дату последней записи, вердикт свежести.")
+        description="Назвать источник: путь базы, род по метке, свежесть, вердикт.")
     razbor.add_argument("baza", nargs="?", default=None,
-                        help="путь к базе; без него — та, что назначена в config.DB_PATH")
+                        help="путь к базе; без него — та, что назвала переменная среды")
+    razbor.add_argument("--pometit", choices=RODA, default=None,
+                        help="поставить род базе и выйти (боевая ставится ОДИН раз, на сервере)")
+    razbor.add_argument("--snyat-kopiyu", default=None, metavar="ПУТЬ",
+                        help="снять рабочую копию по этому пути и пометить её `копия`")
     args = razbor.parse_args(argv)
 
     put = args.baza
@@ -235,14 +392,40 @@ def _dver(argv=None) -> int:
         if koren not in sys.path:
             sys.path.insert(0, koren)
         try:
-            from config import DB_PATH
-            put = str(DB_PATH)
+            import config
+            put = str(config.DB_PATH)
+        except SystemExit as otkaz:
+            # 🔴 ОТКАЗ ИСТОЧНИКА ПЕЧАТАЕТСЯ, А НЕ ПРОБРАСЫВАЕТСЯ. Проброшенный, он
+            # уходит с кодом 1 — тем же, каким эта дверь отвечает «база мёртвая», —
+            # и два разных ответа становятся неразличимы. «Не назван» это 2.
+            print(str(otkaz), file=sys.stderr)
+            return 2
         except Exception as exc:                       # noqa: BLE001
             print("🔴 не удалось узнать путь базы из config: %s" % exc, file=sys.stderr)
             return 2
+    if args.snyat_kopiyu:
+        if not os.path.exists(put):
+            print("🔴 базы нет на диске: %s" % put, file=sys.stderr)
+            return 2
+        kuda = snyat_kopiyu(put, args.snyat_kopiyu)
+        print("снята копия: %s" % kuda)
+        print("указать её явно:  SPETSMAT_BAZA=%s" % kuda)
+        return 0
     if not os.path.exists(put):
         print("🔴 базы нет на диске: %s" % put, file=sys.stderr)
         return 2
+    if args.pometit:
+        conn = sqlite3.connect(put)
+        try:
+            m = pometit(conn, args.pometit)
+        except sqlite3.Error as exc:
+            print("🔴 не удалось пометить %s: %s" % (put, exc), file=sys.stderr)
+            return 2
+        finally:
+            conn.close()
+        print("источник: %s" % Path(put).resolve())
+        print(opisat_metku(m))
+        return 0
     try:
         conn = sqlite3.connect("file:%s?mode=ro" % put, uri=True)
     except sqlite3.Error as exc:
@@ -252,8 +435,11 @@ def _dver(argv=None) -> int:
     nazvat(conn)
     zan = poslednee_zanyatie(conn)
     print("последнее прошедшее занятие: %s" % (zan or "—"))
-    rc = proverit_svezhest(conn, sys.stdout)
-    print("вердикт: %s" % ("СВЕЖАЯ ✅" if rc == 0 else "МЁРТВАЯ 🔴"))
+    svezhest = proverit_svezhest(conn, sys.stdout)
+    rod = proverit_metku(conn, sys.stdout)
+    rc = max(svezhest, rod)
+    print("вердикт: %s" % ("БОЕВАЯ, СВЕЖАЯ, СВОЯ ✅" if rc == 0
+                           else "БОЕВЫХ ЧИСЕЛ НЕ ДАЁТ 🔴"))
     return rc
 
 

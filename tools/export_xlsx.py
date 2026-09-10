@@ -55,14 +55,21 @@ from core.services.seeding import seed_catalogue
 from infra.db import apply_migrations, connect
 from infra.repositories import SqliteCatalogue, SqliteMarkJournal
 
-#: Where the workbook is written.  Derived from ``config.DB_PATH`` and not spelled out as a
-#: literal, because ``data/`` is the directory ``.gitignore`` already excludes and the
-#: export must land somewhere git cannot pick it up by accident.
-#:
-#: 🔴 THIS BELONGS IN ``config.py`` as ``EXPORT_DIR``.  It is here because the зона of this
-#: position forbids editing ``config.py``, and the debt is named in ``## ОТЧЁТ`` rather than
-#: worked around by scattering a path literal through the file.
-EXPORT_DIR = config.DB_PATH.parent
+def export_dir():
+    """Where the workbook is written: beside whatever database was actually named.
+
+    🔴 A FUNCTION AND NOT A CONSTANT, AND THAT IS THE WHOLE POINT OF THIS EDIT.  This
+    used to be a module-level constant read off ``config.DB_PATH``.  Once the database
+    stopped having a silent default, a module-level read fired the refusal at IMPORT
+    time: ``import tools.export_xlsx`` blew up before anyone had asked it to export
+    anything.  Asked at the moment of use, the refusal lands on the person who asked for
+    numbers without naming the source, which is where it belongs.
+
+    The directory is still derived rather than spelled out, for the original reason: the
+    workbook carries the names of fifty-six children and must land where git cannot pick
+    it up by accident.
+    """
+    return config.DB_PATH.parent
 
 #: The conduit's own alphabet.  NOT invented here -- it is the reading side of
 #: ``VALUE_REGISTRY`` in ``tools/import_konduit.py``: there ``1`` means solved and ``x``
@@ -238,13 +245,17 @@ def out_name(probe: bool = False) -> str:
 def command_export(db_path: Optional[Path], out: Optional[Path]) -> int:
     connection = open_read_only(db_path)
     try:
-        destination = out or (EXPORT_DIR / out_name())
+        destination = out or (export_dir() / out_name())
         counts = export(connection, destination)
     finally:
         connection.close()
     print(counts)
     print("файл: %s" % destination)
-    print("в git он не поедет: %s под .gitignore, в нём фамилии 56 детей" % EXPORT_DIR)
+    # Каталог называется ТОТ, КУДА КНИГА ЛЕГЛА. Раньше здесь стоял `export_dir()`
+    # безусловно — то есть каталог по умолчанию, даже когда `--kuda` назвал другой:
+    # строка про `.gitignore` относилась к папке, в которой ничего не появилось.
+    print("в git он не поедет: %s под .gitignore, в нём фамилии 56 детей"
+          % destination.parent)
     return 0
 
 
@@ -254,7 +265,7 @@ def command_probe(out: Optional[Path]) -> int:
         probe = build_probe_database(Path(directory))
         connection = open_read_only(probe)
         try:
-            destination = out or (EXPORT_DIR / out_name(probe=True))
+            destination = out or (export_dir() / out_name(probe=True))
             counts = export(connection, destination)
         finally:
             connection.close()

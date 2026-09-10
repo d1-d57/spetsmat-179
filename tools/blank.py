@@ -256,7 +256,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     seed_dir = config.SEED_DIR
-    db_path = Path(args.db) if args.db else config.DB_PATH
+    # 🔴 «ИСТОЧНИК НЕ НАЗВАН» ЗДЕСЬ РАВНО «БАЗЫ НЕТ», И ЭТОТ ИНСТРУМЕНТ УЖЕ УМЕЕТ
+    # ЖИТЬ БЕЗ БАЗЫ. Бланк печатает КОДЫ, не фамилии, и при отсутствии базы честно
+    # берёт обезличенный `seed/students.csv`, о чём сам и пишет строкой ниже. Отказ
+    # с ненулевым кодом был бы здесь враньём наоборот: инструмент, который может
+    # работать без боевых данных, обязан работать без них, а не требовать их.
+    if args.db:
+        db_path = Path(args.db)
+    else:
+        try:
+            db_path = config.DB_PATH
+        except SystemExit:
+            db_path = Path(config.ROOT) / "нет-такого-файла-источник-не-назван.db"
     if db_path.exists():
         roster, source = roster_from_catalogue(db_path), "каталог %s" % db_path
     else:

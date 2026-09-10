@@ -619,7 +619,12 @@ class Handler(BaseHTTPRequestHandler):
         # ``check_same_thread=False`` and apply the project's pragmas on top of
         # it.  WAL lets readers and the writer run side by side; the test
         # fixture substitutes ``server.db_path`` for a tmp file.
-        db_path = getattr(self.server, "db_path", config.DB_PATH)  # type: ignore[attr-defined]
+        # 🔴 `getattr(x, "db_path", config.DB_PATH)` — ЛОВУШКА, И ОНА СРАБОТАЛА.
+        # Значение по умолчанию у `getattr` вычисляется ДО того, как проверено
+        # наличие атрибута, поэтому обращение к источнику происходило даже там, где
+        # база уже названа сервером. `or` короткозамкнут: спрашиваем источник только
+        # тогда, когда сервер базу НЕ назвал.
+        db_path = getattr(self.server, "db_path", None) or config.DB_PATH  # type: ignore[attr-defined]
         raw = sqlite3.connect(
             str(db_path), check_same_thread=False,
             isolation_level=None,  # we drive transactions explicitly via the repo
@@ -762,7 +767,11 @@ class Handler(BaseHTTPRequestHandler):
                 rezhim = "prepod" if kto is None else "prepod:%d" % kto
             else:
                 rezhim = "gost"
-            self._send_html(200, sobrat_html(rezhim, den=den).encode("utf-8"))
+            # База — та, которую назвали ЭТОМУ серверу; оболочка больше не ищет её
+            # сама (иначе один запрос обслуживали бы две разные базы).
+            self._send_html(200, sobrat_html(
+                rezhim, den=den,
+                baza=getattr(self.server, "db_path", None)).encode("utf-8"))
             return
         # 🔴 ПОСТОЯННОЕ — ЭТО РАЗДЕЛ САМОГО САЙТА, А НЕ ТРЕТЬЯ ВЁРСТКА ТОГО ЖЕ.
         # Здесь отдавался `veb/templates/index.html` — отдельная страница, которую
@@ -877,7 +886,9 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(telo)
             return True
 
-        self._send_html(200, list_odin.stranica(listok, bloki).encode("utf-8"))
+        self._send_html(200, list_odin.stranica(
+            listok, bloki,
+            getattr(self.server, "db_path", None)).encode("utf-8"))
         return True
 
     def _kartochka(self, hvost: str) -> bool:
@@ -926,7 +937,8 @@ class Handler(BaseHTTPRequestHandler):
             from tools.sobrat_stranicu import sobrat_html
             kto = vhod.kto(self.headers)
             rezhim = "admin" if kto is None else "admin:%d" % kto
-            return sobrat_html(rezhim).encode("utf-8")
+            return sobrat_html(
+                rezhim, baza=getattr(self.server, "db_path", None)).encode("utf-8")
         # 🔴 ПРЕПОДАВАТЕЛЬ РЕНДЕРИТСЯ ЖИВЬЁМ, КАК И ОРГАНИЗАТОР, И ПО ТОЙ ЖЕ
         # ПРИЧИНЕ: файл `docs/index.html` один на всех и ничьего кабинета назвать
         # не может. Он видит ровно гостевую страницу плюс СВОЮ вкладку — ни одной
@@ -941,7 +953,8 @@ class Handler(BaseHTTPRequestHandler):
             from tools.sobrat_stranicu import sobrat_html
             kto = vhod.kto(self.headers)
             rezhim = "prepod" if kto is None else "prepod:%d" % kto
-            return sobrat_html(rezhim).encode("utf-8")
+            return sobrat_html(
+                rezhim, baza=getattr(self.server, "db_path", None)).encode("utf-8")
         if not PUBLICHNAYA.is_file():
             # Файла нет вовсе — собрать его прямо сейчас. Падение здесь честнее
             # заглушки: отдавать «страница в разработке» на боевом адресе значит
@@ -1957,6 +1970,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     vhod.proverit_okruzhenie()
 
     connection = connect()
+    # 🔴 СЕРВЕР НАЗЫВАЕТ ИСТОЧНИК ОДИН РАЗ, ПРИ СТАРТЕ, А НЕ НА КАЖДЫЙ ЗАПРОС.
+    # Он показывает числа человеку тысячу раз за занятие и в терминал их не
+    # печатает — строка на каждый запрос утонула бы в логе и её перестали бы
+    # читать. Здесь она стоит там, где на неё смотрят: рядом с адресом, по
+    # которому сервер только что открылся. Все обработчики (`veb/priyom.py`,
+    # `veb/sostoyanie.py`, `veb/razdely/*`) читают ЭТО ЖЕ соединение, поэтому
+    # названо оно для них всех разом, а не восемь раз по отдельности.
+    from core.istochnik import nazvat_i_proverit
+    nazvat_i_proverit(connection)
     try:
         server = ThreadingHTTPServer((args.bind, args.port), Handler)
         server.connection = connection  # type: ignore[attr-defined]
