@@ -25,6 +25,33 @@ from __future__ import annotations
 from veb.obshchee.karkas import e
 from veb.razdely.verstka_stili import STILI
 
+# 🔴 A THIRD LAYER OF RULES, AND FOR THE SAME REASON THE SECOND ONE EXISTS.
+# `veb/obshchee/karkas.py` (the canon) and `veb/razdely/verstka_stili.py` (the
+# 09.09 corrections) are BOTH outside this заход's zone — the zone is the four
+# section files and `tests/enrollment/`. A `<style>` inside `<body>` is valid
+# HTML5 and applies exactly like one in `<head>`; `verstka_stili` is emitted from
+# `vid_vse()` for the same reason and this block rides directly behind it, so it
+# wins ties on cascade order without inventing higher specificity.
+#
+# Every selector below targets a class that already exists, except `.ob-kol`,
+# which this заход introduces and therefore has to dress itself.
+STILI_KOLONKI = """
+<style>
+/* ── §1 «обычно у» — СВОЯ КОЛОНКА ПЕРЕД ИМЕНЕМ ПРИНИМАЮЩЕГО, А НЕ ХВОСТ ФАМИЛИИ.
+   Владелец 10.09 дословно: «мы ничего не дописываем просто в конец». Колонка
+   стоит ВСЕГДА, пока экран однодневный, даже когда значка в строке нет: иначе
+   имена принимающих съезжают по вертикали ровно на ширину значка — ради чего
+   колонку и заводят. Ширина фиксирована и одна на все строки. */
+.ob-kol{flex:0 0 1.35rem;min-width:0;text-align:center;font-size:.85em;
+  line-height:1;align-self:center}
+/* 🔴 `cursor:help` УБРАН, И ЭТО НЕ ВКУСОВЩИНА: он И ЕСТЬ «вопросительный знак»
+   из жалобы G2.3 («наведение даёт вопросительный знак, а нажатие — ничего»).
+   Курсор-вопрос читается как «нажми и узнаешь», а нажимать здесь нечего —
+   подсказка приходит сама. Обычная стрелка ничего не обещает. */
+.obychno{margin-left:0;cursor:default;flex:0 0 auto}
+</style>
+"""
+
 
 def shkolniki(c, slot):
     return c.execute("""
@@ -179,6 +206,97 @@ def _initsialy(kt, teacher_id):
     return ("".join(part[0] for part in polnoe.split()[:2]) or "?", polnoe)
 
 
+def _zhenskaya(imya: str, familia: str) -> bool:
+    """Женское ли это «Имя Фамилия» — СПРОШЕНО У ФАМИЛИИ ПЕРВОЙ, И ЭТО ВАЖНО.
+
+    Судить по имени нельзя: «Ваня», «Вася», «Даня», «Саша», «Миша» кончаются на
+    «-я»/«-а» ровно как женские, а в этой самой школе трое из них — мужчины.
+    Фамилия отвечает надёжнее: «-ова/-ева/-ина/-ая» женская, «-ов/-ев/-ин/-ский»
+    мужская. Имя спрашивают только тогда, когда фамилия молчит («Амбург»,
+    «Маршалл», «Шнитке») — там оно единственный свидетель.
+    """
+    for konec in ("ова", "ева", "ёва", "ина", "ына", "ская", "цкая", "ая", "яя"):
+        if familia.endswith(konec):
+            return True
+    for konec in ("ов", "ев", "ёв", "ин", "ын", "ский", "цкий", "ый", "ий"):
+        if familia.endswith(konec):
+            return False
+    return imya.endswith(("а", "я"))
+
+
+def _imya_rod(slovo: str) -> str:
+    """Имя в родительном падеже: «Наталья» → «Натальи»."""
+    if slovo.endswith("я"):
+        return slovo[:-1] + "и"
+    if slovo.endswith("а"):
+        # Шипящие и заднеязычные не терпят «ы» после себя (правило «жи-ши»):
+        # «Ольга» → «Ольги», но «Дима» → «Димы».
+        return slovo[:-1] + ("и" if slovo[-2:-1] in "кгхжчшщ" else "ы")
+    if slovo.endswith("й"):
+        return slovo[:-1] + "я"
+    if slovo.endswith("ь"):
+        return slovo[:-1] + "я"
+    if slovo[-1:].lower() in "оеиуыэю":
+        return slovo
+    return slovo + "а"
+
+
+def _familia_rod(slovo: str, zhenskaya: bool) -> str:
+    """Фамилия в родительном падеже. Несклоняемая — возвращается как есть."""
+    if zhenskaya:
+        for konec, zamena in (("ова", "овой"), ("ева", "евой"), ("ёва", "ёвой"),
+                              ("ина", "иной"), ("ына", "ыной"),
+                              ("ская", "ской"), ("цкая", "цкой"),
+                              ("яя", "ей")):
+            if slovo.endswith(konec):
+                return slovo[:-len(konec)] + zamena
+        if slovo.endswith("ая"):
+            # «Рыжая» → «Рыжей», но «Толстая» → «Толстой»: после шипящих и «ц»
+            # безударное окончание пишется через «е». Правило то же, что делает
+            # «Ольги» из «Ольга» в `_imya_rod`, только другой стороной.
+            return slovo[:-2] + ("ей" if slovo[-3:-2] in "жшчщц" else "ой")
+        # 🔴 ЖЕНСКАЯ ФАМИЛИЯ НА СОГЛАСНЫЙ НЕ СКЛОНЯЕТСЯ ВОВСЕ — это и есть пример
+        # владельца: «Наталья Амбург» → «Натальи Амбург», а не «Амбурга».
+        return slovo
+    for konec in ("ов", "ев", "ёв", "ин", "ын"):
+        if slovo.endswith(konec):
+            return slovo + "а"
+    for konec, zamena in (("ский", "ского"), ("цкий", "цкого"),
+                          ("ый", "ого"), ("ий", "его")):
+        if slovo.endswith(konec):
+            return slovo[:-len(konec)] + zamena
+    if slovo.endswith(("а", "я")):
+        return _imya_rod(slovo)
+    if slovo[-1:].lower() in "оеиуыэю":
+        return slovo
+    return slovo + "а"
+
+
+def v_roditelnom(polnoe: str) -> str:
+    """«Наталья Амбург» → «Натальи Амбург»: подсказка значка «обычно у ‹кого›».
+
+    🔴 ПАДЕЖ НАЗВАН ВЛАДЕЛЬЦЕМ, А НЕ ВЫБРАН ЗДЕСЬ (G2.3, дословно: «обычно у
+    Натальи Амбург», а не инициалы и не вопросительный знак). Именительный после
+    предлога «у» — не сокращение, а ошибка, и читается она как машинный текст;
+    ради одного этого предлога тут и стоит склонение.
+
+    Осторожность одна и записана: склоняется только запись, КАЖДОЕ слово которой
+    начинается с заглавной и не набрано заглавными целиком. Служебные записи
+    живой базы — «НС», «отсутствует» — не имена, и склонять их значило бы
+    печатать «НСа». Длина словом НЕ проверяется: «Ян» и «Ия» — имена.
+    """
+    slova = polnoe.split()
+    if not slova or len(slova) > 2:
+        return polnoe
+    if not all(s[:1].isupper() and s != s.upper() for s in slova):
+        return polnoe
+    if len(slova) == 1:
+        return _imya_rod(slova[0])
+    imya, familia = slova
+    zh = _zhenskaya(imya, familia)
+    return f"{_imya_rod(imya)} {_familia_rod(familia, zh)}"
+
+
 def svyazka_dnej(kt, ryady):
     """Замок: связаны поля понедельника и четверга или разведены.
 
@@ -321,16 +439,32 @@ def para_shk(kt, ryady, pokazat_kab=True):
 
     # «Обычно у ‹кого›» — только там, где сегодня НЕ как обычно (ТЗ §3.3).
     #
-    # 🔴 ЗНАЧОК С ПОДСКАЗКОЙ, А НЕ ТЕКСТ ВСТЫК С ФАМИЛИЕЙ (ПРАВКА этого захода,
-    # интервью 09.09 п.4). Было: голый текст «обычно у ИИ» — без CSS-правила на
-    # `.obychno` в каноне он клеился прямо к фамилии («Афанасьева Полинаобычно у
-    # НА») и нёс нечитаемые инициалы вместо имени. Значок один символ той же
-    # строки — высота строки не растёт; `title` разворачивается в ПОЛНОЕ имя.
+    # 🔴 ОТДЕЛЬНАЯ КОЛОНКА ПЕРЕД ИМЕНЕМ ПРИНИМАЮЩЕГО, А НЕ ХВОСТ ФАМИЛИИ
+    # (владелец 10.09, G2.1–G2.2: «мы ничего не дописываем просто в конец»;
+    # порядок в строке — фамилия школьника · КОЛОНКА ЗНАЧКА · принимающий ·
+    # кабинет). Прошлая редакция дописывала значок ВНУТРЬ `.kto`, и он ехал
+    # вместе с концом фамилии: у «Цуканова» в одном месте, у
+    # «Тухватулина-Йалчына» — в другом.
+    #
+    # 🔴 ЯЧЕЙКА ПУСТАЯ, НО ЕСТЬ. Без неё колонка появлялась бы только в тех
+    # строках, где значок есть, и сдвигала бы имя принимающего вправо ровно в
+    # них — то самое «имена разъедутся по вертикали», ради которого владелец и
+    # просил колонку. Ставится она только на ОДНОДНЕВНОМ экране: поля `obychno`
+    # в постоянном слое нет вовсе, и пустая колонка на всю страницу была бы
+    # шириной, отнятой у имён ни за чем.
+    #
+    # 🔴 ПОДСКАЗКА — ПОЛНОЕ ИМЯ В РОДИТЕЛЬНОМ ПАДЕЖЕ (G2.3), не инициалы:
+    # «обычно у Натальи Амбург». Клик не делает ничего и не должен — курсор
+    # `help` (тот самый «вопросительный знак при наведении») снят в
+    # `STILI_KOLONKI` выше.
     obychno = ""
-    if kt.den and pole(osnova, "obychno") and osnova["obychno"] != osnova["teacher_id"]:
-        _, polnoe = _initsialy(kt, osnova["obychno"])
-        obychno = ('<span class="obychno" title="обычно у %s">\U0001f501</span>'
-                   % e(polnoe))
+    if kt.den:
+        znachok = ""
+        if pole(osnova, "obychno") and osnova["obychno"] != osnova["teacher_id"]:
+            _, polnoe = _initsialy(kt, osnova["obychno"])
+            znachok = ('<span class="obychno" title="обычно у %s">\U0001f501</span>'
+                       % e(v_roditelnom(polnoe)))
+        obychno = f'<span class="ob-kol">{znachok}</span>'
 
     klassy = "para"
     if kt.den and pole(osnova, "net"):
@@ -354,8 +488,8 @@ def para_shk(kt, ryady, pokazat_kab=True):
     return (f'<div class="{klassy}" data-i="{e((osnova["surname"] + " " + osnova["name"]).lower())}"'
             f' data-shk-id="{osnova["id"]}">'
             f'<span class="kto"><b>{e(osnova["surname"])}</b> {e(osnova["name"])}'
-            f'{obychno}</span>'
-            f'{klass}'
+            f'</span>'
+            f'{klass}{obychno}'
             f'<span class="komu">{hvost}</span></div>')
 
 
@@ -441,7 +575,7 @@ def vid_vse(kt):
     # запас 15% плюс место под значок «обычно у» и внутренние отступы.
     imya_style = ('<style>:root{--imya-w:calc(%dch * 0.85 + .5rem)}</style>'
                   % shirina_imeni_ch(kt))
-    return (STILI + imya_style + '<div class="dva">'
+    return (STILI + STILI_KOLONKI + imya_style + '<div class="dva">'
             f'<div class="kol">{shapka}{"".join(para_shk(kt, r) for r in deti[:pol])}</div>'
             f'<div class="kol">{shapka}{"".join(para_shk(kt, r) for r in deti[pol:])}</div></div>')
 
