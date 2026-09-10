@@ -174,10 +174,17 @@ def test_being_mine_and_having_closed_are_both_visible_at_once(
     for zadacha in zadachi[:3]:
         otmetit(marking, mir.student_ids[0], zadacha)
     prepod = mir.teacher_ids[0]
-    connection.execute(
-        "insert into enrollment (student_id, teacher_id, room, slot, valid_from) "
-        "values (?, ?, ?, ?, ?)",
-        (mir.student_ids[0], prepod, "303", 1, "2020-01-01"))
+    # 🔴 СТРОКА НА ОБА СЛОТА, И ЭТО НЕ ИЗБЫТОЧНОСТЬ. С 10.09 «мой» считается ПО ДНЮ:
+    # кондуит спрашивает ту же службу, что распределение (требование владельца —
+    # «изменение в текущем расписании на сегодня не обновляет кабинет и вкладку в
+    # кондуите»). Строка одного слота делала бы результат зависимым от того, на какой
+    # день недели пришёлся прогон, а этот тест — про СЛОЖЕНИЕ двух меток, и день ему
+    # безразличен.
+    for slot in (1, 2):
+        connection.execute(
+            "insert into enrollment (student_id, teacher_id, room, slot, valid_from) "
+            "values (?, ?, ?, ?, ?)",
+            (mir.student_ids[0], prepod, "303", slot, "2020-01-01"))
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection, prepod_id=prepod)),
                   str(mir.sheet_ids[0]))

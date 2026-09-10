@@ -253,17 +253,73 @@ def _prinimayushchie(kt, den: str) -> dict:
         "order by e.slot, t.name",
         (den, den)).fetchall()
 
+    # 🔴 СЛОЙ ЗАНЯТИЯ НАКЛАДЫВАЕТСЯ ТОЙ ЖЕ СЛУЖБОЙ, ЧТО СЧИТАЕТ РАСПРЕДЕЛЕНИЕ.
+    # Владелец 10.09: «в распределении поменялся список школьников, а в кондуите нет,
+    # это неправильно». Так и было: запрос выше — ЧИСТЫЙ `enrollment`, то есть
+    # постоянное распределение, и ни отклонений дня, ни отсутствующих преподавателей
+    # он не видел. Надю отмечали отсутствующей — в распределении её дети оставались
+    # без принимающего, а в кондуите продолжали носить её инициалы и считались её.
+    #
+    # Второй запрос за тем же фактом здесь заводить НЕЛЬЗЯ — это ровно та болезнь,
+    # которую в этом же файле уже лечили для кабинета (см. комментарий выше: источников
+    # было ЧЕТЫРЕ, и 07.09 это стоило владельцу страницы, спорившей сама с собой).
+    # Поэтому спрашивается ТА ЖЕ `SostavService.sostav(den)`, которой отвечает
+    # распределение, и её ответ ПЕРЕКРЫВАЕТ постоянные строки ЭТОГО дня.
+    #
+    # Строки ДРУГОГО слота (второго дня недели) остаются из `enrollment` намеренно:
+    # служба отвечает про ОДИН день, и подменять её ответом про другой было бы третьей
+    # правдой вместо второй.
+    from core.services.sostav_na_den import SostavService, slot_of
+    from infra.enrollment_repo import SqliteEnrollmentRepo
+    from infra.room_repo import SqliteAttendance, SqliteSessions
+    from veb.razdely.zanyatie import otsutstvuyushchie_prepodavateli
+
+    slot_dnya = slot_of(den)
+    segodnya_po_sluzhbe = {}
+    if slot_dnya is not None:
+        sostav = SostavService(
+            enrollment=SqliteEnrollmentRepo(kt.c),
+            sessions=SqliteSessions(kt.c),
+            attendance=SqliteAttendance(kt.c),
+            otsutstvuyushchie_prepoda=lambda d: otsutstvuyushchie_prepodavateli(kt.c, d),
+        ).sostav(den)
+        segodnya_po_sluzhbe = {m.student_id: m.segodnya for m in sostav.mesta}
+
+    imena_prepodov = {r["id"]: (r["name"], r["gruppa"]) for r in
+                      kt.c.execute("select id, name, gruppa from teachers")}
+
     kabinety = {}
+    vybyli = set()          # у кого сегодня принимающего нет вовсе — им прочерк
     po_shkolniku = defaultdict(list)
     for r in ryady:
         prepod = r["teacher_id"]
         if prepod not in kabinety:
             kabinety[prepod] = kabinet_na_datu(kt.c, prepod, den)
+        imya, gruppa = r["name"], r["gruppa"]
+        if r["slot"] == slot_dnya and r["student_id"] in segodnya_po_sluzhbe:
+            # Этот день служба уже посчитала — её ответ сильнее постоянной строки.
+            po_sluzhbe = segodnya_po_sluzhbe[r["student_id"]]
+            if po_sluzhbe is None:
+                # 🔴 ПРИНИМАЮЩЕГО НА СЕГОДНЯ НЕТ — ШКОЛЬНИК ВЫБЫВАЕТ ИЗ РАЗМЕТКИ ЦЕЛИКОМ,
+                # А НЕ ТОЛЬКО СТРОКОЙ ЭТОГО ДНЯ. У каждого ребёнка в `enrollment` ДВЕ
+                # строки — понедельник и четверг, — и пропуск одной оставлял инициалы
+                # ВТОРОЙ: Надю отмечали отсутствующей на четверг, а кондуит показывал
+                # её же из понедельничной строки. Замерено: три ребёнка, счётчик 3 → 3.
+                # Кондуит рисуется НА ДАТУ, и про эту дату ответ службы один — прочерк.
+                vybyli.add(r["student_id"])
+                continue
+            if po_sluzhbe != prepod:
+                prepod = po_sluzhbe
+                imya, gruppa = imena_prepodov.get(prepod, (imya, gruppa))
+                if prepod not in kabinety:
+                    kabinety[prepod] = kabinet_na_datu(kt.c, prepod, den)
         po_shkolniku[r["student_id"]].append(
-            (r["slot"], prepod, r["name"], r["gruppa"], kabinety[prepod]))
+            (r["slot"], prepod, imya, gruppa, kabinety[prepod]))
 
     razmetka = {}
     for student_id, stroki in po_shkolniku.items():
+        if student_id in vybyli:
+            continue        # прочерк рисует `_prin`, ровно как в распределении
         # Один и тот же принимающий в обоих слотах — это ОДИН человек и одни инициалы.
         # Разные — двое, и тогда подсказка обязана сказать, кто в какой день, иначе она
         # называет двух людей и не говорит, когда встретишь которого.

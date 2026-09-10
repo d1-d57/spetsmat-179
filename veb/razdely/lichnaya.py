@@ -150,15 +150,43 @@ def deti_na_datu(c, teacher_id: int, den: str) -> list:
     Pupils marked `left` are excluded, by the same predicate
     `veb/razdely/shkolniki.shkolniki` uses — four of the 57 rows in `students`.
     """
+    # 🔴 СПРАШИВАЕТСЯ ТА ЖЕ СЛУЖБА, ЧТО СЧИТАЕТ РАСПРЕДЕЛЕНИЕ. Здесь стоял ЧИСТЫЙ
+    # `enrollment`, то есть постоянное распределение, и правка на СЕГОДНЯ сюда не
+    # доходила вовсе. Владелец 10.09: «изменение в текущем расписании на сегодня не
+    # обновляет кабинет и вкладку в кондуите». Замерено на живой базе: в карточке
+    # кабинета стоял Домра, а в распределении на тот же день — Левченко.
+    #
+    # Второй запрос за тем же фактом заводить нельзя — это та же болезнь, что уже
+    # лечили в кондуите для кабинета (там источников было ЧЕТЫРЕ, и 07.09 это стоило
+    # владельцу страницы, спорившей сама с собой). Поэтому ответ даёт
+    # `SostavService.sostav(den)`, и он же отвечает распределению.
+    from core.services.sostav_na_den import SostavService, slot_of
+    from infra.enrollment_repo import SqliteEnrollmentRepo
+    from infra.room_repo import SqliteAttendance, SqliteSessions
+    from veb.razdely.zanyatie import otsutstvuyushchie_prepodavateli
+
+    if slot_of(den) is None:
+        return []          # не учебный день: постоянных строк не применяется ни одной
+
+    sostav = SostavService(
+        enrollment=SqliteEnrollmentRepo(c),
+        sessions=SqliteSessions(c),
+        attendance=SqliteAttendance(c),
+        otsutstvuyushchie_prepoda=lambda d: otsutstvuyushchie_prepodavateli(c, d),
+    ).sostav(den)
+    moi = {m.student_id for m in sostav.mesta if m.segodnya == teacher_id}
+    if not moi:
+        return []
+    # Имена берутся отдельным запросом: служба отвечает про РАСКЛАДКУ, а не про то,
+    # как человека зовут, и смешивать эти два вопроса в одном порту незачем.
+    mesta = ",".join("?" * len(moi))
     return c.execute(
-        """
-        select distinct s.id, s.surname, s.name
-        from enrollment e
-        join students s on s.id = e.student_id
-        where e.teacher_id = ?
-          and e.valid_from <= ? and ? < e.valid_to
+        f"""
+        select s.id, s.surname, s.name
+        from students s
+        where s.id in ({mesta})
           and (s.status is null or s.status <> 'left')
         order by s.surname, s.name
         """,
-        (teacher_id, den, den),
+        tuple(sorted(moi)),
     ).fetchall()
