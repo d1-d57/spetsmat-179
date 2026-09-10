@@ -993,14 +993,23 @@ def stili(kt) -> str:
 #s-kond .kond td[data-u]{{cursor:pointer}}
 #s-kond .kond td[data-u]:hover{{background:var(--accent-soft)}}
 #s-kond .kond td[data-u].zhdyot{{opacity:.5}}
-#s-kond .kond-verh{{display:flex;align-items:baseline;justify-content:space-between;
-  gap:1.5rem;flex-wrap:wrap}}
-/* Та же кнопочная форма, что и у «только мои» — новый цвет не заводится. */
-#s-kond .vnesti-knopka{{display:inline-block;margin-left:1rem;font-family:var(--sans);
-  font-weight:600;font-size:.95rem;color:var(--accent);padding:.35em 1rem;
-  border:1px solid var(--accent);border-radius:8px;text-decoration:none}}
-#s-kond .vnesti-knopka:hover{{background:var(--accent-soft)}}
-#s-kond .kond-moi{{cursor:pointer;font-family:var(--sans);font-weight:600;font-size:1rem;
+#s-kond .kond-verh{{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}}
+/* 🔴 «ВНЕСТИ ЗАДАЧИ» — САМАЯ БОЛЬШАЯ КНОПКА СТРАНИЦЫ. Владелец 10.09: «это самая
+   важная кнопка, она не должна ютиться где-то в рандомном месте» (H4.2). Поэтому
+   она ЗАЛИТА, а не обведена: обведённых кнопок на этой полосе ещё три — «8 класс»,
+   «9 класс», «только мои», — и четвёртая такая же не была бы главной ни на чём,
+   кроме кегля. Заливка `--accent-soft` и рамка `--accent` — ровно то, чем на этой
+   же полосе помечена ВЫБРАННАЯ кнопка класса, то есть приём страницы, а не новый.
+   Ни одного нового цвета. */
+#s-kond .vnesti-knopka{{display:inline-block;font-family:var(--sans);
+  font-weight:700;font-size:1.2rem;color:var(--accent);padding:.45em 1.3rem;
+  background:var(--accent-soft);border:2px solid var(--accent);border-radius:10px;
+  text-decoration:none;white-space:nowrap}}
+#s-kond .vnesti-knopka:hover{{color:var(--panel);background:var(--accent)}}
+/* «Только мои» уходит к правому краю полосы: это фильтр, а не действие, и место
+   действий — слева, у заголовка. */
+#s-kond .kond-moi{{margin-left:auto;cursor:pointer;font-family:var(--sans);
+  font-weight:600;font-size:1rem;
   color:var(--muted);padding:.35em 1rem;border:1px solid var(--rule);border-radius:8px;
   white-space:nowrap}}
 #s-kond .kond-moi::before{{content:"☐\\00a0"}}
@@ -1369,13 +1378,18 @@ def razdel(kt) -> str:
 
     return (f'<section class="str holst" id="s-kond" data-org="videt-konduit">'
             f'{galka}{radio}'
-            f'<div class="kond-verh"><div>'
+            f'<div class="kond-verh">'
             f'<h1>Кондуит</h1>'
             # 🔴 КНОПКА «ВНЕСТИ ЗАДАЧИ» — САМЫЙ ДОРОГОЙ ЗАХОД ВОЛНЫ (владелец 09.09):
             # текст/фото/голос → гипотеза → подтверждение → запись. Ссылка, а не форма
             # тут же, по той же причине, по которой кондуит не несёт своего JS
             # (`razdel.__doc__`): раздел целиком снимается со страницы гостя по
             # `data-org`, и второй, пишущий, механизм внутри него — не его дело.
+            # 🔴 КНОПКА СТОИТ НА СТРОКЕ ЗАГОЛОВКА, А НЕ ПОД НИМ — ПРАВКА 10.09 (H4.2).
+            # Раньше `<h1>` и ссылка лежали в общей обёртке `<div>`, а `<h1>` —
+            # блок: кнопка неизбежно падала на следующую строку и оказывалась
+            # «где-то в рандомном месте», как владелец и сказал. Обёртка снята,
+            # и оба стали элементами одной флекс-полосы.
             f'<a class="vnesti-knopka" href="/vnesti">Внести задачи</a>'
-            f'</div>{metka_galki}</div>'
+            f'{metka_galki}</div>'
             f'{klassy}{slovar}{vkladki}{panely}{istoria}</section>')
