@@ -142,6 +142,79 @@ DRAKON_SKRIPT = r"""
 </script>"""
 
 
+#: The card of the nearest lesson, enlarged onto a panel of its own.
+#:
+#: 🔴 THESE RULES LIVE HERE AND NOT IN THE STYLESHEET BECAUSE THE STYLESHEET IS OUT
+#: OF THE ZONE. `veb/obshchee/karkas.py` holds `.blok-listok` and belongs to the
+#: заход `kanon-verstki`; this file may not edit it. A `<style>` returned by the
+#: section itself is the way this project already overrides the canon from inside a
+#: section — `veb/razdely/verstka_stili.STILI` and `veb/razdely/konduit.stili()` do
+#: exactly this, and a `<style>` element inside `<body>` is valid HTML5 and applies
+#: like one in `<head>`. Every selector below names a class the canon already
+#: defines; nothing here invents a visual language.
+#:
+#: 🔴 IT IS EMITTED ABOVE `<div class="blok-listok">`, AND THAT POSITION IS PART OF
+#: THE MACHINERY. `tools/sobrat_stranicu.proverit_shemu()` reads the slice of markup
+#: FROM `<div class="blok-listok">` TO `<div class="blok-vedut">` and refuses to
+#: build the page if it finds `<b>`, `class="tihoe"`, `class="net"`, `class="gr"`,
+#: `class="kab"` or `class="ver"` in it. A stylesheet placed inside that slice would
+#: be read as card content. Outside it, the lock is untouched — and it stays
+#: untouched by what these rules DO, too: they change only size, spacing and
+#: background, and add neither a weight, nor a colour, nor a plate.
+#:
+#: WHAT THE OWNER ASKED FOR, 09.09, in his own words: *«я бы сделал такую заглушку
+#: на главной странице… прямо на каком-то другом фоне, где большими буквами написал
+#: бы Следующий спецмат… там было бы написано просто: четверг, 10 сентября,
+#: 13:10–15:00, листок Деревья и номера кабинетов для трёх групп. Я бы его
+#: растянул раза в два по сравнению с тем, как он сейчас устроен»*.
+STILI_SPETSMAT = """
+<style>
+/* Вдвое крупнее: канон держит карточку на `clamp(1.02rem,1.15vw,1.24rem)`,
+   здесь — вдвое от него, и все её строки набраны от этого одного кегля. */
+.blok-listok{margin:2.2rem 0 0;width:auto;max-width:100%;
+  font-size:clamp(2.04rem,2.3vw,2.48rem);
+  background:var(--panel);border:1px solid var(--rule);border-radius:18px;
+  padding:1.5rem 2rem 1.7rem}
+/* Подпись — та самая «большими буквами Следующий спецмат». Она набрана
+   служебным серым каркаса (`.zag2`), то есть тем же вторым цветом, который
+   схема карточки разрешала и раньше; растёт только кегль. */
+.blok-listok .zag2{font-size:.46em;letter-spacing:.13em;margin-bottom:.35rem}
+/* Название листка остаётся главным словом, но кратность к базе уменьшена:
+   прежние 2.55em от вдвое большего кегля вылезли бы за колонку. */
+.listok-tema{font-size:1.6em;line-height:1.1}
+.listok-nom{font-size:.5em;vertical-align:.55em}
+/* Строки «когда» и «кабинеты» — служебные, мельче названия, но крупнее, чем
+   были: их читают издалека, стоя. */
+.listok-kogda{font-size:.6em;margin-top:.2rem}
+.listok-kab{font-size:.55em;margin-top:.5rem}
+.listok-moyo{font-size:.5em}
+/* 🔴 ЛИЧНАЯ СТРОКА ДОБАВЛЯЕТСЯ К ОБЩЕЙ, А НЕ ЗАМЕНЯЕТ ЕЁ. Канон прячет строку
+   трёх кабинетов у того, кто вошёл (`.blok-listok:has(.listok-moyo)
+   .listok-obshchij{display:none}` в `karkas.py`), а владелец 09.09 просил в этом
+   блоке ровно «номера кабинетов для трёх групп», и уже потом — «вошедшему
+   добавляется его кабинет и список его школьников». Добавляется, то есть обе
+   строки. Селектор повторён слово в слово, чтобы силы были равны: при равной
+   силе побеждает то правило, что стоит в документе ниже, а этот `<style>`
+   стоит ниже головного. Разметку это не трогает, а значит и побайтовую сверку
+   каркаса — тоже. */
+.blok-listok:has(.listok-moyo) .listok-obshchij{display:block}
+/* Канон запрещает этой строке переноситься (`white-space:nowrap`), а на вдвое
+   большем кегле «понедельник, 14 сентября · 14:15—15:55» в колонку не влезает
+   и даёт горизонтальную прокрутку всей странице — то, что гейт вёрстки считает
+   красным. Перенос по словам, а не сжатие кегля. */
+.listok-kogda,.listok-stroka{white-space:normal !important}
+/* Ссылка в свой кабинет. Стоит ПОД карточкой, а не в ней: внутри она была бы
+   вторым цветом на закреплённой схеме. */
+.moj-kabinet{display:inline-block;align-self:flex-start;margin:.9rem 0 0;
+  font-family:var(--sans);
+  font-size:1.15rem;font-weight:600;color:var(--accent);text-decoration:none;
+  padding:.45em 1.1em;border-radius:10px;background:var(--accent-soft)}
+.moj-kabinet:hover{text-decoration:underline}
+@media(max-width:940px){.blok-listok{font-size:clamp(1.5rem,4.6vw,2rem);
+  padding:1.1rem 1.2rem 1.3rem}}
+</style>"""
+
+
 # ── ЧТО СТОИТ НА ГЛАВНОЙ ────────────────────────────────────────────────
 # Кабинеты ближайшего занятия — по группам, одной строкой. Неизвестные не
 # выдумываются: их просто нет в строке.
@@ -210,6 +283,19 @@ def razdel(kt) -> str:
                   else ' · на сегодня никого не записано')
         moyo_html = (f'\n          <p class="listok-kab listok-moyo" '
                      f'data-org="videt-svoyo">{_kab_txt}{_hvost}</p>')
+
+    # 🔴 ЕДИНСТВЕННАЯ ССЫЛКА НА `/kabinet`, КОТОРУЮ ЭТОТ ЗАХОД МОЖЕТ ПОСТАВИТЬ.
+    # Пункт меню «Кабинет» рядом с «Класс / Листки / Распределение / Кондуит»
+    # живёт в `veb/obshchee/karkas.py::obolochka()`, вне зоны этого захода (разбор
+    # и адрес долга — в `## ВОПРОСЫ` файла-захода). Без этой ссылки страница
+    # `/kabinet` была бы достижима только входом и адресной строкой: вошедший
+    # преподаватель, ушедший с неё на заглавную, обратно не вернулся бы.
+    # Стоит ПОД карточкой, а не внутри: внутри она была бы вторым цветом на
+    # схеме, которую стережёт `proverit_shemu()`.
+    ssylka_v_kabinet = ""
+    if kt.prepod_id is not None:
+        ssylka_v_kabinet = ('\n        <a class="moj-kabinet" href="/kabinet" '
+                            'data-org="videt-svoyo">Мой кабинет →</a>')
     tekushchij_listok = tekushchij()
 
     # ── ДАННЫЕ ДЛЯ СТРАНИЦЫ КЛАССА ──────────────────────────────────────────
@@ -250,7 +336,7 @@ def razdel(kt) -> str:
                  for kod in ("В", "Д", "Н") if kt.kabinety_dnya["pn"].get(kod)]
     kabinety_podpis = ("кабинеты: " + " · ".join(izvestnye)) if izvestnye \
         else '<span class="net">кабинеты уточняются</span>'
-    return f"""<section class="str holst" id="s-start">
+    return f"""<section class="str holst" id="s-start">{STILI_SPETSMAT}
   <!-- 🔴 КРИВАЯ ЛЕЖИТ ПОД ВСЕЙ СТРАНИЦЕЙ И ВЫХОДИТ ЗА КРАЯ, а текст стоит НА ней.
        Две колонки «слева текст, справа картинка» владелец назвал ужасной вёрсткой,
        и он прав: так картинка не взаимодействует с текстом, а стоит рядом. Здесь
@@ -279,11 +365,11 @@ def razdel(kt) -> str:
              карточка, а не как четыре разных куска. -->
         <div class="blok-listok">
           <span class="zag2">следующий спецмат</span>
-          <p class="listok-kogda">{e(kt.DNI[kt.blizh][3])} {e(kt.po_russki_kratko(kt.DNI[kt.blizh][2]))}
+          <p class="listok-kogda">{e(kt.DNI[kt.blizh][0])}, {e(kt.po_russki(kt.DNI[kt.blizh][2]))}
             · {VREMYA[kt.blizh]}</p>
           <p class="listok-stroka">{listok_stroka}</p>
           <p class="listok-kab listok-obshchij">{kabinety_skoro}</p>{moyo_html}
-        </div>
+        </div>{ssylka_v_kabinet}
 
         <div class="blok-vedut">
           <span class="zag2">Кто ведёт</span>
