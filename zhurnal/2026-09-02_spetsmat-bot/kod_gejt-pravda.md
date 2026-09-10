@@ -356,6 +356,61 @@ sees in the browser, and I do NOT touch `veb/**` — the clipping itself is a
 neighbour's zone (G3, G5). My deliverable is a gate that goes RED on today's live
 page, not a green page.
 
+---
+
+### ПЛАН ПРОДОЛЖЕНИЯ ПОСЛЕ ОБРЫВА — ПРАВКА 1 (центрирование)
+
+Everything above this line is the FIRST task and it is finished, merged and reported.
+What follows is `ПРАВКА 1` at the bottom of this file — a new rule of the canon:
+the gate must go RED on `text-align:center`.
+
+**Probe run first, before any edit** (`scratchpad/proba_centr2.py`, live base,
+13 measurements). It says how big the job is and settles the exceptions question
+with numbers instead of an argument:
+
+```
+гость/школьникам      центрировано   0
+гость/принимающим     центрировано  14   td.tg  «Н»/«В»/«Д»
+гость/группы В,Д,Н     центрировано   0
+гость/класс           центрировано   0
+орг/школьникам        центрировано  54   span.kl-kol «9Л»
+орг/принимающим       центрировано  14   td.tg
+орг/группа В/Д/Н      центрировано 20/15/13  span.kl-kol + input.kab-inp
+орг/класс             центрировано   2   button#sbrosit, button#sohranit
+орг/кондуит           центрировано 1199  td (1095, БЕЗ текста), td.vsyo «✓» (39),
+                                          th.zn «1а◦9» (21), две кнопки
+```
+
+Steps, each committed on its own:
+
+1. **CHECK 5 «ЦЕНТР» in `tools/gejt_verstki.py`.** Judge the RENDER
+   (`getComputedStyle(el).textAlign`), never the markup — centering arrives by
+   inheritance and by class alike. Report the ROOT of a centered subtree (the
+   element whose parent is not centered), so one CSS rule gives one finding and
+   not four hundred. `text-align-last:center` counted too: it centers the same
+   text by another property and would otherwise be a way around the gate.
+2. **EXCEPTIONS — one list, one place, a name and a reason on each.** The owner
+   named exactly ONE: the task number in the conduit cell (H4.6), accepted 11:3x.
+   That is `#s-kond .kond th.zn` (`veb/razdely/konduit.py:988`). Nothing else goes
+   in — «сомневаюсь → пусть краснеет».
+3. **THE MEASUREMENT BOUNDARY, stated out loud and not as an exception:** an
+   element with no visible text of its own centers nothing a reader can see, and
+   there is nothing to quote in a report. That is what drops the 1095 empty
+   conduit cells — not a favour to the conduit, but the same rule everywhere. It
+   goes into the printed «НЕ ПРОВЕРЯЕТСЯ» list.
+4. **SELF-TEST `--slomat` gets a fifth breakage**, and it reports whether it
+   landed, like the other four.
+5. **TWO-STATE TEST** in `tests/gejt/`, on the real page: centering added → RED,
+   removed → back to the number that was there BEFORE (never to zero — the live
+   page already centers things).
+6. **RUN ON THE LIVE SITE and NAME what it found**, path + text, into `## ОТЧЁТ`.
+   The layout fixes themselves belong to `raspredelenie-kolonki`, not to me.
+7. Verifier subagent (§3), then merge into `main` myself and post-check from the
+   main folder.
+
+Assumption stated before the work: I do NOT touch `veb/**`. My deliverable is a
+gate that goes RED on today's centering, not a page without it.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 
 1. `.para.krasn` (подсвеченная строка школьника без принимающего) обрывает свою подсветку на 37 px раньше конца строки: рамка 48..667, а метка «отсутствует» стоит 619..704 при непрозрачности 1 — то есть половина метки лежит ВНЕ подсветки. Это прямо противоречит комментарию в самом файле: «Подсветка не должна обрывать строку по краям колонки: она идёт от края до края». Видно глазом у организатора на вкладке «школьникам», 8 строк. Зона соседа — не трогал; новая проверка гейта краснеет на этом сегодня.
@@ -430,7 +485,21 @@ $ git --no-optional-locks branch --no-merged main | grep -c zahod/
 
 ## ОТЧЁТ — (заполняет исполнитель)
 
-**ПРАВКИ ПРОЧИТАНЫ:** блок `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` пуст — правок не было.
+**ПРАВКИ ПРОЧИТАНЫ: 1.** Блок `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` сам по себе пуст
+(`<правок нет>`), но `ПРАВКА 1` лежит НИЖЕ, внутри `## ФАЗА ПРИЁМКИ`: «ГЕЙТ ОБЯЗАН
+КРАСНЕТЬ НА `text-align:center`». Прочитана, исполнена, отчёт — в самом низу этой
+секции, часть «ПРАВКА 1 · ЦЕНТРИРОВАНИЕ».
+
+🔴 **ЭТО ПЕРЕЗАПУСК ПОСЛЕ ОБРЫВА. НА ЧЁМ ОСТАНОВИЛСЯ ПРОШЛЫЙ ПРОГОН И С ЧЕГО Я
+ПРОДОЛЖИЛ.** Прошлый прогон дошёл до конца ПЕРВОЙ задачи и закрыл её целиком:
+семь коммитов работы + два коммита правки тестов, влитие в `main` (`87c6a9a`),
+зелёная пост-проверка из главной папки, заполненные `## ПЛАН`, `## ВОПРОСЫ`,
+`## ГИГИЕНА ВХОДА` и разделы 1–11 этого отчёта. Оборвался он ПОСЛЕ этого, на
+`ПРАВКА 1` — новой задаче, дописанной владельцем в конец файла уже после выдачи:
+в `git log` нет ни одного коммита про центрирование, а в `tools/gejt_verstki.py`
+не было ни одного упоминания `text-align`. Проверено двумя командами до всякой
+работы (`git log --oneline -20`, `grep text-align tools/gejt_verstki.py`).
+Продолжил ровно с `ПРАВКА 1`; первую задачу не переделывал и не трогал.
 
 ### 1. ПРИЧИНА ЛОЖНО-ЗЕЛЁНОГО, ОДНОЙ ФРАЗОЙ
 
