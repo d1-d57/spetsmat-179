@@ -49,7 +49,7 @@ BAZA_ENV = "SPETSMAT_BAZA"
 BAZA_NA_SERVERE = "/srv/spetsmat/data/spetsmat.db"
 
 
-class IstochnikNeNazvan(SystemExit):
+class IstochnikNeNazvan(SystemExit, Exception):
     """Refusal: nobody said WHICH database, so there is no honest answer to give.
 
     🔴 IT INHERITS FROM ``SystemExit`` ON PURPOSE.  Twenty files under ``tools/``,
@@ -59,6 +59,17 @@ class IstochnikNeNazvan(SystemExit):
     of the twenty call sites, which is twenty places to forget one.  ``SystemExit``
     carrying a message prints that message to stderr, exits non-zero, and shows no
     traceback, in all twenty at once.
+
+    🔴 AND IT INHERITS FROM ``Exception`` TOO, WHICH IS NOT BELT AND BRACES BUT A BUG
+    THIS CLASS ALREADY CAUSED.  ``SystemExit`` alone descends from ``BaseException``,
+    so it walks straight THROUGH every ``except Exception`` guard in the project -- and
+    this codebase has guards that exist for exactly the opposite reason: the "rebuild
+    the public page quietly" path swallows failures on purpose, because the write to
+    the database has already happened and a 500 there would say "not saved" over saved
+    data.  With ``SystemExit`` alone that guard stopped guarding.  The dual base keeps
+    both properties: the interpreter still treats it as an exit (message on stderr,
+    non-zero code, no traceback), and ordinary error handling still catches it.
+    Measured, not reasoned: ``tests/veb/test_kabinet.py`` fell over on precisely this.
     """
 
 

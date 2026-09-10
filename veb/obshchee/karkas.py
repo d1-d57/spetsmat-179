@@ -265,8 +265,15 @@ def _razobrat_rezhim(rezhim: str) -> tuple:
         return rol, None
 
 
-def sobrat_kontekst(rezhim: str = "gost", den=None) -> Kontekst:
+def sobrat_kontekst(rezhim: str = "gost", den=None, baza=None) -> Kontekst:
     """Read the database once and hand back everything the sections will need.
+
+    🔴 `baza` — НЕ УДОБСТВО, А ЗАКРЫТИЕ ВТОРОГО ИСТОЧНИКА. Оболочка сайта читала
+    базу САМА, модульной константой, и потому обслуживала запрос НЕ ИЗ ТОГО файла,
+    который назвали серверу: один запрос — две базы, и ни одна строка страницы об
+    этом не говорила. Пока обе указывали на `data/spetsmat.db`, расхождение было
+    невидимо; стоило базе получить адрес — оно вылезло сразу. Теперь базу называет
+    тот, кто её знает, а `None` значит «спроси источник» (`config.DB_PATH`).
 
     This is the only place that talks to the database on behalf of the shell.
     A section that needs a query of its own owns that query — see
@@ -295,7 +302,7 @@ def sobrat_kontekst(rezhim: str = "gost", den=None) -> Kontekst:
     mogu = VOZMOZHNOSTI[rol]
 
 
-    c = sqlite3.connect(data())
+    c = sqlite3.connect(str(baza) if baza else data())
     c.row_factory = sqlite3.Row
 
 

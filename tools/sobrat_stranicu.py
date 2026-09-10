@@ -70,7 +70,7 @@ from veb.razdely.shkolniki import vid_vse  # noqa: E402
 
 
 def sobrat_html(rezhim: str = "gost", svodka: list | None = None,
-                den: str | None = None) -> str:
+                den: str | None = None, baza=None) -> str:
     """Собирает страницу и ВОЗВРАЩАЕТ её. Один рендерер на все уровни доступа.
 
     🔴 ЗДЕСЬ ЖИВЁТ ГЛАВНОЕ РЕШЕНИЕ ЭТОГО ФАЙЛА: гость и организатор смотрят на
@@ -88,7 +88,10 @@ def sobrat_html(rezhim: str = "gost", svodka: list | None = None,
     # `den` — страница ОДНОГО ЗАНЯТИЯ: те же вкладки, но на дату и одной колонкой.
     # Разделы «Класс» и «Листки» на ней не собираются: их расписание читает
     # `kt.DNI`, а он тут из одного дня (см. `karkas.sobrat_kontekst`).
-    kt = sobrat_kontekst(rezhim, den=den)
+    # `baza` едет насквозь: страницу собирают из ТОЙ базы, которую назвал
+    # вызывающий, а не из той, которую оболочка нашла бы сама. Разбор —
+    # `veb/obshchee/karkas.sobrat_kontekst`.
+    kt = sobrat_kontekst(rezhim, den=den, baza=baza)
 
     l9 = [f for _, _, vs in L9 for _, f in vs if est("listki", f)]
     l8 = [f for _, _, f in L8_PERVOE + L8_VTOROE if est("listki-8kl", f)]

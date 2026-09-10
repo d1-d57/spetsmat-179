@@ -272,8 +272,17 @@ def main() -> int:
                         help="whose passwords to mint; the others are left untouched")
     argumenty = razbor.parse_args()
 
-    import config
-    db_path = (Path(argumenty.db) if argumenty.db else config.DB_PATH).resolve()
+    # Назвали базу флагом — источник не спрашиваем вовсе: у вызывающего адрес уже
+    # есть. Не назвали — спрашиваем, и корень репозитория кладём в `sys.path` сами:
+    # файл запускают из `tools/`, и своим корнем он видит `tools/`.
+    if argumenty.db:
+        db_path = Path(argumenty.db).resolve()
+    else:
+        koren = str(Path(__file__).resolve().parent.parent)
+        if koren not in sys.path:
+            sys.path.insert(0, koren)
+        import config
+        db_path = config.DB_PATH.resolve()
     katalog = Path(argumenty.secrets)
     fajl_heshej = katalog / "veb-lichnye-paroli.json"
     spiski = {

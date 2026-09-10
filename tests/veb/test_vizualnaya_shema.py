@@ -12,12 +12,30 @@
 
 from __future__ import annotations
 
+import pytest
+
+import config
 from tools.sobrat_stranicu import (
     SHEMA_KARTOCHKI_ZAPRETY,
     _kartochka,
     proverit_shemu,
     sobrat_html,
 )
+
+# 🔴 ЭТИ ПРОВЕРКИ СМОТРЯТ НА ЖИВУЮ СТРАНИЦУ, А ЖИВАЯ СТРАНИЦА СОБИРАЕТСЯ ИЗ ЖИВОЙ
+# БАЗЫ. Пока `data/spetsmat.db` лежала в репозитории, они были зелёными «сами
+# собой» — и это была не проверка вёрстки, а проверка того, что в git лежит файл с
+# записями 53 детей. Файл ушёл по решению владельца 10.09; источник теперь называет
+# переменная среды, и без неё собирать нечего. Пропуск ЧЕСТНЕЕ зелёного: он говорит
+# «не проверено», а не «проверено и хорошо».
+try:
+    _BAZA = config.DB_PATH
+except SystemExit:
+    _BAZA = None
+pytestmark = pytest.mark.skipif(
+    _BAZA is None or not _BAZA.is_file(),
+    reason="источник не назван (%s) или названной базы нет на диске — "
+           "живую страницу собирать не из чего" % config.BAZA_ENV)
 
 
 def test_zhivaya_stranica_shemu_ne_narushaet():
