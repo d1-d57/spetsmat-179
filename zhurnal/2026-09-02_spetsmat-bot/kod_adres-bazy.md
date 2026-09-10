@@ -348,6 +348,56 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Read anchors only** (`config.py`, `core/istochnik.py`, `.gitignore`, `tools/vnesti_s_bumagi.py`,
+`infra/db.py`, the twenty readers, `tests/conftest.py`). Baseline pytest captured BEFORE any edit.
+
+**Baseline pytest (entry number, printed first as the criterion demands):**
+`44 failed, 1272 passed, 14 skipped, 1 xfailed, 43 errors in 304.70s` (the 43 errors are
+`playwright` / missing browser and pre-existing `tests/room/*` errors — inherited, not mine).
+
+**Assumptions I state out loud before writing code (the criterion may fail on them):**
+
+* A1. `config.DB_PATH` is read at IMPORT time in two places (`tools/export_xlsx.py:65`
+  `EXPORT_DIR = config.DB_PATH.parent`, `veb/sostoyanie.py:18` default argument). A refusal
+  raised on attribute access therefore fires at import, not at use. Both are in my zone and
+  I make them lazy — that is part of step 1, not a drive-by improvement.
+* A2. The refusal is raised as a `SystemExit` subclass. That gives `rc≠0` and the two legal
+  addresses on stderr with NO traceback, for all twenty readers at once, without wiring a
+  `try/except` into each of them. A per-tool wrapper would be twenty places to forget.
+* A3. An UNMARKED base must not be able to claim it is боевая. So migration 011 creates the
+  mark table and seeds exactly one row with `род = тест`, host empty. Боевая is stamped ONCE,
+  on the server, by an explicit command. A copy taken by the regular door stamps `копия` plus
+  where and when it was taken. This is what makes «копия не назовёт себя боевой даже случайно».
+* A4. `боевая` is additionally bound to a HOST: a file stamped `боевая` opened on a machine
+  whose hostname differs from the stamped one is a carried-off copy and is refused. Without
+  the host half, `cp` of the live file inherits the word «боевая».
+* A5. The analyst's list of eight door-less readers is not exactly right and I will not install
+  blindly: `veb/vhod.py` opens no database at all and `core/services/sheets.py` is a pure
+  parser (no `sqlite3`, no `config`). I name in the report who gets the door and who does not.
+
+**Steps, in order, each committed as it finishes (§4):**
+
+1. `config.py`: `DB_PATH` loses its default. `SPETSMAT_BAZA` names the file; absent → refusal
+   naming the server path and «take a copy with the regular door and point at it». Fix A1's two
+   eager readers.
+2. `migrations/011_metka_istochnika.sql`: table `istochnik_metka` (род · хост · когда · откуда),
+   one row, seeded `тест`.
+3. `core/istochnik.py`: read/stamp/verify the mark; `nazvat` prints род; a `боевые` mode that
+   refuses on копия/тест and on боевая stamped for another host. Door `python3 core/istochnik.py`
+   prints path · род · свежесть · вердикт (it already prints the first and third).
+4. `.gitignore` + `git rm --cached data/spetsmat.db`: no database file left in the repository;
+   a test that goes RED if one comes back.
+5. Install the source door on the readers that print numbers to a person; name the ones that do
+   not need it and why.
+6. New tests for all five pairs of the readiness criterion; do not touch
+   `tests/grid/test_konduit_i_raspredelenie_odna_pravda.py` or the case check.
+
+**Where I think the criterion is weak, said before the work and not after:** criterion 1 says
+«любой инструмент, печатающий числа» — I read it as «a tool that reaches `config.DB_PATH`»,
+because a tool given `--db` explicitly HAS an address and refusing it would be wrong. That is
+the reading I implement.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
