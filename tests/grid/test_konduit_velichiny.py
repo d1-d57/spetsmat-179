@@ -1,18 +1,19 @@
-"""Четыре величины на самой странице: разметка, а не только арифметика.
+"""The four величины on the page itself: the markup, and not only the arithmetic.
 
 WHAT THIS FILE CATCHES THAT `test_statistiki.py` CANNOT.  The projections there are pure
-and are already right; the ways this feature breaks after that are all in the wiring:
+and are already right; every way this feature breaks after that is in the wiring:
 
-  * счётчик посчитан по ЧУЖОМУ разрезу — на панели листка стоит годовое число, и оно
-    выглядит совершенно правдоподобно;
-  * строка светится, но признак «свой ребёнок» при этом ПРОПАЛ, потому что классы строки
-    вытеснили друг друга вместо того, чтобы сложиться;
-  * число «сколько сдало» встало в шапку не того столбца — а шапка одна на двадцать один
-    столбец, и сдвиг на единицу читается как совпадение;
-  * инициалы принимающего приехали колонкой, чего владелец прямо не хотел.
+  * the counter computed over SOMEBODY ELSE'S cut -- a whole-year number printed on the
+    row of a листок table, which looks entirely plausible;
+  * the row glows, but the mark «свой ребёнок» has DISAPPEARED, because the two row
+    classes displaced each other instead of adding up;
+  * «сколько сдало» landed in the header of the wrong column -- and there are twenty-one
+    columns under one header, so an off-by-one reads as a coincidence;
+  * the initials of the принимающий arrived as a column, which the owner explicitly did
+    not want.
 
-Каждая из четырёх проверяется на РЕНДЕРЕ секции, собранной тем же вызовом, каким её
-собирает сайт, — `konduit.razdel(kt)`, — на маленьком мире из `seed_world`.
+Each is judged on the RENDER of the section, built by the same call the site builds it
+with -- `konduit.razdel(kt)` -- over a small world from `seed_world`.
 """
 
 from __future__ import annotations
@@ -27,17 +28,17 @@ from veb.obshchee.karkas import Kontekst
 from veb.razdely import konduit
 
 
-#: Один листок: две обязательные, письменная (она тоже обязательна), звезда и обычная.
+#: One листок: two обязательные, one письменная (obligatory as well), a звезда, an обычная.
 LISTOK = ("обязательная", "обязательная", "письменная", "звезда", "обычная")
 
 
-#: Колонки, которые ЖИВАЯ база несёт, а `migrations/` не создаёт: `teachers.gruppa`,
-#: `teachers.kabinet`, `teachers.aktiven`, `students.gruppa`.  Найдено этим заходом
-#: прямым сравнением: на боевой базе они есть (и `veb/razdely/lichnaya.kabinet_na_datu`,
-#: написанная соседним заходом, уже на них опирается), а база, собранная всеми десятью
-#: миграциями с нуля, не имеет ни одной из них.  Здесь они дописываются, чтобы тест
-#: судил ТУ схему, на которой сайт работает; чинится это в `migrations/`, а не тут — не
-#: зона этого захода, и вопрос назван в `## ВОПРОСЫ`.
+#: Columns the LIVE база carries and `migrations/` does not create: `teachers.gruppa`,
+#: `teachers.kabinet`, `teachers.aktiven`, `students.gruppa`.  Found by this заход through
+#: a direct comparison: the live база has them (and `veb/razdely/lichnaya.kabinet_na_datu`,
+#: written by a neighbouring заход, already leans on them), while a database built from all
+#: ten migrations has not one of them.  They are added here so the test judges THE schema
+#: the site actually runs on; the fix belongs in `migrations/`, which is not this заход's
+#: zone, and the question is named in `## ВОПРОСЫ`.
 ZHIVYE_KOLONKI = (
     "alter table teachers add column kabinet text",
     "alter table teachers add column aktiven integer not null default 1",
@@ -48,18 +49,18 @@ ZHIVYE_KOLONKI = (
 
 @pytest.fixture
 def mir(connection):
-    """Пять школьников, один листок, ни одной отметки — отметки ставит сам тест."""
+    """Five pupils, one листок, not a single mark: the marks are written by the test."""
     for zapros in ZHIVYE_KOLONKI:
         connection.execute(zapros)
     return seed_world(connection, students=5, sheets=(LISTOK,))
 
 
 def kontekst(connection, prepod_id=None) -> Kontekst:
-    """`Kontekst` ровно с теми полями, которые кондуит читает.
+    """A `Kontekst` carrying exactly the fields the кондуит reads.
 
-    Собирается здесь руками, а не через `sobrat_kontekst`: та открывает ЖИВУЮ базу
-    проекта по абсолютному пути, и тест, который её позовёт, будет проверять сегодняшние
-    данные школы вместо своего мира.
+    Built by hand rather than through `sobrat_kontekst`: that one opens the LIVE database
+    of the project by absolute path, and a test that called it would be judging today's
+    school data instead of its own world.
     """
     return Kontekst(rezhim="admin", rol="organizator", mogu=frozenset(), c=connection,
                     DNI={}, kabinety_dnya={}, otkuda_kabinet={}, kabinety={}, gruppy={},
@@ -71,7 +72,7 @@ def otmetit(marking, student_id, problem_id, sostoyanie=CellState.SOLVED):
 
 
 def panel(html: str, imya: str) -> str:
-    """Одна вкладка страницы: панели лежат в DOM все сразу и скрыты стилями."""
+    """One tab of the page: the panels all sit in the DOM at once, hidden by CSS."""
     kusok = re.search(r'<section class="vid" id="n-%s">(.*?)</section>' % re.escape(imya),
                       html, re.S)
     assert kusok, "нет панели n-%s" % imya
@@ -79,7 +80,7 @@ def panel(html: str, imya: str) -> str:
 
 
 def schyotchiki(kusok: str) -> list:
-    """Все счётчики обязательных панели, сверху вниз: `(сдано, всего)` или `None`."""
+    """Every obligatory counter of a panel, top to bottom: `(сдано, всего)` or `None`."""
     out = []
     for m in re.finditer(r'<i class="ob-sch( net)?"[^>]*>(.*?)</i>', kusok, re.S):
         if m.group(1):
@@ -95,10 +96,11 @@ def schyotchiki(kusok: str) -> list:
 
 
 def test_the_counter_stands_left_of_every_pupil_on_every_panel(mir, connection, marking):
-    """Пять школьников — пять счётчиков на каждой панели, и ни одним больше.
+    """Five pupils, five counters on every panel, and not one more.
 
-    Панелей три: годовой обзор девятого, годовой обзор восьмого и сам листок. Счётчик,
-    забытый на одной из них, оставляет ровно ту дыру, ради которой величину и заводили.
+    There are three panels: the year overview of the ninth class, the year overview of the
+    eighth, and the листок itself.  A counter forgotten on one of them leaves precisely the
+    hole this величина was introduced to close.
     """
     otmetit(marking, mir.student_ids[0], mir.problems_by_sheet[mir.sheet_ids[0]][0])
     connection.commit()
@@ -113,8 +115,8 @@ def test_the_counter_counts_obligatory_only_and_counts_pismennaya_among_them(
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     uchenik = mir.student_ids[0]
     otmetit(marking, uchenik, zadachi[0])          # обязательная
-    otmetit(marking, uchenik, zadachi[2])          # письменная — тоже обязательная
-    otmetit(marking, uchenik, zadachi[3])          # звезда — не считается вовсе
+    otmetit(marking, uchenik, zadachi[2])          # письменная -- obligatory too
+    otmetit(marking, uchenik, zadachi[3])          # звезда -- never counts at all
     connection.commit()
     schyot = schyotchiki(panel(konduit.razdel(kontekst(connection)),
                                str(mir.sheet_ids[0])))[0]
@@ -122,7 +124,7 @@ def test_the_counter_counts_obligatory_only_and_counts_pismennaya_among_them(
 
 
 def test_a_retracted_obligatory_is_not_counted_as_handed_in(mir, connection, marking):
-    """Сдал и не защитил — это не «сдал», и на экране тоже."""
+    """Handed in and not defended is not «сдал» -- on the screen as well as in the journal."""
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     uchenik = mir.student_ids[0]
     otmetit(marking, uchenik, zadachi[0])
@@ -141,7 +143,7 @@ def test_the_row_glows_exactly_for_the_pupil_who_closed_his_obligatory(
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     for zadacha in (zadachi[0], zadachi[1], zadachi[2]):
         otmetit(marking, mir.student_ids[0], zadacha)
-    # Второй школьник сдал ЗВЕЗДУ и обычную — обязательных не закрыл ни одной.
+    # The second pupil took a ЗВЕЗДА and an обычная -- not one obligatory problem.
     otmetit(marking, mir.student_ids[1], zadachi[3])
     otmetit(marking, mir.student_ids[1], zadachi[4])
     connection.commit()
@@ -152,7 +154,7 @@ def test_the_row_glows_exactly_for_the_pupil_who_closed_his_obligatory(
 
 
 def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marking):
-    """`1д`–`4д` на живой базе именно такие: 99 задач и ни одной обязательной."""
+    """`1д`-`4д` on the live база are exactly like this: 99 problems and no obligatory one."""
     for zapros in ZHIVYE_KOLONKI:
         connection.execute(zapros)
     mir = seed_world(connection, students=3, sheets=(("звезда", "обычная"),))
@@ -165,8 +167,8 @@ def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marki
 def test_being_mine_and_having_closed_are_both_visible_at_once(
     mir, connection, marking
 ):
-    """Два признака СКЛАДЫВАЮТСЯ. Прежняя форма выражения («свой» ИЛИ «чужой») не имела
-    места для третьего класса, и добавить его, не потеряв первый, — это и есть проверка.
+    """The two marks ADD UP.  The previous expression («свой» OR «чужой») had no room for
+    a third class, and adding one without losing the first is the whole of this check.
     """
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     for zadacha in zadachi[:3]:
@@ -187,7 +189,7 @@ def test_being_mine_and_having_closed_are_both_visible_at_once(
 
 
 def shapka(kusok: str) -> list:
-    """Столбцы листка сверху вниз: `(метка, сдало, закрыта ли классом)`."""
+    """The columns of a листок, left to right: `(label, сдало, closed by the class)`."""
     return [(m.group("label"), int(m.group("n")), bool(m.group("zakr")))
             for m in re.finditer(
                 r'<th class="zn">(?P<label>.*?)(?:<i class="pm[^>]*>.</i>)?'
@@ -197,14 +199,14 @@ def shapka(kusok: str) -> list:
 def test_every_column_carries_how_many_took_it_and_the_number_is_per_column(
     mir, connection, marking
 ):
-    """Число стоит у СВОЕГО столбца.
+    """The number stands over ITS OWN column.
 
-    Сдвиг на единицу — самая правдоподобная поломка этой величины: шапка одна на
-    двадцать один столбец, все числа на месте, и ни одно не относится к своей задаче.
-    Поэтому мир нарочно сделан так, что все пять чисел РАЗНЫЕ.
+    An off-by-one is the most plausible way this величина breaks: one header over
+    twenty-one columns, every number present, and not one of them about its own problem.
+    So the world is built on purpose so that all five numbers are DIFFERENT.
     """
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
-    for nomer, zadacha in enumerate(zadachi):        # 0, 1, 2, 3 и 4 сдавших
+    for nomer, zadacha in enumerate(zadachi):        # 0, 1, 2, 3 and 4 solvers
         for uchenik in mir.student_ids[:nomer]:
             otmetit(marking, uchenik, zadacha)
     connection.commit()
@@ -214,7 +216,7 @@ def test_every_column_carries_how_many_took_it_and_the_number_is_per_column(
 
 
 def test_closed_by_the_class_means_MORE_than_three_took_it(mir, connection, marking):
-    """Ровно три — ещё не закрыта; четыре — закрыта. Слова владельца, буквально."""
+    """Exactly three is not closed yet; four is closed.  The words of the owner, literally."""
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
     for uchenik in mir.student_ids[:3]:
         otmetit(marking, uchenik, zadachi[0])
@@ -229,7 +231,7 @@ def test_closed_by_the_class_means_MORE_than_three_took_it(mir, connection, mark
 def test_a_retracted_hand_in_does_not_count_towards_closing_a_problem(
     mir, connection, marking
 ):
-    """Ровно тот случай, ради которого порог и придуман: сдали, но не защитили."""
+    """Exactly the case the threshold exists for: handed in and never defended."""
     zadacha = mir.problems_by_sheet[mir.sheet_ids[0]][0]
     for uchenik in mir.student_ids[:5]:
         otmetit(marking, uchenik, zadacha)
@@ -256,16 +258,16 @@ def zapisat(connection, student_id, teacher_id, slot, room="303",
 def test_the_initials_stand_beside_the_surname_and_not_in_a_column_of_their_own(
     mir, connection
 ):
-    """Решение владельца 09.09 — «не колонкой».
+    """The decision of the owner, 09.09: «не колонкой».
 
-    Проверяется формой: число `<th>` в шапке обязано остаться числом задач плюс один
-    столбец фамилии.  Колонка принимающего прошла бы любую проверку текста.
+    Judged by shape: the number of `<th>` in the header must stay the number of problems
+    plus the one surname column.  A column of принимающие would pass any check on text.
     """
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1)
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
     assert len(re.findall(r"<th[ >]", kusok)) == 1 + len(LISTOK)
-    # А сами инициалы — внутри ячейки фамилии.
+    # And the initials themselves live inside the surname cell.
     yacheyka = re.search(r'<td class="kto">(.*?)</td>', kusok, re.S).group(1)
     assert '<i class="prin"' in yacheyka
 
@@ -283,7 +285,7 @@ def test_the_hover_carries_the_name_the_group_and_the_room(mir, connection):
 
 
 def test_a_pupil_with_no_open_row_gets_a_dash_and_not_a_blank(mir, connection):
-    """Пустое место читается как «забыли нарисовать»; прочерк говорит, что ответа нет."""
+    """A blank reads as «forgot to draw it»; a dash says the question was asked and has no answer."""
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
     nayden = PRIN.findall(kusok)
@@ -292,10 +294,10 @@ def test_a_pupil_with_no_open_row_gets_a_dash_and_not_a_blank(mir, connection):
 
 
 def test_a_row_that_is_already_closed_does_not_name_a_принимающий(mir, connection):
-    """Интервал полуоткрытый: закрытая вчера строка сегодня уже не отвечает.
+    """The interval is half-open: a row closed yesterday does not answer today.
 
-    `valid_to` — это день, С КОТОРОГО строка не действует, и `<=` вместо `<` показал бы
-    вчерашнего принимающего ещё один день.
+    `valid_to` is the day FROM WHICH the row no longer holds, and `<=` in place of `<`
+    would show yesterday's принимающий for one more day.
     """
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1,
             ot="2020-01-01", do="2020-06-01")
@@ -305,7 +307,7 @@ def test_a_row_that_is_already_closed_does_not_name_a_принимающий(mir
 
 
 def test_two_different_принимающих_are_both_named_with_their_days(mir, connection):
-    """Разные люди в понедельник и в четверг — подсказка обязана сказать, кто когда."""
+    """Different people on Monday and on Thursday: the hover must say who is there when."""
     connection.execute("update teachers set name = ?, gruppa = ? where id = ?",
                        ("Андрей Рябичев", "Д", mir.teacher_ids[0]))
     connection.execute("update teachers set name = ?, gruppa = ? where id = ?",
@@ -335,7 +337,7 @@ def test_one_принимающий_in_both_slots_is_one_person_and_one_pair_of_
 
 
 def test_a_one_word_name_keeps_its_word():
-    """«Надя» и «Наталья Амбург» — двое живых принимающих, и «Н.» слило бы их в одно."""
+    """«Надя» and «Наталья Амбург» are two live принимающие, and «Н.» would merge them into one."""
     assert konduit.initsialy("Надя") == "Надя"
     assert konduit.initsialy("Наталья Амбург") == "Н.А."
 
@@ -348,12 +350,12 @@ def grobarij(html: str) -> str:
 
 
 def devyatyj(connection, listki):
-    """Мир, чьи листки кондуит относит к ДЕВЯТОМУ классу.
+    """A world whose листки the кондуит counts as the NINTH class.
 
-    Признак класса кондуит берёт из `veb.razdely.listki.L9` — «номер начинается на 16», —
-    и другого признака в базе нет вовсе. Поэтому листки здесь называются `16…`: тест
-    обязан спрашивать ровно тем же способом, каким спрашивает страница, иначе он проверит
-    вкладку восьмого класса, у которой гробария нет по решению этого захода.
+    The кондуит takes the class from `veb.razdely.listki.L9` -- «the number starts with 16»
+    -- and there is no other mark of it in the база at all.  So the листки here are named
+    `16…`: the test has to ask in exactly the way the page asks, or it would be judging the
+    eighth-class tab bar, which carries no гробарий by this заход's own decision.
     """
     for zapros in ZHIVYE_KOLONKI:
         connection.execute(zapros)
@@ -366,7 +368,7 @@ def devyatyj(connection, listki):
 
 
 def test_with_one_listok_issued_the_grobarij_says_it_is_empty_and_why(connection):
-    """Сегодняшнее состояние боевой базы, воспроизведённое: роздан один листок."""
+    """The state of the live база today, reproduced: exactly one листок has been issued."""
     devyatyj(connection, (LISTOK,))
     connection.commit()
     kusok = grobarij(konduit.razdel(kontekst(connection)))
@@ -379,21 +381,21 @@ def test_with_one_listok_issued_the_grobarij_says_it_is_empty_and_why(connection
 def test_the_previous_listok_falls_in_by_itself_when_the_next_one_is_issued(
     connection, marking
 ):
-    """🔴 ГЛАВНАЯ ПРОВЕРКА ЭТОЙ ВЕЛИЧИНЫ.
+    """🔴 THE CENTRAL CHECK OF THIS ВЕЛИЧИНА.
 
-    Владелец: «гробарий наполнится сам в понедельник, когда 16-й листок станет
-    историческим». Вкладка, которая пуста потому, что в неё вписана пустота, выглядит
-    сегодня ТОЧНО ТАК ЖЕ, как эта, — и в понедельник разница станет видна на занятии.
-    Здесь второй листок раздаётся прямо в тесте, и первый обязан появиться в гробарии
-    без единой правки кода.
+    The owner: «гробарий наполнится сам в понедельник, когда 16-й листок станет
+    историческим».  A tab that is empty because emptiness was written into it looks
+    EXACTLY THE SAME today as this one does -- and the difference would show up on Monday,
+    in front of a class.  Here the second листок is issued inside the test, and the first
+    one has to appear in the гробарий with no edit to the code at all.
     """
     mir = devyatyj(connection, (LISTOK, LISTOK))
     staryj, novyj = mir.sheet_ids
     zadachi = mir.problems_by_sheet[staryj]
-    # Первую задачу взяли четверо — она за порогом и в гробарий не идёт.
+    # Four took the first problem: it is past the threshold and stays out.
     for uchenik in mir.student_ids[:4]:
         marking.set_state(uchenik, zadachi[0], CellState.SOLVED, source="кнопка")
-    # Вторую — двое, и это ровно случай гробария.
+    # Two took the second, which is exactly the гробарий case.
     for uchenik in mir.student_ids[:2]:
         marking.set_state(uchenik, zadachi[1], CellState.SOLVED, source="кнопка")
     connection.commit()
@@ -403,7 +405,7 @@ def test_the_previous_listok_falls_in_by_itself_when_the_next_one_is_issued(
     zadachi_v_grobarii = re.findall(r'<td class="kto">([^<]*)', kusok)
     assert "1.1" not in zadachi_v_grobarii, "четверо сдали — не гробарий"
     assert "1.2" in zadachi_v_grobarii, "двое сдали — гробарий"
-    # Задачи ТЕКУЩЕГО листка в гробарий не попадают, даже если их не сдал никто.
+    # Problems of the CURRENT листок never fall in, even when nobody took them.
     assert not any(z.startswith("2.") for z in zadachi_v_grobarii), zadachi_v_grobarii
 
 
@@ -430,10 +432,11 @@ def test_a_problem_nobody_took_says_so_instead_of_showing_an_empty_cell(
 
 
 def test_versions_of_one_listok_do_not_make_each_other_historical(connection):
-    """`16A`, `16α` и `16ℵ` — один листок в трёх силах и один `issued_at`.
+    """`16A`, `16α` and `16ℵ` are one листок in three strengths and one `issued_at`.
 
-    Сравнение по `ord` объявило бы два из них историческими в день выдачи, и гробарий
-    открылся бы на задачах текущего листка. Это и есть сегодняшняя боевая база.
+    Comparing by `ord` would declare two of them historical on the day they were issued,
+    and the гробарий would open on the problems of the CURRENT листок.  This is the live
+    база as it stands today, not a hypothetical.
     """
     for zapros in ZHIVYE_KOLONKI:
         connection.execute(zapros)
@@ -446,7 +449,7 @@ def test_versions_of_one_listok_do_not_make_each_other_historical(connection):
 
 
 def test_a_listok_row_without_problems_does_not_bury_the_current_one(connection):
-    """Ряд следующего листка, чьи задачи ещё не внесены, — это ещё не розданный листок."""
+    """A row for the next листок whose problems are not entered yet is not an issued листок."""
     mir = devyatyj(connection, (LISTOK,))
     connection.execute(
         "insert into sheets (number, title, issued_at, ord) values (?, ?, ?, ?)",
