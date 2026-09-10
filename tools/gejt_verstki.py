@@ -80,6 +80,19 @@ os.environ.setdefault("SPETSMAT_VEB_SECRET", "gate-secret-key-32bytes-long!!")
 
 ETALON = {"width": 1440, "height": 900}
 
+# 🔴 ДОПУСК «ВСЁ НА ОДИН ЭКРАН», НАЗВАННЫЙ ЧИСЛОМ И ОБЪЯСНЁННЫЙ.  Ноль дал бы
+# ложные красные на округлениях: `scrollHeight` и `clientHeight` целые, а раскладка
+# дробная, и страница высотой 900.4 px отдаёт 901 против 900.  Один пиксель — ровно
+# эта разница и ничего сверх.  Замерено живьём 11.09 по всем 31 экрану: у КАЖДОГО
+# помещающегося экрана разница была ровно 0, а у непомещающегося минимум 22 px —
+# то есть допуску ни разу не пришлось работать, и он не прячет ни одной находки.
+DOPUSK_VYSOTY = 1
+
+# Метка строки отчёта, которая НЕ красная: экран свёлся к другому, а не упал.
+# Отдельный знак, а не разбор текста сообщения: сообщение читает человек,
+# а решение «красное или нет» принимает машина, и им нужен разный носитель.
+SVEDENO = "\u21a6"
+
 # 🔴 THE RENDER IGNORES THE CONNECTION THIS GATE HANDS THE SERVER.  Every page
 # route rebuilds its context through `veb.obshchee.karkas.DATA`, a module-level
 # constant pointing at `<repo>/data/spetsmat.db`.  So the base the gate judges is
@@ -95,30 +108,191 @@ def baza() -> Path:
     import config
     return config.DB_PATH
 
-# One entry per SCREEN the gate judges: name, path, the radio to select before
-# measuring, and the roles that can see it.
+# ── THE LIST OF SCREENS IS DERIVED FROM THE ROUTES, NEVER TYPED OUT ──────────
+# 🔴 WHY.  Until 2026-09-11 `EKRANY` was nine hand-written lines, and `/istoria`
+# and `/kabinet` were not among them -- zero occurrences of either word in this
+# file.  That is how a page with 321 lines of code and 29 green tests could stay
+# invisible on screen until the owner found it himself: the gate was formally
+# right, it had never been sent there.  A hand-written list falls behind the site
+# BY CONSTRUCTION, and the fix is not to add two more lines but to stop writing
+# the list.  Route exists -> screen is judged.
+#
+# `veb/server.py` is not this position's zone and declares its page routes as
+# inline `if path == "..."` branches rather than as a table, so they are READ out
+# of it instead of copied: the AST of `Handler.do_GET` is walked for every string
+# compared against `path` (`==`, `in (...)`, `.startswith(...)`).  A route added
+# there tomorrow arrives here by itself, with nobody editing this file.  The two
+# registries the same method consults -- `server._marshruty_razdelov()` and
+# `vhod.marshruty()` -- are ASKED, not parsed: they already are tables.
+OBE = ("гость", "организатор")
+
+# Not screens, and each says why.  Everything else that is discovered IS a screen.
+NE_EKRANY = {
+    "/api/":       "машинная дверь: отдаёт JSON, вёрстки у неё нет",
+    "/static/":    "файлы, а не страница",
+    "/materials/": "выдача PDF, а не страница",
+}
+
+# 🔴 РОЛЬ СУЖАЕТСЯ ТОЛЬКО ИМЕНЕМ И ТОЛЬКО С ПРИЧИНОЙ.  По умолчанию экран мерится
+# в ОБЕИХ ролях: гость -- это тот, кого владелец фотографирует.  Страница, которая
+# вошедшему показывает раздел, а гостю -- приглашение «Войти», в роли гостя не
+# экран, а заглушка, и мерить её значило бы объявлять пустым то, что пусто нарочно.
+ROLI_MARSHRUTA = {
+    "/istoria": (("организатор",), "у гостя -- заглушка «Войти» "
+                 "(`veb/razdely/istoria_zanyatij.py:314`), а не раздел"),
+    "/kabinet": (("организатор",), "у гостя -- заглушка со ссылкой на вход "
+                 "(`veb/razdely/kabinet.py:484`)"),
+    "/priyom":  (("организатор",), "у гостя -- «Войти» "
+                 "(`veb/priyom.py:404`)"),
+    "/vnesti":  (("организатор",), "страница открыта преподавателям "
+                 "(`veb/razdely/vnesenie.py:546`)"),
+}
+
+# Tabs are an OVERLAY on a route, never the source of the list: a route with no
+# entry here is still measured, once, as it opens.  Roles here narrow the route's
+# own roles and never widen them.
 #   `name="str"` radios switch the SITE SECTION: p-start · p-rasp · p-lich · p-kond
 #   `name="vk"`  radios switch the TAB inside распределение: t-shk · t-prep · t-В/Д/Н
-# `None` means the screen is whatever the page shows on arrival.
-OBE = ("гость", "организатор")
-EKRANY = [
-    ("школьникам",   "/raspredelenie", "t-shk",   OBE),
-    ("принимающим",  "/raspredelenie", "t-prep",  OBE),
-    ("группа В",     "/raspredelenie", "t-В",     OBE),
-    ("группа Д",     "/raspredelenie", "t-Д",     OBE),
-    ("группа Н",     "/raspredelenie", "t-Н",     OBE),
-    ("класс",        "/glavnaya",      "p-start", OBE),
-    ("кондуит",      "/glavnaya",      "p-kond",  ("организатор",)),
-    # 🔴 ПОСТОЯННОЕ РАСПРЕДЕЛЕНИЕ ДОБАВЛЕНО 10.09 (Д4). Его здесь НЕ БЫЛО ВОВСЕ —
+VKLADKI = {
+    "/": [("класс", "p-start", None),
+          ("кондуит", "p-kond", ("организатор",))],
+    "/raspredelenie": [("школьникам", "t-shk", None),
+                       ("принимающим", "t-prep", None),
+                       ("группа В", "t-В", None),
+                       ("группа Д", "t-Д", None),
+                       ("группа Н", "t-Н", None)],
+    # 🔴 ПОСТОЯННОЕ РАСПРЕДЕЛЕНИЕ ДОБАВЛЕНО 10.09 (Д4). Его здесь НЕ БЫЛО ВОВСЕ --
     # целый раздел сайта, обе вкладки, не измерялся гейтом ни разу. При этом
     # владелец жаловался на обрезку фамилий именно там ТРИЖДЫ (G3.2, G3.4, J2.3),
     # а гейт в это же время печатал «обрезка 0» и был формально прав: он туда не
-    # ходил. Четвёртое лицо одного класса за волну — «ноль находок» означало
-    # «не смотрел», а читалось как «чисто» (G0 — не видел узла, J1 — не знал
-    # правила, здесь — не ходил на экран).
-    ("постоянное · школьникам",  "/raspredelenie/postoyannoe", "t-shk",  OBE),
-    ("постоянное · принимающим", "/raspredelenie/postoyannoe", "t-prep", OBE),
-]
+    # ходил. Четвёртое лицо одного класса за волну -- «ноль находок» означало
+    # «не смотрел», а читалось как «чисто» (G0 -- не видел узла, J1 -- не знал
+    # правила, здесь -- не ходил на экран).
+    "/raspredelenie/postoyannoe": [("постоянное · школьникам", "t-shk", None),
+                                   ("постоянное · принимающим", "t-prep", None)],
+}
+
+
+def _hvost_kartochki(db) -> str:
+    """A LIVE pupil, not an invented id: the card of a pupil who is not in the base
+    renders «не найдено», and measuring that would be measuring the 404."""
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        r = c.execute("select id from students where status='active' "
+                      "order by id limit 1").fetchone()
+    finally:
+        c.close()
+    return str(r[0]) if r else ""
+
+
+def _hvost_listka(_db) -> str:
+    """A sheet that is really published, taken from `docs/listki`."""
+    papka = KOREN / "docs" / "listki"
+    if not papka.is_dir():
+        return ""
+    for f in sorted(papka.glob("*.pdf")):
+        return f.stem.split("-")[0]
+    return ""
+
+
+# A route whose tail names an object.  The supplier hands the gate a LIVE tail out
+# of the base or the disk.  🔴 A discovered prefix route with no supplier here is
+# RED, not skipped: «не знаю, что подставить» and «здесь нечего проверять» are the
+# same silence, and this file exists because that silence was read as «чисто».
+HVOSTY = {
+    "/kartochka/": (_hvost_kartochki, "карточка школьника открывается по id"),
+    "/listki/":    (_hvost_listka,    "страница листка открывается по номеру"),
+    "/listok/":    (_hvost_listka,    "второе имя того же адреса, которое не "
+                                      "перехватывает nginx (`veb/server.py:729`)"),
+}
+
+
+def marshruty_sayta() -> dict:
+    """`{путь: род}` -- every route the live server answers a GET on.
+
+    Род: `stranica` (a screen), `hvost` (a prefix that needs an object id),
+    `ne-ekran` (a machine door or a file).  Nothing is dropped silently: a route
+    the gate cannot turn into a screen still comes back, with its род saying why.
+    """
+    import ast
+
+    najdeno: dict = {}
+
+    def rod(put: str) -> str:
+        for pref, _ in NE_EKRANY.items():
+            if put.startswith(pref):
+                return "ne-ekran"
+        return "stranica"
+
+    # 1. the branches of `Handler.do_GET`, read out of the source
+    derevo = ast.parse((KOREN / "veb" / "server.py").read_text(encoding="utf-8"))
+    for uzel in ast.walk(derevo):
+        if not (isinstance(uzel, ast.FunctionDef) and uzel.name == "do_GET"):
+            continue
+        for n in ast.walk(uzel):
+            if (isinstance(n, ast.Compare) and isinstance(n.left, ast.Name)
+                    and n.left.id == "path"):
+                for op, cmp in zip(n.ops, n.comparators):
+                    esli = []
+                    if isinstance(op, ast.Eq) and isinstance(cmp, ast.Constant):
+                        esli = [cmp.value]
+                    elif isinstance(op, ast.In) and isinstance(cmp, (ast.Tuple, ast.List)):
+                        esli = [e.value for e in cmp.elts if isinstance(e, ast.Constant)]
+                    for p in esli:
+                        if isinstance(p, str) and p.startswith("/"):
+                            najdeno.setdefault(p, rod(p))
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr == "startswith"
+                    and isinstance(n.func.value, ast.Name) and n.func.value.id == "path"):
+                for a in n.args:
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                        najdeno[a.value] = ("ne-ekran" if rod(a.value) == "ne-ekran"
+                                            else "hvost")
+
+    # 2. the registries, asked rather than parsed
+    import veb.server as server
+    from veb import vhod
+    for p in list(server._marshruty_razdelov()) + list(vhod.marshruty()):
+        najdeno.setdefault(p, rod(p))
+    return najdeno
+
+
+def sobrat_ekrany(db) -> tuple[list, list]:
+    """`(экраны, беды)`.  Экран -- `(имя, путь, радио, роли)`, ровно тот кортеж,
+    которым была рукописная константа: всё, что ниже, не заметило подмены.
+
+    Беды -- строки о маршрутах, которые НЕ стали экраном.  Пустой список беды
+    здесь не значит «всё хорошо»: он значит «каждый найденный маршрут стал
+    экраном», и число экранов печатается рядом с числом маршрутов.
+    """
+    ekrany, bedy = [], []
+    for put, rod_ in sorted(marshruty_sayta().items()):
+        if rod_ == "ne-ekran":
+            continue
+        if rod_ == "hvost":
+            postavshchik = HVOSTY.get(put)
+            if not postavshchik:
+                bedy.append(f"маршрут «{put}» открывается по хвосту, а подставить "
+                            f"нечего: допиши поставщика в `HVOSTY`")
+                continue
+            hvost = postavshchik[0](db)
+            if not hvost:
+                bedy.append(f"маршрут «{put}»: поставщик хвоста ничего не вернул "
+                            f"({postavshchik[1]})")
+                continue
+            put = put + hvost
+        roli = OBE
+        suzheno = ROLI_MARSHRUTA.get(put.rstrip("/") or "/")
+        if suzheno:
+            roli = suzheno[0]
+        vkl = VKLADKI.get(put)
+        if not vkl:
+            ekrany.append((put, put, None, roli))
+            continue
+        for imya, radio, svoi_roli in vkl:
+            ekrany.append((imya, put, radio, svoi_roli or roli))
+    return ekrany, bedy
+
 
 # The measuring script.  It runs inside the page, so it sees the RENDER: computed
 # boxes after CSS, fonts and layout, not the source.
@@ -126,10 +300,30 @@ ZAMER = r"""
 () => {
   const out = {obrezka: [], perenos: [], vyshli: [], centr: [], skroll: 0,
                osmotreno: 0, vsego: 0, na_obrezku: 0, na_vyhod: 0,
-               na_centr: 0, isklyucheno: 0, bez_sdviga: 0};
+               na_centr: 0, isklyucheno: 0, bez_sdviga: 0,
+               ne_vlezlo: 0,
+               pravil: 0, pravila_zhivye: [], pravila_pustye: [], pravil_nechitaemyh: 0,
+               vidno_uzlov: 0, vidno_simvolov: 0, glavnoe: '', skryto_simvolov: 0,
+               polya: [], na_pole: 0, poley_bez_nabora: 0, pod_klipom: 0,
+               kletki: [], na_kletku: 0, kletok_so_znachkom: 0, kletok_s_kontrolom: 0};
 
   out.skroll = Math.max(0,
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+  // ── 10. ВСЁ НА ОДИН ЭКРАН ──────────────────────────────────────────────────
+  // 🔴 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА, И ОНО ЖЁСТКОЕ.  Реплика В003, ночь 10.09, дословный
+  // ответ на прямой вопрос «„все школьники на один экран" — жёсткое требование
+  // или желательное?»: «ЖЁСТКОЕ — С ГЕЙТОМ».  Слово «с гейтом» сказал он сам.
+  // Причина не косметическая и названа им же (рецензия 3, J3): «из-за этого надо
+  // пролистывать вниз… удобно, когда они помещаются все на одну строку» —
+  // прокрутка вниз посреди занятия, стоя, с телефона.
+  //
+  // Мерится СТРАНИЦА ЦЕЛИКОМ по ВЫСОТЕ, и такого счёта в этом файле не было ни
+  // одного: `skroll` выше и его двойник в самопроверке считают только ШИРИНУ, а
+  // проверка 4 ловит вертикальный выход У ЭЛЕМЕНТА — это про контейнер, а не про
+  // то, влезли ли строки на экран.
+  out.ne_vlezlo = Math.max(0,
+      document.documentElement.scrollHeight - document.documentElement.clientHeight);
 
   const vidim = (el) => {
     const r = el.getBoundingClientRect();
@@ -210,15 +404,26 @@ ZAMER = r"""
   // siblings is a perfectly good reason to wrap, and reporting it would be the
   // gate crying wolf.  When it shares, the element is left unjudged, and that is
   // said out loud in the list of what the gate does not check.
+  // 🔴 ШИРИНА СОДЕРЖИМОГО, А НЕ `clientWidth`.  `clientWidth` включает внутренние
+  // отступы, а текст живёт в content box: у блока с боковым padding проверка
+  // считала доступным на два padding'а больше, объявляла ЗАКОННЫЙ перенос лишним
+  // и красила здоровую страницу.  Найдено верификатором на `/privacy` с боковым
+  // отступом 30 %: content box 296 px, тексту нужно 502 px без переноса —
+  // перенос обязателен, а гейт печатал «нужно 502 есть 740».
+  const bez_otstupov = (el) => {
+    const s = getComputedStyle(el);
+    return Math.max(0, el.clientWidth - parseFloat(s.paddingLeft)
+                                      - parseFloat(s.paddingRight));
+  };
   const dostupno = (el) => {
-    if (el.clientWidth > 0) return el.clientWidth;
+    if (el.clientWidth > 0) return bez_otstupov(el);
     let n = el.parentElement;
     while (n && n !== document.body && n.clientWidth === 0) n = n.parentElement;
     if (!n || n === document.body) return 0;
     const sosedi = [...n.childNodes].filter(k =>
         (k.nodeType === 3 ? (k.nodeValue || '').trim()
                           : k !== el && (k.textContent || '').trim()));
-    return sosedi.length ? 0 : n.clientWidth;
+    return sosedi.length ? 0 : bez_otstupov(n);
   };
 
   const vnutri = (el) => {                    // padding box
@@ -250,6 +455,14 @@ ZAMER = r"""
   // it -- so a leaf-only walk misses every clipped name there is.  An element is
   // judged for clipping when it carries text AND establishes its own clipping
   // context; leaves are kept too, so nothing the old walk caught is lost.
+  // Узлы, режущие себя `clip-path`/`mask`: проверка 1 их не судит (геометрия
+  // обрезки живёт в самом свойстве), но молчать о них нельзя — число печатается.
+  out.pod_klipom = s_tekstom.filter(el => {
+    const s = getComputedStyle(el);
+    return (s.clipPath && s.clipPath !== 'none')
+        || (s.maskImage && s.maskImage !== 'none');
+  }).length;
+
   const na_obrezku = s_tekstom.filter(el => {
     if (organ(el)) return false;
     const s = getComputedStyle(el);
@@ -287,6 +500,191 @@ ZAMER = r"""
         storona: vbok > 1 ? 'вширь' : 'ввысь',
         nado: vbok > 1 ? el.scrollWidth : el.scrollHeight,
         est: vbok > 1 ? el.clientWidth : el.clientHeight});
+  }
+
+  // ── 9. ОДНА КЛЕТКА — ОДИН НОСИТЕЛЬ ДАННЫХ ──────────────────────────────────
+  // 🔴 КАНОН ВЛАДЕЛЬЦА ДОСЛОВНО: «есть простая мысль, которая всегда
+  // проявляется: НЕЛЬЗЯ СМЕШИВАТЬ», и в приложении к колонкам — «всё должно быть
+  // расположено в колонках, не должно быть, чтобы кусочек информации цеплялся к
+  // тексту в предыдущей колонке».  Живое нарушение: «Агаркова Ирина ᴰ·ᴱ·» —
+  // инициалы принимающего надстрочником в клетке с фамилией школьника (O3).  У
+  // правила «никогда не центрируем» рычаг есть и оно держится; у «нельзя
+  // смешивать» рычага не было, и оно возвращается.
+  //
+  // 🔴 УЗКО И ПО МЕСТУ, ПОТОМУ ЧТО ШИРОКОЕ ПРАВИЛО ЗДЕСЬ ДАЁТ ЛОЖНО-КРАСНЫЕ, и
+  // это сказано прямо в ТЗ (Q4).  Красным объявляется ровно один, ИЗМЕРИМЫЙ род
+  // смешения: приписка, поднятая или опущенная относительно строки.  Замерено
+  // 11.09 по живым страницам, почему граница проходит именно здесь:
+  //   * `i.prin` («Н.В.» рядом с фамилией) — `vertical-align: super`. ЭТО ОНО.
+  //   * `span.iz` («/18» в счётчике «8/18») — `baseline`, шрифт мельче. Это ОДИН
+  //     факт, разбитый набором надвое, а не второй носитель: считать его
+  //     находкой значит краснеть на дроби.
+  //   * `span.det-f` (фамилии детей в клетке принимающего) — `baseline`, шрифт
+  //     тот же. Список в клетке — не приписка к соседнему тексту.
+  // Первый род красный; два других посчитаны отдельными числами и напечатаны —
+  // молчаливое прощение неотличимо от дырки в проверке.
+  // Своя копия проверки прозрачности: `prozr` объявлена ниже по скрипту, в
+  // проверке 4, и до её объявления она в мёртвой зоне. Дублируется одна строка,
+  // а не заводится общая: порядок проверок в этом файле — вопрос читаемости, и
+  // менять его ради экономии строки дороже, чем строка.
+  const prozrachno = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
+
+  const nad_strokoy = (el, s) =>
+      ['SUP', 'SUB'].includes(el.tagName) ||
+      ['super', 'sub'].includes(s.verticalAlign);
+
+  const kletki = vse.filter(el => ['TD', 'TH'].includes(el.tagName) && vidim(el));
+  out.na_kletku = kletki.length;
+  for (const kl of kletki) {
+    // Собственный текст клетки — всё, кроме приписок, контролов и служебного.
+    const bez = kl.cloneNode(true);
+    bez.querySelectorAll('sup, sub, select, input, textarea, button, style, script,'
+                       + ' option').forEach(n => n.remove());
+    // Клон не в документе, вычисленных стилей у него нет: приписки, поднятые
+    // НАБОРОМ, а не тегом, снимаются ниже, по оригиналу.
+    let svoy = (bez.textContent || '').trim().replace(/\s+/g, ' ');
+
+    const pripiski = [], znachki = [], kontroly = [];
+    for (const d of kl.querySelectorAll('*')) {
+      const tekst = (d.textContent || '').trim();
+      if (!tekst || !vidim(d)) continue;
+      const s = getComputedStyle(d);
+      if (['SELECT', 'INPUT', 'TEXTAREA', 'BUTTON'].includes(d.tagName)) {
+        kontroly.push(tekst); continue;
+      }
+      if (nad_strokoy(d, s)) {
+        pripiski.push({tag: d.tagName.toLowerCase(), tekst: tekst.slice(0, 24),
+                       chem: ['SUP', 'SUB'].includes(d.tagName)
+                             ? `<${d.tagName.toLowerCase()}>`
+                             : `vertical-align:${s.verticalAlign}`});
+        // Текст приписки в «своём» остаться не должен: `<i>` тегом не отсекается.
+        svoy = svoy.split(tekst).join('').trim();
+        continue;
+      }
+      if (!prozrachno(s.backgroundColor) ||
+          (parseFloat(s.borderLeftWidth) && parseFloat(s.borderRightWidth)))
+        znachki.push(tekst.slice(0, 24));
+    }
+    // 🔴 СВОЙ ТЕКСТ КЛЕТКИ БЫВАЕТ И ВНУТРИ КОНТРОЛА.  Там, где сайт кладёт фамилию
+    // в `<select>`, `svoy` пуст — и правило «нельзя смешивать» молчало ровно на
+    // тех строках, где смешение и происходит. Найдено верификатором: `<sup>Н.В.</sup>`
+    // рядом с селектом в трёх живых клетках дал 0 → 0. Носитель есть носитель:
+    // значение контрола — такой же кусочек информации, как текст рядом.
+    const est_svoyo = Boolean(svoy) || kontroly.length > 0;
+    if (znachki.length && svoy) out.kletok_so_znachkom++;
+    if (kontroly.length && svoy) out.kletok_s_kontrolom++;
+    if (pripiski.length && est_svoyo)
+      out.kletki.push({put: put(kl),
+                       svoy: (svoy || ('поле: ' + kontroly[0])).slice(0, 40),
+                       pripiska: pripiski[0].tekst, chem: pripiski[0].chem,
+                       vsego: pripiski.length});
+  }
+
+  // ── 8. ПОЛЕ ВВОДА ШИРИНОЙ ПО САМОМУ ШИРОКОМУ ВОЗМОЖНОМУ ТЕКСТУ ─────────────
+  // 🔴 ПРАВИЛО ВЛАДЕЛЬЦА, НАЗВАННОЕ ДОСЛОВНО: «ширина полей, в которые что-то
+  // вводится, должна выбираться по самому широкому тексту, который может быть
+  // введён».  Место жалобы — то же самое ЧЕТВЁРТЫЙ раз (N1): «Дима Елисе◇»,
+  // «Наталия Стр◇», «Александр Т◇».  Гейт при этом печатал «обрезка 0» по
+  // тринадцати экранам и был формально прав: `<select>` исключили из проверки
+  // обрезки в круге 15 как источник ложно-красных, и исключение сделало слепое
+  // пятно ровно там, где владелец жалуется четвёртый раз.
+  //
+  // 🔴 СУДИТСЯ РЕНДЕР, А НЕ НАЛИЧИЕ ТЕГА — иначе ложные красные вернутся.
+  // Мерить `scrollWidth` у `<select>` нельзя: он равен `clientWidth` всегда
+  // (замерено 11.09: 72 против 72 там, где текст обрезан), а прежний комментарий
+  // в этом файле обещал обратное.  Мерится КЛОН контрола, поставленный рядом с
+  // оригиналом и потому наследующий его же каскад: в клоне остаётся ровно один
+  // вариант, ширина отпущена в `auto`, и браузер сам говорит, сколько места
+  // нужно этому тексту ВМЕСТЕ со стрелкой и отступами.  Проверено глазом на
+  // скриншоте: «нигде◇» при 66px против нужных 73 действительно срезано.
+  const kesh_shiriny = new Map();
+  const nado_shiriny = (el, tekst) => {
+    const s = getComputedStyle(el);
+    const klyuch = [el.tagName, el.className, s.fontSize, s.fontFamily, s.fontWeight,
+                    s.paddingLeft, s.paddingRight, s.borderLeftWidth,
+                    s.borderRightWidth, s.letterSpacing, tekst].join('|');
+    if (kesh_shiriny.has(klyuch)) return kesh_shiriny.get(klyuch);
+    const k = el.cloneNode(true);
+    k.removeAttribute('id');
+    if (k.tagName === 'SELECT') {
+      [...k.options].forEach(o => o.remove());
+      const o = document.createElement('option');
+      o.textContent = tekst; k.append(o); k.selectedIndex = 0;
+    } else {
+      k.value = tekst; k.removeAttribute('size'); k.removeAttribute('placeholder');
+    }
+    for (const [sv, zn] of [['position', 'absolute'], ['visibility', 'hidden'],
+                            ['left', '-9999px'], ['top', '0'], ['width', 'auto'],
+                            ['min-width', '0'], ['max-width', 'none']])
+      k.style.setProperty(sv, zn, 'important');
+    el.parentElement.insertBefore(k, el.nextSibling);
+    const w = k.getBoundingClientRect().width;
+    k.remove();
+    kesh_shiriny.set(klyuch, w);
+    return w;
+  };
+
+  // Набор ВОЗМОЖНЫХ значений поля.  У `<select>` он известен точно — это его
+  // варианты.  У `<input>` он известен, только когда назван списком `list=`;
+  // без списка самого широкого вводимого текста не существует, и такое поле
+  // судится по тому, что в нём стоит СЕЙЧАС (это уже обрезка, проверка 1).
+  const nabor = (el) => {
+    if (el.tagName === 'SELECT')
+      return [...el.options].map(o => (o.textContent || '').trim()).filter(Boolean);
+    const spisok = el.getAttribute && el.getAttribute('list');
+    if (spisok) {
+      const dl = document.getElementById(spisok);
+      if (dl) return [...dl.options]
+          .map(o => (o.value || o.textContent || '').trim()).filter(Boolean);
+    }
+    return null;
+  };
+
+  const znachenie = (el) => {
+    if (el.tagName === 'SELECT')
+      return el.selectedOptions[0] ? (el.selectedOptions[0].textContent || '').trim() : '';
+    return (el.value || '').trim();
+  };
+
+  // 🔴 БЕРЁТСЯ `vse`, А НЕ `vidimye`, И ЭТО НЕ МЕЛОЧЬ.  `sluzhebnyy()` выбрасывает
+  // `INPUT` из общего обхода целиком — там это верно (у поля ввода нет текстовых
+  // узлов, судить его на перенос нечего), но здесь судится ИМЕННО поле ввода, и
+  // фильтр по `vidimye` оставлял бы проверку без половины её населения.  Найдено
+  // собственным тестом на `/vhod`: «на странице входа не нашлось ни одного поля»
+  // при живой форме пароля.
+  const polya_vvoda = vse.filter(el =>
+      vidim(el)
+      && ['SELECT', 'INPUT', 'TEXTAREA'].includes(el.tagName)
+      && !['checkbox', 'radio', 'hidden', 'range', 'color', 'file', 'submit', 'button']
+          .includes((el.type || '').toLowerCase()));
+  out.na_pole = polya_vvoda.length;
+
+  for (const el of polya_vvoda) {
+    const est = el.getBoundingClientRect().width;
+    if (est < 1) continue;
+    // Часть 1 -- ОБРЕЗКА: то, что в поле стоит сейчас, не помещается. Это то же
+    // самое, на что жалуется владелец, и уходит в тот же список, что и обрезка
+    // текста: для читателя разницы нет, буква срезана и там и там.
+    const teper = znachenie(el);
+    if (teper) {
+      const nado = nado_shiriny(el, teper);
+      if (nado > est + 1)
+        out.obrezka.push({put: put(el), tekst: teper.slice(0, 40), storona: 'вширь',
+                          nado: Math.round(nado), est: Math.round(est)});
+    }
+    // Часть 2 -- УЗКОЕ ПОЛЕ: самый широкий из ВОЗМОЖНЫХ вариантов не помещается.
+    // Отдельная находка, потому что чинится она иначе: не текстом, а шириной.
+    const varianty = nabor(el);
+    if (!varianty || !varianty.length) { out.poley_bez_nabora++; continue; }
+    let shirochayshiy = '', nado_vsego = 0;
+    for (const v of varianty) {
+      const w = nado_shiriny(el, v);
+      if (w > nado_vsego) { nado_vsego = w; shirochayshiy = v; }
+    }
+    if (nado_vsego > est + 1)
+      out.polya.push({put: put(el), tekst: shirochayshiy.slice(0, 40),
+                      teper: teper.slice(0, 24), variantov: varianty.length,
+                      nado: Math.round(nado_vsego), est: Math.round(est)});
   }
 
   // ── 2. NEEDLESS WRAP ───────────────────────────────────────────────────────
@@ -445,9 +843,15 @@ ZAMER = r"""
   // [0,120] → [60,60] — пиксель в пиксель как у запрещённого способа.  Правило
   // владельца про то, что видно глазом, а не про имя свойства.  НЕ наследуется:
   // такой элемент всегда сам себе корень.
+  // 🔴 И `justify-items`/`place-items` ТОЖЕ.  Это третий способ поставить то же
+  // самое по середине, и он свой у СЕТКИ: `justify-content` двигает всю дорожку,
+  // `justify-items` — каждый элемент внутри своей ячейки.  Найдено верификатором
+  // на `/privacy`: заголовок уезжал с левого края 48 на 181 внутри родителя
+  // 0…836, а колонка «центр» оставалась нулём.
   const centr_boksa = (s) =>
       ['flex','inline-flex','grid','inline-grid'].includes(s.display) &&
-      (s.justifyContent === 'center' || s.placeContent === 'center');
+      (s.justifyContent === 'center' || s.placeContent === 'center' ||
+       s.justifyItems === 'center' || s.placeItems === 'center');
 
   // 🔴 КОНТРОЛЫ ОСТАЮТСЯ В ОБХОДЕ ЭТОЙ ПРОВЕРКИ, в отличие от проверок 1-2.
   // Там их выбрасывают потому, что их КОРОБКУ рисует браузер; здесь судится не
@@ -569,6 +973,35 @@ ZAMER = r"""
     // милость к кондуиту, отсекает 1095 ПУСТЫХ клеток решётки; правило одно и то
     // же на всех экранах.  Названо вслух в списке «НЕ ПРОВЕРЯЕТСЯ».
     const t = svoy_tekst(el);
+    // 🔴 БОКС, ЦЕНТРИРУЮЩИЙ СВОИХ ДЕТЕЙ, А НЕ СВОЙ ТЕКСТ.  До 11.09 это было
+    // объявленным слепым пятном («ряд ТАБЛЕТОК, поставленный по середине»), и
+    // верификатор прошёл через него сеткой: `justify-items:center` уводил
+    // заголовок с левого края 48 на 181 при нулях по всем проверкам.  Мера та
+    // же, что у текста: дети отодвинуты от ОБОИХ краёв — значит центр виден
+    // глазом. Замерено по всем 31 экрану живого сайта: таких боксов сегодня
+    // НОЛЬ, то есть закрытие пятна не добавило ни одного красного.
+    if (!t && boksom) {
+      const deti = [...el.children].filter(k => vidim(k)
+          && (k.textContent || '').trim());
+      if (!deti.length) continue;
+      const b = el.getBoundingClientRect();
+      const kor = deti.map(k => k.getBoundingClientRect());
+      const sl = Math.round(Math.min(...kor.map(r => r.left)) - b.left);
+      const sp = Math.round(b.right - Math.max(...kor.map(r => r.right)));
+      if (!(sl > 1 && sp > 1)) continue;
+      if (proshcheno(el)) { out.isklyucheno++; continue; }
+      if (!nayden.has(el))
+        nayden.set(el, {put: put(el),
+                        tekst: (deti[0].textContent || '').trim()
+                                 .replace(/\s+/g, ' ').slice(0, 40),
+                        chem: s.justifyItems === 'center' ? 'justify-items:center'
+                            : s.placeItems === 'center' ? 'place-items:center'
+                            : s.placeContent === 'center' ? 'place-content:center'
+                            : 'justify-content:center',
+                        sdvig: `сдвиг слева ${sl} справа ${sp} (у детей бокса)`,
+                        gde: put(deti[0])});
+      continue;
+    }
     if (!t) continue;
     if (proshcheno(el)) { out.isklyucheno++; continue; }
     const d = sdvig(el);
@@ -587,6 +1020,107 @@ ZAMER = r"""
   }
   out.centr = [...nayden.values()];
 
+  // ── 7. НА ЭКРАНЕ ВИДНО ХОТЬ ЧТО-ТО ─────────────────────────────────────────
+  // 🔴 ПУСТОЙ ЭКРАН ПРИ НЕПУСТЫХ ДАННЫХ — КРАСНОЕ.  Все проверки выше судят то,
+  // что НАРИСОВАНО: где ничего не нарисовано, там у каждой из них ноль находок,
+  // и пять нулей подряд читаются как «чисто».  `/istoria` печатала ровно такие
+  // нули, будучи невидимой целиком.  Считается собственный текст видимых узлов
+  // главной области — то, что человек может прочитать глазами.
+  //
+  // Рядом считается и СКРЫТОЕ: разница между «страница пуста» и «страница
+  // написана, но не показана» — это и есть болезнь «написано, не подключено»,
+  // и без второго числа первое ни о чём не говорит.
+  const glavnoe = document.querySelector('main') || document.body;
+  out.glavnoe = glavnoe.tagName.toLowerCase();
+  for (const el of glavnoe.querySelectorAll('*')) {
+    if (['SCRIPT', 'STYLE'].includes(el.tagName)) continue;
+    let svoy = '';
+    for (const k of el.childNodes)
+      if (k.nodeType === 3 && (k.nodeValue || '').trim()) svoy += k.nodeValue.trim();
+    if (!svoy) continue;
+    if (vidim(el)) { out.vidno_uzlov++; out.vidno_simvolov += svoy.length; }
+    else out.skryto_simvolov += svoy.length;
+  }
+
+  // ── 6. ПРАВИЛО CSS, НЕ СОВПАВШЕЕ НИ С ОДНИМ УЗЛОМ ───────────────────────────
+  // 🔴 ЭТО ТА САМАЯ ПРОВЕРКА, БЕЗ КОТОРОЙ УМЕРЛА ИСТОРИЯ.  Правило
+  // `#iv-shk:checked~#is-shk{display:block}` требует, чтобы панель была СЕСТРОЙ
+  // радиокнопки, а она племянница: `#is-shk,#is-prep{display:none}` действует,
+  // второе правило не совпадает НИ С ЧЕМ НИКОГДА, обе таблицы невидимы навсегда.
+  // 321 строка кода, 29 зелёных тестов, пустой экран.  Правило, не попавшее ни во
+  // что, неотличимо от правила верного — пятое лицо класса «ноль находок значит
+  // не смотрел» за сутки.
+  //
+  // 🔴 СОСТОЯНИЕ СНИМАЕТСЯ, СТРУКТУРА ОСТАЁТСЯ.  `:checked`, `:hover`, `::before`
+  // и прочее описывают МОМЕНТ, а гейт меряет покой; судить селектор по ним значит
+  // объявить мёртвым всё, что ждёт своего состояния.  Снимаем состояние и
+  // спрашиваем СТРУКТУРУ: `#iv-shk~#is-shk` — ноль узлов, и это не «сейчас не
+  // включено», а «так не бывает».
+  //
+  // 🔴 ЧТО ЗДЕСЬ НЕ РЕШАЕТСЯ.  Один лист стилей обслуживает весь сайт, поэтому
+  // «ноль совпадений на ЭТОМ экране» не значит ничего: `.kond th.zn` законно
+  // пуст на распределении.  Экран отдаёт ДВА списка — что здесь ожило и что
+  // здесь пусто, — а мёртвым правило объявляет уже инструмент, собрав все
+  // экраны вместе.  Решение, принятое на одном экране, было бы ложным по
+  // построению.
+  const SOSTOYANIE = new RegExp(
+      '::?(' + ['file-selector-button', 'placeholder-shown', 'first-letter',
+                'focus-within', 'focus-visible', 'indeterminate', 'read-write',
+                'read-only', 'first-line', 'placeholder', 'selection', 'backdrop',
+                'autofill', 'disabled', 'optional', 'required', 'any-link',
+                'visited', 'enabled', 'checked', 'invalid', 'default', 'marker',
+                'active', 'before', 'target', 'after', 'focus', 'hover', 'valid',
+                'link'].join('|') + ')\\b(\\([^)]*\\))?', 'g');
+  const bez_sostoyaniya = (s) => s.replace(SOSTOYANIE, '').replace(/\s+/g, ' ').trim();
+  // Составные части селектора: то, что стоит между комбинаторами.  Каждая из них
+  // — самостоятельный вопрос «есть ли такой узел вообще».
+  const chasti = (s) => s.split(/\s*[>+~]\s*|\s+/).filter(Boolean);
+  // 🔴 ЧАСТЬ БЕЗ ИМЕНИ НЕ СЛУЖИТ УЛИКОЙ.  `div`, `span`, `*` совпадают всегда и
+  // на любой странице, поэтому «все части на месте» с такой частью выполняется
+  // само собой и ничего не доказывает.  Найдено на собственной находке:
+  // `.spisok div` объявлялось несобираемым, а это `<div class="spisok" hidden>`
+  // (`veb/obshchee/karkas.py:2286`), который наполняет скрипт поиска, — правило
+  // ЖДЁТ СВОЕГО СОСТОЯНИЯ, и красное на нём было бы ровно тем ложным красным,
+  // ради которого проверку и сузили.
+  const imenovana = (c) => /[#.\[]/.test(c);
+  const skolko = (s) => { try { return document.querySelectorAll(s).length; }
+                          catch (e) { return -1; } };
+
+  const obhod_pravil = (rules) => {
+    for (const r of rules) {
+      if (r.cssRules && !r.selectorText) { obhod_pravil(r.cssRules); continue; }
+      if (!r.selectorText) continue;              // @font-face, @keyframes: судить нечего
+      out.pravil++;
+      let vsego_uzlov = 0, chitaemo = false, nesobiraemo = false;
+      for (const kusok of r.selectorText.split(',')) {
+        const s = bez_sostoyaniya(kusok);
+        if (!s) continue;
+        const n = skolko(s);
+        if (n < 0) continue;                      // браузер не понял — не наше дело
+        chitaemo = true;
+        vsego_uzlov += n;
+        if (n === 0) {
+          // 🔴 ВСЕ ЧАСТИ НА МЕСТЕ, А СВЯЗЬ НЕВОЗМОЖНА — вот это и есть «написано,
+          // но не подключено».  Отличие от «класса сегодня нет на странице»
+          // измеримо, а не на глаз: там отсутствует САМ УЗЕЛ, здесь узлы есть все
+          // до единого и не складываются в то, что просит правило.
+          const ch = chasti(s);
+          if (ch.length > 1 && ch.every(c => imenovana(c) && skolko(c) > 0))
+            nesobiraemo = true;
+        }
+      }
+      if (!chitaemo) { out.pravil_nechitaemyh++; continue; }
+      const imya = r.selectorText.slice(0, 120);
+      if (vsego_uzlov > 0) out.pravila_zhivye.push(imya);
+      else out.pravila_pustye.push([imya, nesobiraemo]);
+    }
+  };
+  for (const list of document.styleSheets) {
+    // Чужой лист (CDN, шрифты) не отдаёт правил из-за политики источника — это
+    // не находка и не поломка, это отдельное число.
+    try { obhod_pravil(list.cssRules); } catch (e) { out.pravil_nechitaemyh++; }
+  }
+
   return out;
 }
 """
@@ -604,7 +1138,7 @@ LOMKA = r"""() => {
       return r.width > 1 && r.height > 1; };
   const iz = (sel) => [...document.querySelectorAll(sel)].filter(vidno);
   const otchet = {obrezka: false, perenos: false, vyhod: false, skroll: false,
-                  centr: false};
+                  centr: false, pole: false, kletka: false, vniz: false};
 
   // 🔴 EVERY BREAKAGE VERIFIES THAT IT LANDED, AND TRIES AGAIN WHEN IT DID NOT.
   // The verifier caught the previous version rapporting a triumphant red on all
@@ -617,12 +1151,62 @@ LOMKA = r"""() => {
 
   // 1. CLIPPING -- squeeze a text box shut. Deliberately prefers a NON-LEAF node
   //    (`.kto` wraps a `<b>`), the exact shape the walk used to drop.
+  // 🔴 ЦЕЛЬ ОБЯЗАНА ИМЕТЬ СОБСТВЕННЫЙ ТЕКСТ ВНЕ КОНТРОЛА.  Проверка 1 судит по
+  // прямоугольникам ТЕКСТА элемента и вычитает содержимое `<select>`/`<option>`/
+  // `<input>` (`rects_teksta`), поэтому строка распределения, весь текст которой
+  // лежит в селектах, для неё пуста — сжать её можно, а поймать нечего.  Пока
+  // этой границы здесь не было, самопроверка ставила `🔴 ПРОПУСТИЛА 1` на
+  // «постоянное · принимающим» и обвиняла зрение гейта в собственном промахе.
+  // Прямоугольники СОБСТВЕННОГО текста, минус то, что рисует браузер, — та же
+  // граница, что у `rects_teksta` в `ZAMER`, повторённая здесь нарочно: это
+  // другой контекст исполнения, общей функции у них нет, и расхождение обязано
+  // быть видно как расхождение.
+  const rezhet_bukvu = (el) => {
+    const VNE = ['SELECT','OPTION','TEXTAREA','INPUT','BUTTON','STYLE','SCRIPT'];
+    const rects = [];
+    const hod = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        if (!(n.nodeValue || '').trim()) return NodeFilter.FILTER_REJECT;
+        for (let p = n.parentElement; p && p !== el.parentElement; p = p.parentElement)
+          if (VNE.includes(p.tagName)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    for (let n = hod.nextNode(); n; n = hod.nextNode()) {
+      const d = document.createRange(); d.selectNodeContents(n);
+      for (const b of d.getClientRects()) if (b.width > 0 && b.height > 0) rects.push(b);
+    }
+    if (!rects.length) return false;
+    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+    const l = r.left + parseFloat(s.borderLeftWidth);
+    const pr = r.right - parseFloat(s.borderRightWidth);
+    const tp = r.top + parseFloat(s.borderTopWidth);
+    const bt = r.bottom - parseFloat(s.borderBottomWidth);
+    return rects.some(b => b.right - pr > 1 || l - b.left > 1
+                        || b.bottom - bt > 1 || tp - b.top > 1);
+  };
+
+  const svoy_tekst_est = (el) => {
+    const k = el.cloneNode(true);
+    k.querySelectorAll('select, option, input, textarea, button, style, script')
+     .forEach(n => n.remove());
+    return (k.textContent || '').trim().length > 0;
+  };
   for (const k of iz('.kto, td, th, li, .para').slice(0, 40)) {
+    if (!svoy_tekst_est(k)) continue;
     k.style.setProperty('max-width', '8px', 'important');
     k.style.setProperty('overflow', 'hidden', 'important');
     k.style.whiteSpace = 'nowrap'; k.style.textOverflow = 'ellipsis';
     k.style.display = k.tagName === 'TD' || k.tagName === 'TH' ? 'block' : k.style.display;
-    if (k.scrollWidth > k.clientWidth + 1) { otchet.obrezka = true; break; }
+    // 🔴 «КОРОБКА ПЕРЕПОЛНЕНА» — ЕЩЁ НЕ «ТЕКСТ ОБРЕЗАН», и разница ровно та, из-за
+    // которой проверка 1 не считает находкой ни `<option>`, ни декорацию в SVG:
+    // `scrollWidth` растёт от чего угодно, а режется БУКВА.  Замерено 11.09 на
+    // «постоянное · принимающим»: сжатая `td.td-deti` дала scrollWidth 63 при
+    // clientWidth 32, а собственный текст клетки («пн») спокойно уместился в
+    // 32px — гейт молчал совершенно правильно, а самопроверка засчитывала это
+    // себе в пропуск.  Условие приземления теперь ДОСЛОВНО то же, по которому
+    // судит `ZAMER`: прямоугольники СВОЕГО текста выходят за padding box.
+    if (k.scrollWidth > k.clientWidth + 1 && rezhet_bukvu(k)) { otchet.obrezka = true; break; }
     k.style.removeProperty('max-width'); k.style.removeProperty('overflow');
     k.style.whiteSpace = ''; k.style.textOverflow = ''; k.style.display = '';
   }
@@ -649,6 +1233,16 @@ LOMKA = r"""() => {
     if (w.clientWidth <= 0) continue;
     const slova = (w.textContent || '').trim().split(/\s+/);
     if (slova.length < 2 || w.scrollWidth > w.clientWidth + 1) continue;
+    // 🔴 И ЭЛЕМЕНТ ОБЯЗАН СТОЯТЬ В ОДНУ СТРОКУ ДО ПОЛОМКИ.  Иначе `<br>` ставится
+    // туда, где перенос УЖЕ был законным (ширина его потребовала), проверка 2
+    // молчит совершенно правильно, а самопроверка засчитывает это себе в
+    // пропуск.  Найдено 11.09 на `/istoria`, где текстовых узлов всего четыре и
+    // промах стал видно сразу; на широких экранах он просто прятался за
+    // множеством других целей.
+    const do_r = document.createRange(); do_r.selectNodeContents(w);
+    const do_verhi = new Set([...do_r.getClientRects()]
+        .filter(b => b.width > 0 && b.height > 0).map(b => Math.round(b.top)));
+    if (do_verhi.size !== 1) continue;
     w.textContent = '';
     w.append(document.createTextNode(slova.slice(0, -1).join(' ')),
              document.createElement('br'),
@@ -664,15 +1258,45 @@ LOMKA = r"""() => {
   // 4. ESCAPED -- pills walk out of the LEFT edge of the card that owns them,
   //    exactly as in the owner's screenshot `13`, and the document does NOT
   //    scroll on that account, so checks 1-3 stay blind to it.
+  // 🔴 БЛИЖАЙШИЙ ВИДИМЫЙ КОНТЕЙНЕР СДВИНУТОГО УЗЛА ОБЯЗАН БЫТЬ ИМЕННО `pa`.
+  // Проверка 4 поднимается от элемента до ПЕРВОГО предка, который клипует,
+  // красит рамку с двух сторон или свой фон, — и судит по НЕМУ.  Сдвигая `<b>`
+  // внутри `.kto` (а `.kto` клипует), поломка выводила узел за `.kto`, а не за
+  // карточку, и попадала в объявленную границу проверки; самопроверка при этом
+  // писала «ПРОПУСТИЛА 1» на «постоянное · школьникам».  Та же логика, что в
+  // `ZAMER`, повторена здесь нарочно: это ДРУГОЙ контекст исполнения, общей
+  // функции у них нет, и расхождение обязано быть видно как расхождение.
+  const prozr_l = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
+  const konteyner_l = (el) => {
+    const s = getComputedStyle(el);
+    if (s.overflowX !== 'visible' || s.overflowY !== 'visible') return true;
+    if ((parseFloat(s.borderLeftWidth) && parseFloat(s.borderRightWidth)) ||
+        parseFloat(s.borderTopLeftRadius)) return true;
+    return !prozr_l(s.backgroundColor);
+  };
+  const blizhayshiy = (el) => {
+    for (let n = el.parentElement; n && n !== document.body; n = n.parentElement)
+      if (konteyner_l(n)) return n;
+    return null;
+  };
   const cel = iz('.kol-pr .para').length ? iz('.kol-pr .para') : iz('.para');
   for (const pa of cel) {
     pa.style.background = 'rgba(255,255,255,.06)';
     pa.style.borderRadius = '8px';
     const deti = pa.querySelectorAll('.deti-ryad span, .komu.deti span, .komu, b');
-    const kogo = deti.length ? deti : pa.children;
+    // 🔴 И СДВИНУТЫЙ УЗЕЛ ОБЯЗАН ОСТАТЬСЯ ВИДИМЫМ.  Поломки применяются к одной
+    // и той же странице одна за другой, и сжатие из пункта 1 успевает схлопнуть
+    // строку до 8px: `span.komu` внутри неё получает нулевую ширину, `vidim()`
+    // в `ZAMER` считает такой узел невидимым (и правильно — читать там нечего),
+    // а самопроверка писала «ПРОПУСТИЛА 1» на «постоянное · школьникам».
+    const zhivoy = (x) => { const r = x.getBoundingClientRect();
+        return r.width > 1 && r.height > 1; };
+    const kogo = [...(deti.length ? deti : pa.children)]
+        .filter(x => zhivoy(x) && blizhayshiy(x) === pa);
+    if (!kogo.length) { pa.style.background = ''; pa.style.borderRadius = ''; continue; }
     const rod = pa.getBoundingClientRect();
-    [...kogo].forEach(x => { x.style.position = 'relative'; x.style.left = '-120px'; });
-    if ([...kogo].some(x => x.getBoundingClientRect().left < rod.left - 1)) {
+    kogo.forEach(x => { x.style.position = 'relative'; x.style.left = '-120px'; });
+    if (kogo.some(x => zhivoy(x) && x.getBoundingClientRect().left < rod.left - 1)) {
       otchet.vyhod = true; break;
     }
   }
@@ -716,6 +1340,67 @@ LOMKA = r"""() => {
         Math.min(...kor.map(b => rr - b.right)) > 1;
     if (centr(c) && sdvinut) { otchet.centr = true; break; }
     c.style.removeProperty('text-align');
+  }
+
+  // 8. УЗКОЕ ПОЛЕ -- поле, в которое не влезает самый широкий из его вариантов.
+  //    🔴 ЗДЕСЬ ПОЛЕ ВСТАВЛЯЕТСЯ, А НЕ ПОРТИТСЯ СУЩЕСТВУЮЩЕЕ, и это не поблажка.
+  //    Испытывать надо ЗРЕНИЕ проверки, а на живом сайте узки уже ВСЕ селекты до
+  //    единого (замерено 11.09: 108 из 108 на «школьникам») — «сломать» там
+  //    нечего, находка была бы и без поломки, а на экранах без единого контрола
+  //    («кондуит», «класс») ломать нечего тем более. Вставленный контрол даёт
+  //    поломку РОВНО ТОГО РОДА, который проверка называет, на любом экране.
+  {
+    const gde = document.querySelector('main') || document.body;
+    const s = document.createElement('select');
+    s.id = 'proba-uzkoe-pole';
+    for (const t of ['коротко', 'Тухватулин-Йалчын Дэвин Александрович']) {
+      const o = document.createElement('option'); o.textContent = t; s.append(o);
+    }
+    s.selectedIndex = 0;
+    s.style.setProperty('width', '24px', 'important');
+    s.style.setProperty('min-width', '0', 'important');
+    gde.append(s);
+    const r = s.getBoundingClientRect();
+    otchet.pole = r.width > 1 && r.height > 1 && r.width < 40;
+    if (!otchet.pole) s.remove();
+  }
+
+  // 9. ДВА НОСИТЕЛЯ В КЛЕТКЕ -- фамилия и приписка над строкой в одной клетке.
+  //    Клетка ВСТАВЛЯЕТСЯ по той же причине, что и поле в пункте 8: на кондуите
+  //    таких клеток уже 54 живых (это дефект O3, чинить его соседям), а на
+  //    экранах без единой таблицы ломать нечего вовсе. Вставленная клетка даёт
+  //    поломку ровно того рода, который проверка называет, на любом экране.
+  {
+    const gde = document.querySelector('main') || document.body;
+    const tb = document.createElement('table');
+    tb.id = 'proba-kletka';
+    const td = document.createElement('td');
+    td.append(document.createTextNode('Агаркова Ирина'));
+    const sup = document.createElement('sup');
+    sup.textContent = 'Н.В.';
+    td.append(sup);
+    const tr = document.createElement('tr'); tr.append(td); tb.append(tr);
+    gde.append(tb);
+    const r = td.getBoundingClientRect();
+    otchet.kletka = r.width > 1 && r.height > 1;
+    if (!otchet.kletka) tb.remove();
+  }
+
+  // 10. НЕ ВЛЕЗЛО НА ЭКРАН -- добавить строк так, чтобы страница перестала
+  //     помещаться по высоте. Блок ВСТАВЛЯЕТСЯ, а не портится существующий: на
+  //     экранах, которые сегодня и так не влезают, «сломать» нечего, а на
+  //     помещающихся ломать надо именно высотой.
+  {
+    const gde = document.querySelector('main') || document.body;
+    const bylo = document.documentElement.scrollHeight;
+    const d = document.createElement('div');
+    d.id = 'proba-vysota';
+    d.style.height = (document.documentElement.clientHeight + 200) + 'px';
+    gde.append(d);
+    otchet.vniz = document.documentElement.scrollHeight >
+                  document.documentElement.clientHeight &&
+                  document.documentElement.scrollHeight > bylo;
+    if (!otchet.vniz) d.remove();
   }
 
   // 3. H-SCROLL -- push the document wider than the window.
@@ -785,10 +1470,51 @@ def kuka() -> dict:
     return {"name": vhod.COOKIE_NAME, "value": vhod._make_cookie("organizator")}
 
 
-def progon(baza_url: str, slomat: bool, otbor: str | None) -> tuple[list, int]:
+def pustoy_ekran(zamer: dict, shkolnikov: int) -> bool:
+    """Пуст ли экран ПРИ НЕПУСТЫХ ДАННЫХ.
+
+    Правилом, а не строкой внутри печати, по той же причине, что и `svoy_dom`:
+    его испытывают литералами.  🔴 Условие двойное нарочно. Пустой экран на
+    пустой базе — честный пустой экран, и краснеть на нём значит краснеть на
+    свежей установке; пустой экран при 54 живых школьниках — дефект.
+    """
+    return bool(shkolnikov) and zamer.get("vidno_uzlov", 0) == 0
+
+
+def svoy_dom(baza_url: str, adres: str) -> bool:
+    """Осталась ли страница на сервере, который поднял гейт.
+
+    Отдельной функцией, а не строкой внутри прогона, ровно потому, что это
+    ПРАВИЛО, а не подробность: его можно испытать литералами, без сети и без
+    браузера, и оно не зависит от того, отвечает ли сегодня чужой хост.
+
+    🔴 НЕ ГОЛЫЙ `startswith`: `http://127.0.0.1:54321x/` начинается с адреса
+    гейта и сервером гейта не является. Хвост обязан быть пустым или начинаться
+    с разделителя пути. Найдено собственным тестом на литералах, не рассуждением.
+    """
+    if not adres.startswith(baza_url):
+        return False
+    hvost = adres[len(baza_url):]
+    return hvost == "" or hvost[0] in "/?#"
+
+
+def klyuch_ekrana(baza_url: str, adres: str, radio: str | None) -> tuple:
+    """Чем один измеренный экран отличается от другого: путь, на котором браузер
+    ОСТАНОВИЛСЯ, плюс выбранная вкладка.
+
+    По этому ключу переадресация сводится к своей цели: `/glavnaya` отвечает 302
+    на `/` (`veb/server.py:718`), и мерить её отдельно значит написать то же
+    число второй раз. Раздутый охват врёт в ту же сторону, что и заниженный.
+    """
+    put = (adres[len(baza_url):] or "/") if svoy_dom(baza_url, adres) else adres
+    return (put.split("?")[0], radio)
+
+
+def progon(baza_url: str, slomat: bool, otbor: str | None,
+           vse_ekrany: list) -> tuple[list, int]:
     from playwright.sync_api import sync_playwright
 
-    ekrany = [e for e in EKRANY if not otbor or otbor.lower() in e[0].lower()]
+    ekrany = [e for e in vse_ekrany if not otbor or otbor.lower() in e[0].lower()]
     itogi = []
     with sync_playwright() as pw:
         brauzer = pw.chromium.launch()
@@ -797,12 +1523,50 @@ def progon(baza_url: str, slomat: bool, otbor: str | None) -> tuple[list, int]:
             if not svoi:
                 continue
             ctx = brauzer.new_context(viewport=ETALON)
-            if rol == "организатор":
-                ctx.add_cookies([{**kuka(), "url": baza_url}])
             page = ctx.new_page()
+            vidennoe: dict = {}
             for imya, put, radio, _roli in svoi:
                 try:
+                    # 🔴 КУКА ОБНОВЛЯЕТСЯ ПЕРЕД КАЖДЫМ ПЕРЕХОДОМ, А НЕ ОДИН РАЗ НА
+                    # КОНТЕКСТ.  Список экранов теперь строится из роутов, и среди
+                    # роутов есть `/vyhod`, который СТИРАЕТ куку (`veb/server.py:691`):
+                    # один заход на него — и все следующие экраны организатора
+                    # молча меряются глазами гостя, с честными числами и не тем
+                    # содержимым.  Пока список был рукописным, такого роута в нём
+                    # быть не могло, и одна `add_cookies` на контекст была верна.
+                    if rol == "организатор":
+                        ctx.add_cookies([{**kuka(), "url": baza_url}])
                     page.goto(baza_url + put, wait_until="networkidle", timeout=20000)
+                    # 🔴 ПЕРЕАДРЕСАЦИЯ СВОДИТСЯ К ЦЕЛИ, А НЕ СЧИТАЕТСЯ ВТОРЫМ
+                    # ЭКРАНОМ.  `/glavnaya`, `/listki`, `/listki-8` отвечают 302 на
+                    # `/` — измерять их отдельно значит трижды написать одно и то же
+                    # число и раздуть охват работой, которой не было.  Куда именно
+                    # ведёт роут, спрашивается У БРАУЗЕРА после перехода: таблицы
+                    # переадресаций здесь нет и устареть нечему.
+                    # 🔴 ЭКРАН, УШЕДШИЙ С СЕРВЕРА ГЕЙТА, — КРАСНОЕ, А НЕ ЭКРАН.
+                    # Найдено 11.09 первым же прогоном по роутам: гостю корень
+                    # отдаёт `docs/index.html`, а это заглушка-переадресация —
+                    # `<meta refresh>` плюс `location.replace("http://math-
+                    # kluychiki.ru/")` (`docs/index.html:13`, `:34`). Браузер
+                    # уходил на ЧУЖОЙ САЙТ, и гейт честно мерил его: четыре
+                    # экрана гостя («класс», «/glavnaya», обе вкладки постоянного)
+                    # давали одни и те же 46/45/72/78 из 2063 — числа настоящие,
+                    # страница не та. Роль гостя завели 10.09 именно потому, что
+                    # владелец фотографирует сайт БЕЗ пароля; ровно этот экран и
+                    # не измерялся ни разу.
+                    if not svoy_dom(baza_url, page.url):
+                        itogi.append((rol, imya, put, None,
+                                      f"экран ушёл с сервера гейта на {page.url} "
+                                      f"— измерен был бы ЧУЖОЙ документ"))
+                        continue
+                    kuda = page.url[len(baza_url):] or "/"
+                    klyuch = klyuch_ekrana(baza_url, page.url, radio)
+                    if klyuch in vidennoe:
+                        itogi.append((rol, imya, put, None,
+                                      f"{SVEDENO} переадресация на {kuda} — уже "
+                                      f"измерено как «{vidennoe[klyuch]}»"))
+                        continue
+                    vidennoe[klyuch] = imya
                     if radio:
                         if not page.query_selector("#" + radio):
                             itogi.append((rol, imya, put, None,
@@ -842,16 +1606,23 @@ def main() -> int:
     # «нашёл дефект», так что опечатка в имени экрана выглядела снаружи как
     # находка.  Второй такой же исход — argparse на неизвестном флаге, он и так
     # отдаёт 2.  Найдено `check_tool_contract.py`, не рассуждением.
-    if args.ekran and not [e for e in EKRANY if args.ekran.lower() in e[0].lower()]:
+    db = zhivaya_baza()
+    # 🔴 СПИСОК ЭКРАНОВ СТРОИТСЯ ЗДЕСЬ, ИЗ РОУТОВ, И ПРОВЕРКА ИМЕНИ ЭКРАНА ИДЁТ
+    # ПОСЛЕ: пока список был константой, опечатку в `--ekran` можно было отловить
+    # до всего, а маршруты живут в `veb/server.py` и в реестрах разделов, которые
+    # надо сперва спросить.
+    marshrutov = len([p for p, r in marshruty_sayta().items() if r != "ne-ekran"])
+    ekrany_sayta, bedy_marshrutov = sobrat_ekrany(db)
+
+    if args.ekran and not [e for e in ekrany_sayta if args.ekran.lower() in e[0].lower()]:
         print(f"позвали неверно: экрана «{args.ekran}» нет. Есть: "
-              + ", ".join(e[0] for e in EKRANY), file=sys.stderr)
+              + ", ".join(e[0] for e in ekrany_sayta), file=sys.stderr)
         return 2
 
-    db = zhivaya_baza()
     chisla = chisla_bazy(db)
     httpd, conn, t, url = podnyat_server(db)
     try:
-        itogi, dolzhno_byt = progon(url, args.slomat, args.ekran)
+        itogi, dolzhno_byt = progon(url, args.slomat, args.ekran, ekrany_sayta)
     finally:
         httpd.shutdown(); httpd.server_close(); t.join(); conn.close()
 
@@ -859,20 +1630,33 @@ def main() -> int:
           f"живая база: {chisla['vsego']} школьников, "
           f"по классам {chisla['po_klassam']}, крупнейший класс {chisla['krupneyshiy']}")
     print(f"база: {db}")
+    print(f"экраны построены из РОУТОВ, не из списка: маршрутов-страниц "
+          f"{marshrutov} → экранов {len(ekrany_sayta)} "
+          f"(вкладки — надстройка над маршрутом, `VKLADKI`)")
+    for beda in bedy_marshrutov:
+        print(f"   🔴 МАРШРУТ БЕЗ ЭКРАНА: {beda}")
     print()
-    print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'переносы':>10}"
-          f"{'вышли':>8}{'центр':>7}{'скролл':>8}   охват узлов")
-    krasnyh, izmereno, uzlov = 0, 0, 0
+    print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'поля':>6}{'клетки':>8}"
+          f"{'переносы':>10}{'вышли':>8}{'центр':>7}{'скролл':>8}{'не влезло':>11}"
+          f"   охват узлов")
+    krasnyh, izmereno, uzlov, svedeno = len(bedy_marshrutov), 0, 0, 0
     for rol, imya, put, z, oshibka in itogi:
         if z is None:
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}"
-                  f"{'—':>8}   🔴 {oshibka}")
+            if (oshibka or "").startswith(SVEDENO):
+                svedeno += 1
+                print(f"{rol:<13}{imya:<15}{'·':>9}{'·':>6}{'·':>8}{'·':>10}"
+                      f"{'·':>8}{'·':>7}{'·':>8}{'·':>11}   {oshibka}")
+                continue
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>8}{'—':>10}"
+                  f"{'—':>8}{'—':>7}{'—':>8}{'—':>11}   🔴 {oshibka}")
             krasnyh += 1
             continue
         izmereno += 1
         uzlov += z["vsego"]
         ploho = (len(z["obrezka"]) + len(z["perenos"]) + len(z["vyshli"])
-                 + len(z["centr"]) + (1 if z["skroll"] else 0))
+                 + len(z["centr"]) + len(z["polya"]) + len(z["kletki"])
+                 + (1 if z["skroll"] else 0)
+                 + (1 if z["ne_vlezlo"] > DOPUSK_VYSOTY else 0))
         if ploho:
             krasnyh += 1
         # 🔴 ZERO NODES ON A LIVE SCREEN IS RED, NOT GREEN.  A walk that looked at
@@ -880,20 +1664,108 @@ def main() -> int:
         # page unless the coverage is printed next to the verdict.
         if z["vsego"] == 0 or z["na_obrezku"] == 0 or z["na_centr"] == 0:
             krasnyh += 1
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}{'—':>8}   "
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>8}{'—':>10}"
+                  f"{'—':>8}{'—':>7}{'—':>8}{'—':>11}   "
                   f"🔴 ОХВАТ НОЛЬ: узлов {z['vsego']}, на обрезку "
                   f"{z['na_obrezku']}, на центр {z['na_centr']}")
             continue
-        print(f"{rol:<13}{imya:<15}{len(z['obrezka']):>9}{len(z['perenos']):>10}"
-              f"{len(z['vyshli']):>8}{len(z['centr']):>7}{z['skroll']:>8}   "
+        # 🔴 ПУСТОЙ ЭКРАН ПРИ НЕПУСТЫХ ДАННЫХ — КРАСНОЕ, И ЭТО ОТДЕЛЬНЫЙ ИСХОД.
+        # Пять нулей на экране, где ничего не нарисовано, выглядят как чистая
+        # страница: у всех проверок ноль находок ровно потому, что судить нечего.
+        if pustoy_ekran(z, chisla["vsego"]):
+            krasnyh += 1
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>8}{'—':>10}"
+                  f"{'—':>8}{'—':>7}{'—':>8}{'—':>11}   "
+                  f"🔴 ПУСТОЙ ЭКРАН: в <{z['glavnoe']}> не видно ни одного узла с "
+                  f"текстом, а в базе {chisla['vsego']} школьников"
+                  + (f"; при этом СКРЫТО {z['skryto_simvolov']} знаков разметки — "
+                     f"написано, но не показано" if z["skryto_simvolov"] else ""))
+            continue
+        print(f"{rol:<13}{imya:<15}{len(z['obrezka']):>9}{len(z['polya']):>6}"
+              f"{len(z['kletki']):>8}{len(z['perenos']):>10}"
+              f"{len(z['vyshli']):>8}{len(z['centr']):>7}{z['skroll']:>8}"
+              f"{z['ne_vlezlo']:>11}   "
               f"проверено {z['na_obrezku']}/{z['osmotreno']}/{z['na_vyhod']}/"
-              f"{z['na_centr']} из {z['vsego']}")
+              f"{z['na_centr']} из {z['vsego']} · полей {z['na_pole']} · клеток "
+              f"{z['na_kletku']} · видно {z['vidno_uzlov']} узлов "
+              f"({z['vidno_simvolov']} знаков), скрыто {z['skryto_simvolov']}")
 
     print()
-    print(f"ОХВАТ: проверено {izmereno} экранов из {dolzhno_byt}; "
+    print(f"ОХВАТ: проверено {izmereno} экранов из {dolzhno_byt} обещанных "
+          f"(+{svedeno} сведено к другим переадресацией); "
           f"осмотрено элементов {uzlov}")
     print("        четыре числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
           "на ВЫХОД ЗА КОНТЕЙНЕР / на ЦЕНТР, из общего числа элементов страницы.")
+    poley = sum(z["na_pole"] for _r, _i, _p, z, _o in itogi if z)
+    bez_nabora = sum(z["poley_bez_nabora"] for _r, _i, _p, z, _o in itogi if z)
+    kletok = sum(z["na_kletku"] for _r, _i, _p, z, _o in itogi if z)
+    so_znachkom = sum(z["kletok_so_znachkom"] for _r, _i, _p, z, _o in itogi if z)
+    s_kontrolom = sum(z["kletok_s_kontrolom"] for _r, _i, _p, z, _o in itogi if z)
+    pod_klipom = sum(z["pod_klipom"] for _r, _i, _p, z, _o in itogi if z)
+    if pod_klipom:
+        print(f"        узлов, режущих себя `clip-path`/`mask`: {pod_klipom} — "
+              f"проверка 1 их НЕ судит и об этом сказано ниже поимённо.")
+    print(f"        клеток таблиц осмотрено {kletok}; кроме приписок над строкой "
+          f"в них нашлось: {so_znachkom} клеток, где рядом со своим текстом стоит "
+          f"элемент со своим фоном или рамкой, и {s_kontrolom} — где рядом стоит "
+          f"контрол. Эти два рода НЕ красные: список фамилий в клетке и дробь "
+          f"«8/18», набранная двумя кеглями, — один факт, а не два носителя, и "
+          f"красное на них было бы криком волком.")
+    print(f"        полей ввода осмотрено {poley}; из них {bez_nabora} без "
+          f"известного набора значений: набор задаёт `<select>` своими вариантами "
+          f"и `<input list=>` своим списком, больше ничем. 🔴 `maxlength` НАБОРОМ "
+          f"НЕ СЧИТАЕТСЯ, и это решение, а не недосмотр (найдено верификатором, "
+          f"прежняя причина здесь была названа неверно): он ограничивает ДЛИНУ, а "
+          f"«самый широкий вводимый текст» по нему — это N самых широких букв "
+          f"алфавита, чего в поле фамилии не вводит никто. Судить по нему значило "
+          f"бы объявить узким КАЖДОЕ поле сайта. Такое поле судится по тому, что "
+          f"стоит в нём сейчас (это уже колонка «обрезка»).")
+    # ── ПРАВИЛА CSS: РЕШЕНИЕ ПРИНИМАЕТСЯ ПО ВСЕМ ЭКРАНАМ СРАЗУ ────────────────
+    # 🔴 И ТОЛЬКО ЗДЕСЬ, А НЕ В СТРАНИЦЕ.  Лист стилей один на весь сайт: правило,
+    # не совпавшее ни с чем на распределении, может законно жить на кондуите.
+    # Каждый экран отдаёт два списка — что ожило и что осталось пустым, — а
+    # мёртвым правило становится, только если пусто ВЕЗДЕ.
+    zhivye: set = set()
+    pustye: dict = {}
+    for _r, _i, _p, z, _o in itogi:
+        if not z:
+            continue
+        zhivye.update(z.get("pravila_zhivye", ()))
+        for sel, nesobiraemo in z.get("pravila_pustye", ()):
+            pustye[sel] = pustye.get(sel, False) or bool(nesobiraemo)
+    mertvye = {s: n for s, n in pustye.items() if s not in zhivye}
+    nesobiraemye = sorted(s for s, n in mertvye.items() if n)
+    prosto_pustye = sorted(s for s, n in mertvye.items() if not n)
+    pravil_vsego = len(zhivye) + len(mertvye)
+    nechitaemyh = sum(z.get("pravil_nechitaemyh", 0) for _r, _i, _p, z, _o in itogi if z)
+
+    print()
+    if args.ekran:
+        print("⚠ ПРОГОН ОДНОГО ЭКРАНА: числа про правила CSS ниже неполны по "
+              "построению. Мёртвым правило объявляется, только если пусто на ВСЕХ "
+              "экранах, а здесь их измерено меньше — правило соседнего раздела "
+              "выглядит отсюда мёртвым, и это не находка, а урезанный охват.")
+    print(f"ПРАВИЛА CSS: селекторов всего {pravil_vsego} · ожили хотя бы на одном "
+          f"экране {len(zhivye)} · не совпали НИ С ЧЕМ ни на одном {len(mertvye)}, "
+          f"из них НЕСОБИРАЕМЫХ {len(nesobiraemye)}"
+          + (f" · листов, не отдавших правил: {nechitaemyh}" if nechitaemyh else ""))
+    for sel in nesobiraemye:
+        print(f"   🔴 ПРАВИЛО НИ ВО ЧТО НЕ ПОПАЛО: {sel}")
+        print(f"      все части селектора на странице ЕСТЬ, а связь между ними "
+              f"невозможна — это «написано, но не подключено», а не «ждёт своего "
+              f"состояния»")
+    if prosto_pustye:
+        print(f"   ⚠ ещё {len(prosto_pustye)} селекторов не совпали ни с чем, но "
+              f"у них ОТСУТСТВУЕТ САМ УЗЕЛ, а не связь: класс, который сегодня "
+              f"никто не выставил (состояние ставится скриптом, ветка данных не "
+              f"случилась), от мёртвого кода здесь неотличим, и красное на них "
+              f"было бы криком волком на {len(prosto_pustye)} строк. "
+              f"Печатаются числом и первыми пятью, красным не считаются:")
+        for sel in prosto_pustye[:5]:
+            print(f"      · {sel}")
+    if nesobiraemye:
+        krasnyh += 1
+
     isk = sum(z["isklyucheno"] for _r, _i, _p, z, _o in itogi if z)
     bez = sum(z["bez_sdviga"] for _r, _i, _p, z, _o in itogi if z)
     if isk:
@@ -918,6 +1790,23 @@ def main() -> int:
                 print(f"   {vid}{storona} · {rol} · {imya} · {d['put']} · "
                       f"«{d['tekst']}» · надо {d.get('nado', d.get('nuzhno'))} "
                       f"есть {d['est']}")
+        if z["ne_vlezlo"] > DOPUSK_VYSOTY:
+            print(f"   НЕ ВЛЕЗЛО НА ЭКРАН · {rol} · {imya} · вниз ушло "
+                  f"{z['ne_vlezlo']} px при окне {ETALON['height']} px "
+                  f"(допуск {DOPUSK_VYSOTY}) — «жёсткое, с гейтом», владелец В003")
+        for d in z["kletki"][:8]:
+            print(f"   ДВА В КЛЕТКЕ · {rol} · {imya} · {d['put']} · "
+                  f"«{d['svoy']}» + приписка «{d['pripiska']}» ({d['chem']})")
+        if len(z["kletki"]) > 8:
+            print(f"   ДВА В КЛЕТКЕ · {rol} · {imya} · …и ещё "
+                  f"{len(z['kletki']) - 8} — напечатаны первые восемь")
+        for d in z["polya"][:8]:
+            print(f"   УЗКОЕ ПОЛЕ · {rol} · {imya} · {d['put']} · самый широкий "
+                  f"из {d['variantov']} вариантов «{d['tekst']}» надо {d['nado']} "
+                  f"есть {d['est']} · сейчас в нём «{d['teper']}»")
+        if len(z["polya"]) > 8:
+            print(f"   УЗКОЕ ПОЛЕ · {rol} · {imya} · …и ещё {len(z['polya']) - 8} — "
+                  f"напечатаны первые восемь")
         for d in z["vyshli"][:8]:
             print(f"   ВЫШЛО · {rol} · {imya} · {d['put']} · «{d['tekst']}» · "
                   f"влево {d['vlevo']} вправо {d['vpravo']} · "
@@ -936,6 +1825,20 @@ def main() -> int:
           "движение, озвучка экранным диктором. Гейт судит ГЕОМЕТРИЮ на одном "
           "эталоне и больше ничего."
           "\n🔴 И ОТДЕЛЬНО, ПОИМЁННО:"
+          "\n · обрезку, сделанную `clip-path` (или `mask`): такой узел режет "
+          "буквы, оставаясь `overflow:visible`, а его прямоугольники текста при "
+          "этом никуда не выходят — геометрия обрезки живёт в самом свойстве, и "
+          "разобрать её значит разобрать язык `clip-path`. Найдено верификатором: "
+          "`clip-path:inset(0 55% 0 0)` на двадцати живых `.kto` не сдвинул ни "
+          "одного из девяти чисел. Число таких узлов печатается отдельно, ниже."
+          "\n · ПАДЕНИЕ ЧИСЛА НАХОДОК НЕ ЗНАЧИТ ПОЧИНКИ — ни в одной колонке, а "
+          "не только в «центре». Найдено верификатором: расширение всех 198 "
+          "селектов до 420 px увело «обрезку» 53→0 и «поля» 108→0 при том, что "
+          "на скриншоте оказалась срезана КАЖДАЯ фамилия, а колонка класса "
+          "исчезла под соседями. Наложение элементов друг на друга гейт не "
+          "проверяет вовсе (см. ниже), и потому «стало зеленее» — это утверждение "
+          "о числах, а не о странице. Починку показывает НОЛЬ, и только НОЛЬ "
+          "рядом с непустым охватом."
           "\n · обрезку, сделанную НА СЕРВЕРЕ (строка укорочена в Python до отдачи "
           "в браузер) — в разметку приезжает уже короткий текст, переполнения нет. "
           "Гейт ловит обрезку РАМКОЙ, а не ножницами в коде."
@@ -970,10 +1873,11 @@ def main() -> int:
           "\n · экраны, где `--slomat` не сумел нанести поломку: он теперь "
           "называет их сам отдельной строкой — на них испытаны не все пять "
           "проверок."
-          "\n · центрирование БОКСА, внутри которого нет собственного текста: "
-          "`justify-content:center` проверка 5 ловит только там, где текст лежит "
-          "в самом флекс-контейнере. Ряд ТАБЛЕТОК, поставленный по середине "
-          "карточки, и блок, центрированный `margin:0 auto`, ей не видны."
+          "\n · блок, центрированный `margin:0 auto`: это не выключка, а поля, "
+          "и `getComputedStyle` их центром не называет. Центрирование БОКСОМ "
+          "проверка 5 ловит четырьмя способами (`justify-content`, "
+          "`place-content`, `justify-items`, `place-items`) и по своему тексту, и "
+          "по сдвигу ДЕТЕЙ бокса — но `margin:auto` среди них нет."
           "\n · центрирование элемента БЕЗ собственного видимого текста: "
           "центрировать в нём нечего и процитировать в отчёте нечего. Это "
           "граница измерения, а не исключение, и она одна и та же на всех "
@@ -990,7 +1894,36 @@ def main() -> int:
           "при том, что уехал весь экран. Падение числа не значит починки, "
           "починку показывает НОЛЬ."
           "\n · центрирование, приходящее ТОЛЬКО в состоянии, которого нет в "
-          "покое (`:hover`, раскрытый список, окно входа): гейт меряет покой.")
+          "покое (`:hover`, раскрытый список, окно входа): гейт меряет покой."
+          "\n · ПРАВИЛО CSS, у которого не совпала ни одна часть: узла нет вовсе, "
+          "и «мёртвый код» здесь неотличим от «класс выставляется скриптом» или "
+          "«ветка данных сегодня не случилась». Такие считаются числом и "
+          "печатаются пятью примерами, но КРАСНЫМИ не объявляются. Красное — "
+          "только НЕСОБИРАЕМОЕ правило: все части на месте, связь невозможна."
+          "\n · правило из листа, который браузер не отдал (чужой источник): "
+          "считается отдельным числом, содержимое недоступно."
+          "\n · СМЕШЕНИЕ В КЛЕТКЕ, КРОМЕ ПРИПИСКИ НАД СТРОКОЙ. Красное — только "
+          "надстрочник и подстрочник (`<sup>`, `<sub>`, `vertical-align:super|sub`) "
+          "рядом со своим текстом клетки: он ИЗМЕРИМ. Список фамилий в клетке, "
+          "дробь «8/18», набранная двумя кеглями, значок со своим фоном — "
+          "считаются отдельными числами и печатаются, но находкой не являются: "
+          "«приписка» и «второй значок» в общем виде от обычного набора одной "
+          "мысли не отделимы, и широкое правило здесь дало бы ложно-красные "
+          "(так и сказано в ТЗ, Q4: формулировать узко и по месту)."
+          "\n · СМЕШЕНИЕ ВНЕ ТАБЛИЦЫ: строка распределения — это `div.para`, а не "
+          "клетка, и проверка 9 туда не смотрит вовсе."
+          "\n · ПОДСВЕТКА СТРОКИ, КОДИРУЮЩАЯ ДВА ПРИЗНАКА СРАЗУ (O1: «мой "
+          "школьник» и «сдал всё обязательное» одним цветом) — не измеряется: "
+          "цвет строки сам по себе не говорит, сколько смыслов в него вложено."
+          "\n · ЭКРАН, НА КОТОРОМ ВИДНО МАЛО, А СКРЫТО МНОГО. Красное — только "
+          "полный ноль видимых узлов с текстом; отношение «видно к скрыто» "
+          "порогом не судится, потому что на распределении скрытых вкладок "
+          "законно в сто раз больше видимого, а на мёртвой истории — впятеро. "
+          "Оба числа печатаются рядом на каждом экране, и читает их человек."
+          "\n · правило, живущее в состоянии, до которого гейт не доходит "
+          "(раскрытый список, окно входа): состояние снимается ПЕРЕД проверкой, "
+          "поэтому такое правило судится по структуре и мёртвым не станет — но "
+          "и разметка, появляющаяся только в этом состоянии, не измеряется.")
 
     if args.slomat:
         # 🔴 «КРАСНЫЙ» ЕЩЁ НЕ ЗНАЧИТ «ВСЕ ЧЕТЫРЕ РАБОТАЮТ», А «13 ИЗ 13» НЕ ЗНАЧИТ
@@ -999,10 +1932,13 @@ def main() -> int:
         # ровно тем способом, каким гейт врал до 10.09. Поэтому здесь считается
         # ДВОЕ: сколько раз поломку удалось нанести, и сколько раз её поймали.
         PROV = (("ОБРЕЗКА", "obrezka", "obrezka"),
+                ("УЗКОЕ ПОЛЕ", "polya", "pole"),
+                ("ДВА В КЛЕТКЕ", "kletki", "kletka"),
                 ("ПЕРЕНОС", "perenos", "perenos"),
                 ("ВЫШЛО ЗА КОНТЕЙНЕР", "vyshli", "vyhod"),
                 ("ЦЕНТР", "centr", "centr"),
-                ("СКРОЛЛ", "skroll", "skroll"))
+                ("СКРОЛЛ", "skroll", "skroll"),
+                ("НЕ ВЛЕЗЛО НА ЭКРАН", "ne_vlezlo", "vniz"))
         nanesli = {imya: 0 for imya, _, _ in PROV}
         poymali = {imya: 0 for imya, _, _ in PROV}
         for _rol, _imya, _put, z, _osh in itogi:
@@ -1013,7 +1949,7 @@ def main() -> int:
                 if not lom.get(klyuch_lom):
                     continue
                 nanesli[imya_pr] += 1
-                nashli = z[klyuch] if klyuch != "skroll" else z["skroll"]
+                nashli = z[klyuch]
                 if (len(nashli) if isinstance(nashli, list) else nashli):
                     poymali[imya_pr] += 1
         print()
@@ -1022,7 +1958,7 @@ def main() -> int:
             n, p_ = nanesli[imya_pr], poymali[imya_pr]
             hvost = ""
             if n == 0:
-                hvost = "   🔴 ПОЛОМКУ НЕ УДАЛОСЬ НАНЕСТИ НИ РАЗУ — проверка не испытана"
+                hvost = "   🔴 ПОЛОМКУ НЕ УДАЛОСЬ НАНЕСТИ НИ РАЗУ — проверка не испытана"  # noqa: E501
                 bеda.append(f"{imya_pr}: нечем было сломать")
             elif p_ < n:
                 hvost = f"   🔴 ПРОПУСТИЛА {n - p_}"
@@ -1032,15 +1968,15 @@ def main() -> int:
         ne_seli = [f"{rol}/{imya}" for rol, imya, _p, z, _o in itogi if z
                    and not all(z.get("lomka", {}).get(k) for _n, _kk, k in PROV)]
         if ne_seli:
-            print("   ⚠ поломка села НЕ ЦЕЛИКОМ на экранах: " + ", ".join(ne_seli)
-                  + " — там испытаны не все пять проверок, и общий красный это"
-                    " скрывает.")
+            print(f"   ⚠ поломка села НЕ ЦЕЛИКОМ на экранах: " + ", ".join(ne_seli)
+                  + f" — там испытаны не все {len(PROV)} проверок, и общий красный"
+                    " это скрывает.")
         if bеda:
             print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: " + "; ".join(bеda)
                   + ". Проверка, которая ничего не поймала на подстроенном "
                     "нарушении, не ловит и настоящее.")
             return 1
-        print(f"\n✅ САМОПРОВЕРКА: каждая из пяти проверок поймала КАЖДУЮ "
+        print(f"\n✅ САМОПРОВЕРКА: каждая из {len(PROV)} проверок поймала КАЖДУЮ "
               f"нанесённую ей поломку. Красных экранов {krasnyh} из {izmereno}.")
         return 0
 
@@ -1050,13 +1986,15 @@ def main() -> int:
     # формально прав. Число экранов, число ролей и число осмотренных узлов делают
     # зелёное проверяемым: зелёное на двух экранах и зелёное на семнадцати — разные
     # утверждения, и теперь их видно не читая исходник.
-    roli = sorted({r for _, _, _, rr in EKRANY for r in rr})
+    roli = sorted({r for _, _, _, rr in ekrany_sayta for r in rr})
     # Замер лежит четвёртым в кортеже `(роль, экран, путь, замер, беда)`;
     # у экранов, упавших до замера, он `None` — их узлы не считаются, и это верно:
     # неосмотренный экран не должен раздувать охват.
     uzlov = sum((z or {}).get("osmotreno", 0) for _, _, _, z, _ in itogi)
-    ohvat = (f"ОХВАТ: экранов {izmereno} из {dolzhno_byt} обещанных · "
-             f"ролей {len(roli)} ({', '.join(roli)}) · осмотрено узлов {uzlov}")
+    ohvat = (f"ОХВАТ: экранов {izmereno} из {dolzhno_byt} обещанных "
+             f"(+{svedeno} сведено переадресацией) · маршрутов-страниц "
+             f"{marshrutov} · ролей {len(roli)} ({', '.join(roli)}) · "
+             f"осмотрено узлов {uzlov}")
     if krasnyh:
         print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон.")
         print(f"   {ohvat}")
@@ -1064,6 +2002,22 @@ def main() -> int:
     print(f"\n✅ ЗЕЛЁНЫЙ: {izmereno} экранов, все пять чисел нули на каждом.")
     print(f"   {ohvat}")
     return 0
+
+
+
+
+# 🔴 ГОТОВЫЙ СПИСОК ДЛЯ ТЕХ, КТО ЗОВЁТ ЭТОТ МОДУЛЬ КАК БИБЛИОТЕКУ (тесты гейта
+# параметризуются им на СБОРЕ, когда базы может не быть вовсе).  Пустой список
+# здесь значит «источник не назван» и ничего больше: сам гейт этой переменной не
+# пользуется — `main()` строит список заново и падает громко, если не смог.
+def _ekrany_pri_importe() -> list:
+    try:
+        return sobrat_ekrany(zhivaya_baza())[0]
+    except Exception:
+        return []
+
+
+EKRANY = _ekrany_pri_importe()
 
 
 if __name__ == "__main__":

@@ -210,7 +210,17 @@ def test_zdorovyy_ekran_zelyonyy(server, brauzer, rol, put, radio, ekran):
     ctx, p = _stranica(brauzer, server, rol, put, radio)
     try:
         z = _zamer(p)
-        assert z["obrezka"] == [], f"{ekran}/{rol}: ложная обрезка {z['obrezka'][:2]}"
+        # 🔴 КОНТРОЛЫ ИЗ ЭТОГО «ЗДОРОВОГО» СЧЁТА ВЫЧТЕНЫ, И ЭТО ПЕРЕСМОТР, А НЕ
+        # ПОБЛАЖКА.  Прежняя редакция утверждала, что `<select>`, чей широчайший
+        # вариант шире закрытого контрола, «не режет ни буквы» — и это оказалось
+        # НЕВЕРНО: замерено и увидено на скриншоте 11.09, «нигде◇» при 66px
+        # против нужных 73, «Настя В◇» при 74 против 139. Владелец жалуется на
+        # это место ЧЕТВЁРТЫЙ раз (N1). Здесь по-прежнему проверяется, что гейт
+        # не красит здоровую РАЗМЕТКУ; настоящие находки на контролах судят
+        # тесты раздела 8.
+        ne_kontrol = [d for d in z["obrezka"] if "select" not in d["put"]
+                      and "input" not in d["put"]]
+        assert ne_kontrol == [], f"{ekran}/{rol}: ложная обрезка {ne_kontrol[:2]}"
         assert z["perenos"] == [], f"{ekran}/{rol}: ложный перенос {z['perenos'][:2]}"
         assert z["vyshli"] == [], f"{ekran}/{rol}: ложный выход {z['vyshli'][:2]}"
         assert z["skroll"] == 0, f"{ekran}/{rol}: горизонтальный скролл {z['skroll']}"
@@ -220,15 +230,32 @@ def test_zdorovyy_ekran_zelyonyy(server, brauzer, rol, put, radio, ekran):
 
 # ── 4. coverage: a walk that looked at nothing must not read as clean ─────────
 
-@pytest.mark.parametrize("imya,put,radio,roli", [(e[0], e[1], e[2], e[3])
-                                                 for e in gejt.EKRANY])
+# 🔴 ЭКРАНЫ БОЛЬШЕ НЕ КОНСТАНТА, И ЭТО ПРОВЕРЯЕТСЯ ОТДЕЛЬНО ОТ ИХ СОДЕРЖИМОГО.
+# `gejt.EKRANY` собирается при импорте из РОУТОВ живого `veb/server.py`; когда
+# источник не назван, список законно пуст, и параметризация пустым списком тихо
+# не выполняет НИ ОДНОГО теста — то самое «ноль находок значит не смотрел», от
+# которого написан весь этот файл.  Поэтому пустой список — отдельный пропуск с
+# причиной, а не молчание.
+_EKRANY = gejt.EKRANY or [(None, None, None, None)]
+
+
+@pytest.mark.parametrize("imya,put,radio,roli", _EKRANY)
 def test_ohvat_ne_nol(server, brauzer, imya, put, radio, roli):
     """Every screen the gate claims to judge must exist, open, and hand the walks
     a non-zero number of nodes.  🔴 This is the test that would have caught the
     second cause on its own: the table named `p-rasp`/`p-start`/`p-kond`, which
     are the SITE radios (`name="str"`), while the tabs inside распределение are
     `t-shk`/`t-prep`/`t-В`/`t-Д`/`t-Н` (`name="vk"`).  The gate opened the same
-    default view four times and never reached a group tab at all."""
+    default view four times and never reached a group tab at all.
+
+    🔴 ПРОВЕРКА 4 (ВЫХОД ЗА КОНТЕЙНЕР) ЗДЕСЬ НЕ ТРЕБУЕТСЯ, И ЭТО НЕ ПОБЛАЖКА.
+    Её население — элементы, у которых ЕСТЬ видимый контейнер-предок (рамка, фон
+    или клип); на странице без карточек (`/vhod`, `/privacy`, карточка школьника
+    у гостя) таких нет ни одного законно, и требовать их значило бы красить
+    здоровые страницы.  Число печатается гейтом в колонке охвата на каждом
+    экране, так что ноль виден и без падения теста."""
+    if put is None:
+        pytest.skip("источник не назван: `gejt.EKRANY` пуст, строить экраны не из чего")
     rol = roli[0]
     ctx, p = _stranica(brauzer, server, rol, put, radio)
     try:
@@ -236,28 +263,132 @@ def test_ohvat_ne_nol(server, brauzer, imya, put, radio, roli):
         assert z["vsego"] > 0, f"{imya}: на странице ноль элементов"
         assert z["na_obrezku"] > 0, f"{imya}: проверке ОБРЕЗКИ не досталось узлов"
         assert z["osmotreno"] > 0, f"{imya}: проверке ПЕРЕНОСА не досталось узлов"
-        assert z["na_vyhod"] > 0, f"{imya}: проверке ВЫХОДА не досталось узлов"
+        assert z["na_centr"] > 0, f"{imya}: проверке ЦЕНТРА не досталось узлов"
     finally:
         ctx.close()
 
 
 def test_ekrany_razlichny(server, brauzer):
-    """Two screens of the same page must not be the same screen.  When the radio
-    ids were wrong every row of the table measured the identical DOM and the four
+    """Two TABS of распределение must not be the same screen.  When the radio ids
+    were wrong every row of the table measured the identical DOM and the four
     numbers agreed perfectly — which reads exactly like four clean pages."""
     vidy = {}
     for imya, put, radio, roli in gejt.EKRANY:
-        if "гость" not in roli:
+        if "гость" not in roli or put != "/raspredelenie":
             continue
         ctx, p = _stranica(brauzer, server, "гость", put, radio)
         try:
             vidy[imya] = _zamer(p)["na_obrezku"]
         finally:
             ctx.close()
-    rasp = [v for k, v in vidy.items() if k != "класс"]
-    assert len(set(rasp)) == len(rasp), (
+    assert len(vidy) >= 5, f"вкладок распределения найдено {len(vidy)}, ждали пять"
+    assert len(set(vidy.values())) == len(vidy), (
         f"разные вкладки распределения дали одинаковый охват {vidy} — "
         "гейт меряет один и тот же экран под разными именами")
+
+
+# ── 4.1 the list of screens itself: it is DERIVED, and that is testable ───────
+
+def test_spisok_ekranov_stroitsya_iz_routov():
+    """🔴 ГЛАВНАЯ ПРОВЕРКА ЭТОЙ ПРАВКИ, И ОНА НЕ ПРО ВЁРСТКУ.  До 11.09 список
+    экранов был девятью рукописными строками, и `/istoria` с `/kabinet` в нём
+    отсутствовали ПОЛНОСТЬЮ — ноль вхождений обоих слов в файле гейта.  Так
+    страница с 321 строкой кода и 29 зелёными тестами дожила невидимой до
+    владельца: гейт был формально прав, его туда не посылали.
+
+    Здесь проверяется не «в списке есть две нужные строки» (это лечится
+    дописыванием двух строк и ломается на третьей), а что список ПОРОЖДЁН
+    маршрутами: каждый маршрут-страница обязан дать хотя бы один экран."""
+    marshruty = gejt.marshruty_sayta()
+    assert "/istoria" in marshruty, "маршрут истории не найден в `veb/server.py`"
+    assert "/kabinet" in marshruty, "маршрут кабинета не найден в `veb/server.py`"
+    assert "/raspredelenie" in marshruty and "/" in marshruty
+
+    try:
+        db = gejt.zhivaya_baza()
+    except SystemExit as otkaz:
+        pytest.skip("источник не назван: %s" % str(otkaz).splitlines()[0])
+    ekrany, bedy = gejt.sobrat_ekrany(db)
+    assert bedy == [], f"маршруты, не ставшие экраном: {bedy}"
+
+    stranicy = {p for p, rod in marshruty.items() if rod == "stranica"}
+    pokryto = {put for _i, put, _r, _rl in ekrany}
+    ne_pokryto = stranicy - pokryto
+    assert not ne_pokryto, (
+        f"маршрут есть, экрана нет: {sorted(ne_pokryto)} — ровно так «список "
+        f"отстаёт от сайта», из-за чего мёртвая история дожила до владельца")
+
+    # ...и хвостовые маршруты подставили ЖИВОЙ объект, а не выдуманный.
+    for pref in gejt.HVOSTY:
+        assert any(put.startswith(pref) and put != pref for put in pokryto), (
+            f"маршрут «{pref}» открывается по хвосту, а экрана с живым хвостом нет")
+
+
+def test_ekran_ushedshiy_s_servera_ne_izmeryaetsya():
+    """🔴 ГЕЙТ ОБЯЗАН МЕРИТЬ ТОТ САЙТ, КОТОРЫЙ САМ И ПОДНЯЛ.  Найдено 11.09 первым
+    прогоном по роутам: гостю корень отдаёт `docs/index.html`, а это заглушка
+    переадресации на `http://math-kluychiki.ru/` (`docs/index.html:13`, `:34`),
+    и браузер уходил туда.  Четыре экрана гостя печатали одинаковые
+    46/45/72/78 из 2063 — числа настоящие, документ ЧУЖОЙ, и роль гостя завели
+    десятого числа именно затем, чтобы смотреть на страницу без пароля.
+
+    Правило испытывается литералами, без сети: доступен ли сегодня чужой хост —
+    не то, от чего должен зависеть зелёный цвет теста."""
+    baza = "http://127.0.0.1:54321"
+    assert gejt.svoy_dom(baza, baza + "/raspredelenie")
+    assert gejt.svoy_dom(baza, baza + "/")
+    assert not gejt.svoy_dom(baza, "http://math-kluychiki.ru/")
+    assert not gejt.svoy_dom(baza, "http://127.0.0.1:54322/")
+    # 🔴 И ПРЕФИКС НЕ ОБМАНЫВАЕТСЯ ХОСТОМ, КОТОРЫЙ НАЧИНАЕТСЯ ТАК ЖЕ: порт 54321
+    # против 543210 — разные серверы.  Сравнение по началу строки здесь законно
+    # ровно потому, что за адресом гейта всегда идёт «/» или конец строки.
+    assert not gejt.svoy_dom(baza, "http://127.0.0.1:54321x/")
+
+
+def test_pereadresaciya_svoditsya_a_ne_schitaetsya_vtorym_ekranom(server, brauzer):
+    """`/glavnaya`, `/listki`, `/listki-8` отвечают 302 на `/`.  Раз список
+    экранов строится из роутов, они приходят в него сами — и обязаны СВЕСТИСЬ к
+    цели, а не дать по второму «зелёному экрану» с тем же числом: раздутый охват
+    врёт ровно в ту же сторону, что и охват заниженный.
+
+    Обе половины: правило — на литералах, факт переадресации — на живом сервере.
+    (`gejt.progon` здесь позвать нельзя: он открывает СВОЙ `sync_playwright`, а
+    в этом модуле один уже открыт фикстурой `brauzer`, и Playwright запрещает
+    вложение — ошибка выглядела бы как поломка гейта, а её там нет.)"""
+    baza = "http://127.0.0.1:54321"
+    assert (gejt.klyuch_ekrana(baza, baza + "/", None)
+            == gejt.klyuch_ekrana(baza, baza + "/?den=2026-09-10", None)), (
+        "запрос в адресе не делает экран другим экраном")
+    assert (gejt.klyuch_ekrana(baza, baza + "/", "p-start")
+            != gejt.klyuch_ekrana(baza, baza + "/", "p-kond")), (
+        "разные вкладки одной страницы — разные экраны")
+
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", None)
+    try:
+        assert p.url == server + "/", (
+            f"`/glavnaya` больше не переадресует на корень (стоит {p.url}) — "
+            "сведение экранов надо пересмотреть")
+        assert (gejt.klyuch_ekrana(server, p.url, None)
+                == gejt.klyuch_ekrana(server, server + "/", None))
+    finally:
+        ctx.close()
+
+
+def test_spisok_ekranov_ne_perepisan_rukami():
+    """Список остаётся ПРОИЗВОДНЫМ.  Тест ловит откат к константе: если завтра
+    кто-то снова впишет экраны руками, `marshruty_sayta()` перестанет быть их
+    источником, и вот это равенство разойдётся."""
+    try:
+        db = gejt.zhivaya_baza()
+    except SystemExit as otkaz:
+        pytest.skip("источник не назван: %s" % str(otkaz).splitlines()[0])
+    ekrany, _ = gejt.sobrat_ekrany(db)
+    marshruty = gejt.marshruty_sayta()
+    for _imya, put, _radio, _roli in ekrany:
+        znakom = put in marshruty or any(
+            put.startswith(pref) for pref in gejt.HVOSTY)
+        assert znakom, (f"экран «{put}» не происходит ни от одного маршрута — "
+                        f"список снова пишется руками")
 
 
 # ── 5. the four holes a fresh verifier walked through on 2026-09-10 ───────────
@@ -340,11 +471,18 @@ def test_kontrol_ne_oslepljaet_predka(server, brauzer):
     for rol in ("гость", "организатор"):
         do, posle, chisto = _para(
             brauzer, server, rol, "/raspredelenie", "t-shk", lomka, chinka)
-        assert len(posle["obrezka"]) > len(do["obrezka"]) + 5, (
-            f"{rol}: колонка имён раздавлена до 150px, обрезка "
-            f"{len(do['obrezka'])} → {len(posle['obrezka'])} — "
+        # 🔴 СЧИТАЮТСЯ ТОЛЬКО НАХОДКИ НА `.kto`, А НЕ ВСЕ ПОДРЯД.  С 11.09 сам
+        # `<select>` тоже даёт находки обрезки (его выбранный текст в него не
+        # влезает — это и есть жалоба N1), и они ШУМЯТ в общем числе: сжатие
+        # колонки меняет ширину строки, а с ней и число обрезанных селектов, так
+        # что общее число могло и упасть. Здесь испытывается ровно одно — видит
+        # ли гейт обрезку у ПРЕДКА контрола, — и считать надо ровно его.
+        kto = lambda z: [d for d in z["obrezka"] if ".kto" in d["put"]]  # noqa: E731
+        assert len(kto(posle)) > len(kto(do)) + 5, (
+            f"{rol}: колонка имён раздавлена до 150px, обрезка на `.kto` "
+            f"{len(kto(do))} → {len(kto(posle))} — "
             "у организатора в каждой строке <select>, и он не смеет ослеплять строку")
-        assert len(chisto["obrezka"]) == len(do["obrezka"]), f"{rol}: не зеленеет"
+        assert len(kto(chisto)) == len(kto(do)), f"{rol}: не зеленеет"
 
 
 def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
@@ -354,7 +492,12 @@ def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
     ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
     try:
         otchet = p.evaluate(gejt.LOMKA)
-        assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll", "centr"}, (
+        # 🔴 СПИСОК ПЕРЕЧИСЛЕН, А НЕ ВЫВЕДЕН ИЗ КОДА, НАРОЧНО: новая проверка
+        # обязана СЛОМАТЬ этот тест, пока ей не написали поломку. Выведи его из
+        # самого `LOMKA` — и проверка без поломки проедет молча, а это ровно то,
+        # ради чего файл написан.
+        assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll", "centr",
+                               "pole", "kletka", "vniz"}, (
             "поломка не отчитывается о том, села ли она")
         p.wait_for_timeout(200)
         z = _zamer(p)
@@ -728,3 +871,569 @@ def test_centr_boksom_flexom(server, brauzer):
     assert any(d["chem"] == "justify-content:center" for d in posle["centr"]), (
         "нашли, но не назвали, ЧЕМ центрировано — чинить нечего")
     assert len(chisto["centr"]) == len(do["centr"]), "не зеленеет обратно"
+
+
+# ── 6. правило CSS, не совпавшее ни с одним узлом ─────────────────────────────
+#
+# 🔴 ЭТО ТОТ САМЫЙ ДЕФЕКТ, ОТ КОТОРОГО УМЕРЛА `/istoria`, И ОН ПРОВЕРЯЕТСЯ ПАРОЙ:
+# правило внесено — гейт называет его; правило убрано — молчит.
+
+def _pravila(p):
+    z = _zamer(p)
+    return ({s for s in z["pravila_zhivye"]},
+            {s: bool(n) for s, n in z["pravila_pustye"]})
+
+
+def test_nesobiraemoe_pravilo_krasneet_i_zeleneet(server, brauzer):
+    """Дефект истории, воспроизведённый дословно: радиокнопка и панель существуют
+    обе, а правило требует, чтобы панель была СЕСТРОЙ радио, тогда как она
+    племянница.  Правило не совпадает ни с чем НИКОГДА, и до 11.09 это было
+    неотличимо от правила верного."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        _zhivye, do = _pravila(p)
+        p.evaluate("""() => {
+            const rodit = document.createElement('div');
+            rodit.id = 'proba-rodit';
+            const dyadya = document.createElement('input');
+            dyadya.type = 'radio'; dyadya.id = 'proba-radio';
+            const plem = document.createElement('span');
+            plem.id = 'proba-panel'; plem.textContent = 'панель';
+            rodit.append(plem);
+            document.body.append(dyadya, rodit);
+            const st = document.createElement('style');
+            st.id = 'proba-stil';
+            // племянница, а не сестра: связь невозможна при живых обеих частях
+            st.textContent = '#proba-radio:checked ~ #proba-panel{display:block}';
+            document.head.append(st);
+        }""")
+        _zh, s_porchey = _pravila(p)
+        klyuch = "#proba-radio:checked ~ #proba-panel"
+        assert klyuch in s_porchey, (
+            f"несобираемое правило не названо; пустых стало "
+            f"{len(s_porchey) - len(do)}")
+        assert s_porchey[klyuch] is True, (
+            "правило названо пустым, но НЕ несобираемым — а обе его части на "
+            "странице есть, и именно это отличает «не подключено» от «ждёт "
+            "своего состояния»")
+
+        p.evaluate("""() => {
+            document.getElementById('proba-stil').remove();
+            document.getElementById('proba-radio').remove();
+            document.getElementById('proba-rodit').remove();
+        }""")
+        _zh2, posle = _pravila(p)
+        assert klyuch not in posle, "правило убрано, а гейт всё ещё его называет"
+    finally:
+        ctx.close()
+
+
+def test_pravilo_zhdushchee_sostoyaniya_ne_nazyvaetsya_nesobiraemym(server, brauzer):
+    """🔴 ГРАНИЦА, БЕЗ КОТОРОЙ ПРОВЕРКА КРИЧАЛА БЫ ВОЛКОМ НА СТО ТРИДЦАТЬ СТРОК.
+    `:checked`, `:hover` и прочее описывают МОМЕНТ, а гейт меряет покой: правило,
+    ждущее своего состояния, обязано судиться по СТРУКТУРЕ — снимаем состояние и
+    спрашиваем, бывает ли такая связь вообще.  Здесь связь законная, и правило
+    не должно попасть ни в пустые, ни тем более в несобираемые."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        p.evaluate("""() => {
+            const a = document.createElement('input');
+            a.type = 'checkbox'; a.id = 'proba-fl';
+            const b = document.createElement('span');
+            b.id = 'proba-ryadom'; b.textContent = 'сосед';
+            document.body.append(a, b);          // настоящие СЁСТРЫ, не выключено
+            const st = document.createElement('style');
+            st.id = 'proba-stil2';
+            st.textContent = '#proba-fl:checked ~ #proba-ryadom{color:red}';
+            document.head.append(st);
+        }""")
+        zhivye, pustye = _pravila(p)
+        klyuch = "#proba-fl:checked ~ #proba-ryadom"
+        assert klyuch in zhivye, (
+            "правило, которое ждёт `:checked`, объявлено пустым — так проверка "
+            "объявит мёртвым весь сайт, и её выключат")
+        assert klyuch not in pustye
+    finally:
+        p.evaluate("""() => { for (const i of ['proba-stil2','proba-fl','proba-ryadom'])
+            { const e = document.getElementById(i); if (e) e.remove(); } }""")
+        ctx.close()
+
+
+def test_chast_bez_imeni_ne_ulika(server, brauzer):
+    """🔴 ГРАНИЦА, НАЙДЕННАЯ НА СОБСТВЕННОЙ НАХОДКЕ, А НЕ РАССУЖДЕНИЕМ.  Первая
+    редакция проверки объявила несобираемым `.spisok div` — а это
+    `<div class="spisok" id="spisok" hidden>` (`veb/obshchee/karkas.py:2286`),
+    который наполняет скрипт поиска: правило ЖДЁТ СВОЕГО СОСТОЯНИЯ.  Причина
+    промаха общая: часть `div` совпадает на любой странице всегда, поэтому «все
+    части на месте» с ней выполняется само собой и уликой не служит.  Теперь
+    уликой считается только ИМЕНОВАННАЯ часть — с `#`, `.` или `[атрибутом]`."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        p.evaluate("""() => {
+            const pusto = document.createElement('div');
+            pusto.className = 'proba-spisok';        // есть, но БЕЗ детей
+            const a = document.createElement('span'); a.className = 'proba-a';
+            a.textContent = 'а';
+            const b = document.createElement('span'); b.className = 'proba-b';
+            b.textContent = 'б';
+            document.body.append(pusto, a, b);       // соседи, а не вложенные
+            const st = document.createElement('style'); st.id = 'proba-stil3';
+            st.textContent = '.proba-spisok div{color:red}'
+                           + '.proba-a .proba-b{color:blue}';
+            document.head.append(st);
+        }""")
+        _zh, pustye = _pravila(p)
+        assert pustye.get(".proba-spisok div") is False, (
+            "правило с БЕЗЫМЯННОЙ частью (`div`) объявлено несобираемым — так "
+            "выпадающий список, наполняемый скриптом, станет ложным красным")
+        assert pustye.get(".proba-a .proba-b") is True, (
+            "правило, у которого ОБЕ части именованы, обе на странице и никогда "
+            "не вложены, несобираемым не названо — проверка ослепла")
+    finally:
+        p.evaluate("""() => { for (const s of ['proba-stil3'])
+            { const e = document.getElementById(s); if (e) e.remove(); }
+            for (const c of ['.proba-spisok', '.proba-a', '.proba-b'])
+              document.querySelectorAll(c).forEach(e => e.remove()); }""")
+        ctx.close()
+
+
+def test_pravilo_zhivoe_na_sosednem_ekrane_ne_mertvoe(server, brauzer):
+    """🔴 РЕШЕНИЕ ПРИНИМАЕТСЯ ПО ВСЕМ ЭКРАНАМ, А НЕ ПО ОДНОМУ, И ЭТО ИЗМЕРИМО.
+    Лист стилей один на весь сайт, поэтому «ноль совпадений на ЭТОМ экране» не
+    значит ничего.  Здесь показано живьём: есть селекторы, пустые на
+    распределении и ожившие на кондуите.  Проверка, судящая по одному экрану,
+    объявила бы их мёртвыми — и была бы неправа ровно столько раз, сколько на
+    сайте разделов."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/raspredelenie", "t-shk")
+    try:
+        zh_rasp, pu_rasp = _pravila(p)
+    finally:
+        ctx.close()
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        zh_kond, _pu_kond = _pravila(p)
+    finally:
+        ctx.close()
+    voskresli = set(pu_rasp) & zh_kond
+    assert voskresli, (
+        "не нашлось ни одного правила, пустого на распределении и живого на "
+        "кондуите — значит эта проверка испытана не была")
+    assert not (zh_rasp & set(pu_rasp)), (
+        "один экран объявил селектор и живым, и пустым одновременно")
+
+
+# ── 7. пустой экран при непустых данных ───────────────────────────────────────
+
+def test_pustoy_ekran_krasneet_i_zeleneet(server, brauzer):
+    """🔴 ПЯТЬ НУЛЕЙ НА ПУСТОМ ЭКРАНЕ ЧИТАЮТСЯ КАК ЧИСТАЯ СТРАНИЦА.  Все проверки
+    гейта судят НАРИСОВАННОЕ: где не нарисовано ничего, у каждой ноль находок —
+    и `/istoria` печатала ровно такие нули, будучи невидимой целиком.  Пара:
+    главная область спрятана — экран объявлен пустым; возвращена — молчит."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        do = _zamer(p)
+        assert do["vidno_uzlov"] > 0, "здоровый экран объявлен пустым"
+        assert not gejt.pustoy_ekran(do, 54)
+
+        p.evaluate("""() => {
+            const m = document.querySelector('main') || document.body;
+            m.setAttribute('data-bylo', m.getAttribute('style') || '');
+            m.style.setProperty('visibility', 'hidden', 'important');
+        }""")
+        posle = _zamer(p)
+        assert posle["vidno_uzlov"] == 0, (
+            f"главная область спрятана, а гейт видит {posle['vidno_uzlov']} узлов")
+        assert gejt.pustoy_ekran(posle, 54), "пустой экран не объявлен пустым"
+        # 🔴 И ЭТО ИМЕННО «НАПИСАНО, НО НЕ ПОКАЗАНО», А НЕ «ПУСТАЯ СТРАНИЦА»:
+        # разметка на месте, и второе число это говорит.
+        assert posle["skryto_simvolov"] > 0
+
+        p.evaluate("""() => {
+            const m = document.querySelector('main') || document.body;
+            m.setAttribute('style', m.getAttribute('data-bylo') || '');
+        }""")
+        vernuli = _zamer(p)
+        assert vernuli["vidno_uzlov"] > 0
+        assert not gejt.pustoy_ekran(vernuli, 54)
+    finally:
+        ctx.close()
+
+
+def test_pustoy_ekran_na_pustoy_baze_ne_nahodka():
+    """Граница, названная вслух: пустой экран на ПУСТОЙ базе — честный пустой
+    экран.  Красное на нём значило бы красное на свежей установке, где показывать
+    ещё нечего, и такой гейт выключают в первый же день."""
+    pusto = {"vidno_uzlov": 0, "skryto_simvolov": 0}
+    assert gejt.pustoy_ekran(pusto, 54)
+    assert not gejt.pustoy_ekran(pusto, 0)
+    assert not gejt.pustoy_ekran({"vidno_uzlov": 3}, 54)
+
+
+# ── 8. поле ввода шириной по самому широкому возможному тексту (N1) ───────────
+#
+# 🔴 МЕСТО ЧЕТВЁРТОЙ ЖАЛОБЫ ВЛАДЕЛЬЦА, И ТУТ ГЕЙТ МОЛЧАЛ ДОЛЬШЕ ВСЕГО: `<select>`
+# исключили из проверки обрезки в круге 15 как источник ложно-красных, и
+# исключение сделало слепое пятно ровно там, где «Дима Елисе◇».
+
+def test_uzkoe_pole_krasneet_i_zeleneet(server, brauzer):
+    """Пара на ЖИВОМ поле распределения: расширить до нужного — находка уходит,
+    вернуть ширину — возвращается.  Так проверяется, что судится РЕНДЕР, а не
+    наличие тега: тег на месте в обоих состояниях."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/raspredelenie", "t-shk")
+    try:
+        do = _zamer(p)
+        uzkie = [d for d in do["polya"] if "pr-sel" in d["put"]]
+        assert uzkie, ("на живом распределении не нашлось ни одного узкого "
+                       "селекта — проверка не испытана")
+        nado = max(d["nado"] for d in uzkie)
+
+        p.evaluate("""(w) => { for (const s of document.querySelectorAll('select.pr-sel'))
+            { s.style.setProperty('width', w + 'px', 'important');
+              s.style.setProperty('max-width', 'none', 'important'); } }""", nado + 8)
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        assert not [d for d in posle["polya"] if "pr-sel" in d["put"]], (
+            f"поле расширено до {nado + 8}px, а гейт всё ещё зовёт его узким: "
+            f"{[d for d in posle['polya'] if 'pr-sel' in d['put']][:2]}")
+
+        p.evaluate("""() => { for (const s of document.querySelectorAll('select.pr-sel'))
+            { s.style.removeProperty('width'); s.style.removeProperty('max-width'); } }""")
+        p.wait_for_timeout(120)
+        vernuli = _zamer(p)
+        assert [d for d in vernuli["polya"] if "pr-sel" in d["put"]], (
+            "ширину вернули, а находка не вернулась")
+    finally:
+        ctx.close()
+
+
+def test_shirokoe_pole_ne_nahodka(server, brauzer):
+    """Красное на здоровом — ложный гейт, и такой гейт обходят.  Поле, в которое
+    его самый широкий вариант помещается, находкой быть не должно ни при каком
+    числе вариантов."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        p.evaluate("""() => {
+            const s = document.createElement('select');
+            s.id = 'proba-shirokoe';
+            for (const t of ['коротко', 'Тухватулин-Йалчын Дэвин'])
+                { const o = document.createElement('option'); o.textContent = t; s.append(o); }
+            s.style.setProperty('width', '600px', 'important');
+            (document.querySelector('main') || document.body).append(s);
+        }""")
+        z = _zamer(p)
+        assert not [d for d in z["polya"] if "proba-shirokoe" in d["put"]], (
+            "поле в 600px объявлено узким — проверка кричит волком")
+        assert not [d for d in z["obrezka"] if "proba-shirokoe" in d["put"]]
+    finally:
+        p.evaluate("""() => { const e = document.getElementById('proba-shirokoe');
+            if (e) e.remove(); }""")
+        ctx.close()
+
+
+def test_obrezka_vybrannogo_v_selekte_eto_obrezka(server, brauzer):
+    """🔴 ТО, ЧТО В ПОЛЕ СТОИТ СЕЙЧАС И НЕ ПОМЕЩАЕТСЯ, — ЭТО ОБРЕЗКА, и уходит в
+    тот же список, что обрезанный текст: читателю всё равно, срезана буква рамкой
+    абзаца или рамкой контрола.  Именно это владелец и фотографирует —
+    «Настя В◇» вместо «Настя Вахрина»."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/raspredelenie", "t-shk")
+    try:
+        z = _zamer(p)
+        srezano = [d for d in z["obrezka"] if "select" in d["put"]]
+        assert srezano, ("ни один селект не назван обрезанным, хотя выбранное имя "
+                         "в него не влезает — это и есть слепое пятно круга 15")
+        d = srezano[0]
+        assert d["nado"] > d["est"], d
+    finally:
+        ctx.close()
+
+
+def test_input_bez_nabora_ne_sudirsya_na_shirinu(server, brauzer):
+    """Граница, названная вслух и посчитанная числом: у `<input>` без `list=`
+    самого широкого ВВОДИМОГО текста не существует — набор значений не назван
+    ничем.  Такое поле не находка и не молчание: оно попадает в счётчик
+    `poley_bez_nabora`, который печатается на каждом прогоне."""
+    ctx, p = _stranica(brauzer, server, "гость", "/vhod", None)
+    try:
+        z = _zamer(p)
+        assert z["na_pole"] > 0, "на странице входа не нашлось ни одного поля"
+        assert z["poley_bez_nabora"] > 0, (
+            "поле без набора значений не посчитано — молчаливое прощение "
+            "неотличимо от дырки в проверке")
+        assert z["polya"] == [], f"поле без набора объявлено узким: {z['polya']}"
+    finally:
+        ctx.close()
+
+
+# ── 9. одна клетка — один носитель данных (O3, Q4) ────────────────────────────
+
+def test_dva_nositelya_v_kletke_krasneyut_i_zeleneyut(server, brauzer):
+    """🔴 КАНОН ВЛАДЕЛЬЦА «НЕЛЬЗЯ СМЕШИВАТЬ», У КОТОРОГО НЕ БЫЛО РЫЧАГА.  Живое
+    нарушение — «Агаркова Ирина ᴰ·ᴱ·»: инициалы принимающего надстрочником в
+    клетке с фамилией школьника.  У правила «никогда не центрируем» рычаг есть, и
+    оно держится; у этого рычага не было, и оно возвращается.
+
+    Пара на кондуите: приписку убрали — находка ушла, вернули — вернулась."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        do = _zamer(p)
+        assert do["na_kletku"] > 0, "на кондуите не нашлось ни одной клетки"
+        assert do["kletki"], (
+            "живое нарушение O3 («Агаркова Ирина» + инициалы надстрочником) не "
+            "названо — проверка не испытана")
+        assert any("Агаркова" in d["svoy"] or "Аникина" in d["svoy"]
+                   for d in do["kletki"]), do["kletki"][:2]
+
+        p.evaluate("""() => { for (const i of document.querySelectorAll('td.kto i.prin'))
+            { i.setAttribute('data-bylo', '1'); i.remove(); } }""")
+        posle = _zamer(p)
+        assert posle["kletki"] == [], (
+            f"приписки убраны, а гейт всё ещё называет {len(posle['kletki'])} клеток")
+    finally:
+        ctx.close()
+
+
+def test_pripiska_lovitsya_i_tegom_i_naborom(server, brauzer):
+    """Приписка бывает `<sup>` и бывает `vertical-align:super` на любом теге —
+    живое нарушение сделано ВТОРЫМ способом (`i.prin`), и проверка, знающая один
+    только тег, прошла бы мимо него целиком."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        z = _zamer(p)
+        chem = {d["chem"] for d in z["kletki"]}
+        assert any("vertical-align" in c for c in chem), (
+            f"приписка, поднятая НАБОРОМ, не поймана: {chem}")
+        p.evaluate("""() => {
+            const td = document.createElement('td');
+            td.append(document.createTextNode('Проба Пробова'));
+            const s = document.createElement('sup'); s.textContent = 'П.П.';
+            td.append(s);
+            const tr = document.createElement('tr'); tr.append(td);
+            const tb = document.createElement('table'); tb.id = 'proba-tabl';
+            tb.append(tr);
+            (document.querySelector('main') || document.body).append(tb);
+        }""")
+        posle = _zamer(p)
+        tegom = [d for d in posle["kletki"] if "Проба" in d["svoy"]]
+        assert tegom and tegom[0]["chem"] == "<sup>", (
+            f"приписка, сделанная ТЕГОМ, не поймана: {posle['kletki'][-2:]}")
+    finally:
+        p.evaluate("""() => { const e = document.getElementById('proba-tabl');
+            if (e) e.remove(); }""")
+        ctx.close()
+
+
+def test_odin_fakt_dvumya_keglyami_ne_nahodka(server, brauzer):
+    """🔴 ГРАНИЦА, ИЗМЕРЕННАЯ, А НЕ ВЫБРАННАЯ.  Счётчик «8/18» набран двумя
+    кеглями (`span.iz` мельче), а список фамилий в клетке принимающего — своим
+    набором блоков.  Ни то, ни другое не приписка: это ОДИН факт, разбитый
+    набором, и красное на нём было бы красным на дроби.  Отличие измеримо —
+    `vertical-align`, — а не выбрано на глаз: `i.prin` это `super`, `span.iz` и
+    `span.det-f` это `baseline`."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        z = _zamer(p)
+        assert not [d for d in z["kletki"] if "/" in d["pripiska"]], (
+            f"дробь счётчика объявлена вторым носителем: "
+            f"{[d for d in z['kletki'] if '/' in d['pripiska']][:2]}")
+        vyravnivanie = p.evaluate("""() => {
+            const o = {};
+            for (const [imya, sel] of [['prin', 'td.kto i.prin'], ['iz', 'td.sch span.iz']]) {
+              const e = document.querySelector(sel);
+              o[imya] = e ? getComputedStyle(e).verticalAlign : null;
+            }
+            return o;
+        }""")
+        assert vyravnivanie["prin"] == "super", vyravnivanie
+        assert vyravnivanie["iz"] == "baseline", (
+            f"счётчик перестал быть baseline — границу проверки надо пересмотреть "
+            f"по замеру, а не по памяти: {vyravnivanie}")
+    finally:
+        ctx.close()
+
+
+def test_spisok_v_kletke_schitaetsya_no_ne_nahodka(server, brauzer):
+    """Клетка со списком фамилий (вкладка «принимающим») — не находка, но и не
+    молчание: она попадает в счётчик, который печатается каждым прогоном.
+    Молчаливое прощение неотличимо от дырки в проверке."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-prep")
+    try:
+        z = _zamer(p)
+        assert z["na_kletku"] > 0
+        assert z["kletki"] == [], f"ложная находка в клетке: {z['kletki'][:2]}"
+        assert z["kletok_so_znachkom"] > 0, (
+            "клетки со вторым элементом, у которого свой фон, не посчитаны вовсе")
+    finally:
+        ctx.close()
+
+
+# ── 10. всё на один экран (ПРАВКА 1, требование владельца В003) ───────────────
+
+def test_ne_vlezlo_na_ekran_krasneet_i_zeleneet(server, brauzer):
+    """🔴 «ЖЁСТКОЕ — С ГЕЙТОМ», сказал владелец дословно (реплика В003, ночь
+    10.09), и слово «с гейтом» сказал он, а не аналитик.  Причина не
+    косметическая и названа им же (J3): «из-за этого надо пролистывать вниз…
+    удобно, когда они помещаются все на одну строку» — прокрутка вниз посреди
+    занятия, стоя, с телефона.
+
+    Такого счёта в файле не было ни одного: `skroll` и его двойник в самопроверке
+    считают только ШИРИНУ, а проверка 4 ловит вертикальный выход У ЭЛЕМЕНТА —
+    это про контейнер, а не про то, влезли ли строки на экран."""
+    ctx, p = _stranica(brauzer, server, "гость", "/vhod", None)
+    try:
+        do = _zamer(p)
+        assert do["ne_vlezlo"] <= gejt.DOPUSK_VYSOTY, (
+            f"экран входа не помещается и БЕЗ поломки ({do['ne_vlezlo']} px) — "
+            "испытывать нечего, возьми другой экран")
+
+        p.evaluate("""(h) => {
+            const d = document.createElement('div'); d.id = 'proba-vysota-t';
+            d.style.height = (h + 300) + 'px';
+            (document.querySelector('main') || document.body).append(d);
+        }""", gejt.ETALON["height"])
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        assert posle["ne_vlezlo"] > gejt.DOPUSK_VYSOTY, (
+            "строк добавили на 300 px больше окна, а гейт говорит, что всё влезло")
+        assert posle["ne_vlezlo"] >= 300, (
+            f"число не то: вниз ушло {posle['ne_vlezlo']} px, а добавили минимум 300")
+
+        p.evaluate("""() => { const e = document.getElementById('proba-vysota-t');
+            if (e) e.remove(); }""")
+        p.wait_for_timeout(120)
+        chisto = _zamer(p)
+        assert chisto["ne_vlezlo"] == do["ne_vlezlo"], (
+            f"строки убрали, а число не вернулось: {do['ne_vlezlo']} → "
+            f"{chisto['ne_vlezlo']}")
+    finally:
+        ctx.close()
+
+
+def test_dopusk_vysoty_nazvan_chislom_i_ne_pryachet_nahodok(server, brauzer):
+    """Допуск обязан быть числом с причиной, а не «на глаз».  Ноль дал бы ложные
+    красные на округлениях: `scrollHeight`/`clientHeight` целые, раскладка
+    дробная.  Один пиксель — ровно эта разница; замерено живьём по всем экранам,
+    у КАЖДОГО помещающегося разница ровно 0, у непомещающегося минимум 22 px, то
+    есть допуску ни разу не пришлось работать."""
+    assert gejt.DOPUSK_VYSOTY == 1
+    ctx, p = _stranica(brauzer, server, "гость", "/vhod", None)
+    try:
+        assert _zamer(p)["ne_vlezlo"] == 0, (
+            "помещающийся экран даёт не ровный ноль — тогда допуск действительно "
+            "что-то прячет, и его надо пересчитать по замеру, а не по памяти")
+    finally:
+        ctx.close()
+
+
+def test_perenos_ne_krasneet_na_otstupah(server, brauzer):
+    """🔴 НАХОДКА ВЕРИФИКАТОРА: `dostupno()` возвращал `clientWidth`, а он включает
+    внутренние отступы, тогда как текст живёт в content box.  У блока с боковым
+    padding проверка считала доступным на два отступа больше и объявляла ЗАКОННЫЙ
+    перенос лишним — красное на здоровой странице, а такой гейт обходят."""
+    ctx, p = _stranica(brauzer, server, "гость", "/privacy", None)
+    try:
+        do = _zamer(p)
+        p.evaluate("""() => {
+            for (const e of document.querySelectorAll('p, li'))
+                e.style.setProperty('padding', '0 30%', 'important');
+        }""")
+        p.wait_for_timeout(150)
+        posle = _zamer(p)
+        assert len(posle["perenos"]) == len(do["perenos"]), (
+            f"боковой отступ 30 % сделал законные переносы «лишними»: "
+            f"{len(do['perenos'])} → {len(posle['perenos'])}; первые: "
+            f"{posle['perenos'][:2]}")
+    finally:
+        ctx.close()
+
+
+def test_centr_setkoy_justify_items(server, brauzer):
+    """🔴 НАХОДКА ВЕРИФИКАТОРА: третий способ поставить по середине — свой у
+    СЕТКИ. `justify-content` двигает всю дорожку, `justify-items` — каждый
+    элемент внутри своей ячейки, и текст встаёт ровно туда же."""
+    ctx, p = _stranica(brauzer, server, "гость", "/privacy", None)
+    try:
+        do = _zamer(p)
+        p.evaluate("""() => {
+            const h = document.querySelector('h1') || document.querySelector('p');
+            const o = document.createElement('div'); o.id = 'proba-setka';
+            o.style.display = 'grid'; o.style.justifyItems = 'center';
+            h.parentElement.insertBefore(o, h); o.append(h);
+        }""")
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        assert len(posle["centr"]) > len(do["centr"]), (
+            f"`justify-items:center` не пойман: {len(do['centr'])} → "
+            f"{len(posle['centr'])}")
+        nash = [d for d in posle["centr"] if "justify-items" in d["chem"]]
+        assert nash, (f"находка есть, но названа не тем свойством: "
+                      f"{[d['chem'] for d in posle['centr']][:3]}")
+        assert "у детей бокса" in nash[0]["sdvig"], (
+            "сдвиг назван не тот: центрируется не текст бокса, а его дети, и "
+            "отчёт обязан говорить именно это — иначе чинить по нему нечего")
+        p.evaluate("""() => { const o = document.getElementById('proba-setka');
+            if (o) o.style.removeProperty('justify-items'); }""")
+        p.wait_for_timeout(120)
+        chisto = _zamer(p)
+        assert len(chisto["centr"]) == len(do["centr"]), (
+            f"центрирование сняли, а находка осталась: {len(do['centr'])} → "
+            f"{len(chisto['centr'])}")
+    finally:
+        ctx.close()
+
+
+def test_pripiska_ryadom_s_kontrolom_v_kletke(server, brauzer):
+    """🔴 НАХОДКА ВЕРИФИКАТОРА: там, где сайт кладёт фамилию в `<select>`,
+    собственный текст клетки пуст — и правило «нельзя смешивать» молчало ровно на
+    тех строках, где смешение и происходит.  Значение контрола — такой же
+    кусочек информации, как текст рядом."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        do = _zamer(p)
+        p.evaluate("""() => {
+            const td = document.createElement('td');
+            const s = document.createElement('select');
+            const o = document.createElement('option'); o.textContent = 'Настя Вахрина';
+            s.append(o); s.selectedIndex = 0;
+            const sup = document.createElement('sup'); sup.textContent = 'Н.В.';
+            td.append(s, sup);
+            const tr = document.createElement('tr'); tr.append(td);
+            const tb = document.createElement('table'); tb.id = 'proba-kontrol';
+            tb.append(tr);
+            (document.querySelector('main') || document.body).append(tb);
+        }""")
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        nashli = [d for d in posle["kletki"] if "поле:" in d["svoy"]]
+        assert nashli, (
+            f"приписка рядом с контролом в клетке не поймана: было "
+            f"{len(do['kletki'])}, стало {len(posle['kletki'])}")
+    finally:
+        p.evaluate("""() => { const e = document.getElementById('proba-kontrol');
+            if (e) e.remove(); }""")
+        ctx.close()
+
+
+def test_uzly_pod_klipom_schitayutsya(server, brauzer):
+    """🔴 ДЫРА ВЕРИФИКАТОРА, КОТОРУЮ ЗАКРЫТЬ НЕЛЬЗЯ, НО ПРОМОЛЧАТЬ О НЕЙ — МОЖНО
+    БЫЛО.  `clip-path:inset(0 55% 0 0)` режет буквы, оставляя `overflow:visible`,
+    и прямоугольники текста при этом никуда не выходят: разобрать такую обрезку
+    значит разобрать язык `clip-path`.  Проверка её не судит — но число таких
+    узлов печатается, потому что молчаливое слепое пятно неотличимо от чистой
+    страницы."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        do = _zamer(p)
+        p.evaluate("""() => {
+            for (const e of [...document.querySelectorAll('#v-shk .kto')].slice(0, 20))
+                e.style.setProperty('clip-path', 'inset(0 55% 0 0)', 'important');
+        }""")
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        assert posle["pod_klipom"] >= do["pod_klipom"] + 20, (
+            f"узлы под `clip-path` не посчитаны: {do['pod_klipom']} → "
+            f"{posle['pod_klipom']}")
+        assert len(posle["obrezka"]) == len(do["obrezka"]), (
+            "обрезка `clip-path` вдруг стала находкой — тогда границу надо "
+            "пересмотреть и переписать объявление, а не радоваться")
+    finally:
+        ctx.close()
