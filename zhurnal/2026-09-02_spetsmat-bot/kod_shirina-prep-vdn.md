@@ -2,14 +2,14 @@
 > Твой единственный файл-заход. Читай ТОЛЬКО его и названные якоря; проект не изучай.
 <!-- собран bootstrap_zahod.py -->
 > План/вопросы/отчёт — в секции внизу. Метрика — КАЧЕСТВО. Часы — норма.
-> **Модель: openrouter/cohere/north-mini-code:free** — одно правило CSS в одном файле, границы названы владельцем жёстко — суждения здесь нет, есть точное указание.
+> **Модель: openrouter/nex-agi/nex-n2.5-pro:free** — одно правило CSS в одном файле, границы названы владельцем жёстко — суждения здесь нет, есть точное указание.
 
 ## СТАРТОВОЕ СООБЩЕНИЕ ВЛАДЕЛЬЦУ
 
 > Это блок для владельца — то, чем тебя запустили. Исполнителю здесь делать нечего, твоё задание ниже.
 
 ```
-Модель: openrouter/cohere/north-mini-code:free — см. обоснование в шапке захода, §0.
+Модель: openrouter/nex-agi/nex-n2.5-pro:free — см. обоснование в шапке захода, §0.
 
 Ты исполнитель в репозитории /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/shirina-prep-vdn.
 
@@ -304,7 +304,14 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+1. Measure the longest active teacher name from the live database with a read-only query; use that measured width for the recipient control on the logged-in group tabs only.
+2. Change exactly one CSS rule in `veb/obshchee/karkas.py`, scoped to `#v-В`, `#v-Д`, and `#v-Н`, so the right edge moves right while the student-name left edge and every other layout property remain unchanged.
+3. Commit the single-file change immediately with path-limited `add` and `commit --`, then run the layout gate for guest and logged-in roles on both distribution URLs and all three group tabs.
+4. Record coverage, the longest name and measured width, left-edge coordinates before and after, byte-identical guest/school-tab snapshots, and the 1440×900 horizontal-scroll result; then complete hygiene, push, merge this branch last, and verify from the main worktree.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+None.
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -338,15 +345,15 @@ git --no-optional-locks status --porcelain | wc -l        # не закомми�
 git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
 python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
 ```
-<сюда — вывод, дословно>
+```
+1
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
 <влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
-*(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
-правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
-не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** нет
+- `zahod/shirina-prep-vdn` — собственная рабочая ветка; она намеренно остаётся невлитой до последнего хода этого захода.
 
 ## ОТЧЁТ — (заполняет исполнитель)
 **АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
@@ -404,3 +411,9 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 Владелец 11.09 дословно: пароль не понадобится ни одной позиции — ни `sudo`, ни keychain.
 Если твоя задача, как ты её понял, требует пароля владельца — это ОШИБКА ПОНИМАНИЯ, а не
 потребность. Остановись, назови её отдельной строкой в `## ОТЧЁТ` и делай остальное.
+
+> ⚠ МОДЕЛЬ ПЕРЕВЫБРАНА ВТОРОЙ РАЗ (2026-09-11 00:59). Первая замена, `cohere/north-mini-code:free`,
+> умерла через 106 секунд ответом провайдера: `UnknownError · Unexpected server error ·
+> ref err_71a5f2e3` (лог /tmp/pusk-shirina-prep-vdn.out, старт 00:54:19, конец 00:56:05).
+> Работы не оставила: коммитов 0, рабочая папка чиста. Замена — снова БЕСПЛАТНАЯ,
+> `nex-agi/nex-n2.5-pro:free`, проверена живым прогоном в 00:24-00:32. На Opus позиция НЕ поднята.

@@ -389,3 +389,86 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 Владелец 11.09 дословно: пароль не понадобится ни одной позиции — ни `sudo`, ни keychain.
 Если твоя задача, как ты её понял, требует пароля владельца — это ОШИБКА ПОНИМАНИЯ, а не
 потребность. Остановись, назови её отдельной строкой в `## ОТЧЁТ` и делай остальное.
+
+---
+
+### PLAN (written by the executor, before any action)
+
+**Entry ritual.** §0.1 cancelled by the orchestrator; the single replacement command was
+run first move, its output is in `## ОТЧЁТ` and in `## ГИГИЕНА ВХОДА`. Working folder was
+already present, branch confirmed `zahod/offlajn-ochered`.
+
+**What I read.** Only the заход and its named anchor `NADEZHNOST-zakaz-na-resyorch.md`
+(§2 and Р1–Р7), plus the zone files themselves: `veb/obshchee/karkas.py`
+(`PRAVKA_SKRIPT.srazu`, `KONDUIT_SKRIPT.otpravit`), `veb/razdely/konduit.py`,
+`veb/server.py` (`Handler._connection`, `do_GET`), and the two doors a tap already goes
+through (`veb/priyom.py`, `core/services/marking.py`) — read-only, to learn the contract.
+
+**Assumptions stated before writing code (Карпатов: name the fork out loud).**
+
+* **A1 — no service worker, no PWA, and this is a deliberate choice, not an omission.**
+  The заход forbids both unless the minimal solution needs them, because Р1 (queue
+  survival in an installed iOS PWA) and Р2 (Background Sync in Safari) are closed by an
+  EXPERIMENT on real hardware, which this заход has none of. So everything below depends
+  on neither answer: the queue lives in IndexedDB and is flushed from the foreground only
+  — on `online`, on `visibilitychange`, on page load, and on a backoff timer while the
+  page is open. **The price of A1, named honestly:** a COLD load with no network still
+  fails — the browser cannot fetch `/` without a service worker. What is covered is the
+  case the owner actually described: the page is already open during the lesson and the
+  network dies under it.
+* **A2 — the client does NOT send an idempotency key, and does not need one.**
+  `/api/priyom` mints its own key (`veb/priyom.py:_klyuch`, per-second) and lives OUTSIDE
+  my zone. It does not matter: `MarkingService._set_state_locked` carries *semantic*
+  idempotency — a request whose target state the cell already stands at writes nothing
+  and answers `written=False`. A queued tap redelivered after a lost response is
+  therefore a no-op, not a duplicate row. Verified by reading the service and by a test.
+* **A3 — the queue is transport only** (interview point 4, заказ §2). Losing it must not
+  be frightening, so nothing is computed from it: the server stays the single source of
+  truth and every confirmed answer redraws the cell from what the server says.
+* **A4 — the phone's wall clock is never used for ordering** (заказ §2). Order is the
+  IndexedDB autoincrement inside one device; server order is its own autoincrement. The
+  clock is used for one thing only: printing "data as of HH:MM" in the banner, and even
+  there the printed time comes from the SERVER's render, while the AGE is measured with
+  `performance.now()` elapsed since load, not with `Date.now()` arithmetic.
+* **A5 — `navigator.onLine` is not trusted** (заказ §2, school wi-fi). Every state
+  transition is driven by the outcome of a real request. `online`/`offline` events are
+  used only as a hint to try again sooner.
+
+**Objection to the критерий готовности — none.** It is checkable and it can fail: three
+network states, two numbers each, plus a deliberately refused edit. I keep it as written
+and add the coverage line it demands.
+
+**The work, in parts, each committed separately.**
+
+1. **Part 1 — the write queue.** New module `veb/razdely/ochered.py`: an IndexedDB FIFO
+   (`spetsmat-offlajn` / `tapy`, `autoIncrement` id = the order), a sender that sends
+   STRICTLY ONE AT A TIME in id order, and a counter chip "в очереди N" in `.kond-verh`.
+   `KONDUIT_SKRIPT.otpravit` in `veb/obshchee/karkas.py` stops calling `fetch` itself and
+   hands the tap to the queue; the cell is drawn into its target state IMMEDIATELY and
+   marked pending until the server confirms. Retry policy: network error / timeout →
+   item stays, loop stops, banner turns on, backoff retry. HTTP 5xx / 429 → same. HTTP
+   4xx → terminal, item dropped, cell reverted, sticky message naming the reason (a head
+   item that can never succeed would block every tap behind it).
+2. **Part 2 — reading from the last snapshot, Р7.** The same module carries the three
+   states (`живо` · `снимок свежий` · `снимок старый`, boundary 15 minutes of elapsed
+   time) and the banner text of each. Liveness is probed by a new cheap endpoint
+   `/api/zhiv` in `veb/server.py` (no database, `Cache-Control: no-store`) — needed
+   because the queue is empty most of the time and there would otherwise be nothing to
+   learn the state from.
+3. **Part 3 — a refusal survives the reload.** `PRAVKA_SKRIPT.srazu` in
+   `veb/obshchee/karkas.py`: drop the `setTimeout(location.reload, 1200)` on the failure
+   path, restore the control to its last known good value, and leave the message standing
+   until the person closes it, naming WHY the server refused. Success keeps reloading —
+   that path is right and is not touched.
+4. **Part 4 — tests** in `tests/veb/`: the queue module's contract, and Р5 —
+   concurrent writers against one SQLite file through the live server (WAL +
+   `busy_timeout` are already set in `Handler._connection`; the test turns "already
+   configured" into "measured").
+5. **Part 5 — `doc/OFFLAJN.md`**: what the mechanism is, the three states and their exact
+   texts, what is deliberately NOT built (A1) and which experiment would unlock it.
+6. **Готовность.** A live run: real server, real chromium (playwright is installed with
+   chromium-1243), `context.set_offline(True)` — three network states, two numbers each,
+   plus the refused edit. Then the §3 verifier subagent, by a different method.
+
+**Not touched.** Everything outside the zone: `veb/priyom.py`, `core/**`, `infra/**`,
+`migrations/**`, `tools/**`. Anything found there goes into `## ОТЧЁТ` as a line.

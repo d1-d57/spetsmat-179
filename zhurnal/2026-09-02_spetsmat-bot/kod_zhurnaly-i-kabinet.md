@@ -315,6 +315,139 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+> Written in English per §2. Fixed Russian addresses (`ЦЕНА:` `ДОМ:` `ДОСТАВЛЕНО:`,
+> `## ` headings, paths, commands) stay Cyrillic.
+
+### 0. Entry, and the one thing the entry got wrong
+
+`§0.1` was CANCELLED for this заход by the orchestrator (message ahead of the file, and
+the file itself already carries the same cancellation at line 87). The single command it
+was replaced with was run first, and its output is in `## ГИГИЕНА ВХОДА` and `## ОТЧЁТ`.
+
+🔴 **THE NAMED INPUT DOES NOT EXIST, AND I AM NOT GUESSING AROUND IT.** §2 says
+`ВХОД: TZ-DOBOR-10-09.md, разделы L, M, Q5`. That file has 491 lines and its headings run
+`A … K3`; there is no `L`, no `M`, no `Q5` in it, and `grep` finds no such sections in any
+other `.md` of this арка (the only `Q5` hits are `--question Q5` flags inside the mandate
+files, which are about the ORCHESTRATOR's report form, not about this task). Named as a
+lesson to the factory with its ЦЕНА below. It does not block the work: §2 restates the
+task in full (items 1–6 plus L1.1–L1.3), so the заход is self-contained without L/M/Q5,
+and I work from §2 alone. Nothing in this plan is inferred from a section I could not read.
+
+### 1. Assumptions stated BEFORE the code, per §1
+
+* **A1. Two journals, one page, one menu item.** §2 says «журнала ДВА… Не две вкладки
+  одного раздела, а два журнала», and the same §2 says the menu carries ONE item
+  «журнал В САМОМ КОНЦЕ». Two routes would be new functionality, which the frame forbids
+  («новый функционал нам не нужен»). So: `/istoria` stays one page and one menu item, and
+  the two journals stop being two nameless tabs — each gets its own name and its own
+  one-line statement of what it is FOR (teachers' journal → Наташа counts salary by it;
+  students' journal → attendance, hand-ins, and later marks). If the owner meant two
+  addresses, that is a правка, and it is cheap after this one.
+* **A2. «Журнал» replaces «история» in what the READER sees, not in file names.**
+  Renaming `veb/razdely/istoria_zanyatij.py` or the route `/istoria` would touch
+  `veb/server.py` and every link on the site — outside the zone. So the word changes in
+  the menu label, the `<h1>`, the `<title>` and the tests; the module and the URL keep
+  their names. Recorded in `## ВОПРОСЫ`.
+* **A3. `sessions.kind` cannot show all four kinds today, and I will not pretend it can.**
+  The live schema closes the column to three values —
+  `check (kind in ('обычное', 'зачёт', 'отменённое'))` (`migrations/001_init.sql:83`),
+  verified on the live база. The owner asks for four: обычное · контрольная · отменено ·
+  дополнительное. «дополнительное» has no value to hold it, and adding one is a migration —
+  `migrations/` is outside the zone. So item 5 is done to the edge of the zone: the kind
+  that EXISTS is read and displayed, and the missing fourth value is a queue item, not a
+  silent invention of a word the database would refuse.
+* **A4. Marks and comments are NOT introduced (§2 item 4, ЧЕГО НЕ ДЕЛАТЬ).** The cell gets
+  a named, empty slot and the data attributes an editor would need; no input, no write
+  path, no API.
+
+### 2. Work, in parts, each committed on its own (§4)
+
+**P1 — the dead journal, one fix, `veb/razdely/istoria_zanyatij.py`.**
+Confirmed by reading: `<input id=iv-shk>` / `<input id=iv-prep>` sit at BODY level, while
+`.ist-vkladki`, `#is-shk` and `#is-prep` sit inside `<main class="istoria">`. `~` needs a
+sibling; a nephew never matches. So `#is-shk,#is-prep{display:none}` stands and
+`#iv-shk:checked~#is-shk{display:block}` never fires — both tables invisible, and the
+selected-tab highlight dead by the same one cause. ONE fix: move the two inputs INSIDE
+`<main>`, ahead of the `<nav>`, so radios, nav and both sections become siblings. No CSS
+rule changes; the родство changes.
+Measurement, two numbers per pair, on a real render (playwright, 1440×900, live-база copy):
+computed `display` of `#is-shk` / `#is-prep` before → after, and again after a click on
+«Преподаватели».
+
+**P2 — the menu, `karkas.py` + `istoria_zanyatij.py`.**
+`grep -n 'menyu\|ssyl' veb/razdely/istoria_zanyatij.py` → 0: the page carries no menu at
+all, which is the whole of «пропадает всё остальное меню». Add `menyu_ssylkami("/istoria")`
+— the ONE home of the item names, already used by `/kabinet`; a second list of items in
+this file is exactly what that function's docstring forbids.
+Order, owner verbatim: кабинет · листки · распределение · кондуит · журнал В САМОМ КОНЦЕ.
+Both menus carry it — `menyu_ssylkami()` for standalone pages and `obolochka()` for the
+shell — because they are two renderings of one list and drifting them is the defect the
+docstring already names. Label becomes «Журнал».
+
+**P3 — what the two journals hold, and the cell as a PLACE.**
+Teachers' journal: rows = teachers, columns = lessons, cell = ✓/✕; the cell OPENS and
+names whom they took that day. Students' journal: rows = students, columns = lessons; the
+cell OPENS and names to whom they handed in and WHICH problems.
+«кому сдавал и какие задачи» needs the marks of that student on that lesson day. The
+mapping tick→lesson is already answered once, by `core.services.history.zanyatie_po_iso`
+(the owner's own rule of 09.09), and that is what I call — I do not re-derive a day from
+`valid_at` here, which is the exact defect `core/services/spiski.py` opens by naming.
+🔴 **The cell becomes a container with named slots**, so a mark and a comment drop in
+without touching the table: `<td class="ist-kl …" data-den data-kto>` holding
+`<span class="kl-znak">`, an empty `<span class="kl-ocenka">` and an empty
+`<span class="kl-komm">`. The two empty spans render nothing today. That is the ONLY place
+in this заход where anything is built for a step ahead (§2 item 4 says so in as many words).
+Opening is a click, per §2 — a delegated handler and one panel, not a checkbox per cell:
+at 57 students × N lessons a hidden input per cell is a document that grows quadratically.
+`title=` stays, so hover keeps working and the page still says something with JS off.
+
+**P4 — род занятия.** `SqliteSessionBook.recent()` already returns `Session(id, held_on,
+kind)` and this file already calls it, so the kind arrives with no second query; today
+`IstoriyaService` throws it away (`dni` is a tuple of dates). The map `{held_on: kind}` is
+built in the зона from the list already in hand and printed in the column header.
+Checked ALIVE on the live база before the code, not after.
+
+**P5 — кабинет, `veb/razdely/kabinet.py`.**
+* L1.1, the cause and not the paint: the strip splits past from future on `den < segodnya()`.
+  10.09 was a Thursday, i.e. a lesson day, and on 10.09 that test is FALSE for 10.09 — so
+  the lesson the owner had just taught rendered as a FUTURE cell: uncoloured, with a
+  checkbox. There is no state «today, and it is over» in the strip at all. The fix calls
+  the answer that already exists — `istoria_poseshchenij.zanyatie_zaversheno(held_on,
+  seichas=…)`, the single place that decides whether a lesson is over — instead of
+  comparing dates in a second way.
+  🔴 The WRITE door keeps its own boundary and I say so out loud: after this, a lesson that
+  has ENDED today shows green and offers no checkbox, while `/api/kabinet/otsutstvie` would
+  still accept it. Two boundaries for two different questions («is it over» vs «may I still
+  say I will not come»), and the door's own docstring already argues for its one. I do not
+  widen the door in this заход: that is a write-path change nobody asked for.
+* L1.2 + L1.3: the strip of chips becomes a TABLE — one row per lesson, each listing that
+  day's students, a click on a student opening what he handed in. Laid out in CSS columns
+  TOP-TO-BOTTOM so a whole term fits with no horizontal scroll; measured at 1440×900 by
+  `document.documentElement.scrollWidth - clientWidth` → must be 0.
+  The future cells keep their checkbox and their write — «отмечу, что меня не будет» is the
+  one thing on this page that writes, and it is not this заход's to remove.
+
+**P6 — tests.** `tests/veb/` is in the zone: the renamed label, the sibling fix, the menu
+order, the kind, and the cabinet table each get a test that CAN fail. `pytest tests/veb`
+green, and the две-числа measurements run on the live-база copy, not on the fixture.
+
+**P7 — §3 verifier**, ПОСЛЕ-type, fresh subagent, both journals and both roles, exhaustive
+(2/2 and 2/2), final line «выдано N позиций из M найденных» required.
+
+**P8 — hygiene, own merge, отчёт** per the WARNING block: commit → merge → post-check from
+the main folder → gashenie → vyvoz.
+
+### 3. Criterion — I do NOT dispute it
+The критерий готовности is checkable and can fail as written; each pair is two numbers on a
+real render. The one clause I cannot satisfy as stated is «на живом сайте»: the live база is
+addressed by `SPETSMAT_BAZA` and the боевой site is on a server this заход has no
+credentials for (and the ПРАВКА ОБЩАЯ of 11.09 says no password will be needed by any
+position). I run against the OWNER'S OWN local copy of the боевая база
+(`~/spetsmat-baza-lokalnaya-2026-09-10.db`) — real rows, real 57 students, real 19
+teachers — through the real `veb.server.Handler`, and I say so rather than claiming a
+deployment I did not do. Читается это как «живой прогон на реальном объекте репозитория»,
+исполненный полностью, и «на живом сайте», исполненный копией боевых данных.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

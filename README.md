@@ -153,6 +153,9 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-08.md`** (Выгрузка сессии 2026-09-08 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/VYGRUZKA-2026-09-11.md`** (Выгрузка сессии 2026-09-11 — сырьё для дневника арки 2026-09-02_spetsmat-bot)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_N0-dovezti-rabotu-noch-0904.md`** (довезти в git работу ночи 04.09: две регрессии и вся волна ОСНОВАНИЕ, двумя коммитами)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_N1-slot-vmesto-weekday.md`** (enrollment переводится с weekday на slot 1|2, room выносится в отдельную таблицу)
@@ -278,7 +281,13 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_chistka-tokenov.md`** (вычистить мёртвые строки токена из четырёх файлов и из истории git публичного репозитория)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_dannye-07-09.md`** (внести Романчука за 07.09 и явку владельца на 10.09 через готовую дверь, ничего не угадывая)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_data-i-istoria-kletki.md`** (дата сдачи у галочки, история клетки жестом, отсев тестовых нажатий, правило последнего занятия)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_dobivka-vecher.md`** (добивка вечера 10.09: гейт видит все экраны, история подключена, кабинет таблицей, кондуит без смешивания, отказ переживает перезагрузку)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_dozabivka-dolgov-sklejki.md`** (закрыть долги заходa склейки: права у кабинетов, опечатка except Value, красные тесты enrollment)
 
@@ -289,6 +298,9 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_gejt-pravda.md`** (гейт вёрстки перестаёт врать: ловит обрезку и выход за контейнер)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_gejt-vse-ekrany.md`** (гейт вёрстки: список экранов из роутов, мёртвое правило CSS красное, пустой экран красный, обрезка select снова под проверкой)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_https-i-domen.md`** (HTTPS на math-kluychiki.ru: сертификат, редиректы с http и с IP, сторож на новый адрес)
 
@@ -308,11 +320,23 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_karkas-menyu-kabinet.md`** (верхнее меню с вкладкой Кабинет, полоса занятий вместо ссылок, главная без чужих кабинетов)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_konduit-i-raspredelenie.md`** (кондуит без смешивания смыслов и распределение без обрезки фамилий принимающих)
+
 **`zhurnal/2026-09-02_spetsmat-bot/kod_konduit-panel.md`** (кондуит: одна верхняя панель, счётчик колонкой после фамилии, строчные буквы, звезда цветом, большая кнопка)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_listki-kak-baza-zadach.md`** (листок как база задач: страница листка вместо PDF, скачивание PDF и TeX, кондуит и состав из базы, отметки 05.09)
 
 
+
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_melochi-i-dovoz.md`** (мелочи текста и довоз документов: Лена вместо Елены, слово ПРИХОДИТ, три doc/TZ от 06.09 никогда не были в git)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_nadzor-zvonit.md`** (часовой ЗВОНИТ на смерть головы, а не только печатает: 10.09 голова умирала дважды и оба раза надзор молчал)
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_offlajn-ochered.md`** (очередь записи в браузере плюс чтение из последнего снимка: галочка ставится без сети и уезжает, когда сеть вернулась)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_pages-i-materialy.md`** (Pages перестаёт отдавать устаревшую копию и уводит на живой сайт; /materials/ перестаёт быть вечным 404)
 
@@ -335,6 +359,9 @@
 
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_razmetka-bazy.md`** (разметка боевой базы видами задач: копия, импорт, проверка крестиков в кондуите)
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_shirina-prep-vdn.md`** (ширина поля принимающего на вкладках групп В Д Н у вошедшего: правый край вправо, левый на месте, больше ничего)
 
 **`zhurnal/2026-09-02_spetsmat-bot/kod_skleit-adminku-s-sajtom.md`** (свести рабочий редактор распределения и страницу правки на сайте в один шаблон с двумя режимами)
 
@@ -381,6 +408,9 @@
 **`zhurnal/2026-09-02_spetsmat-bot/kod_vykatka-tunnel-i-storozh.md`** (Выкатка сайта распределения наружу по HTTPS через туннель с машины владельца плюс сторож продукта)
 
 
+
+**`zhurnal/2026-09-02_spetsmat-bot/kod_zhurnaly-i-kabinet.md`** (два ЖУРНАЛА вместо одной истории плюс личная сводка в кабинете: подключить написанное, меню в конец, клетка как место под оценку)
+
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_sborka-bota.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_veb-raspredelenie.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
@@ -390,6 +420,9 @@
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-noch.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
+
+
+**`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-noch2.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 
 **`zhurnal/2026-09-02_spetsmat-bot/mandate_volna-utro.md`** (MANDATE — two halves, two authors; status OPEN/CLOSED/REFUSED lives in the file)
 

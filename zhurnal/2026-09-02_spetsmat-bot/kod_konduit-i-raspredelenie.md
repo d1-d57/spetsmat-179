@@ -305,6 +305,84 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+Written before any edit.  Input read: this заход in full, and `TZ-DOBOR-10-09.md` §N, §O,
+§Q4 (read from the МАИН copy — the worktree branch is one журнал-commit behind and its copy
+of the ТЗ stops at §K3; the code is identical, only the ТЗ text differs).
+
+**One canon behind all five: «нельзя смешивать» — one признак, one носитель, one meaning per
+cell.**  Every part below is committed separately, in order.
+
+1. **O1 · row highlight goes.**  `_klass_stroki` stops adding `gotov`; the CSS rules
+   `tr.gotov td` disappear with it.  The second carrier of the SAME признак goes too —
+   `tr.gotov td.sch .ob-sch{background:--accent-soft}` painted the counter cell as well, and
+   leaving it would keep «сдал всё» smeared over two places, which is the very thing O1/Q4
+   forbid.  Row class after this carries exactly one признак: `moi`/`chuzh`.
+2. **O2 · own column with the big green ✓.**  A real `<td class="gt">` (not a mark inside
+   another cell), on both cuts — годовой обзор and листок.  Green is `var(--zel)`, already
+   declared in `:root` and already used by the кабинет полоса the owner accepted; no new
+   colour, no hex outside `:root` (`doc/DIZAJN-ZAKREPLENO.md` §2).  `vsego == 0` (a листок
+   with no obligatory problems) lights nobody — same rule the счётчик already obeys.
+3. **O3 · initials of the принимающий get their own column.**  `_prin(...)` moves out of
+   `td.kto` into `<td class="pr">`, placed right after the surname («„Агаркова Ирина“, а
+   дальше идёт столбец»).  `_prinimayushchie` and `_prin` keep returning EXACTLY the markup
+   they return now — `tests/grid/test_konduit_i_raspredelenie_odna_pravda.py` reads that
+   function directly and must stay green.  Only the cell it is placed in changes, plus the
+   CSS that made it a superscript.  Column order becomes: Ученик · Прин. · Обяз. · ✓ · задачи.
+   On the phone the sticky-left offsets shift with it (the счётчик is frozen at `7.2rem`
+   today; it moves behind the new column) — otherwise the frozen columns would overlap.
+4. **O4 · гробарий loses all prose.**  Both paragraphs go: the `grob-pravilo` explanation and
+   the «Гробарий пуст, и это не ошибка…» message that enumerates the issued листки.  No short
+   version replaces them (K1 rule, second нейрослоп in a day).  The section heading
+   «Гробарий» stays — it is the panel's label, structurally the same `<p class="zag2">` every
+   sibling panel carries, not text written at the reader.  Byte count of the prose is measured
+   before and after on the live база.
+5. **O5 · галочка on «Весь год» when all obligatory are closed OR one листок is closed
+   entirely.**  `_obzor` already computes `vzyato == len(zad)` per листок for the `vsyo` class,
+   so the predicate is the disjunction of two facts the cut already knows; no second query, no
+   new service.  Not a row highlight — the column from part 2 (O1).  The знаменатель question
+   in O5 is already answered by the analyst in the заход («`obyazatelnyh_sdano` считает именно
+   обязательные»), and re-reading `core/services/progress.py:206` confirms it filters on
+   `Problem.is_obligatory`; different знаменатели per cut are lawful because the cut decides
+   the scope.  Verified, not re-implemented.
+6. **Q4 · the рычаг: a check «одна клетка — один смысл», narrow and by place.**  A new test in
+   `tests/grid/` that goes red if (a) a row of the кондуит carries more than one признак-class,
+   (b) the surname cell carries a second носитель inside it (`<i class="prin">` and friends),
+   (c) «сдал всё обязательное» is expressed anywhere but its own column.  Formulated over the
+   кондуит render only, as §Q4 demands: a wide rule here gives false reds.
+
+**Existing tests that assert the OLD canon and are rewritten with the правки that reverse
+them** (they are in the zone, and the owner reversed his own earlier decisions):
+`test_the_row_glows_exactly_for_the_pupil_who_closed_his_obligatory`,
+`test_being_mine_and_having_closed_are_both_visible_at_once`,
+`test_the_initials_stand_beside_the_surname_and_not_in_a_column_of_their_own`
+(this one defends «не колонкой» from 09.09 — O3 of 10.09 says the opposite, in the owner's own
+words).  `test_a_listok_with_no_obligatory_problems_lights_up_nobody` keeps its meaning and
+changes its instrument from the row class to the column.
+
+**🔴 ONE ITEM OF THE КРИТЕРИЙ ГОТОВНОСТИ IS CONTESTED, BEFORE THE WORK RATHER THAN AFTER**
+(§1 allows this explicitly): the pair «обрезка `<select>` по гейту была → стала 0» cannot be
+delivered from this position, for two independent reasons, neither of which is difficulty.
+(a) The exclusion lives in `tools/gejt_verstki.py` (`const organ = ['SELECT','OPTION',…]`,
+lines 167/169/644) — that file is NOT in this заход's zone, and the zone contract says a
+problem found outside the zone goes into the отчёт and is not touched.  (b) Even with the gate
+un-blinded, the number only reaches 0 once the `<select>` on the group tab is widened, and
+that вёрстка is exactly what §2 removes from this position («РАСПРЕДЕЛЕНИЕ ИЗ ЭТОЙ ПОЗИЦИИ
+ВЫНЕСЕНО. НЕ ТРОГАЙ ЕГО ВОВСЕ», owner 11.09 «больше ничего не менять, жёстко») and hands to
+`shirina-prep-vdn`.  I make no change on either side and name the finding in `## ОТЧЁТ`, with
+the exact lines, so the position that owns the вёрстка can fix the gate first, as §N1 asks.
+Every other pair of the критерий is delivered with both numbers.
+
+**Проверка:** `pytest tests/grid/ tests/veb/` for the зона, plus a render of
+`konduit.razdel` over a copy of the LIVE база (`data/spetsmat.db`, 53 pupils) — every pair of
+the критерий counted on that render before and after, and the same page served by the live
+`veb/server.py` and read back over HTTP.
+
+**Baseline, measured before touching anything (`pytest tests/grid/test_konduit_velichiny.py`):
+21 passed, 1 failed** — `test_being_mine_and_having_closed_are_both_visible_at_once`, red on
+`"moi"`, not on `"gotov"`.  Cause is the calendar, not the code: `_moi_deti` asks
+`deti_na_datu(segodnya())`, today is Friday, `slot_of` has no слот for it, so nobody is «мой»
+on any Friday.  Recorded here so that a red that was already standing is not read as mine.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -332,19 +410,55 @@ grep -n '<как механизм назван в вызывающем коде>
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+> 🔴 **§ 0.1 CANCELLED BY THE ORCHESTRATOR BEFORE THIS ЗАХОД STARTED, IN WRITING.**  The
+> instruction that launched me overrides the text of the заход: «СУБАГЕНТА ГИТ-КОНТУРА §0.1
+> НЕ ЗАПУСКАЙ… пункт ОТМЕНЁН оркестратором».  Reason given: four заходы out of ten in the
+> neighbouring wave died on exactly that call.  In its place the orchestrator asked for ONE
+> command, run by me, and its output pasted here.  So this section is filled by the
+> исполнитель, not by the субагент, and the input debts were closed by NOBODY — there was no
+> субагент to close them, and closing them myself was not what the override asked for.
+
+**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; сняты первым ходом, до всякой работы)*
+
+The command the orchestrator named, run first, before reading the заход:
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
 ```
-<сюда — вывод, дословно>
+The rest of the snapshot, taken in the same working folder:
+```
+$ git --no-optional-locks status --porcelain | wc -l
+0
+$ git rev-parse --abbrev-ref HEAD
+zahod/konduit-i-raspredelenie
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+Nothing on the input contour, and that is the override's doing rather than an omission:
+влитий 0, гашений 0, заявок закрыто 0, чужих коммитов 0.  What I did commit is my own zone
+and only it — six commits, listed in `## ОТЧЁТ` with hashes.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+
+*Поимённо, и почему каждый непроходим МОИМИ правами:*
+1. `zahod/gejt-vse-ekrany`, `zahod/nadzor-zvonit`, `zahod/offlajn-ochered`,
+   `zahod/zhurnaly-i-kabinet` — ЖИВЫЕ рабочие папки соседних позиций этой же волны.  At my
+   входной snapshot there was ONE unmerged `zahod/*` branch; by the end there are five,
+   because the wave started around me.  Merging a neighbour's live branch is the one thing
+   the зона contract forbids outright, and §0.1 gave that right to the субагент — the субагент
+   the orchestrator cancelled.
+2. Открытых заявок 24 (`git_zona.py zayavki`), из них ни одна не адресована мне: the list
+   prints «АДРЕСАТ — ВЛАДЕЛЕЦ», «АДРЕСАТ — ГИТ-КОНТУР», «адресат живёт в репозитории
+   disciplina» on the ones it names at all.  Closing them is `zayavka-zakryt`, which §0.1
+   gave to the субагент.
+3. `main` невывезен — that is the standing decision of the owner recorded in заявка
+   `2026-09-05T0056-…`: вывоз `main` publishes to a PUBLIC repository over an open incident
+   with a live bot token, and it unblocks by a human action (`/revoke` in BotFather), not by
+   a git operation.
+
+Ни одна из трёх строк не про «сложно» и не про «не моя тема»: первая — чужие живые рабочие
+папки, вторая и третья — права, снятые с меня отменой §0.1, и решение владельца.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
