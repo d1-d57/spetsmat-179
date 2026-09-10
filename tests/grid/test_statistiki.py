@@ -91,7 +91,7 @@ def test_zakryl_is_true_only_when_nothing_obligatory_is_left():
         student_id=1,
     )
     assert schyot.zakryl and schyot.ostalos == 0
-    # Звезда и обычная не сданы — и это ничего не меняет: они не обязательны.
+    # The звезда and the обычная are untaken, and that changes nothing: not obligatory.
     assert schyot.vsego == 3
 
 
@@ -120,7 +120,7 @@ def test_skolko_sdalo_counts_credited_over_the_pupils_it_was_given():
     sostoyaniya = sost(**{"1:1": "solved", "2:1": "solved",
                           "3:1": "retracted", "4:1": "empty"})
     assert skolko_sdalo(1, [1, 2, 3, 4], sostoyaniya) == 2
-    # Тот же журнал, другой список школьников — другой честный ответ.
+    # The same journal, a different list of pupils, a different honest answer.
     assert skolko_sdalo(1, [1], sostoyaniya) == 1
 
 
@@ -182,17 +182,18 @@ def test_names_are_the_first_solvers_in_order_and_are_capped_at_the_threshold():
     Reached here through a problem that only just misses the graveyard cap in the OTHER
     direction: the cap on names and the cap on membership are the same number, so the
     only way to see the name cap alone is to ask the assembler for a row it would not
-    itself keep.  Хронология намеренно ПЕРЕВЁРНУТА относительно имён: сортировка по
-    алфавиту дала бы здесь тот же список в другом порядке, и тест не заметил бы разницы.
+    itself keep.  The chronology is deliberately REVERSED against the names: sorting
+    alphabetically would give the same two names in the other order, and a test that did
+    not reverse them could not tell the two rules apart.
     """
     poryadok = {1: "2026-09-08", 2: "2026-09-01", 3: "2026-09-04"}
     zapisi = zapisi_grobaria(
         LISTOK[:1], [1, 2, 3],
         sost(**{"1:1": "solved", "2:1": "solved", "3:1": "solved"}),
         lambda s, _p: poryadok[s], IMENA.get)
-    # Трое — не гробарий, строки нет вовсе; это и есть верхняя граница списка имён.
+    # Three is not a гробарий at all -- no row -- and that IS the cap on the name list.
     assert zapisi == []
-    # А двое — гробарий, и порядок именно хронологический.
+    # Two is a гробарий, and the order is the chronological one.
     zapisi = zapisi_grobaria(
         LISTOK[:1], [1, 2, 3],
         sost(**{"1:1": "solved", "3:1": "solved"}),
