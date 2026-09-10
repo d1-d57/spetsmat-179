@@ -344,7 +344,7 @@ def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
     ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
     try:
         otchet = p.evaluate(gejt.LOMKA)
-        assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll"}, (
+        assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll", "centr"}, (
             "поломка не отчитывается о том, села ли она")
         p.wait_for_timeout(200)
         z = _zamer(p)
@@ -355,5 +355,194 @@ def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
                     f"поломка «{klyuch_lom}» отчиталась, что села, а проверка "
                     f"«{klyuch_zam}» ничего не нашла — это ложно-зелёная "
                     "самопроверка, тот же класс, что и ложно-зелёный гейт")
+    finally:
+        ctx.close()
+
+
+# ── 6. центрирование: правило канона, которое до сих пор было текстом ─────────
+#
+# 🔴 «НИКОГДА по центру мы не центрируем» — владелец, 10.09 11:4x, ЧЕТВЁРТЫЙ
+# возврат одного и того же дефекта.  Он же назвал причину: правило обязано
+# КРАСНЕТЬ, а не жить строкой в документе.  Тесты ниже стерегут ровно это: что
+# проверка 5 видит центрирование, что она видит его ПО РЕНДЕРУ (а не по строке в
+# разметке), что она называет ОДНО место вместо всего поддерева, и что
+# именованное исключение остаётся прощённым.
+
+def test_centr_krasneet_i_zelenet(server, brauzer):
+    """Пара, как у обрезки: центрирование поставили — красный, убрали — вернулось
+    ТО ЖЕ ЧИСЛО, что было (не ноль: на живой странице центрирования уже есть, и
+    требовать здесь ноль значило бы, что тест зелен, только пока страница
+    идеальна)."""
+    do, posle, chisto = _para(
+        brauzer, server, "гость", "/raspredelenie", "t-shk",
+        "()=>document.querySelectorAll('#v-shk .para .kto').forEach("
+        "e=>e.style.setProperty('text-align','center','important'))",
+        "()=>document.querySelectorAll('#v-shk .para .kto').forEach("
+        "e=>e.style.removeProperty('text-align'))")
+    assert len(posle["centr"]) > len(do["centr"]) + 10, (
+        f"колонку имён поставили по центру, а гейт показывает "
+        f"{len(do['centr'])} → {len(posle['centr'])}. Это и есть тот дефект, "
+        "который возвращался четыре раза, потому что на нём ничего не краснело")
+    assert any(".kto" in d["put"] for d in posle["centr"]), (
+        "центрирование найдено, но названо не то место — чинить по такому "
+        "отчёту нечего")
+    assert len(chisto["centr"]) == len(do["centr"]), (
+        f"центрирование сняли, а гейт всё ещё его показывает: "
+        f"{len(do['centr'])} → {len(chisto['centr'])}")
+
+
+def test_centr_viden_po_nasledstvu(server, brauzer):
+    """🔴 РЕНДЕР, А НЕ РАЗМЕТКА.  `text-align` наследуется, и центрирование
+    приезжает на элемент, у которого в его собственных стилях нет ни слова про
+    выключку.  Проверка, ищущая строку `text-align` у самого узла (или, тем
+    более, `grep` по шаблону), этот случай не видит вовсе — а на живом сайте он
+    и есть основной: правило пишется на карточке, а видно его на именах."""
+    do, posle, chisto = _para(
+        brauzer, server, "гость", "/raspredelenie", "t-shk",
+        "()=>document.querySelectorAll('#v-shk .kol').forEach("
+        "e=>e.style.setProperty('text-align','center','important'))",
+        "()=>document.querySelectorAll('#v-shk .kol').forEach("
+        "e=>e.style.removeProperty('text-align'))")
+    assert len(posle["centr"]) > len(do["centr"]), (
+        "центрирование объявлено на колонке, а видно его на каждой строке "
+        "внутри — гейт обязан покраснеть, читая РЕНДЕР")
+    assert len(chisto["centr"]) == len(do["centr"]), "не зеленеет обратно"
+
+
+def test_centr_nazyvaet_koren_a_ne_vsyo_poddevo(server, brauzer):
+    """🔴 ОДНО ПРАВИЛО — ОДНА НАХОДКА.  `text-align` наследуется, поэтому одна
+    строка CSS на карточке делает центрированным КАЖДОГО её потомка.  Замерено
+    живьём 10.09 на кондуите: 1199 центрированных узлов при 42 настоящих местах.
+    Отчёт на тысячу строк не читает никто, и чинить по нему нечего — чинится
+    корень.  Тест сравнивает число находок с числом центрированных узлов и
+    требует, чтобы первое было в разы меньше."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        p.evaluate("()=>document.querySelectorAll('#v-shk .kol').forEach("
+                   "e=>e.style.setProperty('text-align','center','important'))")
+        p.wait_for_timeout(200)
+        z = _zamer(p)
+        vsego_centrirovano = p.evaluate("""() => [...document.querySelectorAll('body *')]
+            .filter(e => { const r = e.getBoundingClientRect();
+                           return r.width > 1 && r.height > 1; })
+            .filter(e => getComputedStyle(e).textAlign === 'center').length""")
+        assert vsego_centrirovano > 100, (
+            "порча не села: центрированных узлов на странице почти нет, "
+            "и сравнивать не с чем")
+        assert len(z["centr"]) * 5 < vsego_centrirovano, (
+            f"центрированных узлов {vsego_centrirovano}, находок "
+            f"{len(z['centr'])} — гейт перечисляет поддерево вместо его корня, "
+            "и такой отчёт нечитаем ровно там, где он нужнее всего")
+    finally:
+        ctx.close()
+
+
+def test_centr_vidit_body_celikom(server, brauzer):
+    """🔴 САМОЕ КРУПНОЕ НАРУШЕНИЕ — САМОЕ ЛЁГКОЕ ДЛЯ ПРОПУСКА.  Обход идёт по
+    `body *`, и `body{text-align:center}` не дал бы НИ ОДНОГО корня: у каждого
+    потомка родитель тоже центрирован, а сам `body` в обход не входит.  Гейт
+    молчал бы на центрированной целиком странице."""
+    do, posle, chisto = _para(
+        brauzer, server, "гость", "/raspredelenie", "t-shk",
+        "()=>document.body.style.setProperty('text-align','center','important')",
+        "()=>document.body.style.removeProperty('text-align')")
+    assert posle["centr"], (
+        "страница центрирована ЦЕЛИКОМ, а гейт зелёный — обход не включал "
+        "`body`, и корня центрированного поддерева на странице не нашлось")
+    assert any(d["put"].endswith("body") or "body" in d["put"]
+               for d in posle["centr"]), (
+        f"названо не `body`, а {[d['put'] for d in posle['centr']][:3]}")
+    assert len(chisto["centr"]) == len(do["centr"]), "не зеленеет обратно"
+
+
+def test_centr_lovit_text_align_last(server, brauzer):
+    """`text-align-last:center` центрирует ту же строку другим свойством.
+    Проверка, знающая только `text-align`, оставляла бы законную дорогу, по
+    которой запрещённое центрирование возвращается на сайт молча."""
+    do, posle, chisto = _para(
+        brauzer, server, "гость", "/raspredelenie", "t-shk",
+        "()=>document.querySelectorAll('#v-shk .para .kto').forEach("
+        "e=>e.style.setProperty('text-align-last','center','important'))",
+        "()=>document.querySelectorAll('#v-shk .para .kto').forEach("
+        "e=>e.style.removeProperty('text-align-last'))")
+    assert len(posle["centr"]) > len(do["centr"]) + 10, (
+        "центрирование через `text-align-last` гейт не увидел")
+    assert any(d["chem"] == "text-align-last:center" for d in posle["centr"]), (
+        "нашли, но не назвали, ЧЕМ центрировано — чинить нечего")
+    assert len(chisto["centr"]) == len(do["centr"]), "не зеленеет обратно"
+
+
+def test_isklyuchenie_konduita_proshcheno_i_schitaetsya(server, brauzer):
+    """Единственное исключение, названное владельцем вслух: номер задачи в клетке
+    кондуита (H4.6), принято 10.09 11:3x дословно «мне всё нравится».  Тест
+    держит обе половины: исключение ПРОЩЕНО (в находках его нет) и оно ПОСЧИТАНО
+    (гейт печатает, сколько центрирований простил) — молчаливое исключение
+    неотличимо от дырки в проверке."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        z = _zamer(p)
+        assert z["isklyucheno"] > 0, (
+            "на кондуите не нашлось ни одного `th.zn` — либо разметка изменилась, "
+            "либо экран открыт не тот; тогда это исключение ничего не стережёт")
+        assert not any("th.zn" in d["put"] for d in z["centr"]), (
+            f"номер задачи в клетке кондуита назван находкой: "
+            f"{[d['put'] for d in z['centr'] if 'th.zn' in d['put']][:2]} — "
+            "владелец принял его явно, и красное на нём выключает гейт")
+    finally:
+        ctx.close()
+
+
+def test_pustaya_kletka_ne_nahodka(server, brauzer):
+    """Граница измерения, объявленная вслух: у элемента без собственного видимого
+    текста центрировать нечего и процитировать в отчёте нечего.  Ею отсекаются
+    1095 ПУСТЫХ клеток решётки кондуита — не милостью к кондуиту, а тем же
+    правилом, что и всюду.  Тест держит границу с обеих сторон: пустая клетка
+    молчит, та же клетка с текстом — находка."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
+    try:
+        pusto = p.evaluate("""() => [...document.querySelectorAll(
+            '#s-kond .kond tbody td + td')].filter(e => {
+                const r = e.getBoundingClientRect();
+                return r.width > 1 && !(e.textContent || '').trim(); }).length""")
+        assert pusto > 100, ("на кондуите нет пустых клеток — граница, ради "
+                             "которой написан тест, ничего не отсекает")
+        do = _zamer(p)
+
+        # 🔴 ТЕ ЖЕ КЛЕТКИ, ЧТО СЧИТАЛИ, А НЕ ПЕРВЫЕ ТРИДЦАТЬ В ДОКУМЕНТЕ.  Решёток
+        # на кондуите двадцать две, и видна одна: без фильтра по видимости текст
+        # ложится в СКРЫТУЮ таблицу, гейт честно её не смотрит, и тест «не
+        # увидел» ровно то, чего на экране нет.
+        p.evaluate("""() => [...document.querySelectorAll(
+            '#s-kond .kond tbody td + td')].filter(e => {
+                const r = e.getBoundingClientRect();
+                return r.width > 1 && r.height > 1
+                       && !(e.textContent || '').trim(); }).slice(0, 30)
+            .forEach(e => e.textContent = 'ы')""")
+        p.wait_for_timeout(200)
+        posle = _zamer(p)
+        assert len(posle["centr"]) >= len(do["centr"]) + 25, (
+            f"в тридцать пустых клеток положили текст, и он центрирован тем же "
+            f"правилом — гейт обязан их увидеть: "
+            f"{len(do['centr'])} → {len(posle['centr'])}. Иначе «без текста не "
+            "судим» — не граница измерения, а тихая амнистия всей решётке")
+    finally:
+        ctx.close()
+
+
+def test_samoproverka_lomaet_i_centr(server, brauzer):
+    """`--slomat` обязан испытать и пятую проверку, и честно сказать, села ли
+    поломка: самопроверка, отчитавшаяся об ущербе, которого не нанесла, — та же
+    ложь, что и гейт, отчитавшийся об узлах, на которые не смотрел."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        otchet = p.evaluate(gejt.LOMKA)
+        assert "centr" in otchet, (
+            "поломка не отчитывается о центрировании — проверка 5 не испытана")
+        p.wait_for_timeout(200)
+        z = _zamer(p)
+        if otchet["centr"]:
+            assert z["centr"], (
+                "поломка «centr» отчиталась, что села, а проверка ничего не "
+                "нашла — это ложно-зелёная самопроверка")
     finally:
         ctx.close()
