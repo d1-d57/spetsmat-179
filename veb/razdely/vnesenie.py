@@ -125,14 +125,24 @@ def _student_label(student) -> str:
 
 
 def _tekushchij_listok(catalogue):
-    """The sheet a fresh draft is read against: the newest one, the lesson's own —
-    the same convention `veb/priyom.py._vybrannyj_listok` and `veb/razdely/konduit.py`
-    (`_samyj_novyj`) already use for "which sheet is today's".
+    """The sheet a fresh draft is read against: the newest one that actually has
+    problems on it, the lesson's own.
+
+    🔴 NEWEST IS `issued_at`, TIE-BROKEN BY `ord` ASCENDING — NOT a bare `max(ord)`.
+    `veb/razdely/konduit.py._samyj_novyj` measured why: `16A`, `16α` and `16ℵ` are one
+    sheet in three strengths sharing ONE `issued_at`, with `ord` running 19, 20, 21 — a
+    bare `max(ord)` opens the WEAKEST version (`16ℵ`) for everybody, exactly backwards.
+    `veb/priyom.py._vybrannyj_listok` still uses the bare form; that file is read-only
+    for this position, so the fix stands here and is named in `## ВОПРОСЫ` for its own
+    home rather than silently carried into a neighbour's file.
     """
-    listki = catalogue.sheets()
-    if not listki:
+    with_problems = [sh for sh in catalogue.sheets() if catalogue.problems_of_sheet(sh.id)]
+    if not with_problems:
         return None
-    return max(listki, key=lambda sh: sh.ord)
+    return min(
+        (sh for sh in with_problems if sh.issued_at == max(s.issued_at for s in with_problems)),
+        key=lambda sh: sh.ord,
+    )
 
 
 # --------------------------------------------------------------- draft -> wire format
