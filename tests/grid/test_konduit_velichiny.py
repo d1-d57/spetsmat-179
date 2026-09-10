@@ -459,6 +459,25 @@ def grobarij(html: str) -> str:
     return panel(html, "grob")
 
 
+def proza(kusok: str) -> str:
+    """Текст панели БЕЗ разметки и без её собственного заголовка — то, что владелец
+    назвал «кучей текста от тебя» (O4).  Именно эта величина обязана быть пустой у
+    пустого гробария; таблица с задачами прозой не считается — это данные."""
+    tekst = re.sub(r"<[^>]+>", "", kusok).strip()
+    return tekst[len("Гробарий"):].strip() if tekst.startswith("Гробарий") else tekst
+
+
+def pust(kusok: str) -> bool:
+    """Пустой гробарий — тот, в котором нет ни одной строки задачи.
+
+    🔴 СУДИТСЯ ФОРМОЙ, А НЕ СЛОВАМИ.  До 10.09 эти проверки искали фразу «Гробарий
+    пуст» — то есть держались за ту самую прозу, которую владелец потребовал убрать, и
+    покраснели бы на верной правке.  Пустота — это отсутствие таблицы, и такой ответ
+    переживает любой текст вокруг.
+    """
+    return "<table" not in kusok
+
+
 def devyatyj(connection, listki):
     """A world whose листки the кондуит counts as the NINTH class.
 
@@ -477,15 +496,24 @@ def devyatyj(connection, listki):
     return mir
 
 
-def test_with_one_listok_issued_the_grobarij_says_it_is_empty_and_why(connection):
-    """The state of the live база today, reproduced: exactly one листок has been issued."""
+def test_with_one_listok_issued_the_empty_grobarij_is_EMPTY(connection):
+    """The state of the live база today, reproduced: exactly one листок has been issued.
+
+    🔴 THIS TEST ASSERTED THE OPPOSITE UNTIL 10.09 and was named «…says it is empty and
+    why»: it demanded the rule «сюда попадают задачи листка…» and the sentence «Гробарий
+    пуст, и это не ошибка… наполнится сам».  The owner read that text on the live page and
+    said: «мне не нравится, что сюда попадает куча текста от тебя, а гробарий пуст.  Это не
+    ошибка — это нейрослоп.  Убираем это.  Пустой гробарий пусть будет пустым» (O4).
+    Nothing short replaces it, by the same rule that removed the кабинет caption (K1).
+    """
     devyatyj(connection, (LISTOK,))
     connection.commit()
     kusok = grobarij(konduit.razdel(kontekst(connection)))
-    assert "Гробарий пуст" in kusok
-    assert "исторических листков пока нет" in kusok
-    assert "наполнится сам" in kusok, "пустая вкладка обязана сказать, чего она ждёт"
-    assert "меньше 3" in kusok, "правило написано во вкладке всегда, а не только когда есть строки"
+    assert pust(kusok), kusok
+    assert proza(kusok) == "", proza(kusok)
+    # Заголовок панели остаётся: он называет вкладку, как называет её любая другая
+    # панель раздела, и он не «текст от тебя».
+    assert '<p class="zag2">Гробарий</p>' in kusok
 
 
 def test_the_previous_listok_falls_in_by_itself_when_the_next_one_is_issued(
@@ -511,7 +539,7 @@ def test_the_previous_listok_falls_in_by_itself_when_the_next_one_is_issued(
     connection.commit()
 
     kusok = grobarij(konduit.razdel(kontekst(connection)))
-    assert "Гробарий пуст" not in kusok
+    assert not pust(kusok), kusok
     zadachi_v_grobarii = re.findall(r'<td class="kto">([^<]*)', kusok)
     assert "1.1" not in zadachi_v_grobarii, "четверо сдали — не гробарий"
     assert "1.2" in zadachi_v_grobarii, "двое сдали — гробарий"
@@ -555,7 +583,7 @@ def test_versions_of_one_listok_do_not_make_each_other_historical(connection):
         connection.execute("update sheets set number = ?, issued_at = ? where id = ?",
                            (nomer, "2026-09-03", sheet_id))
     connection.commit()
-    assert "Гробарий пуст" in grobarij(konduit.razdel(kontekst(connection)))
+    assert pust(grobarij(konduit.razdel(kontekst(connection))))
 
 
 def test_a_listok_row_without_problems_does_not_bury_the_current_one(connection):
@@ -565,4 +593,4 @@ def test_a_listok_row_without_problems_does_not_bury_the_current_one(connection)
         "insert into sheets (number, title, issued_at, ord) values (?, ?, ?, ?)",
         ("16Z", "следующий, задачи ещё не внесены", "2026-09-14", 99))
     connection.commit()
-    assert "Гробарий пуст" in grobarij(konduit.razdel(kontekst(connection)))
+    assert pust(grobarij(konduit.razdel(kontekst(connection))))
