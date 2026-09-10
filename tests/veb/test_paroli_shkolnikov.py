@@ -335,3 +335,120 @@ def test_neverny_parol_stoit_ne_dorozhe_chem_do_shkolnikov(tri_shkolnika):
         assert schyot["n"] == vzroslyh
     finally:
         vh._hesh_kandidata = nastoyashchij
+
+
+# ------------------------------------------------------------------ часть 3: смена пароля
+
+
+def test_smena_parolya_gasit_vydannyj_i_zapominaetsya(tri_shkolnika):
+    """«Смена пароля на свой — и он запоминается навсегда.»
+
+    Three facts, and the middle one is the whole point: the new one works, the OLD one stops
+    working, and a fresh mint of the pupils does not resurrect the old one.
+    """
+    from core.services.lichnye_paroli import smenit
+
+    uid, vydannyj = tri_shkolnika["Агаркова"]
+    assert vh.proverit_parol(vydannyj) == ("shkolnik", uid)
+
+    smenit("shkolnik", uid, vydannyj, "moy-sobstvennyj-parol", proverka=vh.proverit_parol)
+
+    assert vh.proverit_parol("moy-sobstvennyj-parol") == ("shkolnik", uid)
+    assert vh.proverit_parol(vydannyj) is None
+
+    # ... and it survives the owner minting everybody's password afresh.
+    tajniki = tri_shkolnika["_tajniki"]
+    baza = json.loads((tajniki / "veb-lichnye-paroli.json").read_text())["istochnik"]
+    assert chekanit(Path(baza), tajniki, "shkolniki", "--perezapisat").returncode == 0
+    assert vh.proverit_parol("moy-sobstvennyj-parol") == ("shkolnik", uid)
+
+
+def test_chuzhoj_tekushchij_parol_smenu_ne_otkryvaet(tri_shkolnika):
+    """🔴 The boundary again, arriving through the door meant to protect it.
+
+    Pupil B's password is a REAL password — it just is not A's.  If the change accepted "any
+    password that belongs to somebody", B could rewrite A's password out from under A.
+    """
+    from core.services.lichnye_paroli import OtkazSmeny, smenit
+
+    a_uid, a_parol = tri_shkolnika["Агаркова"]
+    _, b_parol = tri_shkolnika["Фомин"]
+
+    with pytest.raises(OtkazSmeny):
+        smenit("shkolnik", a_uid, b_parol, "novyj-parol", proverka=vh.proverit_parol)
+    with pytest.raises(OtkazSmeny):
+        smenit("shkolnik", a_uid, "sovsem-ne-parol", "novyj-parol", proverka=vh.proverit_parol)
+    # A's own password is untouched by either refusal.
+    assert vh.proverit_parol(a_parol) == ("shkolnik", a_uid)
+
+
+def test_shkolnik_ne_mozhet_smenit_parol_prepodavatelyu(tri_shkolnika):
+    """A pupil holding their own password cannot aim the change at a teacher's row."""
+    from core.services.lichnye_paroli import OtkazSmeny, smenit
+
+    _, parol_shkolnika = tri_shkolnika["Агаркова"]
+    prepod_uid, _ = tri_shkolnika["Пётр Петров"]
+    with pytest.raises(OtkazSmeny):
+        smenit("prepod", prepod_uid, parol_shkolnika, "novyj", proverka=vh.proverit_parol)
+
+
+def test_smena_ne_puskaet_negodnyj_parol(tri_shkolnika):
+    from core.services.lichnye_paroli import OtkazSmeny, smenit
+
+    uid, vydannyj = tri_shkolnika["Агаркова"]
+    for negodnyj in ("abc", " parol", "parol ", "x" * 200):
+        with pytest.raises(OtkazSmeny):
+            smenit("shkolnik", uid, vydannyj, negodnyj, proverka=vh.proverit_parol)
+    assert vh.proverit_parol(vydannyj) == ("shkolnik", uid)
+
+
+def test_smena_pishet_600_i_ne_hranit_parol(tri_shkolnika):
+    from core.services.lichnye_paroli import fajl_smenennyh, smenit
+
+    uid, vydannyj = tri_shkolnika["Агаркова"]
+    smenit("shkolnik", uid, vydannyj, "moy-sobstvennyj-parol", proverka=vh.proverit_parol)
+    put = fajl_smenennyh()
+    assert put.stat().st_mode & 0o777 == 0o600
+    tekst = put.read_text(encoding="utf-8")
+    assert "moy-sobstvennyj-parol" not in tekst
+    assert vydannyj not in tekst
+
+
+def test_vtoraya_smena_zamenyaet_pervuyu_a_ne_dobavlyaet(tri_shkolnika):
+    """Two changes leave ONE way in, not two."""
+    from core.services.lichnye_paroli import fajl_smenennyh, smenit
+
+    uid, vydannyj = tri_shkolnika["Агаркова"]
+    smenit("shkolnik", uid, vydannyj, "pervyj-vybrannyj", proverka=vh.proverit_parol)
+    smenit("shkolnik", uid, "pervyj-vybrannyj", "vtoroj-vybrannyj", proverka=vh.proverit_parol)
+
+    assert vh.proverit_parol("vtoroj-vybrannyj") == ("shkolnik", uid)
+    assert vh.proverit_parol("pervyj-vybrannyj") is None
+    zapisi = json.loads(fajl_smenennyh().read_text())["lyudi"]
+    assert len([z for z in zapisi if z["uid"] == uid and z["rol"] == "shkolnik"]) == 1
+
+
+def test_smena_ne_trogaet_sosedej(tri_shkolnika):
+    """A change is one row.  Everybody else logs in exactly as before."""
+    from core.services.lichnye_paroli import smenit
+
+    uid, vydannyj = tri_shkolnika["Агаркова"]
+    smenit("shkolnik", uid, vydannyj, "moy-sobstvennyj-parol", proverka=vh.proverit_parol)
+    for imya in ("Фомин", "Шарова", "Ваня Яковлев", "Пётр Петров"):
+        chuzhoj_uid, chuzhoj_parol = tri_shkolnika[imya]
+        otvet = vh.proverit_parol(chuzhoj_parol)
+        assert otvet is not None and otvet[1] == chuzhoj_uid, imya
+
+
+def test_smenennyj_parol_vsyo_ravno_ne_daet_roli(tri_shkolnika):
+    """A pupil who chose a long strong password is still a pupil: `rol()` is still None."""
+    from core.services.lichnye_paroli import smenit
+
+    uid, vydannyj = tri_shkolnika["Агаркова"]
+    smenit("shkolnik", uid, vydannyj, "moy-sobstvennyj-parol", proverka=vh.proverit_parol)
+    rol_i_kto = vh.proverit_parol("moy-sobstvennyj-parol")
+    assert rol_i_kto == ("shkolnik", uid)
+    golova = kuka(vh._make_cookie(*rol_i_kto))
+    assert vh.rol(golova) is None
+    assert vh.kto(golova) is None
+    assert vh.shkolnik(golova) == uid
