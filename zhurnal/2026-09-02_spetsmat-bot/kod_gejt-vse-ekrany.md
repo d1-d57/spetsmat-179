@@ -306,6 +306,72 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Baseline measured before any edit** (live run, real base
+`~/spetsmat-baza-lokalnaya-2026-09-10.db` copied into the session scratchpad, because
+`SPETSMAT_BAZA` is unset on this machine and python cannot read the home copy through the
+sandbox): 17 measurements over 10 screens x 2 roles, rc=1, red only on ЦЕНТР (neighbours'
+markup — not mine to fix). `обрезка/переносы/вышли/скролл` all zero everywhere.
+
+Six parts, each committed on its own.
+
+**P1. EKRANY IS DERIVED FROM ROUTES.** `veb/server.py` is out of my zone and declares its
+page routes as inline `if path == "…"` branches, so the list is read from it rather than
+copied: parse the AST of `Handler.do_GET` for every string literal compared against `path`
+(`==`, `in (…)`, `.startswith(…)`), and union it with the keys of
+`server._marshruty_razdelov()` and `vhod.marshruty()`. `/api/*`, `/static/*`, `/materials/*`
+drop out as non-screens; redirects (`/glavnaya`, `/listki`, `/listki-8`) fold onto their
+target; prefix routes (`/kartochka/`, `/listki/`, `/listok/`) get a live sample id from the
+base. Tabs stay a per-route overlay table, never the source of the list. 🔴 A discovered page
+route with no screen built for it is RED, not skipped — otherwise the list silently falls
+behind again, which is the whole defect. `/istoria` and `/kabinet` must appear by themselves.
+
+**P2. DEAD CSS RULE IS RED (Q1 lever 2).** Per screen, `document.styleSheets` is walked and
+every rule's selector is asked `querySelectorAll`. State pseudo-classes (`:hover`, `:checked`,
+`:focus`, …) and pseudo-elements are stripped first, so `#iv-shk:checked~#is-shk` is judged as
+`#iv-shk~#is-shk` — 0 nodes, structurally impossible, exactly the rule that killed `/istoria`.
+🔴 Deadness is decided ACROSS ALL SCREENS, in the tool and not in the page: one stylesheet
+serves the whole site, so `.kond th.zn` matching nothing on `/raspredelenie` proves nothing.
+Dead = matched nothing on every screen that carried the sheet. Calibration first: if the live
+count is large, the finding is stated with a named exception list, one reason each, never a
+silent threshold.
+
+**P3. EMPTY SCREEN ON NON-EMPTY DATA IS RED (Q1 lever 3).** Per screen: visible text-carrying
+elements inside `<main>` (body when there is no `<main>`), plus the length of visible text.
+Zero while the base has rows — red. `/istoria` is expected to fire.
+
+**P4. `<select>` COMES BACK UNDER MEASUREMENT, BY RENDER (N1, task item 5).** Two separate
+numbers, both measured by drawing the option text in the control's own computed font:
+* clipping — the SELECTED option's rendered width against the control's content box;
+* narrow field — the WIDEST option of the same control against the same box (owner's rule
+  «ширина полей … по самому широкому тексту, который может быть введён»).
+`<input>` has no knowable widest value, so it is judged on its `list=` datalist when it has
+one and on its current value otherwise; the boundary goes into «НЕ ПРОВЕРЯЕТСЯ» out loud.
+The ancestor rule of the 10.09 rewrite is untouched: only the control itself is judged, never
+the row that contains it.
+
+**P5. ONE CARRIER PER CELL (owner's third rule, Q4).** Narrow and by place, because a wide
+rule here gives false reds and a gate crying wolf gets switched off. Inside a `<td>`/`<th>`
+the carriers are counted: the cell's own text is one; every descendant that draws text AND is
+set apart from it — `<sup>`/`<sub>`, `vertical-align:super|sub`, or a font more than 15%
+smaller — is another; a control with a visible value is another. Two or more is red. Calibrated
+against the live pages before it is switched on.
+
+**P6. THE THREE OWNER RULES GO INTO `doc/DIZAJN-ZAKREPLENO.md` §1.** That file is outside the
+zone of the contract, and the task names it explicitly — so it is a zone extension named by the
+task, not a stray edit, and it is called out as such in `## ОТЧЁТ`. Canon without a check is a
+hope; a check without canon is an unexplained red.
+
+**NOT DOING** (task's «ЧЕГО НЕ ДЕЛАТЬ»): the centring check, the sheet-title case check and the
+круг-15 exception list are left alone; the site's own markup is not repaired — that is the
+neighbouring positions' work.
+
+**ON THE КРИТЕРИЙ ГОТОВНОСТИ.** It asks for six pairs of states with both numbers printed, on a
+live object and a live site. One honest correction, stated before the work rather than after:
+the base this machine can reach is a COPY of the боевая (2026-09-06), and `core/istochnik`
+prints that in the header of every run. It is a real object with 54 real pupils and real
+markup — not a fixture — but it is not the боевая base, and no number below will be claimed as
+боевой.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
@@ -384,3 +450,26 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 - `<id заявки>` — `<род>` — `<суть одной строкой: влитие / коммит / вывоз / деплой / гашение>`
 
 *(Заявок эта приёмка не ставила — так и напиши строкой «заявок нет: <почему ни одна из пяти операций не понадобилась>». Пустая строка и прочерк не принимаются: молчание неотличимо от «забыл».)*
+
+### ПРАВКА 1 (2026-09-11 00:38, от владельца через оркестратора) — ГДЕ МЕРИТЬ И ЧТО ЭТО ДОКАЗЫВАЕТ
+
+Гоняй гейт **ЛОКАЛЬНО** и печатай числа **С ОХВАТОМ**: не «нарушений 0», а
+«проверено X экранов из Y, правил Z, нарушений N». Число без охвата means «не смотрел» —
+за сутки этот класс всплыл пять раз (гейт не видел узла · не знал правила · не ходил на
+экран · `<select>` был исключён · правило CSS не совпало ни с чем).
+
+Локальный рендер ЧЕСТЕН: обрезка, центрирование и мёртвое правило CSS видны и на нём.
+Чего локальный прогон НЕ доказывает — что владелец увидит то же самое. Утром 10.09 гейт
+печатал «обрезанных 0» именно потому, что мерил не то, на что смотрел человек.
+
+Отсюда ТРЕБОВАНИЕ К УСТРОЙСТВУ ГЕЙТА, и оно часть твоей задачи: **базовый адрес гейт
+принимает снаружи** — переменной среды или аргументом, — а не имеет `localhost` вшитым.
+Боевой прогон ТЕМ ЖЕ гейтом делает ОРКЕСТРАТОР последним ходом волны и печатает оба
+набора чисел рядом; если адрес вшит, этого хода не существует. В `## ОТЧЁТ` напиши
+ОДНОЙ строкой, какой командой оркестратору гнать гейт по чужому адресу.
+
+### ПРАВКА ОБЩАЯ (2026-09-11 00:38, ответ владельца через оркестратора) — ПАРОЛЬ НЕ ПОНАДОБИТСЯ
+
+Владелец 11.09 дословно: пароль не понадобится ни одной позиции — ни `sudo`, ни keychain.
+Если твоя задача, как ты её понял, требует пароля владельца — это ОШИБКА ПОНИМАНИЯ, а не
+потребность. Остановись, назови её отдельной строкой в `## ОТЧЁТ` и делай остальное.
