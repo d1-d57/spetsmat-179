@@ -34,6 +34,19 @@ WT="$HOME/Documents/GitHub/spetsmat-bot-wt"
 
 export GIT_ZONA_REPO="$KOREN"
 
+# 🔴 ПОТОЛОК ФОНОВЫХ ЗАДАЧ СНИМАЕТ ЗАХОД, КОТОРЫЙ ЖДЁТ СВОЕГО ВЕРИФИКАТОРА.
+# ЦЕНА, ОПЛАЧЕНА 10.09 02:21:59 позицией verstka-raspredeleniya. Её последние
+# слова в логе: «I am now waiting for the independent §3 verifier (running in
+# the background against the live production site) before writing the final
+# report and merging» — и следом «Background tasks still running after 600s;
+# terminating». Наказан ровно тот, кто соблюдал дисциплину: §3 велит звать
+# независимого верификатора, верификатор ходит по ЖИВОМУ серверу и в 600 с не
+# укладывается, а движок считает ожидание простоем. Работа была сделана и
+# оказалась лучшей за ночь (48 обрезанных фамилий у гостя на боевом → 0), но
+# отчёта не существует вовсе, а влитие, проверку и выкатку доделывал оркестратор.
+# Обход назван самим движком в тексте отказа. Ставим ноль = ждать сколько нужно.
+export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0
+
 if [ ! -f "$FAJL" ]; then
   echo "❌ нет файла-захода: $FAJL"
   exit 1
