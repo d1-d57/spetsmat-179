@@ -205,11 +205,13 @@ STILI_SPETSMAT = """
 .listok-kogda,.listok-stroka{white-space:normal !important}
 /* Ссылка в свой кабинет. Стоит ПОД карточкой, а не в ней: внутри она была бы
    вторым цветом на закреплённой схеме. */
-.moj-kabinet{display:inline-block;align-self:flex-start;margin:.9rem 0 0;
-  font-family:var(--sans);
-  font-size:1.15rem;font-weight:600;color:var(--accent);text-decoration:none;
-  padding:.45em 1.1em;border-radius:10px;background:var(--accent-soft)}
-.moj-kabinet:hover{text-decoration:underline}
+/* 🔒 ССЫЛКА НА СВОЮ ГРУППУ НАБРАНА ЦВЕТОМ КАРТОЧКИ, А НЕ СИНИМ. Замок схемы
+   (`proverit_shemu()`) держит карточку в одном цвете и одном весе; браузерная
+   синева ссылки была бы вторым цветом ровно там, где его быть не должно.
+   Ссылка видна подчёркиванием — оно из линейки каркаса (`--rule`), — и
+   акцентом при наведении, то есть только в тот момент, когда на неё смотрят. */
+.listok-moyo a{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule)}
+.listok-moyo a:hover{border-bottom-color:var(--accent);color:var(--accent)}
 @media(max-width:940px){.blok-listok{font-size:clamp(1.5rem,4.6vw,2rem);
   padding:1.1rem 1.2rem 1.3rem}}
 </style>"""
@@ -292,18 +294,16 @@ def razdel(kt) -> str:
         moyo_html = (f'\n          <p class="listok-kab listok-moyo" '
                      f'data-org="videt-svoyo">{_gr_html}{_kab_txt}{_hvost}</p>')
 
-    # 🔴 ЕДИНСТВЕННАЯ ССЫЛКА НА `/kabinet`, КОТОРУЮ ЭТОТ ЗАХОД МОЖЕТ ПОСТАВИТЬ.
-    # Пункт меню «Кабинет» рядом с «Класс / Листки / Распределение / Кондуит»
-    # живёт в `veb/obshchee/karkas.py::obolochka()`, вне зоны этого захода (разбор
-    # и адрес долга — в `## ВОПРОСЫ` файла-захода). Без этой ссылки страница
-    # `/kabinet` была бы достижима только входом и адресной строкой: вошедший
-    # преподаватель, ушедший с неё на заглавную, обратно не вернулся бы.
-    # Стоит ПОД карточкой, а не внутри: внутри она была бы вторым цветом на
-    # схеме, которую стережёт `proverit_shemu()`.
+    # 🔴 КНОПКА «МОЙ КАБИНЕТ» УБРАНА ИЗ ТЕЛА СТРАНИЦЫ, ПОТОМУ ЧТО СТАЛА ВКЛАДКОЙ.
+    # Она стояла здесь как единственная ссылка на `/kabinet`, которую тот заход мог
+    # поставить: пункт меню живёт в `veb/obshchee/karkas.py::obolochka()`, и та
+    # зона до него не доставала. Долг закрыт 10.09 — «Кабинет» стоит в верхнем
+    # меню вторым, после «Класса». Владелец в тот же день назвал и остаток:
+    # *«кнопка „Мой кабинет“ стоит в теле страницы, должна быть вкладкой в верхнем
+    # меню, и называться просто „Кабинет“ — не „мой“»* (`TZ-DOBOR-10-09.md` H2.1).
+    # Две двери в одно место — это ровно то повторение, от которого страница и
+    # чистится; уходит та, что стоит не на месте.
     ssylka_v_kabinet = ""
-    if kt.prepod_id is not None:
-        ssylka_v_kabinet = ('\n        <a class="moj-kabinet" href="/kabinet" '
-                            'data-org="videt-svoyo">Мой кабинет →</a>')
     tekushchij_listok = tekushchij()
 
     # ── ДАННЫЕ ДЛЯ СТРАНИЦЫ КЛАССА ──────────────────────────────────────────
