@@ -15,7 +15,14 @@ from infra.db import connect
 
 # ------------------------------------------------------------------ WAL setup
 
-def _connect_wal(db_path: str = str(config.DB_PATH)) -> sqlite3.Connection:
+def _connect_wal(db_path: Optional[str] = None) -> sqlite3.Connection:
+    # 🔴 THE DEFAULT IS RESOLVED HERE, NOT IN THE SIGNATURE.  It used to read
+    # ``db_path: str = str(config.DB_PATH)``, and a default argument is evaluated when
+    # the module is IMPORTED.  Once ``config.DB_PATH`` became a question the environment
+    # answers, that turned ``import veb.sostoyanie`` itself into a refusal -- the whole
+    # module unusable because of a default nobody had asked for yet.
+    if db_path is None:
+        db_path = str(config.DB_PATH)
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
