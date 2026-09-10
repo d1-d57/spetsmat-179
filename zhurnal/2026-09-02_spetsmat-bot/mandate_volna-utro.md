@@ -2,9 +2,9 @@
 
 <!-- assembled by bootstrap_mandate.py; two halves, two authors; do not merge them -->
 
-**STATUS:** `CLOSED-S-DOLGOM`
+**STATUS:** `OPEN`
 **TOP_HALF_STATUS:** `COMPLETE`
-**BOTTOM_HALF_STATUS:** `COMPLETE`
+**BOTTOM_HALF_STATUS:** `PENDING`
 **ARC:** `zhurnal/2026-09-02_spetsmat-bot`
 **JOURNAL:** `zhurnal/2026-09-02_spetsmat-bot/ZHURNAL-ORKESTRATORA-UTRO.md`
 **ASSEMBLED:** `2026-09-10`
