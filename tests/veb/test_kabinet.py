@@ -319,16 +319,53 @@ def test_taking_a_student_AWAY_from_an_absent_teacher_is_never_refused(running_s
     assert status == 200, body
 
 
-def test_the_standing_layer_refuses_a_move_onto_an_absent_teacher(running_server):
-    den = _sleduyushchie(1)[0]
-    _post(f'{running_server["baza"]}/api/kabinet/otsutstvie', {"den": den, "net": 1},
+def test_the_standing_layer_refuses_a_move_onto_a_teacher_absent_TODAY(running_server):
+    """The standing door can only ever be frozen for TODAY, and that is not a shortfall.
+
+    🔴 `/api/enrollment` COMPUTES `effective_from` ITSELF, AS TODAY, AND IGNORES THE FIELD
+    IN THE BODY (`veb/server.py:1590`). Measured live on the боевой server on 2026-09-10:
+    a request naming `effective_from: 2026-10-01` opened the new interval on 2026-09-10.
+    So a standing row is never «назначение на 1 октября» — it is «с сегодняшнего дня и
+    впредь», and the only date its freeze can be asked about is today. A single future
+    date is frozen where a single date lives: the lesson layer, `/api/zanyatie`, tested
+    above. On 1 October the teacher marked absent still shows «отсутствует» there and his
+    children go red as unassigned, which is what `SostavService` was built to do.
+
+    Skipped when today is not a lesson day: the mark itself refuses a non-lesson date, so
+    on a Tuesday there is no date on which BOTH doors can be asked about the same day.
+    """
+    segodnya = date.today().isoformat()
+    if slot_of(segodnya) is None:
+        pytest.skip("сегодня не день занятия: замораживать постоянный слой нечем")
+    _post(f'{running_server["baza"]}/api/kabinet/otsutstvie', {"den": segodnya, "net": 1},
           _kuka("prepod", running_server["t1"]))
     status, body = _post(
         f'{running_server["baza"]}/api/enrollment',
         {"student_id": running_server["s2"], "teacher_id": running_server["t1"],
-         "slot": slot_of(den), "effective_from": den},
+         "slot": slot_of(segodnya)},
         _kuka("organizator"))
     assert status == 409, body
+
+
+def test_a_future_lesson_is_frozen_even_though_it_is_weeks_away(running_server):
+    """The owner's own scenario: a cross put in a cell far ahead, not in today's."""
+    daleko = _sleduyushchie(6)[5]
+    _post(f'{running_server["baza"]}/api/kabinet/otsutstvie', {"den": daleko, "net": 1},
+          _kuka("prepod", running_server["t1"]))
+    status, body = _post(
+        f'{running_server["baza"]}/api/zanyatie',
+        {"den": daleko, "student_id": running_server["s2"],
+         "teacher_id": running_server["t1"]},
+        _kuka("organizator"))
+    assert status == 409, body
+    # ...and the lesson right before it is untouched: one date is one date.
+    blizhe = _sleduyushchie(6)[4]
+    status, body = _post(
+        f'{running_server["baza"]}/api/zanyatie',
+        {"den": blizhe, "student_id": running_server["s2"],
+         "teacher_id": running_server["t1"]},
+        _kuka("organizator"))
+    assert status == 200, body
 
 
 def test_without_the_mark_the_same_write_goes_through(running_server):
