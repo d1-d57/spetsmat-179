@@ -1,30 +1,53 @@
+#!/usr/bin/env python3
+# TOOL-CONTRACT: called-by-hand — run before publishing a layout change, and by
+# the acceptance of any заход that touched `veb/**`.
 """Layout gate: judges the RENDER of a page, not the lines of its CSS.
 
 Why this file exists.  The column rule of this project was written down three times
 and did not hold three times, because it had no lever: nothing turned red when a
 page broke it.  A rule without a carrier is a hope (`skills/disciplina-kachestvo`).
 This gate is the carrier.  It boots the real server on the real database, opens
-every page in a headless Chromium at the reference viewport and asks three
-questions that a human asks by looking:
+every screen in a headless Chromium at the reference viewport, in every role that
+can see it, and asks four questions that a human asks by looking:
 
   1. CLIPPING      -- is there an element whose visible box is narrower than its
                       own text needs, so the text is cut?
   2. NEEDLESS WRAP -- is there a line that took two line-heights where the
                       available width allowed one?
   3. H-SCROLL      -- is the document wider than the window?
+  4. ESCAPED       -- is there an element standing OUTSIDE the card that owns it,
+                      where nothing clips it and no scrollbar reveals it?
 
-All three zero on every page -- green.  Anything else -- red, with the offending
+All four zero on every screen -- green.  Anything else -- red, with the offending
 selectors printed, because a gate that says only "red" gets ignored.
 
-🔴 WHAT THIS GATE DOES NOT CHECK, stated out loud so nobody mistakes green here
-for "the page is good": colour and contrast, readability, font substitution on a
-machine without the project fonts, mobile widths, print, motion, and anything a
-screen reader would say.  It judges geometry at one viewport and nothing else.
+🔴 WHY THIS FILE WAS REWRITTEN ON 2026-09-10.  The gate reported «обрезанных у
+гостя 48 → 0» while the owner was looking at «Тухватулин-Йалчын …» clipped on the
+very same page, guest role, tab «школьникам».  Three things were wrong at once and
+each one alone was enough to produce that zero:
+
+  * THE WALK DROPPED THE CLIPPED NODE.  The node walk kept only LEAF elements --
+    an element was discarded when any child carried text.  The clipped node is
+    `<span class="kto"><b>SURNAME</b> Name</span>` (`veb/razdely/shkolniki.py:356`)
+    and the `text-overflow:ellipsis` lives on `.kto` (`veb/obshchee/karkas.py:1308`,
+    `:1591`).  `.kto` has a `<b>` child with text, so every single one of them was
+    thrown away.  Measured live 10.09: 113 `.kto` on the guest page, 0 of them
+    leaves, 1 of them clipped -- and the leaf walk reported 0.
+  * THE GUEST WAS NEVER MEASURED.  The gate authenticated as `organizator` always,
+    and the screen the owner photographed is the one WITHOUT a password.
+  * THE TAB IDS WERE THE WRONG ONES.  The table selected `p-rasp` / `p-start` /
+    `p-kond` -- those are the SITE-level radios (`name="str"`).  The tabs inside
+    распределение are `t-shk` / `t-prep` / `t-В` / `t-Д` / `t-Н` (`name="vk"`,
+    `veb/obshchee/karkas.py:1084`).  The gate therefore measured the same default
+    view four times and never opened a group tab at all -- which is exactly where
+    the escaped-content defect of the owner's screenshot `13` lives.
 
 Run:  python3 tools/gejt_verstki.py            (green -> rc=0, red -> rc=1)
-      python3 tools/gejt_verstki.py --slomat   (self-test: forces a violation,
-                                                the gate MUST go red; rc=0 when
-                                                it correctly caught it)
+      python3 tools/gejt_verstki.py --slomat   (self-test: forces a violation of
+                                                EVERY one of the four checks; the
+                                                gate MUST go red; rc=0 when it
+                                                correctly caught them all)
+      python3 tools/gejt_verstki.py --ekran Д  (one screen, by name substring)
 """
 
 from __future__ import annotations
@@ -44,21 +67,36 @@ os.environ.setdefault("SPETSMAT_VEB_SECRET", "gate-secret-key-32bytes-long!!")
 
 ETALON = {"width": 1440, "height": 900}
 
-# One entry per page the gate judges.  `vkladka` is the id of the tab radio to
-# select before measuring; None means the page has no tabs.  The names are the
-# owner's own words for these screens.
-STRANICY = [
-    ("школьникам",      "/raspredelenie", None),
-    ("принимающим",     "/raspredelenie", "p-rasp"),
-    ("страница группы", "/glavnaya",      "p-start"),
-    ("кондуит",         "/glavnaya",      "p-kond"),
+# 🔴 THE RENDER IGNORES THE CONNECTION THIS GATE HANDS THE SERVER.  Every page
+# route rebuilds its context through `veb.obshchee.karkas.DATA`, a module-level
+# constant pointing at `<repo>/data/spetsmat.db`.  So the base the gate judges is
+# ALWAYS the one checked out next to it -- there is no honest way to aim the gate
+# elsewhere, and pretending otherwise with a `--baza` flag would be a third way to
+# lie.  Stated here so nobody spends an hour finding it again.
+BAZA = KOREN / "data" / "spetsmat.db"
+
+# One entry per SCREEN the gate judges: name, path, the radio to select before
+# measuring, and the roles that can see it.
+#   `name="str"` radios switch the SITE SECTION: p-start · p-rasp · p-lich · p-kond
+#   `name="vk"`  radios switch the TAB inside распределение: t-shk · t-prep · t-В/Д/Н
+# `None` means the screen is whatever the page shows on arrival.
+OBE = ("гость", "организатор")
+EKRANY = [
+    ("школьникам",   "/raspredelenie", "t-shk",   OBE),
+    ("принимающим",  "/raspredelenie", "t-prep",  OBE),
+    ("группа В",     "/raspredelenie", "t-В",     OBE),
+    ("группа Д",     "/raspredelenie", "t-Д",     OBE),
+    ("группа Н",     "/raspredelenie", "t-Н",     OBE),
+    ("класс",        "/glavnaya",      "p-start", OBE),
+    ("кондуит",      "/glavnaya",      "p-kond",  ("организатор",)),
 ]
 
 # The measuring script.  It runs inside the page, so it sees the RENDER: computed
 # boxes after CSS, fonts and layout, not the source.
 ZAMER = r"""
 () => {
-  const out = {obrezka: [], perenos: [], skroll: 0, osmotreno: 0};
+  const out = {obrezka: [], perenos: [], vyshli: [], skroll: 0,
+               osmotreno: 0, vsego: 0, na_obrezku: 0, na_vyhod: 0};
 
   out.skroll = Math.max(0,
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -70,15 +108,17 @@ ZAMER = r"""
     return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
   };
 
-  // Only LEAF elements carrying their own text: a container is wide because its
-  // children are, and blaming it would bury the real offender.
-  const list = [...document.querySelectorAll('body *')].filter(el => {
-    if (!vidim(el)) return false;
-    if (['SCRIPT','STYLE','SVG','PATH','BR','INPUT'].includes(el.tagName)) return false;
-    const t = (el.textContent || '').trim();
-    if (!t) return false;
-    return ![...el.children].some(c => (c.textContent || '').trim().length > 0);
-  });
+  const sluzhebnyy = (el) =>
+      ['SCRIPT','STYLE','SVG','PATH','BR','INPUT'].includes(el.tagName);
+
+  const vse = [...document.querySelectorAll('body *')];
+  out.vsego = vse.length;
+
+  const vidimye = vse.filter(el => !sluzhebnyy(el) && vidim(el));
+  const s_tekstom = vidimye.filter(el => (el.textContent || '').trim().length > 0);
+
+  // A LEAF carries its own text: none of its children carries any.
+  const list = (el) => ![...el.children].some(c => (c.textContent || '').trim().length > 0);
 
   const put = (el) => {
     const parts = [];
@@ -94,20 +134,38 @@ ZAMER = r"""
     return parts.join(' > ');
   };
 
-  for (const el of list) {
-    out.osmotreno++;
+  // ── 1. CLIPPING ────────────────────────────────────────────────────────────
+  // 🔴 NOT LEAVES ONLY, AND THAT IS THE WHOLE POINT OF THE 10.09 REWRITE.  The box
+  // that clips is the one carrying `overflow:hidden` + `text-overflow:ellipsis`,
+  // and on this site that box (`.kto`) always wraps a `<b>` with the surname in
+  // it -- so a leaf-only walk misses every clipped name there is.  An element is
+  // judged for clipping when it carries text AND establishes its own clipping
+  // context; leaves are kept too, so nothing the old walk caught is lost.
+  const na_obrezku = s_tekstom.filter(el => {
     const s = getComputedStyle(el);
-    const r = el.getBoundingClientRect();
-    const tekst = (el.textContent || '').trim().slice(0, 40);
+    return (s.overflowX !== 'visible' || s.overflowY !== 'visible') || list(el);
+  });
+  out.na_obrezku = na_obrezku.length;
 
-    // 1. CLIPPING -- the content box cannot hold the text it carries.
+  for (const el of na_obrezku) {
+    const s = getComputedStyle(el);
+    const tekst = (el.textContent || '').trim().slice(0, 40);
     // scrollWidth exceeding clientWidth means the browser had to hide part of it.
     if (el.scrollWidth > el.clientWidth + 1 && s.overflowX !== 'visible') {
       out.obrezka.push({put: put(el), tekst,
                         nado: el.scrollWidth, est: el.clientWidth});
     }
+  }
 
-    // 2. NEEDLESS WRAP -- rendered on two or more lines while one would fit.
+  // ── 2. NEEDLESS WRAP ───────────────────────────────────────────────────────
+  // Leaves only, and here the leaf rule earns its place: a container wraps
+  // because its children do, and blaming the container buries the real offender.
+  const listya = s_tekstom.filter(list);
+  out.osmotreno = listya.length;
+
+  for (const el of listya) {
+    const s = getComputedStyle(el);
+    const tekst = (el.textContent || '').trim().slice(0, 40);
     // 🔴 Line count is taken from the TEXT's own line boxes, never from the
     // element's height.  Height includes padding and border, so a tab button
     // with 10px of vertical padding measures two line-heights while carrying a
@@ -142,17 +200,94 @@ ZAMER = r"""
       }
     }
   }
+
+  // ── 4. ESCAPED THE CONTAINER ───────────────────────────────────────────────
+  // 🔴 THE CHECK THE GATE DID NOT HAVE AT ALL, added 10.09.  Owner's screenshot
+  // `13`: the pills «Бирюков», «Аникина», «Белеванцева» stand LEFT of the card of
+  // the teacher who owns them.  None of the three older checks can see it -- the
+  // text is not cut, the line did not wrap, and the DOCUMENT does not scroll,
+  // because the pills escape into space the page already has.
+  //
+  // A VISUAL CONTAINER is what the eye reads as an edge: it clips, or it paints a
+  // border, or it paints a background of its own.  An element is a defect when
+  // its border box sticks out of the padding box of its nearest visual container
+  // AND that container does NOT clip -- if it clipped, the overflow would be
+  // hidden and that is check 1's business, not this one.
+  const prozr = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
+  const konteyner = (el) => {
+    const s = getComputedStyle(el);
+    if (s.overflowX !== 'visible' || s.overflowY !== 'visible') return 'клип';
+    if (parseFloat(s.borderTopWidth) || parseFloat(s.borderLeftWidth) ||
+        parseFloat(s.borderRightWidth) || parseFloat(s.borderBottomWidth)) return 'рамка';
+    if (!prozr(s.backgroundColor)) return 'фон';
+    return null;
+  };
+  const vnutri = (el) => {                    // padding box of a container
+    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+    return {l: r.left + parseFloat(s.borderLeftWidth),
+            r: r.right - parseFloat(s.borderRightWidth)};
+  };
+
+  for (const el of vidimye) {
+    const s = getComputedStyle(el);
+    // Deliberate escapes -- dropdowns, tooltips, the login modal -- are taken out
+    // of flow ON PURPOSE, and reporting them would be the gate crying wolf.
+    if (s.position === 'fixed' || s.position === 'absolute') continue;
+    let n = el.parentElement, rod = null;
+    while (n && n !== document.body) {
+      const tip = konteyner(n);
+      if (tip) { rod = {el: n, tip}; break; }
+      n = n.parentElement;
+    }
+    if (!rod) continue;                 // nothing owns it but the page itself
+    out.na_vyhod++;
+    if (rod.tip === 'клип') continue;   // hidden overflow is check 1's business
+    const a = el.getBoundingClientRect(), b = vnutri(rod.el);
+    const vlevo = Math.round(b.l - a.left), vpravo = Math.round(a.right - b.r);
+    if (vlevo > 1 || vpravo > 1) {
+      out.vyshli.push({put: put(el), rod: put(rod.el), tip: rod.tip,
+                       vlevo, vpravo,
+                       tekst: (el.textContent || '').trim().slice(0, 40)});
+    }
+  }
+
   return out;
 }
 """
 
+# Deliberate breakage for the self-test.  Every one of the four checks must have
+# something to catch: a gate that stays green here is a gate nobody needs.
+LOMKA = r"""() => {
+  // 1. CLIPPING -- squeeze one text box shut.  Chosen so that it hits a NON-LEAF
+  //    node (`.kto` wraps a `<b>`), which is exactly the shape the old walk
+  //    dropped: if the walk regresses to leaves only, this stays green and the
+  //    self-test says so.
+  const k = document.querySelector('.kto') || document.querySelector('td, li');
+  if (k) { k.style.width = '8px'; k.style.overflow = 'hidden';
+           k.style.whiteSpace = 'nowrap'; k.style.textOverflow = 'ellipsis'; }
+  // 2. NEEDLESS WRAP -- right-align cells so short labels break onto two lines.
+  document.querySelectorAll('td, th, .kl, li').forEach(e => {
+      e.style.textAlign = 'right'; });
+  // 4. ESCAPED -- pills walk out of the LEFT edge of the card that owns them,
+  //    exactly as in the owner's screenshot `13`, and the document does NOT
+  //    scroll, so checks 1-3 stay blind to it.
+  document.querySelectorAll('.kol-pr .para, .para').forEach(pa => {
+      pa.style.background = 'rgba(255,255,255,.06)';
+      pa.querySelectorAll('.deti-ryad span, .komu.deti span').forEach(s => {
+          s.style.marginLeft = '-120px'; });
+  });
+  // 3. H-SCROLL -- push the document wider than the window.
+  const d = document.createElement('div');
+  d.style.width = '2400px'; d.style.height = '1px';
+  document.body.appendChild(d);
+}"""
+
 
 def zhivaya_baza() -> Path:
-    """The real project database -- 54 active pupils, not three invented rows."""
-    p = KOREN / "data" / "spetsmat.db"
-    if not p.exists():
-        raise SystemExit(f"нет живой базы: {p}")
-    return p
+    """The real project database -- every active pupil, not three invented rows."""
+    if not BAZA.exists():
+        raise SystemExit(f"нет живой базы: {BAZA}")
+    return BAZA
 
 
 def chisla_bazy(db: Path) -> dict:
@@ -187,128 +322,156 @@ def podnyat_server(db: Path):
 def kuka() -> dict:
     """An organiser cookie, exactly as /vhod hands one to a browser.  The conduit
     tab is gated on the capability `videt-konduit`, which a guest does not have --
-    measuring the page as a guest would silently check an empty screen."""
+    measuring that page as a guest would silently check an empty screen.
+    🔴 The GUEST is measured too, and without this the gate is blind to the only
+    screen the owner ever photographs: the site as everyone else sees it."""
     from veb import vhod
     return {"name": vhod.COOKIE_NAME, "value": vhod._make_cookie("organizator")}
 
 
-def progon(baza_url: str, slomat: bool) -> tuple[list, int, int]:
+def progon(baza_url: str, slomat: bool, otbor: str | None) -> tuple[list, int]:
     from playwright.sync_api import sync_playwright
 
-    itogi, osmotreno_vsego = [], 0
+    ekrany = [e for e in EKRANY if not otbor or otbor.lower() in e[0].lower()]
+    itogi = []
     with sync_playwright() as pw:
         brauzer = pw.chromium.launch()
-        ctx = brauzer.new_context(viewport=ETALON)
-        c = kuka()
-        ctx.add_cookies([{**c, "url": baza_url}])
-        page = ctx.new_page()
-
-        for imya, put, vkladka in STRANICY:
-            try:
-                page.goto(baza_url + put, wait_until="networkidle", timeout=20000)
-                if vkladka:
-                    el = page.query_selector(f"#{vkladka}")
-                    if el:
-                        page.evaluate(f"document.getElementById('{vkladka}').checked = true")
-                        page.wait_for_timeout(150)
-                if slomat:
-                    # Deliberate breakage for the self-test: right-align every cell
-                    # and squeeze one column.  A gate that stays green here is a
-                    # gate nobody needs.
-                    page.evaluate("""() => {
-                        document.querySelectorAll('td, th, .kl, li').forEach(e => {
-                            e.style.textAlign = 'right';
-                        });
-                        const c = document.querySelector('td, li, .kl');
-                        if (c) { c.style.width = '8px'; c.style.overflow = 'hidden'; }
-                        const b = document.body;
-                        const d = document.createElement('div');
-                        d.style.width = '2400px'; d.style.height = '1px';
-                        b.appendChild(d);
-                    }""")
-                    page.wait_for_timeout(120)
-                z = page.evaluate(ZAMER)
-            except Exception as exc:                       # noqa: BLE001
-                itogi.append((imya, put, None, str(exc)[:120]))
+        for rol in ("гость", "организатор"):
+            svoi = [e for e in ekrany if rol in e[3]]
+            if not svoi:
                 continue
-            osmotreno_vsego += z["osmotreno"]
-            itogi.append((imya, put, z, None))
-
+            ctx = brauzer.new_context(viewport=ETALON)
+            if rol == "организатор":
+                ctx.add_cookies([{**kuka(), "url": baza_url}])
+            page = ctx.new_page()
+            for imya, put, radio, _roli in svoi:
+                try:
+                    page.goto(baza_url + put, wait_until="networkidle", timeout=20000)
+                    if radio:
+                        if not page.query_selector("#" + radio):
+                            itogi.append((rol, imya, put, None,
+                                          f"переключателя #{radio} нет на странице"))
+                            continue
+                        page.evaluate("(i)=>document.getElementById(i).checked=true", radio)
+                        page.wait_for_timeout(200)
+                    if slomat:
+                        page.evaluate(LOMKA)
+                        page.wait_for_timeout(150)
+                    z = page.evaluate(ZAMER)
+                except Exception as exc:                       # noqa: BLE001
+                    itogi.append((rol, imya, put, None, str(exc).splitlines()[0][:90]))
+                    continue
+                itogi.append((rol, imya, put, z, None))
+            ctx.close()
         brauzer.close()
-    return itogi, len(STRANICY), osmotreno_vsego
+    return itogi, len(ekrany)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slomat", action="store_true",
-                    help="self-test: break the pages on purpose; the gate MUST go red")
+                    help="self-test: break the screens on purpose; the gate MUST go red")
+    ap.add_argument("--ekran", default=None,
+                    help="run one screen only, by substring of its name")
     args = ap.parse_args()
 
     db = zhivaya_baza()
     chisla = chisla_bazy(db)
     httpd, conn, t, url = podnyat_server(db)
     try:
-        itogi, vsego_stranic, osmotreno = progon(url, args.slomat)
+        itogi, vsego_ekranov = progon(url, args.slomat, args.ekran)
     finally:
         httpd.shutdown(); httpd.server_close(); t.join(); conn.close()
 
     print(f"ГЕЙТ ВЁРСТКИ · эталон {ETALON['width']}x{ETALON['height']} · "
           f"живая база: {chisla['vsego']} школьников, "
           f"по классам {chisla['po_klassam']}, крупнейший класс {chisla['krupneyshiy']}")
+    print(f"база: {db}")
     print()
-    print(f"{'страница':<18}{'обрезка':>9}{'переносы':>10}{'скролл, px':>12}   осмотрено")
-    krasnyh, izmereno = 0, 0
-    for imya, put, z, oshibka in itogi:
+    print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'переносы':>10}"
+          f"{'вышли':>8}{'скролл':>8}   охват узлов")
+    krasnyh, izmereno, uzlov = 0, 0, 0
+    for rol, imya, put, z, oshibka in itogi:
         if z is None:
-            print(f"{imya:<18}{'—':>9}{'—':>10}{'—':>12}   🔴 {oshibka}")
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>8}   🔴 {oshibka}")
             krasnyh += 1
             continue
         izmereno += 1
-        plohо = len(z["obrezka"]) + len(z["perenos"]) + (1 if z["skroll"] else 0)
-        if plohо:
+        uzlov += z["vsego"]
+        ploho = (len(z["obrezka"]) + len(z["perenos"]) + len(z["vyshli"])
+                 + (1 if z["skroll"] else 0))
+        if ploho:
             krasnyh += 1
-        print(f"{imya:<18}{len(z['obrezka']):>9}{len(z['perenos']):>10}"
-              f"{z['skroll']:>12}   {z['osmotreno']}")
+        # 🔴 ZERO NODES ON A LIVE SCREEN IS RED, NOT GREEN.  A walk that looked at
+        # nothing reports no defects, and that is indistinguishable from a clean
+        # page unless the coverage is printed next to the verdict.
+        if z["vsego"] == 0 or z["na_obrezku"] == 0:
+            krasnyh += 1
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>8}   "
+                  f"🔴 ОХВАТ НОЛЬ: узлов {z['vsego']}, на обрезку {z['na_obrezku']}")
+            continue
+        print(f"{rol:<13}{imya:<15}{len(z['obrezka']):>9}{len(z['perenos']):>10}"
+              f"{len(z['vyshli']):>8}{z['skroll']:>8}   "
+              f"проверено {z['na_obrezku']}/{z['osmotreno']}/{z['na_vyhod']} "
+              f"из {z['vsego']}")
 
     print()
-    print(f"ОХВАТ: проверено {izmereno} страниц из {vsego_stranic}; "
-          f"осмотрено элементов {osmotreno}")
+    print(f"ОХВАТ: проверено {izmereno} экранов из {vsego_ekranov * 2 - 1}; "
+          f"осмотрено элементов {uzlov}")
+    print("        три числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
+          "на ВЫХОД ЗА КОНТЕЙНЕР, из общего числа элементов страницы.")
     if izmereno == 0:
         print("🔴 ОХВАТ НОЛЬ при живом сервере — это КРАСНЫЙ, а не зелёный: "
               "гейт ничего не измерил.")
         return 1
 
-    for imya, put, z, oshibka in itogi:
+    for rol, imya, put, z, oshibka in itogi:
         if not z:
             continue
         for vid, klyuch in (("ОБРЕЗКА", "obrezka"), ("ПЕРЕНОС", "perenos")):
             for d in z[klyuch][:8]:
-                print(f"   {vid} · {imya} · {d['put']} · «{d['tekst']}» · "
+                print(f"   {vid} · {rol} · {imya} · {d['put']} · «{d['tekst']}» · "
                       f"надо {d.get('nado', d.get('nuzhno'))} есть {d['est']}")
+        for d in z["vyshli"][:8]:
+            print(f"   ВЫШЛО · {rol} · {imya} · {d['put']} · «{d['tekst']}» · "
+                  f"влево {d['vlevo']} вправо {d['vpravo']} · "
+                  f"из {d['rod']} ({d['tip']})")
 
     print()
     print("НЕ ПРОВЕРЯЕТСЯ ЭТИМ ГЕЙТОМ: цвет и контраст, читаемость, подстановка "
           "шрифтов на машине без проектных шрифтов, мобильные ширины, печать, "
           "движение, озвучка экранным диктором. Гейт судит ГЕОМЕТРИЮ на одном "
-          "эталоне и больше ничего.\n🔴 И ОТДЕЛЬНО: обрезку, сделанную НА "
-          "СЕРВЕРЕ (строка укорочена в Python до отдачи в браузер), этот гейт "
-          "увидеть не может в принципе — в разметку приезжает уже короткий "
-          "текст, и переполнения нет. Он ловит обрезку РАМКОЙ, а не ножницами "
-          "в коде.")
+          "эталоне и больше ничего."
+          "\n🔴 И ОТДЕЛЬНО, ПОИМЁННО:"
+          "\n · обрезку, сделанную НА СЕРВЕРЕ (строка укорочена в Python до отдачи "
+          "в браузер) — в разметку приезжает уже короткий текст, переполнения нет. "
+          "Гейт ловит обрезку РАМКОЙ, а не ножницами в коде."
+          "\n · ВЕРТИКАЛЬНЫЙ выход за контейнер: проверка 4 сравнивает только левый "
+          "и правый край. Таблетка, уехавшая ВНИЗ из карточки, не поймана."
+          "\n · выход из контейнера, который НЕ красит ни рамки, ни фона и не режет: "
+          "такой контейнер глазом не читается как край, и границы у него для гейта "
+          "нет. Карточка без фона и рамки — слепое пятно."
+          "\n · элементы `position:absolute` и `fixed` — они выходят за родителя "
+          "НАРОЧНО (выпадающие списки, подсказки, окно входа), и проверка 4 их "
+          "пропускает целиком. Сломанный выпадающий список гейт не увидит."
+          "\n · роль `prepod`: гейт меряет ГОСТЯ и ОРГАНИЗАТОРА. Третья роль есть "
+          "в `veb/vhod.py`, и её экраны не измерены ни разу."
+          "\n · состояния, в которые страница приходит только по клику: раскрытые "
+          "списки, окно входа, подсказка значка «обычно у». Гейт меряет покой.")
 
     if args.slomat:
         if krasnyh:
-            print("\n✅ САМОПРОВЕРКА: гейт покраснел на подстроенном нарушении — "
-                  "рычаг работает.")
+            print(f"\n✅ САМОПРОВЕРКА: гейт покраснел на {krasnyh} подстроенных "
+                  "нарушениях — рычаг работает.")
             return 0
-        print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: страницы сломаны нарочно, а гейт зелёный. "
+        print("\n🔴 САМОПРОВЕРКА ПРОВАЛЕНА: экраны сломаны нарочно, а гейт зелёный. "
               "Молчащий гейт хуже отсутствующего.")
         return 1
 
     if krasnyh:
-        print(f"\n🔴 КРАСНЫЙ: {krasnyh} страниц(ы) из {vsego_stranic} нарушают канон.")
+        print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон.")
         return 1
-    print(f"\n✅ ЗЕЛЁНЫЙ: {izmereno} страниц из {vsego_stranic}, все три числа нули.")
+    print(f"\n✅ ЗЕЛЁНЫЙ: {izmereno} экранов, все четыре числа нули на каждом.")
     return 0
 
 
