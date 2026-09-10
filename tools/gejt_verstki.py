@@ -438,7 +438,10 @@ def progon(baza_url: str, slomat: bool, otbor: str | None) -> tuple[list, int]:
                 itogi.append((rol, imya, put, z, None))
             ctx.close()
         brauzer.close()
-    return itogi, len(ekrany)
+    # How many measurements this run OWED: one per screen per role that can see
+    # it.  Never a formula over the screen count — «проверено 6 экранов из 5» is
+    # the arithmetic of a gate that does not know what it set out to do.
+    return itogi, sum(len(e[3]) for e in ekrany)
 
 
 def main() -> int:
@@ -449,11 +452,21 @@ def main() -> int:
                     help="run one screen only, by substring of its name")
     args = ap.parse_args()
 
+    # 🔴 «ПОЗВАЛИ НЕВЕРНО» — ОТДЕЛЬНЫЙ КОД ВОЗВРАТА, А НЕ «ЧИСТО».  `--ekran` с
+    # именем, которого нет, отбирал ноль экранов, и гейт возвращал 1 — то же, что
+    # «нашёл дефект», так что опечатка в имени экрана выглядела снаружи как
+    # находка.  Второй такой же исход — argparse на неизвестном флаге, он и так
+    # отдаёт 2.  Найдено `check_tool_contract.py`, не рассуждением.
+    if args.ekran and not [e for e in EKRANY if args.ekran.lower() in e[0].lower()]:
+        print(f"позвали неверно: экрана «{args.ekran}» нет. Есть: "
+              + ", ".join(e[0] for e in EKRANY), file=sys.stderr)
+        return 2
+
     db = zhivaya_baza()
     chisla = chisla_bazy(db)
     httpd, conn, t, url = podnyat_server(db)
     try:
-        itogi, vsego_ekranov = progon(url, args.slomat, args.ekran)
+        itogi, dolzhno_byt = progon(url, args.slomat, args.ekran)
     finally:
         httpd.shutdown(); httpd.server_close(); t.join(); conn.close()
 
@@ -490,7 +503,7 @@ def main() -> int:
               f"из {z['vsego']}")
 
     print()
-    print(f"ОХВАТ: проверено {izmereno} экранов из {vsego_ekranov * 2 - 1}; "
+    print(f"ОХВАТ: проверено {izmereno} экранов из {dolzhno_byt}; "
           f"осмотрено элементов {uzlov}")
     print("        три числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
           "на ВЫХОД ЗА КОНТЕЙНЕР, из общего числа элементов страницы.")
@@ -562,7 +575,8 @@ def main() -> int:
         return 0
 
     if krasnyh:
-        print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон.")
+        print(f"\n🔴 КРАСНЫЙ: {krasnyh} экранов из {izmereno} нарушают канон "
+              f"(измерено {izmereno} из {dolzhno_byt} обещанных).")
         return 1
     print(f"\n✅ ЗЕЛЁНЫЙ: {izmereno} экранов, все четыре числа нули на каждом.")
     return 0
