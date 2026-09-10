@@ -336,6 +336,12 @@ window.OCHERED = (function () {
     if (SCHYOT) {
       SCHYOT.hidden = !n;
       SCHYOT.textContent = n ? ("в очереди " + n + " " + slovo(n)) : "";
+      /* Число стоит ещё и атрибутом. Оно нужно живому прогону
+         (`tests/veb/test_offlajn_brauzer.py`): длину очереди отдаёт Promise, а
+         ожидание в браузере обязано быть СИНХРОННЫМ предикатом — иначе оно видит
+         сам Promise, считает его истиной и просыпается раньше времени. Поймано
+         живьём: тест «отметка уехала» проходил, не дождавшись ни одной отправки. */
+      SCHYOT.setAttribute("data-n", String(n));
     }
     if (!BANNER) { return; }
     var s = sostoyanie();
@@ -368,7 +374,12 @@ window.OCHERED = (function () {
       clearTimeout(budilnik);
       /* Сервер жив — значит связь есть, чем бы он ни ответил. */
       if (r.status >= 500 || r.status === 429) {
-        return {rod: "net-seti", pochemu: "сервер занят (" + r.status + ")", zhiv: true};
+        /* Тело дочитывается и здесь: см. `proba` — недочитанный ответ держит
+           соединение открытым, и следующая попытка встаёт в очередь за ним. */
+        return r.text().catch(function () {}).then(function () {
+          return {rod: "net-seti", pochemu: "сервер занят (" + r.status + ")",
+                  zhiv: true};
+        });
       }
       return r.json().catch(function () { return {}; }).then(function (d) {
         if (r.ok) { return {rod: "ok", dannye: d, zhiv: true}; }
@@ -445,8 +456,18 @@ window.OCHERED = (function () {
     proba_idyot = true;
     var otsechka = new AbortController();
     var budilnik = setTimeout(function () { otsechka.abort(); }, TAJMAUT);
+    /* 🔴 ТЕЛО ОТВЕТА ДОЧИТЫВАЕТСЯ, ХОТЯ ОНО НАМ НЕ НУЖНО, И ЭТО НЕ ПЕДАНТИЗМ.
+       `fetch`, у которого не прочитали `body`, оставляет поток открытым: браузер
+       считает запрос НЕЗАВЕРШЁННЫМ, соединение не освобождается, а на сервере из
+       stdlib `http.server` поток обработчика висит вместе с ним. Поймано живьём:
+       страница поднималась и работала, но `networkidle` не наступал никогда —
+       снаружи это неотличимо от «сервер не отвечает». Восемнадцать телефонов,
+       пробующих связь раз в полминуты, оставили бы столько же висящих потоков. */
     return fetch("/api/zhiv", {cache: "no-store", signal: otsechka.signal})
-      .then(function (r) { clearTimeout(budilnik); otmetit_svyaz(r.ok); })
+      .then(function (r) {
+        clearTimeout(budilnik);
+        return r.text().catch(function () {}).then(function () { otmetit_svyaz(r.ok); });
+      })
       .catch(function () { clearTimeout(budilnik); otmetit_svyaz(false); })
       .then(function () { proba_idyot = false; return obnovit(); });
   }
