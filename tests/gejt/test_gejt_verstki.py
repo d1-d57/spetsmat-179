@@ -1166,88 +1166,148 @@ def test_input_bez_nabora_ne_sudirsya_na_shirinu(server, brauzer):
 
 # ── 9. одна клетка — один носитель данных (O3, Q4) ────────────────────────────
 
+def _kletka_s_pripiskoy(p, nabor: bool):
+    """Ставит приписку в ПЕРВУЮ живую клетку с собственным текстом и возвращает её
+    путь.  Поломка ВНОСИТСЯ, а не берётся со страницы — см. заголовок раздела."""
+    return p.evaluate("""(naborom) => {
+        const vidno = (e) => { const r = e.getBoundingClientRect();
+            return r.width > 1 && r.height > 1; };
+        const kl = [...document.querySelectorAll('td, th')].find(e => {
+            if (!vidno(e)) return false;
+            for (const k of e.childNodes)
+                if (k.nodeType === 3 && (k.nodeValue || '').trim()) return true;
+            return false;
+        });
+        if (!kl) return null;
+        const i = document.createElement(naborom ? 'i' : 'sup');
+        i.className = 'proba-pripiska';
+        i.textContent = 'Н.В.';
+        if (naborom) i.style.setProperty('vertical-align', 'super', 'important');
+        kl.append(i);
+        return (kl.className || kl.tagName).slice(0, 30);
+    }""", nabor)
+
+
+def _snyat_pripiski(p):
+    p.evaluate("""() => document.querySelectorAll('.proba-pripiska')
+        .forEach(e => e.remove())""")
+
+
 def test_dva_nositelya_v_kletke_krasneyut_i_zeleneyut(server, brauzer):
     """🔴 КАНОН ВЛАДЕЛЬЦА «НЕЛЬЗЯ СМЕШИВАТЬ», У КОТОРОГО НЕ БЫЛО РЫЧАГА.  Живое
-    нарушение — «Агаркова Ирина ᴰ·ᴱ·»: инициалы принимающего надстрочником в
-    клетке с фамилией школьника.  У правила «никогда не центрируем» рычаг есть, и
-    оно держится; у этого рычага не было, и оно возвращается.
+    нарушение, ради которого проверка написана, — «Агаркова Ирина ᴰ·ᴱ·»: инициалы
+    принимающего надстрочником в клетке с фамилией школьника (O3).
 
-    Пара на кондуите: приписку убрали — находка ушла, вернули — вернулась."""
+    🔴 ПОЛОМКА ВНОСИТСЯ, А НЕ БЕРЁТСЯ СО СТРАНИЦЫ, И ЭТО ОПЛАЧЕНО ЖИВЬЁМ.  Первая
+    редакция этих тестов требовала, чтобы живое нарушение O3 всё ещё стояло на
+    кондуите, — и покраснела в тот же вечер, когда соседняя позиция его ПОЧИНИЛА:
+    `td.kto i.prin` стало ноль, гейт честно сказал «находок 0», а тест закричал
+    «проверка не испытана». Тест, которому нужна сломанная страница, наказывает
+    за починку; закреплять надо ЗРЕНИЕ гейта, а не сегодняшний дефект. Ровно та же
+    ошибка и ровно то же лечение уже записаны выше, в `test_obrezka_familii_u_gostya`."""
     ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
     try:
         do = _zamer(p)
         assert do["na_kletku"] > 0, "на кондуите не нашлось ни одной клетки"
-        assert do["kletki"], (
-            "живое нарушение O3 («Агаркова Ирина» + инициалы надстрочником) не "
-            "названо — проверка не испытана")
-        assert any("Агаркова" in d["svoy"] or "Аникина" in d["svoy"]
-                   for d in do["kletki"]), do["kletki"][:2]
 
-        p.evaluate("""() => { for (const i of document.querySelectorAll('td.kto i.prin'))
-            { i.setAttribute('data-bylo', '1'); i.remove(); } }""")
+        gde = _kletka_s_pripiskoy(p, nabor=True)
+        assert gde, "не нашлось клетки с собственным текстом — ломать нечего"
         posle = _zamer(p)
-        assert posle["kletki"] == [], (
-            f"приписки убраны, а гейт всё ещё называет {len(posle['kletki'])} клеток")
+        assert len(posle["kletki"]) == len(do["kletki"]) + 1, (
+            f"приписку внесли в клетку «{gde}», а гейт показывает "
+            f"{len(do['kletki'])} → {len(posle['kletki'])}")
+        nash = [d for d in posle["kletki"] if d["pripiska"] == "Н.В."]
+        assert nash and nash[0]["svoy"], (
+            f"находка есть, но не названы ОБА носителя — чинить по такому отчёту "
+            f"нечего: {posle['kletki'][-1:]}")
+
+        _snyat_pripiski(p)
+        chisto = _zamer(p)
+        assert len(chisto["kletki"]) == len(do["kletki"]), (
+            f"приписку убрали, а гейт всё ещё её показывает: "
+            f"{len(do['kletki'])} → {len(chisto['kletki'])}")
     finally:
+        _snyat_pripiski(p)
         ctx.close()
 
 
 def test_pripiska_lovitsya_i_tegom_i_naborom(server, brauzer):
-    """Приписка бывает `<sup>` и бывает `vertical-align:super` на любом теге —
-    живое нарушение сделано ВТОРЫМ способом (`i.prin`), и проверка, знающая один
-    только тег, прошла бы мимо него целиком."""
+    """Приписка бывает `<sup>` и бывает `vertical-align:super` на любом теге.
+    Живое нарушение O3 было сделано ВТОРЫМ способом (`<i class="prin">`), и
+    проверка, знающая один только тег, прошла бы мимо него целиком — поэтому
+    испытываются оба, и оба парой."""
     ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
     try:
-        z = _zamer(p)
-        chem = {d["chem"] for d in z["kletki"]}
-        assert any("vertical-align" in c for c in chem), (
-            f"приписка, поднятая НАБОРОМ, не поймана: {chem}")
-        p.evaluate("""() => {
-            const td = document.createElement('td');
-            td.append(document.createTextNode('Проба Пробова'));
-            const s = document.createElement('sup'); s.textContent = 'П.П.';
-            td.append(s);
-            const tr = document.createElement('tr'); tr.append(td);
-            const tb = document.createElement('table'); tb.id = 'proba-tabl';
-            tb.append(tr);
-            (document.querySelector('main') || document.body).append(tb);
-        }""")
-        posle = _zamer(p)
-        tegom = [d for d in posle["kletki"] if "Проба" in d["svoy"]]
-        assert tegom and tegom[0]["chem"] == "<sup>", (
-            f"приписка, сделанная ТЕГОМ, не поймана: {posle['kletki'][-2:]}")
+        do = _zamer(p)
+        for naborom, imya in ((True, "vertical-align:super"), (False, "<sup>")):
+            assert _kletka_s_pripiskoy(p, nabor=naborom)
+            posle = _zamer(p)
+            nash = [d for d in posle["kletki"] if d["pripiska"] == "Н.В."]
+            assert nash, f"приписка способом «{imya}» не поймана"
+            assert nash[0]["chem"] == imya, (
+                f"поймана, но названа не тем: ждали «{imya}», в отчёте "
+                f"«{nash[0]['chem']}»")
+            _snyat_pripiski(p)
+            assert len(_zamer(p)["kletki"]) == len(do["kletki"]), (
+                f"после «{imya}» число не вернулось к исходному")
     finally:
-        p.evaluate("""() => { const e = document.getElementById('proba-tabl');
-            if (e) e.remove(); }""")
+        _snyat_pripiski(p)
         ctx.close()
 
 
 def test_odin_fakt_dvumya_keglyami_ne_nahodka(server, brauzer):
     """🔴 ГРАНИЦА, ИЗМЕРЕННАЯ, А НЕ ВЫБРАННАЯ.  Счётчик «8/18» набран двумя
-    кеглями (`span.iz` мельче), а список фамилий в клетке принимающего — своим
-    набором блоков.  Ни то, ни другое не приписка: это ОДИН факт, разбитый
-    набором, и красное на нём было бы красным на дроби.  Отличие измеримо —
-    `vertical-align`, — а не выбрано на глаз: `i.prin` это `super`, `span.iz` и
-    `span.det-f` это `baseline`."""
+    кеглями (`span.iz` мельче), и это ОДИН факт, разбитый набором, а не второй
+    носитель: красное на нём было бы красным на дроби.  Отличие измеримо —
+    `vertical-align`, — а не выбрано на глаз.
+
+    Обе половины проверяются на ВНЕСЁННЫХ узлах, чтобы тест не зависел от того,
+    какой класс сегодня носит счётчик; живой счётчик проверяется дополнительно и
+    только если он на странице есть."""
     ctx, p = _stranica(brauzer, server, "организатор", "/glavnaya", "p-kond")
     try:
-        z = _zamer(p)
-        assert not [d for d in z["kletki"] if "/" in d["pripiska"]], (
-            f"дробь счётчика объявлена вторым носителем: "
-            f"{[d for d in z['kletki'] if '/' in d['pripiska']][:2]}")
-        vyravnivanie = p.evaluate("""() => {
-            const o = {};
-            for (const [imya, sel] of [['prin', 'td.kto i.prin'], ['iz', 'td.sch span.iz']]) {
-              const e = document.querySelector(sel);
-              o[imya] = e ? getComputedStyle(e).verticalAlign : null;
-            }
-            return o;
+        do = _zamer(p)
+        # мельче кеглем, но НА той же строке — не приписка
+        p.evaluate("""() => {
+            const vidno = (e) => { const r = e.getBoundingClientRect();
+                return r.width > 1 && r.height > 1; };
+            const kl = [...document.querySelectorAll('td, th')].find(e => {
+                if (!vidno(e)) return false;
+                for (const k of e.childNodes)
+                    if (k.nodeType === 3 && (k.nodeValue || '').trim()) return true;
+                return false;
+            });
+            const s = document.createElement('span');
+            s.className = 'proba-pripiska';
+            s.textContent = '/18';
+            s.style.setProperty('font-size', '9px', 'important');
+            kl.append(s);
         }""")
-        assert vyravnivanie["prin"] == "super", vyravnivanie
-        assert vyravnivanie["iz"] == "baseline", (
-            f"счётчик перестал быть baseline — границу проверки надо пересмотреть "
-            f"по замеру, а не по памяти: {vyravnivanie}")
+        melche = _zamer(p)
+        assert len(melche["kletki"]) == len(do["kletki"]), (
+            f"дробь, набранная мельче, объявлена вторым носителем: "
+            f"{[d for d in melche['kletki'] if '/18' in d['pripiska']][:2]}")
+        _snyat_pripiski(p)
+
+        # тот же узел, но ПОДНЯТЫЙ — находка
+        _kletka_s_pripiskoy(p, nabor=True)
+        podnyat = _zamer(p)
+        assert len(podnyat["kletki"]) == len(do["kletki"]) + 1, (
+            "поднятая приписка не поймана — тогда граница проходит не по "
+            "`vertical-align`, и её надо назвать заново")
+        _snyat_pripiski(p)
+
+        # живой счётчик — если он ещё носит этот класс
+        zhivoy = p.evaluate("""() => {
+            const e = document.querySelector('td.sch span.iz');
+            return e ? getComputedStyle(e).verticalAlign : null;
+        }""")
+        if zhivoy is not None:
+            assert zhivoy == "baseline", (
+                f"живой счётчик перестал быть baseline ({zhivoy}) — границу надо "
+                f"пересмотреть по замеру, а не по памяти")
     finally:
+        _snyat_pripiski(p)
         ctx.close()
 
 
