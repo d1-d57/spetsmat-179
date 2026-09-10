@@ -85,7 +85,7 @@ def stend(tmp_path_factory):
         c.execute("insert into students (surname, name, class, status, first_sheet_id) "
                   "values (?, 'Иван', '9a', 'active', ?)",
                   (f"Асеев-{i}", listok)).lastrowid
-        for i in range(2)
+        for i in range(3)
     ]
     for slot in (1, 2):
         c.execute("insert into enrollment (student_id, teacher_id, room, slot, "
@@ -124,6 +124,17 @@ def _v_baze(stend) -> list:
     try:
         return [r[0] for r in c.execute(
             "select problem_id from marks where event = 'assert' order by id")]
+    finally:
+        c.close()
+
+
+def _sobytia(stend, student_id: int) -> list:
+    """Все события журнала этого школьника парами (задача, событие), в порядке строк."""
+    c = sqlite3.connect(f"file:{stend['db']}?mode=ro", uri=True)
+    try:
+        return [(r[0], r[1]) for r in c.execute(
+            "select problem_id, event from marks where student_id = ? order by id",
+            (student_id,))]
     finally:
         c.close()
 
@@ -362,6 +373,58 @@ def test_otvergnutaya_pravka_vozvrashchaet_znak_i_ostavlyaet_prichinu(stend):
         assert page.eval_on_selector(
             f'#s-kond .kond td[data-u="{rebyonok}"][data-z="{zadacha}"]',
             "td => td.classList.contains('otkazano')")
+    finally:
+        ctx.close()
+
+
+# ══════════════════════════════════════════ СТОЛКНОВЕНИЕ КЛЮЧЕЙ ИДЕМПОТЕНТНОСТИ
+
+def test_odna_kletka_neskolko_raz_podryad_ne_teryaet_ni_odnogo_tapa(stend):
+    """🔴 ДЫРА, НАЙДЕННАЯ ВЕРИФИКАТОРОМ §3, И ОНА ТЕРЯЛА ОТМЕТКИ МОЛЧА.
+
+    Ключ идемпотентности мнёт СЕРВЕР (`veb/priyom.py::_klyuch`, вне зоны этой
+    позиции), и в нём стоит СЕКУНДА ОБРАБОТКИ. Пока тап шёл прямо из пальца, две
+    одинаковые цели по одной клетке в одну секунду были редкой гонкой. Очередь
+    укладывает весь вывоз в доли секунды — и «поставил · снял · поставил» приезжало
+    тремя запросами в одну секунду: третий ловил ключ первого, служба отвечала
+    `200 zapisano:false` и ТЕКУЩИМ состоянием, а клетка на экране переворачивалась в
+    пустоту без единого сообщения.
+
+    ЗАМЕР ВЕРИФИКАТОРА: 15 потерь из 15 клеток при мёртвой сети (30 строк вместо 45);
+    тот же ритм при живой сети — 1 из 15.
+
+    Здесь берутся ТРИ клетки и по три тапа на каждую: одной было бы мало — потеря
+    зависит от того, попали ли два одинаковых запроса в одну секунду, и один прогон
+    мог бы случайно разъехаться по границе секунды и позеленеть зря.
+    """
+    ctx, page = _stranica(stend)
+    try:
+        rebyonok = stend["deti"][2]
+        kletki = stend["zadachi"][:3]
+        bylo = _sobytia(stend, rebyonok)
+
+        ctx.set_offline(True)
+        for z in kletki:
+            for _ in range(3):                 # ✓ → пусто → ✓
+                _tapnut(page, rebyonok, z)
+                page.wait_for_timeout(60)
+        _zhdat_ochered(page, 9, timeout=25000)
+
+        ctx.set_offline(False)
+        page.evaluate("() => OCHERED.tolknut()")
+        _zhdat_ochered(page, 0, timeout=60000)
+
+        stalo = _sobytia(stend, rebyonok)
+        novye = stalo[len(bylo):]
+        assert len(novye) == 9, (
+            "потерян тап: строк %d вместо 9 — %r" % (len(novye), novye))
+        for z in kletki:
+            svoi = [e for (p_id, e) in novye if p_id == z]
+            assert svoi == ["assert", "erratum", "assert"], (
+                "клетка %s кончила не тем, что нажимали: %r" % (z, svoi))
+            # И на экране стоит галочка, а не пустота.
+            assert _znak(page, rebyonok, z) == "✓", (
+                "галочка перевернулась в пустоту после вывоза — клетка %s" % z)
     finally:
         ctx.close()
 

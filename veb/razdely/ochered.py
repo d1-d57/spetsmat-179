@@ -162,6 +162,9 @@ window.OCHERED = (function () {
   var TAJMAUT = @TAJMAUT@;                /* мс на одну попытку */
   var STARYJ = @STARYJ@ * 60000;          /* мс: граница «свежий / старый» */
   var PAUZA_NACHALO = 2000, PAUZA_POTOLOK = 30000;
+  /* Секунда сервера плюс запас: ключ идемпотентности несёт СЕКУНДУ, и повтор
+     раньше её переворота столкнётся с тем же ключом снова (см. `poslat`). */
+  var PAUZA_SEKUNDY = 1100, PREDEL_STOLKNOVENIJ = 5;
 
   /* ── ХРАНИЛИЩЕ ────────────────────────────────────────────────────────────
      IndexedDB — основное; `localStorage` — запасное. Запасное существует не для
@@ -269,7 +272,10 @@ window.OCHERED = (function () {
      удавшегося ответа», а не «который час».
      ВРЕМЯ, КОТОРОЕ ЧИТАЕТ ЧЕЛОВЕК, приходит с сервера (`data-snyato`) и не считается
      здесь вовсе. */
-  var zhivo = true;                 /* страница пришла с сервера — значит связь была */
+  var zhivo = !(navigator && navigator.onLine === false);
+  /* Страница пришла с сервера — значит связь БЫЛА. Единственное исключение —
+     прямое «offline» от браузера: см. слушатель `offline` ниже про то, почему
+     отрицательному ответу этого флага верить можно, а положительному нет. */
   var udacha_v = (window.performance && performance.now) ? performance.now() : 0;
   function teper() {
     return (window.performance && performance.now) ? performance.now() : udacha_v;
@@ -382,7 +388,33 @@ window.OCHERED = (function () {
         });
       }
       return r.json().catch(function () { return {}; }).then(function (d) {
-        if (r.ok) { return {rod: "ok", dannye: d, zhiv: true}; }
+        if (r.ok) {
+          /* 🔴 «200 OK, НО НИЧЕГО НЕ ЗАПИСАНО» — ЭТО НЕ УСПЕХ, А СТОЛКНОВЕНИЕ
+             КЛЮЧЕЙ, И БЕЗ ЭТОЙ ВЕТКИ ОТМЕТКА ТЕРЯЕТСЯ МОЛЧА.
+             Ключ идемпотентности мнёт СЕРВЕР (`veb/priyom.py::_klyuch`, вне зоны),
+             и в нём стоит СЕКУНДА ОБРАБОТКИ: `кнопка-<уч>-<зад>-<цель>-<секунда>`.
+             Пока тап шёл прямо из пальца, две одинаковые цели по одной клетке в
+             одну секунду были редкой гонкой. Очередь укладывает весь свой вывоз в
+             доли секунды — и гонка стала ПРАВИЛОМ: «поставил · снял · поставил»
+             приезжает тремя запросами в одну секунду, третий ловит ключ первого,
+             служба отвечает `zapisano:false` и ТЕКУЩИМ состоянием клетки, и
+             галочка на экране переворачивается в пустоту без единого сообщения.
+             ЗАМЕРЕНО ВЕРИФИКАТОРОМ: 15 потерь из 15 клеток; тот же ритм при живой
+             сети — 1 из 15. То есть очередь превращала редкую гонку в неизбежность.
+             ПОЧИНКА ЧЕСТНАЯ И ТРАНСПОРТНАЯ: запись НЕ выбрасывается и остаётся
+             первой, а повтор идёт, когда секунда сервера перевернётся. Смысла
+             записи это не меняет ничем — меняется только ключ, который сервер
+             сминает заново.
+             🔴 ВТОРОЙ ВИД `zapisano:false` РЕТРАЮ НЕ ПОДЛЕЖИТ: «cell is already in
+             the target state» значит, что клетка уже стоит где просили, и повтор
+             ничего не изменит никогда. Отличаются они только текстом `pochemu` —
+             поэтому здесь смотрят именно на него, а не на голое `zapisano`. */
+          if (d && d.zapisano === false && d.pochemu
+              && d.pochemu.indexOf("idempotency key") !== -1) {
+            return {rod: "stolknulis", zhiv: true, pochemu: d.pochemu};
+          }
+          return {rod: "ok", dannye: d, zhiv: true};
+        }
         return {rod: "otkaz", zhiv: true,
                 pochemu: (d && d.error) || ("сервер отказал (" + r.status + ")")};
       });
@@ -395,13 +427,21 @@ window.OCHERED = (function () {
   }
 
   var idyot = false, pauza = PAUZA_NACHALO, budilnik_povtora = null;
+  /* Сколько раз одна и та же запись уже столкнулась ключами. Живёт в памяти
+     вкладки, а не в хранилище: столкновение — свойство МОМЕНТА отправки, а не
+     записи, и переживать перезагрузку ему незачем. */
+  var stolknovenij = {};
 
-  function pozzhe() {
-    if (budilnik_povtora) { return; }
+  function povtorit_cherez(ms) {
+    if (budilnik_povtora) { return false; }
     budilnik_povtora = setTimeout(function () {
       budilnik_povtora = null; vyvezti();
-    }, pauza);
-    pauza = Math.min(pauza * 2, PAUZA_POTOLOK);
+    }, ms);
+    return true;
+  }
+
+  function pozzhe() {
+    if (povtorit_cherez(pauza)) { pauza = Math.min(pauza * 2, PAUZA_POTOLOK); }
   }
 
   function otmetit_svyaz(zhiv) {
@@ -427,7 +467,25 @@ window.OCHERED = (function () {
             /* Запись ОСТАЁТСЯ на месте и остаётся первой: порядок не рвётся. */
             return obnovit().then(function () { pozzhe(); });
           }
+          if (itog.rod === "stolknulis") {
+            /* Связь ЖИВА — баннера тут быть не должно. Запись остаётся первой, и
+               повтор идёт, когда секунда сервера перевернётся (см. `poslat`). */
+            stolknovenij[z.id] = (stolknovenij[z.id] || 0) + 1;
+            if (stolknovenij[z.id] <= PREDEL_STOLKNOVENIJ) {
+              return obnovit().then(function () { povtorit_cherez(PAUZA_SEKUNDY); });
+            }
+            /* Столько раз подряд секунда не перевернуться не может: это уже не
+               гонка, а что-то другое, и молчать про это нельзя. */
+            delete stolknovenij[z.id];
+            return udalit(z.id).then(function () {
+              zapisat_otkaz(z, "сервер отвечает «уже записано», но записи нет — "
+                            + "повторено " + PREDEL_STOLKNOVENIJ + " раз");
+              soobshchit({rod: "otkaz", zapis: z, pochemu: itog.pochemu});
+              return obnovit().then(shag);
+            });
+          }
           return udalit(z.id).then(function () {
+            delete stolknovenij[z.id];
             if (itog.rod !== "ok") { zapisat_otkaz(z, itog.pochemu); }
             soobshchit({rod: itog.rod === "ok" ? "uehala" : "otkaz", zapis: z,
                         dannye: itog.dannye, pochemu: itog.pochemu});
@@ -473,7 +531,13 @@ window.OCHERED = (function () {
   }
 
   function tolknut() {
-    return vse().then(function (z) { return z.length ? vyvezti() : proba(); });
+    /* 🔴 ОРГАНЫ РИСУЮТСЯ ДО ПЕРВОЙ ПОПЫТКИ, А НЕ ПОСЛЕ НЕЁ. Раньше здесь стоял
+       `vse()`, и счётчик «в очереди N» появлялся только вместе с ответом — то есть
+       при мёртвой двери через десять секунд, ровно в тот момент, когда человек
+       перезагрузил страницу и ищет глазами, целы ли его отметки. Замерено
+       верификатором: 10,1 с молчания на перезагрузке с непустой очередью.
+       `obnovit()` делает ту же работу, что `vse()`, плюс рисует. */
+    return obnovit().then(function (n) { return n ? vyvezti() : proba(); });
   }
 
   /* ── КОГДА ПРОБОВАТЬ СНОВА ─────────────────────────────────────────────────
@@ -481,7 +545,13 @@ window.OCHERED = (function () {
      «online», когда наружу не проходит ничего. Поэтому по событию мы не меняем
      состояние, а просто пробуем раньше, чем собирались. */
   window.addEventListener("online", function () { pauza = PAUZA_NACHALO; tolknut(); });
-  window.addEventListener("offline", function () { obnovit(); });
+  /* 🔴 «OFFLINE» — ЕДИНСТВЕННОЕ, ЧЕМУ У ЭТОГО ФЛАГА МОЖНО ВЕРИТЬ, И ЭТО НЕ
+     ПРОТИВОРЕЧИЕ ПРАВИЛУ ВЫШЕ. Врёт он в одну сторону: говорит «online», когда
+     линк есть, а интернета нет (школьный wi-fi). Сказать «offline», когда линка
+     нет, он не ошибается — линк он видит сам. Поэтому отрицательный ответ
+     принимается сразу, и баннер не ждёт десяти секунд таймаута; положительный
+     по-прежнему ничего не значит и проверяется настоящим запросом. */
+  window.addEventListener("offline", function () { otmetit_svyaz(false); obnovit(); });
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden) { pauza = PAUZA_NACHALO; tolknut(); }
   });
