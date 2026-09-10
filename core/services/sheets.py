@@ -39,6 +39,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Iterable, Protocol, Sequence
 
+import config
+
 
 # --------------------------------------------------------------------------- types
 
@@ -76,10 +78,16 @@ class ProblemDraft:
     notes: str = ""
 
     def __post_init__(self) -> None:
-        if self.kind not in ("обязательная", "обычная", "звезда", "двойная"):
+        # 🔴 THE LIST IS ASKED FOR, NOT RETYPED.  It stood here as a literal four-tuple
+        # until `письменная` was added on 2026-09-10, and the literal is exactly why the
+        # kind had to be added in three places instead of one.  `config.PROBLEM_KINDS` is
+        # declared by the project to be the Python-side truth and is what
+        # `tests/test_schema_matches_config.py` compares the live CHECK against, so a
+        # fourth copy here could only ever be the one that drifts.
+        if self.kind not in config.PROBLEM_KINDS:
             raise ValueError(
-                "неизвестный тип задачи %r; известные: обязательная, обычная, "
-                "звезда, двойная" % self.kind
+                "неизвестный тип задачи %r; известные: %s"
+                % (self.kind, ", ".join(config.PROBLEM_KINDS))
             )
         if self.ord < 1:
             raise ValueError("ord обязан быть ≥ 1; получено %d" % self.ord)
