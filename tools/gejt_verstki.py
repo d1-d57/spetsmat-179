@@ -685,7 +685,20 @@ LOMKA = r"""() => {
     // список исключений и заведён.
     if (c.matches('#s-kond .kond th.zn')) continue;
     c.style.setProperty('text-align', 'center', 'important');
-    if (centr(c)) { otchet.centr = true; break; }
+    // 🔴 И ПОЛОМКА ОБЯЗАНА БЫТЬ ТОГО РОДА, КОТОРЫЙ ПРОВЕРКА НАЗЫВАЕТ.  Проверка 5
+    // не считает находкой центрирование, не сдвинувшее текста ни на пиксель
+    // (бокс сжат по тексту — двигать нечего), поэтому `text-align:center`,
+    // посаженный на такой бокс, — это поломка объявленного слепого пятна, а её
+    // «непойманность» была бы враньём о зрении гейта. Смещение проверяется тут же.
+    const r = document.createRange(); r.selectNodeContents(c);
+    const kor = [...r.getClientRects()].filter(b => b.width > 0 && b.height > 0);
+    const st = getComputedStyle(c), box = c.getBoundingClientRect();
+    const l = box.left + parseFloat(st.borderLeftWidth) + parseFloat(st.paddingLeft);
+    const rr = box.right - parseFloat(st.borderRightWidth) - parseFloat(st.paddingRight);
+    const sdvinut = kor.length &&
+        Math.min(...kor.map(b => b.left - l)) > 1 &&
+        Math.min(...kor.map(b => rr - b.right)) > 1;
+    if (centr(c) && sdvinut) { otchet.centr = true; break; }
     c.style.removeProperty('text-align');
   }
 
