@@ -210,7 +210,17 @@ def test_zdorovyy_ekran_zelyonyy(server, brauzer, rol, put, radio, ekran):
     ctx, p = _stranica(brauzer, server, rol, put, radio)
     try:
         z = _zamer(p)
-        assert z["obrezka"] == [], f"{ekran}/{rol}: ложная обрезка {z['obrezka'][:2]}"
+        # 🔴 КОНТРОЛЫ ИЗ ЭТОГО «ЗДОРОВОГО» СЧЁТА ВЫЧТЕНЫ, И ЭТО ПЕРЕСМОТР, А НЕ
+        # ПОБЛАЖКА.  Прежняя редакция утверждала, что `<select>`, чей широчайший
+        # вариант шире закрытого контрола, «не режет ни буквы» — и это оказалось
+        # НЕВЕРНО: замерено и увидено на скриншоте 11.09, «нигде◇» при 66px
+        # против нужных 73, «Настя В◇» при 74 против 139. Владелец жалуется на
+        # это место ЧЕТВЁРТЫЙ раз (N1). Здесь по-прежнему проверяется, что гейт
+        # не красит здоровую РАЗМЕТКУ; настоящие находки на контролах судят
+        # тесты раздела 8.
+        ne_kontrol = [d for d in z["obrezka"] if "select" not in d["put"]
+                      and "input" not in d["put"]]
+        assert ne_kontrol == [], f"{ekran}/{rol}: ложная обрезка {ne_kontrol[:2]}"
         assert z["perenos"] == [], f"{ekran}/{rol}: ложный перенос {z['perenos'][:2]}"
         assert z["vyshli"] == [], f"{ekran}/{rol}: ложный выход {z['vyshli'][:2]}"
         assert z["skroll"] == 0, f"{ekran}/{rol}: горизонтальный скролл {z['skroll']}"
@@ -461,11 +471,18 @@ def test_kontrol_ne_oslepljaet_predka(server, brauzer):
     for rol in ("гость", "организатор"):
         do, posle, chisto = _para(
             brauzer, server, rol, "/raspredelenie", "t-shk", lomka, chinka)
-        assert len(posle["obrezka"]) > len(do["obrezka"]) + 5, (
-            f"{rol}: колонка имён раздавлена до 150px, обрезка "
-            f"{len(do['obrezka'])} → {len(posle['obrezka'])} — "
+        # 🔴 СЧИТАЮТСЯ ТОЛЬКО НАХОДКИ НА `.kto`, А НЕ ВСЕ ПОДРЯД.  С 11.09 сам
+        # `<select>` тоже даёт находки обрезки (его выбранный текст в него не
+        # влезает — это и есть жалоба N1), и они ШУМЯТ в общем числе: сжатие
+        # колонки меняет ширину строки, а с ней и число обрезанных селектов, так
+        # что общее число могло и упасть. Здесь испытывается ровно одно — видит
+        # ли гейт обрезку у ПРЕДКА контрола, — и считать надо ровно его.
+        kto = lambda z: [d for d in z["obrezka"] if ".kto" in d["put"]]  # noqa: E731
+        assert len(kto(posle)) > len(kto(do)) + 5, (
+            f"{rol}: колонка имён раздавлена до 150px, обрезка на `.kto` "
+            f"{len(kto(do))} → {len(kto(posle))} — "
             "у организатора в каждой строке <select>, и он не смеет ослеплять строку")
-        assert len(chisto["obrezka"]) == len(do["obrezka"]), f"{rol}: не зеленеет"
+        assert len(kto(chisto)) == len(kto(do)), f"{rol}: не зеленеет"
 
 
 def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
@@ -475,7 +492,8 @@ def test_samoproverka_chestna_o_svoey_polomke(server, brauzer):
     ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
     try:
         otchet = p.evaluate(gejt.LOMKA)
-        assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll", "centr"}, (
+        assert set(otchet) == {"obrezka", "perenos", "vyhod", "skroll", "centr",
+                               "pole"}, (
             "поломка не отчитывается о том, села ли она")
         p.wait_for_timeout(200)
         z = _zamer(p)
@@ -1007,3 +1025,98 @@ def test_pustoy_ekran_na_pustoy_baze_ne_nahodka():
     assert gejt.pustoy_ekran(pusto, 54)
     assert not gejt.pustoy_ekran(pusto, 0)
     assert not gejt.pustoy_ekran({"vidno_uzlov": 3}, 54)
+
+
+# ── 8. поле ввода шириной по самому широкому возможному тексту (N1) ───────────
+#
+# 🔴 МЕСТО ЧЕТВЁРТОЙ ЖАЛОБЫ ВЛАДЕЛЬЦА, И ТУТ ГЕЙТ МОЛЧАЛ ДОЛЬШЕ ВСЕГО: `<select>`
+# исключили из проверки обрезки в круге 15 как источник ложно-красных, и
+# исключение сделало слепое пятно ровно там, где «Дима Елисе◇».
+
+def test_uzkoe_pole_krasneet_i_zeleneet(server, brauzer):
+    """Пара на ЖИВОМ поле распределения: расширить до нужного — находка уходит,
+    вернуть ширину — возвращается.  Так проверяется, что судится РЕНДЕР, а не
+    наличие тега: тег на месте в обоих состояниях."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/raspredelenie", "t-shk")
+    try:
+        do = _zamer(p)
+        uzkie = [d for d in do["polya"] if "pr-sel" in d["put"]]
+        assert uzkie, ("на живом распределении не нашлось ни одного узкого "
+                       "селекта — проверка не испытана")
+        nado = max(d["nado"] for d in uzkie)
+
+        p.evaluate("""(w) => { for (const s of document.querySelectorAll('select.pr-sel'))
+            { s.style.setProperty('width', w + 'px', 'important');
+              s.style.setProperty('max-width', 'none', 'important'); } }""", nado + 8)
+        p.wait_for_timeout(120)
+        posle = _zamer(p)
+        assert not [d for d in posle["polya"] if "pr-sel" in d["put"]], (
+            f"поле расширено до {nado + 8}px, а гейт всё ещё зовёт его узким: "
+            f"{[d for d in posle['polya'] if 'pr-sel' in d['put']][:2]}")
+
+        p.evaluate("""() => { for (const s of document.querySelectorAll('select.pr-sel'))
+            { s.style.removeProperty('width'); s.style.removeProperty('max-width'); } }""")
+        p.wait_for_timeout(120)
+        vernuli = _zamer(p)
+        assert [d for d in vernuli["polya"] if "pr-sel" in d["put"]], (
+            "ширину вернули, а находка не вернулась")
+    finally:
+        ctx.close()
+
+
+def test_shirokoe_pole_ne_nahodka(server, brauzer):
+    """Красное на здоровом — ложный гейт, и такой гейт обходят.  Поле, в которое
+    его самый широкий вариант помещается, находкой быть не должно ни при каком
+    числе вариантов."""
+    ctx, p = _stranica(brauzer, server, "гость", "/raspredelenie", "t-shk")
+    try:
+        p.evaluate("""() => {
+            const s = document.createElement('select');
+            s.id = 'proba-shirokoe';
+            for (const t of ['коротко', 'Тухватулин-Йалчын Дэвин'])
+                { const o = document.createElement('option'); o.textContent = t; s.append(o); }
+            s.style.setProperty('width', '600px', 'important');
+            (document.querySelector('main') || document.body).append(s);
+        }""")
+        z = _zamer(p)
+        assert not [d for d in z["polya"] if "proba-shirokoe" in d["put"]], (
+            "поле в 600px объявлено узким — проверка кричит волком")
+        assert not [d for d in z["obrezka"] if "proba-shirokoe" in d["put"]]
+    finally:
+        p.evaluate("""() => { const e = document.getElementById('proba-shirokoe');
+            if (e) e.remove(); }""")
+        ctx.close()
+
+
+def test_obrezka_vybrannogo_v_selekte_eto_obrezka(server, brauzer):
+    """🔴 ТО, ЧТО В ПОЛЕ СТОИТ СЕЙЧАС И НЕ ПОМЕЩАЕТСЯ, — ЭТО ОБРЕЗКА, и уходит в
+    тот же список, что обрезанный текст: читателю всё равно, срезана буква рамкой
+    абзаца или рамкой контрола.  Именно это владелец и фотографирует —
+    «Настя В◇» вместо «Настя Вахрина»."""
+    ctx, p = _stranica(brauzer, server, "организатор", "/raspredelenie", "t-shk")
+    try:
+        z = _zamer(p)
+        srezano = [d for d in z["obrezka"] if "select" in d["put"]]
+        assert srezano, ("ни один селект не назван обрезанным, хотя выбранное имя "
+                         "в него не влезает — это и есть слепое пятно круга 15")
+        d = srezano[0]
+        assert d["nado"] > d["est"], d
+    finally:
+        ctx.close()
+
+
+def test_input_bez_nabora_ne_sudirsya_na_shirinu(server, brauzer):
+    """Граница, названная вслух и посчитанная числом: у `<input>` без `list=`
+    самого широкого ВВОДИМОГО текста не существует — набор значений не назван
+    ничем.  Такое поле не находка и не молчание: оно попадает в счётчик
+    `poley_bez_nabora`, который печатается на каждом прогоне."""
+    ctx, p = _stranica(brauzer, server, "гость", "/vhod", None)
+    try:
+        z = _zamer(p)
+        assert z["na_pole"] > 0, "на странице входа не нашлось ни одного поля"
+        assert z["poley_bez_nabora"] > 0, (
+            "поле без набора значений не посчитано — молчаливое прощение "
+            "неотличимо от дырки в проверке")
+        assert z["polya"] == [], f"поле без набора объявлено узким: {z['polya']}"
+    finally:
+        ctx.close()

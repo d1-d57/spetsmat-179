@@ -294,7 +294,8 @@ ZAMER = r"""
                osmotreno: 0, vsego: 0, na_obrezku: 0, na_vyhod: 0,
                na_centr: 0, isklyucheno: 0, bez_sdviga: 0,
                pravil: 0, pravila_zhivye: [], pravila_pustye: [], pravil_nechitaemyh: 0,
-               vidno_uzlov: 0, vidno_simvolov: 0, glavnoe: '', skryto_simvolov: 0};
+               vidno_uzlov: 0, vidno_simvolov: 0, glavnoe: '', skryto_simvolov: 0,
+               polya: [], na_pole: 0, poley_bez_nabora: 0};
 
   out.skroll = Math.max(0,
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -455,6 +456,113 @@ ZAMER = r"""
         storona: vbok > 1 ? 'вширь' : 'ввысь',
         nado: vbok > 1 ? el.scrollWidth : el.scrollHeight,
         est: vbok > 1 ? el.clientWidth : el.clientHeight});
+  }
+
+  // ── 8. ПОЛЕ ВВОДА ШИРИНОЙ ПО САМОМУ ШИРОКОМУ ВОЗМОЖНОМУ ТЕКСТУ ─────────────
+  // 🔴 ПРАВИЛО ВЛАДЕЛЬЦА, НАЗВАННОЕ ДОСЛОВНО: «ширина полей, в которые что-то
+  // вводится, должна выбираться по самому широкому тексту, который может быть
+  // введён».  Место жалобы — то же самое ЧЕТВЁРТЫЙ раз (N1): «Дима Елисе◇»,
+  // «Наталия Стр◇», «Александр Т◇».  Гейт при этом печатал «обрезка 0» по
+  // тринадцати экранам и был формально прав: `<select>` исключили из проверки
+  // обрезки в круге 15 как источник ложно-красных, и исключение сделало слепое
+  // пятно ровно там, где владелец жалуется четвёртый раз.
+  //
+  // 🔴 СУДИТСЯ РЕНДЕР, А НЕ НАЛИЧИЕ ТЕГА — иначе ложные красные вернутся.
+  // Мерить `scrollWidth` у `<select>` нельзя: он равен `clientWidth` всегда
+  // (замерено 11.09: 72 против 72 там, где текст обрезан), а прежний комментарий
+  // в этом файле обещал обратное.  Мерится КЛОН контрола, поставленный рядом с
+  // оригиналом и потому наследующий его же каскад: в клоне остаётся ровно один
+  // вариант, ширина отпущена в `auto`, и браузер сам говорит, сколько места
+  // нужно этому тексту ВМЕСТЕ со стрелкой и отступами.  Проверено глазом на
+  // скриншоте: «нигде◇» при 66px против нужных 73 действительно срезано.
+  const kesh_shiriny = new Map();
+  const nado_shiriny = (el, tekst) => {
+    const s = getComputedStyle(el);
+    const klyuch = [el.tagName, el.className, s.fontSize, s.fontFamily, s.fontWeight,
+                    s.paddingLeft, s.paddingRight, s.borderLeftWidth,
+                    s.borderRightWidth, s.letterSpacing, tekst].join('|');
+    if (kesh_shiriny.has(klyuch)) return kesh_shiriny.get(klyuch);
+    const k = el.cloneNode(true);
+    k.removeAttribute('id');
+    if (k.tagName === 'SELECT') {
+      [...k.options].forEach(o => o.remove());
+      const o = document.createElement('option');
+      o.textContent = tekst; k.append(o); k.selectedIndex = 0;
+    } else {
+      k.value = tekst; k.removeAttribute('size'); k.removeAttribute('placeholder');
+    }
+    for (const [sv, zn] of [['position', 'absolute'], ['visibility', 'hidden'],
+                            ['left', '-9999px'], ['top', '0'], ['width', 'auto'],
+                            ['min-width', '0'], ['max-width', 'none']])
+      k.style.setProperty(sv, zn, 'important');
+    el.parentElement.insertBefore(k, el.nextSibling);
+    const w = k.getBoundingClientRect().width;
+    k.remove();
+    kesh_shiriny.set(klyuch, w);
+    return w;
+  };
+
+  // Набор ВОЗМОЖНЫХ значений поля.  У `<select>` он известен точно — это его
+  // варианты.  У `<input>` он известен, только когда назван списком `list=`;
+  // без списка самого широкого вводимого текста не существует, и такое поле
+  // судится по тому, что в нём стоит СЕЙЧАС (это уже обрезка, проверка 1).
+  const nabor = (el) => {
+    if (el.tagName === 'SELECT')
+      return [...el.options].map(o => (o.textContent || '').trim()).filter(Boolean);
+    const spisok = el.getAttribute && el.getAttribute('list');
+    if (spisok) {
+      const dl = document.getElementById(spisok);
+      if (dl) return [...dl.options]
+          .map(o => (o.value || o.textContent || '').trim()).filter(Boolean);
+    }
+    return null;
+  };
+
+  const znachenie = (el) => {
+    if (el.tagName === 'SELECT')
+      return el.selectedOptions[0] ? (el.selectedOptions[0].textContent || '').trim() : '';
+    return (el.value || '').trim();
+  };
+
+  // 🔴 БЕРЁТСЯ `vse`, А НЕ `vidimye`, И ЭТО НЕ МЕЛОЧЬ.  `sluzhebnyy()` выбрасывает
+  // `INPUT` из общего обхода целиком — там это верно (у поля ввода нет текстовых
+  // узлов, судить его на перенос нечего), но здесь судится ИМЕННО поле ввода, и
+  // фильтр по `vidimye` оставлял бы проверку без половины её населения.  Найдено
+  // собственным тестом на `/vhod`: «на странице входа не нашлось ни одного поля»
+  // при живой форме пароля.
+  const polya_vvoda = vse.filter(el =>
+      vidim(el)
+      && ['SELECT', 'INPUT', 'TEXTAREA'].includes(el.tagName)
+      && !['checkbox', 'radio', 'hidden', 'range', 'color', 'file', 'submit', 'button']
+          .includes((el.type || '').toLowerCase()));
+  out.na_pole = polya_vvoda.length;
+
+  for (const el of polya_vvoda) {
+    const est = el.getBoundingClientRect().width;
+    if (est < 1) continue;
+    // Часть 1 -- ОБРЕЗКА: то, что в поле стоит сейчас, не помещается. Это то же
+    // самое, на что жалуется владелец, и уходит в тот же список, что и обрезка
+    // текста: для читателя разницы нет, буква срезана и там и там.
+    const teper = znachenie(el);
+    if (teper) {
+      const nado = nado_shiriny(el, teper);
+      if (nado > est + 1)
+        out.obrezka.push({put: put(el), tekst: teper.slice(0, 40), storona: 'вширь',
+                          nado: Math.round(nado), est: Math.round(est)});
+    }
+    // Часть 2 -- УЗКОЕ ПОЛЕ: самый широкий из ВОЗМОЖНЫХ вариантов не помещается.
+    // Отдельная находка, потому что чинится она иначе: не текстом, а шириной.
+    const varianty = nabor(el);
+    if (!varianty || !varianty.length) { out.poley_bez_nabora++; continue; }
+    let shirochayshiy = '', nado_vsego = 0;
+    for (const v of varianty) {
+      const w = nado_shiriny(el, v);
+      if (w > nado_vsego) { nado_vsego = w; shirochayshiy = v; }
+    }
+    if (nado_vsego > est + 1)
+      out.polya.push({put: put(el), tekst: shirochayshiy.slice(0, 40),
+                      teper: teper.slice(0, 24), variantov: varianty.length,
+                      nado: Math.round(nado_vsego), est: Math.round(est)});
   }
 
   // ── 2. NEEDLESS WRAP ───────────────────────────────────────────────────────
@@ -864,7 +972,7 @@ LOMKA = r"""() => {
       return r.width > 1 && r.height > 1; };
   const iz = (sel) => [...document.querySelectorAll(sel)].filter(vidno);
   const otchet = {obrezka: false, perenos: false, vyhod: false, skroll: false,
-                  centr: false};
+                  centr: false, pole: false};
 
   // 🔴 EVERY BREAKAGE VERIFIES THAT IT LANDED, AND TRIES AGAIN WHEN IT DID NOT.
   // The verifier caught the previous version rapporting a triumphant red on all
@@ -1066,6 +1174,29 @@ LOMKA = r"""() => {
         Math.min(...kor.map(b => rr - b.right)) > 1;
     if (centr(c) && sdvinut) { otchet.centr = true; break; }
     c.style.removeProperty('text-align');
+  }
+
+  // 8. УЗКОЕ ПОЛЕ -- поле, в которое не влезает самый широкий из его вариантов.
+  //    🔴 ЗДЕСЬ ПОЛЕ ВСТАВЛЯЕТСЯ, А НЕ ПОРТИТСЯ СУЩЕСТВУЮЩЕЕ, и это не поблажка.
+  //    Испытывать надо ЗРЕНИЕ проверки, а на живом сайте узки уже ВСЕ селекты до
+  //    единого (замерено 11.09: 108 из 108 на «школьникам») — «сломать» там
+  //    нечего, находка была бы и без поломки, а на экранах без единого контрола
+  //    («кондуит», «класс») ломать нечего тем более. Вставленный контрол даёт
+  //    поломку РОВНО ТОГО РОДА, который проверка называет, на любом экране.
+  {
+    const gde = document.querySelector('main') || document.body;
+    const s = document.createElement('select');
+    s.id = 'proba-uzkoe-pole';
+    for (const t of ['коротко', 'Тухватулин-Йалчын Дэвин Александрович']) {
+      const o = document.createElement('option'); o.textContent = t; s.append(o);
+    }
+    s.selectedIndex = 0;
+    s.style.setProperty('width', '24px', 'important');
+    s.style.setProperty('min-width', '0', 'important');
+    gde.append(s);
+    const r = s.getBoundingClientRect();
+    otchet.pole = r.width > 1 && r.height > 1 && r.width < 40;
+    if (!otchet.pole) s.remove();
   }
 
   // 3. H-SCROLL -- push the document wider than the window.
@@ -1301,24 +1432,24 @@ def main() -> int:
     for beda in bedy_marshrutov:
         print(f"   🔴 МАРШРУТ БЕЗ ЭКРАНА: {beda}")
     print()
-    print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'переносы':>10}"
+    print(f"{'роль':<13}{'экран':<15}{'обрезка':>9}{'поля':>6}{'переносы':>10}"
           f"{'вышли':>8}{'центр':>7}{'скролл':>8}   охват узлов")
     krasnyh, izmereno, uzlov, svedeno = len(bedy_marshrutov), 0, 0, 0
     for rol, imya, put, z, oshibka in itogi:
         if z is None:
             if (oshibka or "").startswith(SVEDENO):
                 svedeno += 1
-                print(f"{rol:<13}{imya:<15}{'·':>9}{'·':>10}{'·':>8}{'·':>7}"
-                      f"{'·':>8}   {oshibka}")
+                print(f"{rol:<13}{imya:<15}{'·':>9}{'·':>6}{'·':>10}{'·':>8}"
+                      f"{'·':>7}{'·':>8}   {oshibka}")
                 continue
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}"
-                  f"{'—':>8}   🔴 {oshibka}")
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>10}{'—':>8}"
+                  f"{'—':>7}{'—':>8}   🔴 {oshibka}")
             krasnyh += 1
             continue
         izmereno += 1
         uzlov += z["vsego"]
         ploho = (len(z["obrezka"]) + len(z["perenos"]) + len(z["vyshli"])
-                 + len(z["centr"]) + (1 if z["skroll"] else 0))
+                 + len(z["centr"]) + len(z["polya"]) + (1 if z["skroll"] else 0))
         if ploho:
             krasnyh += 1
         # 🔴 ZERO NODES ON A LIVE SCREEN IS RED, NOT GREEN.  A walk that looked at
@@ -1326,7 +1457,8 @@ def main() -> int:
         # page unless the coverage is printed next to the verdict.
         if z["vsego"] == 0 or z["na_obrezku"] == 0 or z["na_centr"] == 0:
             krasnyh += 1
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}{'—':>8}   "
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>10}{'—':>8}"
+                  f"{'—':>7}{'—':>8}   "
                   f"🔴 ОХВАТ НОЛЬ: узлов {z['vsego']}, на обрезку "
                   f"{z['na_obrezku']}, на центр {z['na_centr']}")
             continue
@@ -1335,13 +1467,15 @@ def main() -> int:
         # страница: у всех проверок ноль находок ровно потому, что судить нечего.
         if pustoy_ekran(z, chisla["vsego"]):
             krasnyh += 1
-            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>10}{'—':>8}{'—':>7}{'—':>8}   "
+            print(f"{rol:<13}{imya:<15}{'—':>9}{'—':>6}{'—':>10}{'—':>8}"
+                  f"{'—':>7}{'—':>8}   "
                   f"🔴 ПУСТОЙ ЭКРАН: в <{z['glavnoe']}> не видно ни одного узла с "
                   f"текстом, а в базе {chisla['vsego']} школьников"
                   + (f"; при этом СКРЫТО {z['skryto_simvolov']} знаков разметки — "
                      f"написано, но не показано" if z["skryto_simvolov"] else ""))
             continue
-        print(f"{rol:<13}{imya:<15}{len(z['obrezka']):>9}{len(z['perenos']):>10}"
+        print(f"{rol:<13}{imya:<15}{len(z['obrezka']):>9}{len(z['polya']):>6}"
+              f"{len(z['perenos']):>10}"
               f"{len(z['vyshli']):>8}{len(z['centr']):>7}{z['skroll']:>8}   "
               f"проверено {z['na_obrezku']}/{z['osmotreno']}/{z['na_vyhod']}/"
               f"{z['na_centr']} из {z['vsego']} · видно {z['vidno_uzlov']} узлов "
@@ -1353,6 +1487,12 @@ def main() -> int:
           f"осмотрено элементов {uzlov}")
     print("        четыре числа в колонке охвата — узлов на ОБРЕЗКУ / на ПЕРЕНОС / "
           "на ВЫХОД ЗА КОНТЕЙНЕР / на ЦЕНТР, из общего числа элементов страницы.")
+    poley = sum(z["na_pole"] for _r, _i, _p, z, _o in itogi if z)
+    bez_nabora = sum(z["poley_bez_nabora"] for _r, _i, _p, z, _o in itogi if z)
+    print(f"        полей ввода осмотрено {poley}; из них {bez_nabora} без "
+          f"известного набора значений — у `<input>` без `list=` самого широкого "
+          f"вводимого текста не существует, и такое поле судится только по тому, "
+          f"что стоит в нём сейчас (это уже колонка «обрезка»).")
     # ── ПРАВИЛА CSS: РЕШЕНИЕ ПРИНИМАЕТСЯ ПО ВСЕМ ЭКРАНАМ СРАЗУ ────────────────
     # 🔴 И ТОЛЬКО ЗДЕСЬ, А НЕ В СТРАНИЦЕ.  Лист стилей один на весь сайт: правило,
     # не совпавшее ни с чем на распределении, может законно жить на кондуите.
@@ -1373,6 +1513,11 @@ def main() -> int:
     nechitaemyh = sum(z.get("pravil_nechitaemyh", 0) for _r, _i, _p, z, _o in itogi if z)
 
     print()
+    if args.ekran:
+        print("⚠ ПРОГОН ОДНОГО ЭКРАНА: числа про правила CSS ниже неполны по "
+              "построению. Мёртвым правило объявляется, только если пусто на ВСЕХ "
+              "экранах, а здесь их измерено меньше — правило соседнего раздела "
+              "выглядит отсюда мёртвым, и это не находка, а урезанный охват.")
     print(f"ПРАВИЛА CSS: селекторов всего {pravil_vsego} · ожили хотя бы на одном "
           f"экране {len(zhivye)} · не совпали НИ С ЧЕМ ни на одном {len(mertvye)}, "
           f"из них НЕСОБИРАЕМЫХ {len(nesobiraemye)}"
@@ -1418,6 +1563,13 @@ def main() -> int:
                 print(f"   {vid}{storona} · {rol} · {imya} · {d['put']} · "
                       f"«{d['tekst']}» · надо {d.get('nado', d.get('nuzhno'))} "
                       f"есть {d['est']}")
+        for d in z["polya"][:8]:
+            print(f"   УЗКОЕ ПОЛЕ · {rol} · {imya} · {d['put']} · самый широкий "
+                  f"из {d['variantov']} вариантов «{d['tekst']}» надо {d['nado']} "
+                  f"есть {d['est']} · сейчас в нём «{d['teper']}»")
+        if len(z["polya"]) > 8:
+            print(f"   УЗКОЕ ПОЛЕ · {rol} · {imya} · …и ещё {len(z['polya']) - 8} — "
+                  f"напечатаны первые восемь")
         for d in z["vyshli"][:8]:
             print(f"   ВЫШЛО · {rol} · {imya} · {d['put']} · «{d['tekst']}» · "
                   f"влево {d['vlevo']} вправо {d['vpravo']} · "
@@ -1515,6 +1667,7 @@ def main() -> int:
         # ровно тем способом, каким гейт врал до 10.09. Поэтому здесь считается
         # ДВОЕ: сколько раз поломку удалось нанести, и сколько раз её поймали.
         PROV = (("ОБРЕЗКА", "obrezka", "obrezka"),
+                ("УЗКОЕ ПОЛЕ", "polya", "pole"),
                 ("ПЕРЕНОС", "perenos", "perenos"),
                 ("ВЫШЛО ЗА КОНТЕЙНЕР", "vyshli", "vyhod"),
                 ("ЦЕНТР", "centr", "centr"),
@@ -1538,7 +1691,7 @@ def main() -> int:
             n, p_ = nanesli[imya_pr], poymali[imya_pr]
             hvost = ""
             if n == 0:
-                hvost = "   🔴 ПОЛОМКУ НЕ УДАЛОСЬ НАНЕСТИ НИ РАЗУ — проверка не испытана"
+                hvost = "   🔴 ПОЛОМКУ НЕ УДАЛОСЬ НАНЕСТИ НИ РАЗУ — проверка не испытана"  # noqa: E501
                 bеda.append(f"{imya_pr}: нечем было сломать")
             elif p_ < n:
                 hvost = f"   🔴 ПРОПУСТИЛА {n - p_}"
@@ -1556,7 +1709,7 @@ def main() -> int:
                   + ". Проверка, которая ничего не поймала на подстроенном "
                     "нарушении, не ловит и настоящее.")
             return 1
-        print(f"\n✅ САМОПРОВЕРКА: каждая из пяти проверок поймала КАЖДУЮ "
+        print(f"\n✅ САМОПРОВЕРКА: каждая из {len(PROV)} проверок поймала КАЖДУЮ "
               f"нанесённую ей поломку. Красных экранов {krasnyh} из {izmereno}.")
         return 0
 
