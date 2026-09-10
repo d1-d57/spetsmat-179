@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# TOOL-CONTRACT: called-by-hand — a one-shot readiness check run manually against the
+# live database while verifying this заход; no hook or pipeline step calls it.
 """One-shot readiness check for the pravila-raspredeleniya заход: the ceiling and the
 day-attendance rule, read straight off the live database -- read-only, no writes.
 
