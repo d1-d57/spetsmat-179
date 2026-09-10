@@ -33,6 +33,13 @@ NotifyAccess=main
 # a local system zone moves the whole timetable by an hour twice a year.
 Environment=TZ=UTC
 Environment=PYTHONUNBUFFERED=1
+# 🔴 АДРЕС БАЗЫ — ПЕРЕМЕННОЙ, А НЕ ПУТ�ём ОТ КОРНЯ (позиция adres-bazy, 10.09).
+# С этой правки `config.DB_PATH` не имеет молчаливого значения по умолчанию: одно имя
+# указывало на РАЗНЫЕ файлы на сервере и на машине владельца — и указывало успешно,
+# что стоило четырёх ложных докладов владельцу за день. Без переменной служба
+# ОТКАЗЫВАЕТСЯ стартовать, и это проверено живьём: сайт без неё не поднимается вовсе.
+# Значит она обязана стоять ЗДЕСЬ, иначе первая же выкатка кладёт боевой сайт.
+Environment=SPETSMAT_BAZA=@CHECKOUT@/data/spetsmat.db
 
 User=@USER@
 Group=@USER@
