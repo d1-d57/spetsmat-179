@@ -132,7 +132,16 @@ def main(argv=None) -> int:
     if not put.is_file():
         raise SystemExit("базы нет: %s" % put)
     conn = sqlite3.connect("file:%s?mode=ro" % put, uri=True)
-    print("база: %s" % put)
+    # 🔴 ПЕРВОЙ СТРОКОЙ — ОТКУДА ЧИСЛА (Д1, владелец 10.09). Прежняя строка
+    # «база: <путь>» называла путь и молчала о СОДЕРЖИМОМ: копия недельной
+    # давности печаталась ровно так же, как живая, и её числа выглядели
+    # одинаково убедительно. `nazvat` добавляет дату САМОЙ ПОЗДНЕЙ ЗАПИСИ внутри
+    # базы — величину, которую копирование не подделывает, в отличие от даты файла.
+    from core.istochnik import nazvat, proverit_svezhest
+    nazvat(conn)
+    # И проверка, которая КРАСНЕЕТ: печатать источник и не смотреть на него —
+    # надежда, а не гейт. Числа мёртвой базы описывают прошлое, и это говорится вслух.
+    proverit_svezhest(conn)
     stroki = po_listkam(conn, args.nomera or None)
     rashozhdenij = napechatat(stroki)
     ohvat(stroki)
