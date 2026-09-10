@@ -979,6 +979,18 @@ if(_put === '/raspredelenie' || _put.indexOf('/raspredelenie/') === 0){
   var rasp = document.getElementById('p-rasp');
   if(rasp) rasp.checked = true;
 }
+/* 🔴 АДРЕС `/#s-list` ОТКРЫВАЕТ ВКЛАДКУ «ЛИСТКИ», А НЕ ПРОСТО ПРОКРУЧИВАЕТ В НИКУДА.
+   Такая ссылка стоит в меню страницы занятия с 07.09 и до сих пор не открывала
+   ничего: раздел скрыт, пока не отмечена его радиокнопка, а якорь радиокнопок не
+   трогает — человек попадал на заглавную и видел «Класс». Теперь на неё же ведут
+   пункты меню КАБИНЕТА, страницы отдельной от оболочки, и без этих четырёх строк
+   уйти из кабинета можно было бы только на «Класс» и «Распределение».
+   Правило одно на все разделы: `#s-XXX` отмечает `p-XXX`, если такая пара есть. */
+var _yakor = (location.hash || '').replace('#', '');
+if(_yakor.indexOf('s-') === 0){
+  var _vkl = document.getElementById('p-' + _yakor.slice(2));
+  if(_vkl && _vkl.classList.contains('rd')) _vkl.checked = true;
+}
 </script>
 """
 
@@ -1099,17 +1111,57 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
 </section>"""
 
 
-# 🔴 TWO RULES, AND NOT ONE NEW COLOUR OR SIZE AMONG THEM. `doc/DIZAJN-ZAKREPLENO.md`
-# §0: a new page TAKES the palette, the sizes and the devices of what already
-# stands, and never the other way round. Everything the personal section draws —
-# the caption, the heading, the room chip, the two columns of names — is drawn by
-# rules that were already in this stylesheet for the sections next to it. What was
-# genuinely missing is only the pair every tab of this site needs: show my section
-# when my radio is checked, and light up my label in the menu while it is.
-LICH_STILI = """
-/* Личная страница преподавателя — вкладка меню и её раздел. */
-#p-lich:checked~#s-lich{display:block}
-#p-lich:checked~.menu label[for=p-lich]{color:var(--accent);background:var(--accent-soft)}"""
+# 🔴 ВКЛАДКА «КАБИНЕТ» — ССЫЛКА, А НЕ РАДИОКНОПКА, И СТОИТ ВТОРОЙ ПОСЛЕ «КЛАССА».
+# Требование владельца 10.09 (`TZ-DOBOR-10-09.md` H1.1, H2.1, H2.2): *«поиск очень
+# широкий, ничего не поменяется, если я добавлю кабинет первой кнопкой или второй
+# после класса»*, и название — «Кабинет», без слова «мой».
+#
+# 🔴 УСЛОВИЕ — `prepod_id`, А НЕ ВОЗМОЖНОСТЬ `videt-svoyo`, И ЭТО ЗАМЕР, А НЕ ВКУС.
+# На скриншоте `20` вошёл САМ ВЛАДЕЛЕЦ: справа в шапке стоят «Сбросить/Сохранить»,
+# то есть роль `organizator`, у которой `videt-svoyo` НЕТ (`VOZMOZHNOSTI` выше).
+# Вкладка, повешенная на эту возможность, была бы невидима ровно тому человеку,
+# который её попросил. `prepod_id` — то же самое условие, при котором `glavnaya.py`
+# печатает «Мой кабинет →»: ссылка и вкладка появляются и исчезают вместе.
+# Гостевая сборка (`prepod_id is None`) не получает ни того, ни другого, и
+# `docs/index.html` этой правкой не меняется.
+#
+# 🔴 ПОМЕТКА `data-org` ЗДЕСЬ НЕ НУЖНА И БЫЛА БЫ ВРЕДНА. Окно, которое сверяет гейт
+# каркаса, начинается с `id="s-rasp"` (`tools/sobrat_stranicu.py:160`); меню стоит
+# ВЫШЕ него и в сравнение не попадает. А пометка `videt-svoyo` на этом пункте
+# сняла бы его со страницы преподавателя и оставила у организатора — то есть ровно
+# наоборот тому, зачем пункт заведён.
+MENYU_PUNKT_KABINETA = '<a class="ssyl ssyl-kab" href="/kabinet">Кабинет</a>'
+
+
+def menyu_ssylkami(tut: str = "") -> str:
+    """Верхнее меню для страницы, которая НЕ собрана оболочкой.
+
+    🔴 ПОЧЕМУ ЭТО ОТДЕЛЬНАЯ ФУНКЦИЯ, А НЕ КУСОК `obolochka()`. `/kabinet`,
+    `/istoria` и `/raspredelenie` — самостоятельные документы: у них нет ни
+    `Kontekst`, ни радиокнопок разделов, ни поиска, потому что нет разделов, между
+    которыми переключаться. Меню при этом обязано стоять и на них — владелец 10.09
+    про кабинет: *«из кабинета некуда уйти, это плохо»*. Одно место, где записаны
+    названия и адреса пунктов, — здесь; `obolochka()` ниже собирает свою строку из
+    тех же слов.
+
+    `tut` — адрес текущей страницы (`/kabinet`), чтобы её пункт был отмечен тем же
+    цветом, каким оболочка отмечает открытую вкладку.
+
+    Пункты ведут на якоря разделов (`/#s-list`), и открывает их `VKLADKA_SKRIPT`,
+    который для этого и научен переводить `#s-XXX` в отметку `p-XXX`.
+    """
+    def punkt(adres: str, imya: str) -> str:
+        tut_klass = " ssyl-tut" if adres == tut else ""
+        return f'<a class="ssyl{tut_klass}" href="{adres}">{imya}</a>'
+
+    return ('<nav class="menu">\n'
+            '  <span class="im">Ключики</span>\n  '
+            + "\n  ".join((punkt("/", "Класс"),
+                           punkt("/kabinet", "Кабинет"),
+                           punkt("/#s-list", "Листки"),
+                           punkt("/raspredelenie", "Распределение"),
+                           punkt("/#s-kond", "Кондуит")))
+            + '\n</nav>')
 
 
 def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
@@ -1145,19 +1197,18 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
     # document. The input is above the menu, i.e. outside the window the frame gate
     # compares (`id="s-rasp"` up to the first `\n<script>`), so it needs no mark;
     # the section IS inside that window and carries one.
-    if kt.mozhno("videt-svoyo"):
-        from veb.razdely.lichnaya import razdel as lichnaya_razdel
-        lichnaya = lichnaya_razdel(kt)
-        lich_vhod = '\n<input class="rd" type="radio" name="str" id="p-lich" checked>'
-        lich_metka = '\n  <label for="p-lich" data-org="videt-svoyo">Моё</label>'
-        lich_stili = LICH_STILI
-        # Своя вкладка открыта по умолчанию: человек вошёл личным паролем, чтобы
-        # увидеть СВОЁ. Две отмеченные радиокнопки в одной группе — не «обе», а
-        # неопределённость, поэтому отметка снимается с заглавной, а не добавляется.
-        start_vybran = ""
-    else:
-        lichnaya = lich_vhod = lich_metka = lich_stili = ""
-        start_vybran = " checked"
+    # 🔴 ВКЛАДКА «МОЁ» СНЯТА, И ЭТО ПЕРЕДЕЛКА ПО УСТРОЙСТВУ, А НЕ УБОРКА. Личное
+    # жило в двух местах сразу: раздел `#s-lich` в оболочке и страница `/kabinet`,
+    # рождённая на день позже и знающая про человека всё то же самое и больше.
+    # Владелец 10.09 просил ОДНУ вкладку с одним именем — «Кабинет» — и она ведёт
+    # на страницу, а не на раздел. Две двери в одно место это и есть та самая
+    # вторая версия сайта, от которой мы избавляемся по всему проекту.
+    # `veb/razdely/lichnaya.py` остаётся домом двух запросов (`kabinet_na_datu`,
+    # `deti_na_datu`): их зовут и `/kabinet`, и карточка на заглавной.
+    lichnaya = lich_vhod = lich_stili = ""
+    start_vybran = " checked"
+    # Пункт «Кабинет» — по `prepod_id`, разбор условия у `MENYU_PUNKT_KABINETA`.
+    kab_metka = ('\n  ' + MENYU_PUNKT_KABINETA) if kt.prepod_id is not None else ""
     if tolko_raspredelenie:
         # Раздел на этой странице один; открывать нечего, кроме него.
         start_vybran, rasp_vybran = "", " checked"
@@ -1182,11 +1233,11 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
     # занятий одно. Оглавление при этом обязано стоять на месте — владелец 07.09:
     # *«оглавление куда-то исчезло»*, и это было первое, что он заметил.
     if tolko_raspredelenie:
-        punkty = ('<a class="ssyl" href="/">Класс</a>\n'
+        punkty = ('<a class="ssyl" href="/">Класс</a>' + kab_metka + '\n'
                   '  <a class="ssyl" href="/#s-list">Листки</a>')
         rasp_adres, rasp_aktivna = "/raspredelenie", " ssyl-tut"
     else:
-        punkty = ('<label for="p-start">Класс</label>\n'
+        punkty = ('<label for="p-start">Класс</label>' + kab_metka + '\n'
                   '  <label for="p-list">Листки</label>')
         rasp_adres, rasp_aktivna = "/raspredelenie", ""
     if kt.mozhno("videt-konduit"):
@@ -1206,12 +1257,20 @@ def obolochka(kt, *, glavnaya: str, listki: str, raspredelenie: str,
 :root{{--bg:#fbfaf6;--panel:#fffdf8;--text:#211f1b;--muted:#726c60;--rule:#e7e2d6;
   --accent:#2f6e8e;--accent-soft:#e8f0f4;--warm:#c9743a;--faint:#b7ae9c;--chip:#e7e0d2;
   --krasn:#b3402a;--krasn-fon:rgba(179,64,42,.08);
+  /* 🔴 ЗЕЛЁНЫЙ ЗАВЕДЁН ЗДЕСЬ, РЯДОМ С КРАСНЫМ, И БОЛЬШЕ НИГДЕ. Полоса занятий в
+     кабинете красит «был» и «не был», и второго цвета для «был» в палитре не
+     было вовсе. `doc/DIZAJN-ZAKREPLENO.md` §2 запрещает не новый цвет, а ВТОРОЕ
+     МЕСТО, где он записан: страница `/kabinet` берёт таблицу стилей отсюда
+     целиком (`list_odin._obshchij_stil`), так что запись остаётся одна. Пара
+     построена по образцу красной: тон и та же полупрозрачная подложка. */
+  --zel:#3d7a4e;--zel-fon:rgba(61,122,78,.10);
   --sans:"Source Sans 3",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
   --serif:"Source Serif 4",Georgia,"Times New Roman",serif}}
 @media(prefers-color-scheme:dark){{:root:not([data-theme=light]){{--bg:#1b1e22;--panel:#23272c;
   --text:#dcd8d0;--muted:#9a948a;--rule:#343a41;--accent:#7fb6d2;--accent-soft:#22333d;
   --warm:#e0946a;--faint:#6b6f75;--chip:#333a41;
-  --krasn:#e8836a;--krasn-fon:rgba(232,131,106,.12)}}}}
+  --krasn:#e8836a;--krasn-fon:rgba(232,131,106,.12);
+  --zel:#7cc08e;--zel-fon:rgba(124,192,142,.14)}}}}
 *{{box-sizing:border-box}}
 body{{margin:0;background:var(--bg);color:var(--text);font-family:var(--serif);font-size:20px}}
 /* Меню — строка сверху: три пункта помещаются, ничего выезжать не должно (§1). */
@@ -2003,7 +2062,7 @@ body{{padding-bottom:2rem}}
      `/raspredelenie/postoyannoe` checks it (VKLADKA_SKRIPT). Removing it would
      take the section off the site altogether. -->
 <nav class="menu">
-  <span class="im">Ключики</span>{lich_metka}
+  <span class="im">Ключики</span>
   {punkty}
   <a class="ssyl ssyl-rasp{rasp_aktivna}" href="{rasp_adres}">Распределение</a>{kond_metka}
   <div class="podskazki poisk-verh">
