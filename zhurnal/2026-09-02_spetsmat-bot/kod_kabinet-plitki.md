@@ -228,6 +228,69 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+Все eight points of the owner's review touch ONE screen — `/kabinet`, drawn by
+`veb/razdely/kabinet.py::stranica`.  They are done in the order they are numbered, each
+its own commit, each with its own test in `tests/veb/test_kabinet.py`.
+
+**Assumptions stated BEFORE the code, per §1.**
+
+*A1 · THERE IS NO GENDER IN THE БАЗА, AND POINT 3 THEREFORE CHANGES SHAPE.*  Measured,
+not assumed: `students` is `(id, tg_id, surname, name, class, status, first_sheet_id,
+gruppa)` and `teachers` is `(id, tg_id, name, aka, is_owner, kabinet, aktiven, gruppa)`
+— no column carries sex, and no other table does either (20 tables checked on the live
+copy).  The заход itself forbids guessing it from the name.  So the screen stops
+printing a gendered verb at all instead of printing the wrong one: `сдал N` becomes
+`задач: N`, `ничего не сдал` becomes `задач нет`.  That answers what the owner actually
+objected to («Бочарова Анна — она СДАЛА, а не сдал»: no wrong form is shown) and it is
+the same word point 2 asks for.  Where the gender data should come from is named in
+`## ВОПРОСЫ` and in `## ОТЧЁТ`.  The other gendered verb, `принято сдач`, lives inside
+the summary line that point 1 deletes, so it leaves with it.
+
+*A2 · «16 ИЗ 16» IS AN ESTIMATE, NOT A FACT OF THE CALENDAR, AND I SAY SO BEFORE I START.*
+The критерий готовности asks for «плиток в четверти 16 из 16».  16 is the заход's own
+arithmetic («~8 недель × 2 занятия»).  The real count is whatever the quarter's dates
+and `SLOTY_ZANYATIJ` (пн, чт) produce, and no quarter calendar exists anywhere in this
+repo — `grep` over `*.py` and `*.sql` finds the word «четверть» only in prose.  So I
+write the quarter boundaries down once, in `kabinet.py`, as the standard grid of the
+2026/2027 school year, and I report the ACTUAL number with охват — «плиток N из N, то
+есть все дни занятий четверти на экране» — plus the part that is genuinely checkable and
+is what the owner asked for: five columns, everything visible, no horizontal scroll.  The
+boundaries themselves go to `## ВОПРОСЫ` with `ДОМ: владелец`, because only he knows them.
+
+*A3 · THE WHOLE YEAR IS DRAWN, NOT JUST THE PAST PLUS EIGHT DAYS.*  Four tabs means four
+quarters of tiles in the document.  This costs nothing new in queries: point 6 removes
+the pupil list from FUTURE tiles, so a future tile needs no `deti_na_datu` call at all,
+and the past is the same set of days the page already walked.
+
+**ORDER OF WORK — one commit per point.**
+
+1. Delete the summary line `с начала года: …` and everything computed only for it
+   (`prinyato_vsego`, `deti_vsego`, `_byli_deti`, `svoi_dni`, `svodka`, `.kab-svodka`).
+   Two tests assert that line and are removed with it; one new test asserts the line is
+   gone.
+2. `сдач: N` → `задач: N` in the tile header, `сдал N` → `задач: N` on the pupil.
+3. No gendered verb anywhere on the screen (A1): the two remaining `не сдал` strings in
+   the JS become `задач нет`.  Test greps the rendered page for `сдал`/`сдач`.
+4. Tiles collapse.  A past tile becomes `<details class="kab-zanyatie …">` with the date
+   row as its `<summary>` — closed by default, which is exactly «по умолчанию свёрнуто,
+   потом я нажимаю, оно разворачивается», and it costs no JS and keeps the keyboard.
+5. `.kab-tablica{columns:4}` → `columns:5`, and four tabs «1 четверть … 4 четверть» over
+   four bodies.  Tabs are radio inputs plus CSS siblings — the site's own way of doing
+   tabs (`karkas.obolochka`), not a new mechanism.  The tab holding today opens.
+6. A future tile loses its list of five surnames: date plus the «меня не будет» control,
+   nothing else.  The checkbox and its door stay exactly as they are.
+7. A visible `Кондуит за занятие` button inside every past tile.  The click that used to
+   hang on the date line moves onto it, because the date line is now the collapse toggle.
+8. The кондуит panel stops being a `<ul>` of «листок 16A · задача 3» and becomes one ROW
+   PER SHEET: a big sheet button that is a real link to `/listki/<номер>`, then the tasks
+   of that sheet as pills — `3`, `8`, `10а`, without the word «задача».
+
+**КРИТЕРИЙ, КОТОРЫЙ МОЖЕТ ПРОВАЛИТЬСЯ** — a live run against the live copy of the база
+(57 pupils, 15 847 marks), not only the fixture: `/kabinet` rendered for a real teacher,
+counted by script — tiles of the open quarter N of N, columns 5, future tiles carrying a
+pupil surname 0, occurrences of `сдач`/`сдал` 0, summary line absent, three past tiles
+expanded each carrying a `/listki/` sheet button and its task pills.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

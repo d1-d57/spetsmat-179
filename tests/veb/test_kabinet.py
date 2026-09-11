@@ -523,48 +523,26 @@ def test_clicking_a_lesson_and_a_pupil_has_something_to_open(running_server):
         assert "sdal" in dannye[k], f"раскрытие школьника {k} обязано называть сдачу"
 
 
-def test_the_cabinet_sums_itself_up_in_one_line(running_server):
-    """Владелец 10.09: «И это должно сводиться в один текст»."""
-    _status, body, _h = _get(
-        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
-    telo = body.decode("utf-8")
-    assert 'class="kab-svodka"' in telo
-    assert "с начала года: занятий с вашими школьниками" in telo
-    assert "принято сдач" in telo and "работал со школьниками" in telo
+def test_the_made_up_summary_line_is_gone(running_server):
+    """Пункт 1 рецензии владельца 11.09, дословно: *«я не понял, что значит занятия с
+    вашими школьниками 2 из 3… это какая-то фраза вставлена, которую можно удалить
+    вообще. Фразы от себя лучше удалять»*.
 
+    Здесь стояли ДВЕ проверки, и обе требовали ровно того, что владелец теперь велел
+    убрать: `test_the_cabinet_sums_itself_up_in_one_line` требовала подстроку «с начала
+    года: занятий с вашими школьниками», а `test_the_summary_does_not_count_a_lesson_
+    the_teacher_did_not_teach` — что первое число считает свои дни, а не календарные.
+    Они удалены вместе со строкой: тест, стерегущий удалённое поведение, это не
+    страховка, а запрет на выполнение просьбы. Их содержательная находка (сводка
+    складывала календарь с работой) не теряется — она записана у места, где сводка
+    считалась, в `veb/razdely/kabinet.py`.
 
-def test_the_summary_does_not_count_a_lesson_the_teacher_did_not_teach(running_server):
-    """Находка верификатора: сводка складывала календарь с работой.
-
-    «занятий N» считалось днями пн/чт с 1 сентября — то есть у преподавателя,
-    у которого в один из этих дней не было НИ ОДНОГО школьника, стояло на единицу
-    больше занятий, чем он вёл. Замер на боевых данных: у 13 принимающих из 14
-    календарных дней 3, а своих — 2. Здесь то же самое проверяется на фикстуре:
-    первое число обязано считать дни СО СВОИМИ школьниками, а не дни календаря.
+    Проверяется ОТСУТСТВИЕ: и текста, и класса, которым он был размечен.
     """
-    import re
-
-    from core.services.sostav_na_den import slot_of
-    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
-    from veb.razdely.lichnaya import deti_na_datu
-
     _status, body, _h = _get(
         f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
     telo = body.decode("utf-8")
-    chisla = re.search(r"занятий с вашими школьниками (\d+) из (\d+)", telo)
-    assert chisla, "сводка обязана называть оба числа"
-    svoi, kalendar = int(chisla.group(1)), int(chisla.group(2))
-
-    conn = sqlite3.connect(str(running_server["put"]))
-    conn.row_factory = sqlite3.Row
-    try:
-        proshlo = proshedshie_zanyatiya(segodnya())
-        svoi_zhdyom = sum(1 for d in proshlo
-                          if slot_of(d) is not None
-                          and deti_na_datu(conn, running_server["t1"], d))
-    finally:
-        conn.close()
-    assert kalendar == len(proshlo), "второе число — дни календаря"
-    assert svoi == svoi_zhdyom, (
-        f"своих дней {svoi}, а по базе их {svoi_zhdyom}: сводка считает не то")
-    assert svoi <= kalendar
+    assert "с начала года: занятий с вашими школьниками" not in telo
+    assert 'class="kab-svodka"' not in telo, "класс сводки снят вместе с ней"
+    assert "принято сдач" not in telo
+    assert "работал со школьниками" not in telo

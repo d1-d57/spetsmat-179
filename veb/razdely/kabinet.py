@@ -256,7 +256,6 @@ SVOI_STILI = """
 .kab-zanyatie input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .kab-zanyatie input:focus-visible+.kab-den-tekst{outline:2px solid var(--accent);
   outline-offset:3px;border-radius:3px}
-.kab-svodka{font-family:var(--sans);font-size:1.1rem;margin:.2rem 0 0}
 .kab-raskrytie{position:sticky;bottom:0;z-index:30;margin:1.2rem 0 0;
   background:var(--panel);border:1px solid var(--rule);border-radius:14px;
   padding:1rem 1.3rem;font-family:var(--sans);box-shadow:0 -2px 14px rgba(0,0,0,.06)}
@@ -450,12 +449,7 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
     seichas = datetime.now(timezone.utc)
     sdachi = sdachi_po_zanyatiyam(c, tuple(proshlo))
     bloki = []
-    prinyato_vsego = 0
-    deti_vsego: set = set()
     raskrytie: dict = {}
-    #: День → были ли в этот день СВОИ школьники. Считается тем же обходом, что рисует
-    #: блоки, а не вторым запросом: сводка и таблица обязаны говорить одно и то же.
-    _byli_deti: dict = {}
     for den in proshlo + dni:
         proshlo_li = zanyatie_zaversheno(den, seichas=seichas)
         d = date.fromisoformat(den)
@@ -472,7 +466,6 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
             for r in kto_byl:
                 sdal = sdachi.get((den, r["id"]), ())
                 sdach_dnya += len(sdal)
-                deti_vsego.add(r["id"])
                 raskrytie["%s|%s" % (den, r["id"])] = {
                     "kto": "%s %s" % (r["surname"], r["name"]),
                     "den": po_russki(den),
@@ -484,7 +477,6 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                     % (e(den), r["id"], e(r["surname"]), e(r["name"]),
                        (' <span class="kab-skolko">сдал %d</span>' % len(sdal))
                        if sdal else ""))
-            prinyato_vsego += sdach_dnya
             raskrytie[den] = {
                 "kto": po_russki(den),
                 "den": po_russki(den),
@@ -493,7 +485,6 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                                    for z, l, _t in sdachi.get((den, r["id"]), ())]}
                          for r in kto_byl],
             }
-            _byli_deti[den] = bool(punkty)
             spisok = ('<ul class="kab-spisok">%s</ul>' % "".join(punkty) if punkty
                       else '<p class="kab-nikogo">школьников в этот день не было</p>')
             bloki.append(
@@ -518,33 +509,17 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                     % imena.replace(", ", "</li><li>")) if imena
                    else '<p class="kab-nikogo">школьников пока нет</p>'))
 
-    # 🔴 «И ЭТО ДОЛЖНО СВОДИТЬСЯ В ОДИН ТЕКСТ» — слова владельца 10.09 про кабинет.
-    # Одна строка, четыре числа, все посчитаны из того же, что нарисовано ниже: ни
-    # одного отдельного запроса ради сводки, поэтому сводка и таблица разойтись не
-    # могут по построению.
-    #
-    # 🔴 ДВА ЧИСЛА ВМЕСТО ОДНОГО, И ЭТО НАХОДКА ВЕРИФИКАТОРА, ОПЛАЧЕННАЯ ЗАМЕРОМ.
-    # Здесь стояло одно «занятий N», и N считалось КАЛЕНДАРЁМ — сколько было пн и чт
-    # с 1 сентября. Замер по всем четырнадцати принимающим: у ТРИНАДЦАТИ из них
-    # сводка говорила «занятий 3», а дней, в которые у них по `enrollment` был хоть
-    # один школьник, было ДВА. Третий день при этом ещё и зелёный — «был», потому что
-    # «был» на этой странице значит «нет отметки об отсутствии», а не «вёл занятие».
-    # Тринадцать карточек из четырнадцати показывали владельцу на единицу больше
-    # занятий, чем он вёл, — и показывали это рядом со словом «принято».
-    # Цвет клетки не переучивается (это правило страницы, и оно не этого захода), а
-    # сводка перестаёт складывать разные вещи в одно число: календарных дней столько,
-    # СВОИХ — столько.
-    # 🔴 СЧИТАЕТСЯ `_byli_deti`, И НИЧЕГО КРОМЕ. Здесь стояло ещё «или в этот день
-    # была хоть одна сдача» — по словарю `sdachi`, который держит сдачи ВСЕЙ школы,
-    # а не этого преподавателя. С ним день, в который сдавал кто угодно, засчитывался
-    # каждому: все четырнадцать карточек показали «3 из 3» вместо честных «2 из 3» у
-    # тринадцати. Поймано собственным замером сразу после правки — сводка, которая
-    # у всех одинаковая, и есть признак того, что она считает не то.
-    svoi_dni = sum(1 for den in proshlo if _byli_deti.get(den))
-    svodka = ("с начала года: занятий с вашими школьниками %d из %d · "
-              "принято сдач %d · работал со школьниками: %d"
-              % (svoi_dni, len(proshlo), prinyato_vsego, len(deti_vsego)))
-
+    # 🔴 СВОДНОЙ СТРОКИ «С НАЧАЛА ГОДА: …» ЗДЕСЬ БОЛЬШЕ НЕТ, И ЭТО РЕШЕНИЕ
+    # ВЛАДЕЛЬЦА 11.09, А НЕ УПРОЩЕНИЕ. Дословно: *«я не понял, что значит занятия с
+    # вашими школьниками 2 из 3… это какая-то фраза вставлена, которую можно удалить
+    # вообще. Фразы от себя лучше удалять»*. Строка родилась из его же «и это должно
+    # сводиться в один текст» 10.09 и была дописана здесь по догадке о том, ЧТО именно
+    # сводить; посмотрев на неё на живом сайте, он сказал, что не понимает её. Ни одно
+    # из четырёх чисел не спрашивалось отдельным запросом — все считались тем же
+    # обходом, который рисует блоки, — поэтому вместе со строкой уходят и счётчики
+    # (`prinyato_vsego`, `deti_vsego`, `_byli_deti`, `svoi_dni`): считать их больше
+    # не для кого, а счётчик без читателя это третье место, где записан тот же факт.
+    # Числа дня остались там, где владелец их и смотрит — в шапке самой плитки.
     gruppa_html = (' · <a href="/raspredelenie">группа %s</a>' % e(kto["gruppa"])
                    if kto["gruppa"] else "")
     telo = f"""<div class="kab-stranica">
@@ -553,12 +528,12 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
   {blok_blizh}
   <div class="kab-blok">
     <p class="zag2">мои занятия с начала года</p>
-    <p class="kab-svodka">{e(svodka)}</p>
-    <!-- 🔴 ПОДПИСИ-ПОЯСНЕНИЯ ЗДЕСЬ НЕТ И НЕ ДОЛЖНО БЫТЬ (K1, владелец 10.09).
-         «Зелёная — вы были, красная — вас не было…» он назвал НЕЙРОСЛОПОМ и велел
-         убрать целиком. Короткая версия на том же месте — тот же нейрослоп, только
-         тише. Строка выше — НЕ пояснение: это три ЧИСЛА, то самое «должно сводиться
-         в один текст», которое он просил в той же надиктовке. -->
+    <!-- 🔴 НИ ПОДПИСИ-ПОЯСНЕНИЯ, НИ СВОДНОЙ СТРОКИ ЗДЕСЬ НЕТ И НЕ ДОЛЖНО БЫТЬ.
+         «Зелёная — вы были, красная — вас не было…» владелец назвал НЕЙРОСЛОПОМ
+         10.09 и велел убрать целиком; сводную строку «с начала года: занятий с
+         вашими школьниками 2 из 3…» он убрал 11.09 теми же словами — «фразы от
+         себя лучше удалять». Короткая версия на том же месте — то же самое, только
+         тише. Разбор — у места, где строка считалась, выше в этом файле. -->
     <div class="kab-tablica">{"".join(bloki)}</div>
     <p class="kab-beda" id="kab-beda"></p>
   </div>
