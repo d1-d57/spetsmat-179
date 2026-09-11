@@ -287,7 +287,20 @@ def obespechit_otsutstvia(c: sqlite3.Connection) -> None:
     Держать их вместе нечем внутри зоны этого захода (`infra/` вне зоны), поэтому
     расхождение ловится проверкой в `tests/veb/test_otsutstvie_prepodavatelya.py`,
     которая сверяет обе схемы полем за полем.
+
+    🔴 СНАЧАЛА СПРАШИВАЕМ, ПОТОМ СОЗДАЁМ, И ЭТО НЕ МИКРО-ОПТИМИЗАЦИЯ. Функция
+    зовётся на КАЖДОМ рендере страницы (её зовёт `sobrat_kontekst`, по разу на
+    каждую дату экрана), то есть три раза в секунду на живом занятии. `create
+    table if not exists` в этом положении — DDL по запросу на главной странице
+    сайта: он ничего не меняет 99.99 % раз, но именно он окажется тем оператором,
+    который упрётся в чужой лок или в базу, открытую только на чтение, и уронит
+    ВЕСЬ экран ради строки, которой и так нет работы. Чтение `sqlite_master` —
+    обычный SELECT, и на нём ни лока, ни отказа не бывает.
     """
+    est = c.execute("select 1 from sqlite_master where type = 'table' and name = ?",
+                    ("otsutstvie_prepodavatelya",)).fetchone()
+    if est is not None:
+        return
     c.execute(_SOZDAT_OTSUTSTVIYA)
     c.execute("create index if not exists otsutstvie_po_prepodavatelyu "
               "on otsutstvie_prepodavatelya (teacher_id, s_daty)")
