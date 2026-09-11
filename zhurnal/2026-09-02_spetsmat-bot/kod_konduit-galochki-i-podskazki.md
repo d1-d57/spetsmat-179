@@ -222,6 +222,23 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Both machine commands the заход prints for this repository name a `_generator/` that does not exist in it
+`## СТАРТОВОЕ СООБЩЕНИЕ` says to run
+`python3 /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/_generator/tools/orkestr.py`, and the
+readiness criterion of `## 2. ЗАДАЧА` offers
+`bash _generator/tools/fixtures/bootstrap_zahod/PROGNAT.sh` as the run that proves the work.
+Neither path exists: `ls _generator` in `spetsmat-bot` is `No such file or directory` — the
+directory lives in `disciplina`, a different git repository, and every OTHER tool the заход
+names (`git_zona.py`, `register_doc.py`, `priyomka.py`, `bootstrap_zahod.py`) is spelled with
+its full `disciplina` path in the same file. Only these two are relative, and only these two
+are unrunnable.
+ЦЕНА: the readiness criterion — the one thing in the заход that is allowed to FAIL — arrived
+without an executable form. An исполнитель who takes it literally runs a missing script, gets
+`rc=127`, and either reports a red criterion that has nothing to do with his work or quietly
+drops the criterion; I had to build the live run myself and say in `## ОТЧЁТ` what I ran
+instead, which is the исполнитель deciding what «готово» means — exactly what the criterion
+exists to prevent.
+
 ## ПЛАН — (заполняет исполнитель)
 
 **BASELINE, MEASURED BEFORE ANY EDIT** (render of `konduit.razdel` over a copy of the live
@@ -295,6 +312,19 @@ one thing» survives the move, only its address changes.
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
+1. The tooltip-target defect the owner reported is NOT unique to the принимающий column, and 589 more of them stand in the кондуит untouched. Measured on the live render after the fix: `<b class="sdalo" title="сдало N из M…">` sits inside `<th class="zn">` (589 column headers) and `<i class="vsyo" title="<дата>">` sits inside `<td class="fishki">` of the personal card (14 722). In every one of them the hover target is the inline text, not the cell — the same shape as «я навожу на клеточку — не всплывает Даня Макаров». They are not touched here because the owner named one column and «ничего сверх задачи» is about the CONTENT of the work. Repeats on the next screen: the site has more cells of this shape than this заход has seen.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/TZ-DOBOR-10-09.md
+   ДОСТАВЛЕНО: нет
+2. `tests/veb/` is 52 red before this заход and 52 red after it — an identical set, measured by running the same suite over a pristine `git archive HEAD` tree. They are `/kabinet` routing (`assert 404 == 403`), `test_istoria_zanyatij`, `test_server` enrollment POSTs and `test_kanon_verstki` (13 errors at setup). None of them touches the кондуит, and fixing them is somebody's whole заход, not a side effect of this one.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+3. The assembled preview page has nowhere to live inside this заход's zone. `data/konduit-prosmotr.html` already exists in the main folder and is exactly the kind of file the owner opens — but `data/` is outside the zone, and the zone contract forbids writing there even when it is the obvious address. The preview is therefore built into the session scratchpad and the `## ОТЧЁТ` carries both the absolute path and the one command that rebuilds it anywhere.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+4. Half of the readiness criterion — «в разрезе „Весь год“ у каждой галочки назван номер листка» — cannot be met literally, and the state where it cannot is not a corner case. A pupil who has handed in every обязательная of the cut without closing a single листок whole has a tick and no листок behind it; on the live база that is 8 of the 14 year-cut ticks. Those read «всё»; the 6 lit by a whole листок read its number, as asked. Disputed in `## ПЛАН` before the code, per §1.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
@@ -307,19 +337,40 @@ one thing» survives the move, only its address changes.
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
-```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
-```
-<сюда — вывод, дословно>
+🔴 **THE §0.1 SUBAGENT WAS CANCELLED BY THE ORCHESTRATOR, IN WRITING, BEFORE THE RUN
+STARTED.** Its instruction, verbatim: «СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ… Причина
+замерена соседней волной: четыре захода из десяти умерли ровно на этом вызове. Вместо
+всего блока §0.1 выполни САМ одну команду и вставь её вывод в ## ОТЧЁТ». So this section
+is filled in by the исполнитель and not by the субагент, the whole §0.1 contour (queue of
+заявки, merging the `--vlit` branches into main, closing заявки) was NOT walked, and that
+is the orchestrator's decision, not a skipped step. Whatever Г12 makes of it, it is red by
+the cancellation and not by the work.
 
-**ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+**СНИМОК ВХОДА** *(the one command the orchestrator named, first move, before any work)*
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+```
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ЧТО СДЕЛАНО**
+The contour was not walked: see the cancellation above. Nothing was merged, closed or
+pushed on anybody else's behalf. What this заход did to the repository is its own three
+commits and its own merge, both listed in `## ОТЧЁТ`.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+*(Named, one by one, and none of them is passable with my rights — the §0.1 subagent that
+holds those rights was cancelled by the orchestrator:*
+  * *`zahod/otsutstvie-prepodavatelya` — the one unmerged branch of the entrance snapshot.
+    Merging somebody else's branch is the cancelled subagent's right, not mine; the заход
+    itself declares the valve open for it («три ветки волны ПЯТНИЦА работают ПРЯМО СЕЙЧАС
+    и вольются сами последним ходом каждой»), so taking it over would be taking unfinished
+    work away from a running заход.*
+  * *`zahod/kabinet-plitki` and `zahod/zhurnal-setka` — NOT in the entrance snapshot: they
+    were merged at the moment it was taken and became unmerged DURING this run, which is
+    exactly the ПЯТНИЦА wave working in parallel. Same answer, and same reason.*
+  * *28 переадресованных заявок in the queue — every one of them addressed to a different
+    repository (`materials`, `disciplina`) or to the аналитик. Closing заявки is the
+    cancelled subagent's right.*)*
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
