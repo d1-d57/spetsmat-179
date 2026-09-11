@@ -450,6 +450,41 @@ def test_the_cell_opens_a_row_per_sheet_with_the_tasks_as_buttons(running_server
         ("16A", "3"), ("16A", "5"), ("17", "1")]
 
 
+def test_the_receiver_is_named_once_per_cell_and_never_per_task(running_server):
+    """Владелец 11.09: «принимающий один на занятие… я бы писал просто, кто принимает».
+
+    🔴 ЧТО ИМЕННО СТОРОЖИТСЯ, СКАЗАНО ТОЧНО, ПОТОМУ ЧТО БУКВАЛЬНОЕ ЧТЕНИЕ ЭТОЙ ФРАЗЫ
+    НЕВЕРНО ДЛЯ ЭТОЙ БАЗЫ. Принимающих в одном дне столько, сколько преподавателей
+    ведут занятие: `enrollment` даёт каждому школьнику своего (замер на боевой базе
+    2026-09-10 — 90 действующих строк, 14 разных преподавателей, по 3–5 школьников
+    у каждого). Один — НЕ на занятие, а на школьника в занятии, и назван он ровно
+    один раз: строкой клетки, а не повторением у каждой задачи.
+
+    Раньше «— принял X» стояло у КАЖДОЙ строки сдачи, и на боевых данных оно не
+    печатало ничего: из 53 отметок не-импорта ни одна не несла `teacher_id`.
+    """
+    # Ирина (s2), а не Иван (s1): у Ивана в понедельник стоит отметка «не был», и
+    # принимающего у клетки нет по существу, а не по недосмотру.
+    _sdal(running_server["db"], running_server["s2"], MONDAY,
+          [("16A", "3"), ("16A", "5"), ("17", "1")])
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
+    assert status == 200
+    telo = body.decode("utf-8")
+    dannye = _dannye_stranicy(telo)
+
+    kletka = dannye["shk|%s|%s" % (MONDAY, running_server["s2"])]
+    assert kletka["prinyal"].endswith(kletka["komu"]), "принимающий назван строкой клетки"
+    assert all("prinyal" not in z for z in kletka["sdal"]), \
+        "у задачи своего принявшего больше нет"
+    assert "принял " not in telo.replace(kletka["prinyal"], ""), \
+        "слово «принял» не повторяется нигде, кроме одной строки клетки"
+
+    # Один принимающий на школьника в занятии: клетка называет ровно одно имя.
+    for klyuch, zapis in dannye.items():
+        if klyuch.startswith("shk|") and zapis["byl"]:
+            assert isinstance(zapis["komu"], (str, type(None)))
+
+
 def test_no_masculine_verb_is_said_about_a_woman(running_server):
     """Владелец 11.09: «опять у тебя „принял Саша Оревкова“. Ну пол учитывай».
 
