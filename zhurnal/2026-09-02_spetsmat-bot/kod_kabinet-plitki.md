@@ -306,6 +306,30 @@ expanded each carrying a `/listki/` sheet button and its task pills.
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
+1. THE БАЗА HOLDS NO SEX, SO POINT 3 CANNOT BE DONE AS «СДАЛА» UNTIL SOMEBODY PUTS IT
+   THERE. Measured on the live copy (57 pupils, 15 847 marks): `students` is
+   `(id, tg_id, surname, name, class, status, first_sheet_id, gruppa)` and `teachers` is
+   `(id, tg_id, name, aka, is_owner, kabinet, aktiven, gruppa)` — no sex column, no
+   patronymic to derive one from, and none of the other 18 tables carries either. The
+   screen therefore stopped using a gendered verb at all (`задач: N`, `задач нет`), which
+   is correct for every person and is the word point 2 asked for anyway. Where the data
+   could come from, cheapest first: (а) one `pol` column on `students` and on `teachers`,
+   filled by the owner in the same screen where he edits people — 57 + 19 rows, one
+   sitting; (б) the same column filled once from the class lists he already imports, if
+   those name it; (в) nothing automatic — guessing from the given name is what the заход
+   forbids, and it is wrong exactly on «Саша», «Женя», «Ян» and every non-Russian surname.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. THE SCHOOL YEAR HAS NO QUARTER CALENDAR ANYWHERE IN THE REPO, AND POINT 5 NEEDED ONE.
+   `grep` over every `*.py` and `*.sql` finds «четверть» only in prose comments. The four
+   boundaries are now written down once, as `CHETVERTI` in `veb/razdely/kabinet.py`, using
+   the standard grid of the 2026/2027 school year (01.09–25.10 · 05.11–27.12 · 12.01–22.03
+   · 01.04–31.05). They are a DEFAULT, not a fact taken from the school: only the owner
+   knows the real dates, and a wrong boundary silently moves lessons between tabs.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но

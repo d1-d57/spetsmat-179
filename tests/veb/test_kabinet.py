@@ -575,3 +575,33 @@ def test_the_screen_says_zadach_and_never_sdach(running_server):
     telo = _bez_kommentariev(body.decode("utf-8"))
     assert "сдач" not in telo, "слова «сдач» на экране быть не должно"
     assert re.search(r"задач: \d+", telo), "шапка плитки называет число задач"
+
+
+def test_no_gendered_verb_is_printed_for_a_person_whose_sex_is_not_in_the_baza(
+        running_server):
+    """Пункт 3 рецензии 11.09: *«Бочарова Анна — она СДАЛА, а не сдал»*.
+
+    🔴 ПРОВЕРЯЕТСЯ ДВА ФАКТА СРАЗУ, И ВТОРОЙ — ПРИЧИНА ПЕРВОГО. Пола в базе нет:
+    здесь это утверждается не словами, а `pragma table_info` по тем же двум таблицам,
+    из которых страница берёт людей. Пока столбца нет, единственный способ не
+    напечатать неверный род — не печатать род вовсе, и экран проверяется именно на
+    это: ни «сдал», ни «сдала», ни «сдали».
+
+    Тест переживёт появление пола: в тот день первая половина покраснеет, и это
+    ровно то место, куда надо прийти и вернуть глагол.
+    """
+    conn = sqlite3.connect(str(running_server["put"]))
+    try:
+        for tablica in ("students", "teachers"):
+            stolbcy = {r[1] for r in conn.execute(f"pragma table_info({tablica})")}
+            assert not (stolbcy & {"pol", "gender", "sex", "otchestvo", "patronymic"}), (
+                f"в {tablica} появился пол — глагол можно и нужно вернуть")
+    finally:
+        conn.close()
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = _bez_kommentariev(body.decode("utf-8"))
+    for glagol in ("сдал", "сдала", "сдали", "принял", "приняла"):
+        assert glagol not in telo, f"род глагола угадан: «{glagol}»"
+    assert "задач нет" in telo, "вместо глагола — безличное «задач нет»"

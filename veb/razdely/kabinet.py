@@ -277,6 +277,23 @@ SVOI_STILI = """
 #: of correction and there is no reason for this one to grow a Save button.  A refused
 #: write puts the checkbox back where it was: an unchecked box that the server rejected
 #: would otherwise read as «сохранено».
+#: 🔴 РОДА ГЛАГОЛА НА ЭТОМ ЭКРАНЕ БОЛЬШЕ НЕТ, ПОТОМУ ЧТО ПОЛА НЕТ В БАЗЕ (пункт 3
+#: рецензии владельца 11.09: *«Бочарова Анна — она СДАЛА, а не сдал»*).
+#:
+#: ЗАМЕРЕНО, А НЕ ПРЕДПОЛОЖЕНО, по копии боевой базы (57 школьников, 15 847 отметок):
+#:   students  = (id, tg_id, surname, name, class, status, first_sheet_id, gruppa)
+#:   teachers  = (id, tg_id, name, aka, is_owner, kabinet, aktiven, gruppa)
+#: Ни столбца пола, ни отчества, из которого его выводят, нет ни здесь, ни в остальных
+#: восемнадцати таблицах. Заход прямо запрещает угадывать пол по имени — и правильно
+#: делает: «Саша», «Женя», «Ян» и любая нерусская фамилия дают ошибку молча, а ошибка
+#: в роде это ровно то, на что владелец и пожаловался.
+#:
+#: ⇒ Экран перестаёт употреблять глагол вовсе: `сдал N` → `задач: N`, `ничего не сдал`
+#: → `задач нет`. Безличная форма рода не имеет, поэтому неверной быть не может, и она
+#: же — то самое слово «задач», которое владелец просил пунктом 2. Второй гендерный
+#: глагол, «принято сдач», стоял в сводной строке, которую снял пункт 1.
+#: Откуда брать пол, если владелец захочет именно «сдала» — вопрос к нему, и он стоит
+#: пунктом очереди в `## ВОПРОСЫ` захода `kod_kabinet-plitki.md`.
 SKRIPT = """
 <script>
 document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
@@ -331,11 +348,11 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
     if (d.deti) {
       telo.innerHTML = spisok(d.deti.map(function(r){
         var z = zadachi(r.sdal);
-        return '<b>' + r.kto + '</b>' + (z.length ? ' — ' + z.join('; ') : ' — ничего не сдал');
+        return '<b>' + r.kto + '</b>' + (z.length ? ' — ' + z.join('; ') : ' — задач нет');
       }), 'в этот день школьников не было');
     } else {
       telo.innerHTML = '<p>' + d.den + '</p>'
-        + spisok(zadachi(d.sdal), 'в этот день ничего не сдал');
+        + spisok(zadachi(d.sdal), 'в этот день задач нет');
     }
     panel.hidden = false;
   }
@@ -475,7 +492,7 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                     '<li><button class="kab-shk" type="button" data-den="%s" '
                     'data-sid="%s"><b>%s</b> %s%s</button></li>'
                     % (e(den), r["id"], e(r["surname"]), e(r["name"]),
-                       (' <span class="kab-skolko">сдал %d</span>' % len(sdal))
+                       (' <span class="kab-skolko">задач: %d</span>' % len(sdal))
                        if sdal else ""))
             raskrytie[den] = {
                 "kto": po_russki(den),
