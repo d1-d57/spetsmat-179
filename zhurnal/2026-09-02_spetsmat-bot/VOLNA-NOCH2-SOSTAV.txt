@@ -29,3 +29,4 @@ V7|dannye-07-09|бесплатная|tools/vnesti_s_bumagi.py|mehanika|Рома�
 # * запрет голого insert into marks — правка схемы marks, отдельным заходом.
 V8|shirina-prep-vdn|бесплатная|veb/statika/ (одно правило CSS)|mehanika|ширина поля принимающего на вкладках групп у вошедшего, обе версии; левый край на месте, правый вправо — единственное место дизайна по F6
 # ⚠ СТРОКА V8 ДОПИСАНА ОРКЕСТРАТОРОМ 11.09 00:2x: заход kod_shirina-prep-vdn.md был собран, а строки в составе не имел; мандат (SCALE) считает волну восьмипозиционной.
+ZK1|zakon-zakrytiya-volna-noch2|opus|zhurnal/2026-09-02_spetsmat-bot/mandate_volna-noch2.md|pryamoj
