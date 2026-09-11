@@ -222,7 +222,80 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Both machine commands the заход prints for this repository name a `_generator/` that does not exist in it
+`## СТАРТОВОЕ СООБЩЕНИЕ` says to run
+`python3 /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/_generator/tools/orkestr.py`, and the
+readiness criterion of `## 2. ЗАДАЧА` offers
+`bash _generator/tools/fixtures/bootstrap_zahod/PROGNAT.sh` as the run that proves the work.
+Neither path exists: `ls _generator` in `spetsmat-bot` is `No such file or directory` — the
+directory lives in `disciplina`, a different git repository, and every OTHER tool the заход
+names (`git_zona.py`, `register_doc.py`, `priyomka.py`, `bootstrap_zahod.py`) is spelled with
+its full `disciplina` path in the same file. Only these two are relative, and only these two
+are unrunnable.
+ЦЕНА: the readiness criterion — the one thing in the заход that is allowed to FAIL — arrived
+without an executable form. An исполнитель who takes it literally runs a missing script, gets
+`rc=127`, and either reports a red criterion that has nothing to do with his work or quietly
+drops the criterion; I had to build the live run myself and say in `## ОТЧЁТ` what I ran
+instead, which is the исполнитель deciding what «готово» means — exactly what the criterion
+exists to prevent.
+
 ## ПЛАН — (заполняет исполнитель)
+
+**BASELINE, MEASURED BEFORE ANY EDIT** (render of `konduit.razdel` over a copy of the live
+`data/spetsmat.db`, organizer mode): 78 panels in the DOM, of which 24 are grids and 23 carry
+the `th.gt` header (the 24th is the гробарий, which has no such column); 1242 `td.gt` cells,
+558 of them lit; 1242 `td.sch` cells; 1242 `td.pr` cells — **0 of which carry a `title`**,
+while all 1242 inner `<i class="prin">` do. 23 is therefore the denominator the readiness
+criterion names, and it is a fact of the live база rather than a number copied from the заход.
+
+### PART 1 — the tick takes the place of the counter
+Today the row draws TWO cells side by side: `<td class="sch">` with `N/M` and `<td class="gt">`
+with the tick. The owner wants one: where the counter would say `N из N`, a big green tick
+stands instead. So the `gt` column goes away and `_schyotchik` becomes the single carrier of
+the cell, drawing exactly one of three things and never two at once:
+  * `·` — this листок has no обязательные at all (unchanged);
+  * the tick — this pupil has no debts in this cut;
+  * `N/M` — how many of the обязательные are in.
+`ZAGOLOVOK_GT` / `ZAGOLOVOK_GT_GOD` disappear; their explanation moves into the two `sch`
+headers (листок cut and year cut keep separate hover text, because the tick means two
+different things on them — see O5). The CSS block of `td.gt` moves onto `.ob-sch.gt-da`, so
+the tick keeps the size (`1.15rem`) and the colour (`var(--zel)`) it has today.
+
+### PART 2 — the hover target is the CELL, not the two centimetres of text in it
+Measured, not guessed: the tooltip text is correct and has always been correct — the live
+render carries `title="принимающий: Даня Макаров · группа Д · кабинет 302"`. It sits on the
+inner `<i class="prin">`, which is ~2rem of text inside a 3.4rem cell with padding. Hovering
+«на клеточку», as the owner described it, lands outside that inline box and nothing pops up.
+Fix: `_prinimayushchie` hands back `(подсказка, разметка)` instead of one blob, and
+`_stolbec_prin` puts the `title` on the `<td class="pr">` itself; `cursor:help` goes on the
+cell too. One carrier, one tooltip, whole-cell target.
+
+### PART 3 — the year tick says WHICH листок it is about
+`_obzor` already computes `listok_celikom` (the number of a листок closed whole) and
+`schyot.zakryl`. Today both facts collapse into a bare `✓`. Now the tick carries a label in
+the same smaller type the counter's denominator already uses (`<span class="iz">`), so this is
+the established «one fact, two type sizes», not a second carrier.
+
+**🔴 I DISPUTE ONE HALF OF THE READINESS CRITERION, BEFORE WRITING CODE, AS §1 REQUIRES.**
+The criterion says «в разрезе „Весь год“ у каждой галочки назван номер листка». There is a
+state of the база where no листок number exists to name and naming one would be a lie: a pupil
+who has done every обязательная of the cut without closing any single листок whole (the
+обязательные are a subset of each листок, so this is not a corner case). His tick is lit by
+`schyot.zakryl`, and there is no «16A» behind it. For that state the label reads `всё`, and
+the hover says «долгов нет: закрыл все N обязательных этого разреза». Where a листок IS the
+reason — the owner's own example — the label is the листок number, exactly as asked. The
+report will carry both counts separately, so the owner can see how often each occurs.
+
+### ORDER OF WORK, ONE COMMIT PER PART
+1. Part 2 (tooltip) — code + tests + live run.
+2. Part 1 (tick into the counter cell) — code + tests + live run.
+3. Part 3 (листок number beside the year tick) — code + tests + live run.
+4. §3 verifier subagent, then the git hygiene block.
+Parts 1 and 3 touch the same two functions, so 3 follows 1; part 2 is independent and goes
+first. Tests that encode the OLD canon (`tests/grid/test_odna_kletka_odin_smysl.py` declares
+`gt` a column of its own, `tests/grid/test_konduit_velichiny.py` counts `th.gt`) are in the
+zone and are rewritten to the new decision rather than deleted: the property «one cell says
+one thing» survives the move, only its address changes.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
@@ -239,6 +312,19 @@ grep -n '<как механизм назван в вызывающем коде>
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
+1. The tooltip-target defect the owner reported is NOT unique to the принимающий column, and 589 more of them stand in the кондуит untouched. Measured on the live render after the fix: `<b class="sdalo" title="сдало N из M…">` sits inside `<th class="zn">` (589 column headers) and `<i class="vsyo" title="<дата>">` sits inside `<td class="fishki">` of the personal card (14 722). In every one of them the hover target is the inline text, not the cell — the same shape as «я навожу на клеточку — не всплывает Даня Макаров». They are not touched here because the owner named one column and «ничего сверх задачи» is about the CONTENT of the work. Repeats on the next screen: the site has more cells of this shape than this заход has seen.
+   ДОМ: zhurnal/2026-09-02_spetsmat-bot/TZ-DOBOR-10-09.md
+   ДОСТАВЛЕНО: нет
+2. `tests/veb/` is 52 red before this заход and 52 red after it — an identical set, measured by running the same suite over a pristine `git archive HEAD` tree. They are `/kabinet` routing (`assert 404 == 403`), `test_istoria_zanyatij`, `test_server` enrollment POSTs and `test_kanon_verstki` (13 errors at setup). None of them touches the кондуит, and fixing them is somebody's whole заход, not a side effect of this one.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+3. The assembled preview page has nowhere to live inside this заход's zone. `data/konduit-prosmotr.html` already exists in the main folder and is exactly the kind of file the owner opens — but `data/` is outside the zone, and the zone contract forbids writing there even when it is the obvious address. The preview is therefore built into the session scratchpad and the `## ОТЧЁТ` carries both the absolute path and the one command that rebuilds it anywhere.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+4. Half of the readiness criterion — «в разрезе „Весь год“ у каждой галочки назван номер листка» — cannot be met literally, and the state where it cannot is not a corner case. A pupil who has handed in every обязательная of the cut without closing a single листок whole has a tick and no листок behind it; on the live база that is 8 of the 14 year-cut ticks. Those read «всё»; the 6 lit by a whole листок read its number, as asked. Disputed in `## ПЛАН` before the code, per §1.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
@@ -251,30 +337,137 @@ grep -n '<как механизм назван в вызывающем коде>
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
-```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
-```
-<сюда — вывод, дословно>
+🔴 **THE §0.1 SUBAGENT WAS CANCELLED BY THE ORCHESTRATOR, IN WRITING, BEFORE THE RUN
+STARTED.** Its instruction, verbatim: «СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ… Причина
+замерена соседней волной: четыре захода из десяти умерли ровно на этом вызове. Вместо
+всего блока §0.1 выполни САМ одну команду и вставь её вывод в ## ОТЧЁТ». So this section
+is filled in by the исполнитель and not by the субагент, the whole §0.1 contour (queue of
+заявки, merging the `--vlit` branches into main, closing заявки) was NOT walked, and that
+is the orchestrator's decision, not a skipped step. Whatever Г12 makes of it, it is red by
+the cancellation and not by the work.
 
-**ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+**СНИМОК ВХОДА** *(the one command the orchestrator named, first move, before any work)*
+```
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+1
+```
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ЧТО СДЕЛАНО**
+The contour was not walked: see the cancellation above. Nothing was merged, closed or
+pushed on anybody else's behalf. What this заход did to the repository is its own three
+commits and its own merge, both listed in `## ОТЧЁТ`.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `нет`
+*(Named, one by one, and none of them is passable with my rights — the §0.1 subagent that
+holds those rights was cancelled by the orchestrator:*
+  * *`zahod/otsutstvie-prepodavatelya` — the one unmerged branch of the entrance snapshot.
+    Merging somebody else's branch is the cancelled subagent's right, not mine; the заход
+    itself declares the valve open for it («три ветки волны ПЯТНИЦА работают ПРЯМО СЕЙЧАС
+    и вольются сами последним ходом каждой»), so taking it over would be taking unfinished
+    work away from a running заход.*
+  * *`zahod/kabinet-plitki` and `zahod/zhurnal-setka` — NOT in the entrance snapshot: they
+    were merged at the moment it was taken and became unmerged DURING this run, which is
+    exactly the ПЯТНИЦА wave working in parallel. Same answer, and same reason.*
+  * *28 переадресованных заявок in the queue — every one of them addressed to a different
+    repository (`materials`, `disciplina`) or to the аналитик. Closing заявки is the
+    cancelled subagent's right.*)*
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/private/tmp/claude-501/-Users-ivanyakovlev-Documents-GitHub-spetsmat-bot-wt-konduit-galochki-i-podskazki/bc6e3e54-774a-43cd-94d3-562450e9c8a1/scratchpad/konduit-prosmotr.html` — открыть в браузере, вкладка «Кондуит»; это ВЕСЬ сайт в режиме организатора, собранный из копии живой базы уже правленым кодом, 3,7 МБ, наводить мышью можно прямо в нём.
+Пересобирается одной командой откуда угодно (первая строка кладёт копию базы, в саму базу не пишем):
+```
+cp /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/data/spetsmat.db /tmp/kopia.db
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && SPETSMAT_BAZA=/tmp/kopia.db PYTHONPATH=. python3 -c "
+import os
+from tools.sobrat_stranicu import sobrat_html
+open('/tmp/konduit-prosmotr.html','w').write(sobrat_html('admin', baza=os.environ['SPETSMAT_BAZA']))"
+```
+🔴 Почему превью лежит НЕ в `data/` рядом с `data/konduit-prosmotr.html`, где владелец привык его искать: `data/` вне зоны этого захода, а контракт зоны запрещает писать вне неё даже туда, где это очевидный адрес. Названо пунктом 3 в `## ВОПРОСЫ`.
+**РОД АРТЕФАКТА:** `исходник`
+*(продукт захода — КОД `veb/razdely/konduit.py` и его проверки; он закоммичен РАНЬШЕ отчёта, и отчёт цитирует хэши. HTML выше — снимок этого кода, а не то, что заход производил.)*
+**КОММИТ:** `987c3e2`, `400237b`, `5cc74ab`, `5755f2e` (+ этот отчёт) · `git_zona.py check --zone` по всем четырём путям зоны → ✅ ✅ ✅ ✅
+
+---
+
+### ЧТО СДЕЛАНО И ЗАЧЕМ — по частям задания, по коммиту на каждую
+
+**Часть 2 — ПОДСКАЗКИ (коммит `987c3e2`).** Дефект оказался НЕ в тексте подсказки, и это главное, что здесь стоит знать. Текст был верен и стоял на месте: на живой базе все 1242 клетки принимающего несли `title="принимающий: Даня Макаров · группа Д · кабинет 302"`. Неверна была МИШЕНЬ — подсказка висела на `<i class="prin">`, то есть на двух сантиметрах текста внутри клетки шириной `3.4rem` с полями по краям, и «навожу на клеточку» приходилось мимо неё штатно, а не по невезению. `_prinimayushchie` теперь отдаёт `(подсказка, разметка)` раздельно, `_stolbec_prin` вешает `title` на сам `<td class="pr">`, `cursor:help` переехал на клетку. Замер до/после на одной и той же базе: `td.pr` с подсказкой **0 → 1242**, `i.prin` с подсказкой **1242 → 0** (не два носителя, а один, переехавший).
+
+**Часть 1 — ГАЛОЧКА В КЛЕТКЕ ОБЯЗАТЕЛЬНЫХ (коммит `400237b`).** Отдельный столбец `td.gt` (правка 10.09) стоял вплотную к счётчику, и у закрывшего горели ОБА — `5/5` и галочка рядом: два соседних столбца отвечали на один вопрос. Столбца больше нет. Новая `_stolbec_obyaz` рисует ОДНУ клетку, в которой ровно одно — или галочка, или счётчик, или точка (листок без обязательных): замена, а не дописывание, как и просил владелец. Размер `1.15rem` и цвет `var(--zel)` переехали с `td.gt` на сам знак `.ob-sch.gt-da`, нового цвета не заведено; на телефоне галочка остаётся крупнее счётчика (`.95rem` против `.72rem`). 🔴 Числа счётчика при замене НЕ пропали: на годовом разрезе галочка может гореть у школьника с 200 из 215, и эти числа уехали в подсказку той же клетки — иначе правка «поставить галочку вместо счётчика» отняла бы факт, о потере которого никто не просил.
+
+**Часть 3 — НОМЕР ЛИСТКА У ГОДОВОЙ ГАЛОЧКИ (коммит `5cc74ab`).** Рядом с галочкой встала подпись тем же `<span class="iz">`, которым набран знаменатель счётчика: один факт двумя кеглями, а не второй носитель. Подпись — номер листка, закрытого целиком («✓ 11»), или слово «всё», когда сданы все обязательные разреза. После находки верификатора подсказка переписана так, чтобы называть не только вывод, но и посылку: было «долгов нет: закрыл целиком листок 11; обязательных сдано 146 из 215» — верификатор прочитал это как противоречие внутри строки, и владелец прочитал бы так же; стало «долгов нет: листки даны на выбор, и листок 11 закрыт целиком; обязательных сдано 146 из 215» — то самое объяснение O5, которым владелец сам объяснил правило.
+
+### ЧИСЛА С ОХВАТОМ — снято командой по КОПИИ ЖИВОЙ БАЗЫ, не по фикстуре
+```
+панелей-решёток: 23, из них с колонкой обязательных: 23
+панелей, где галочка стоит В КЛЕТКЕ обязательных: 23 из 23
+панелей с остатками отдельного столбца gt: 0
+клеток обязательных не с одним знаком: 0
+клеток обязательных всего: 1242
+   галочка                      558
+   счётчик N/M                  468
+   точка (нет обязательных)     216
+клеток обязательных БЕЗ подсказки: 0
+```
+```
+vse9: галочек 0, подписано 0, БЕЗ подписи 0
+vse8: галочек 14, подписано 14, БЕЗ подписи 0
+     подпись «всё»  × 8
+     подпись «1»    × 3
+     подпись «12»   × 2
+     подпись «11»   × 1
+ИТОГО по разрезу «Весь год»: подписано 14 из 14
+```
+**Подсказки, снятые командой у ТРЁХ разных клеток — дословный вывод:**
+```
+клеток принимающего на странице: 1242
+снято подсказок: 3 из 3
+  Аникина  Анастасия      инициалы в клетке: Н.В.   подсказка клетки: принимающий: Настя Вахрина · группа Д · кабинет 302
+  Бирюков  Василий        инициалы в клетке: Д.М.   подсказка клетки: принимающий: Даня Макаров · группа Д · кабинет 302
+  Болотин  Фёдор          инициалы в клетке: Надя   подсказка клетки: принимающий: Надя · группа Н · кабинет 203
+```
+Средняя строка — ровно случай владельца: «тут написано ДМ… не всплывает Даня Макаров».
+
+### КАК ПРОВЕРЕНО — четыре независимых способа, и ни один не «должно работать»
+1. **Живой прогон на реальном объекте.** Страница собрана целиком (`tools/sobrat_stranicu.sobrat_html('admin', baza=<копия>)`) — `rc=0`, 3 428 360 байт, «школьников 54 · преподавателей 14 · листки 9кл 3 · 8кл 19». Числа охвата выше сняты с этого же рендера.
+2. **Тесты зоны.** `tests/grid` — **109 passed, 1 skipped**, красных нет. Из них три написаны этим заходом: подсказка на клетке, а не на инициалах; подпись у годовой галочки; отсутствие подписи на вкладке листка.
+3. **Сверка с ЧИСТЫМ HEAD, чтобы «красное» и «моё красное» не слились.** `tests/grid tests/veb` прогнаны дважды — по `git archive HEAD` в отдельном дереве и по рабочему. Было **39 failed / 13 errors / 249 passed**, стало **39 failed / 13 errors / 252 passed**. Множества падений сравнены построчно: новых падений **0**, исчезнувших **0**, +3 прошедших — мои новые тесты. Все 52 красных — `tests/veb`, унаследованный долг, назван пунктом 2 в `## ВОПРОСЫ`.
+4. **Живой гейт вёрстки по браузеру** (`tools/gejt_verstki.py --ekran кондуит`, playwright, та же копия базы), тоже дважды — по HEAD и по правленому:
+   * HEAD: `обрезка 0 · перенос 0 · поля 0 · центр 40 · смешение 0 · вниз 1098px · клеток 1375`
+   * после: `обрезка 0 · перенос 0 · поля 0 · центр 39 · смешение 0 · вниз 1098px · клеток 1320`
+   Находок стало на одну МЕНЬШЕ — исчезла ровно `thead > tr > th.gt`, шапка упразднённого столбца. Новых нет, «смешение» как было 0, так и осталось 0. Гейт красный на этом экране и до, и после — по `НЕ ВЛЕЗЛО НА ЭКРАН 1098px при окне 900` (принятый владельцем пункт В003) и по 39 центрированиям `td.vsyo`, которые старше этого захода.
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА §3
+Свежий субагент, ДРУГИМ методом: собрал страницу сам и пересчитал состояние клеток ПРЯМО ПО БАЗЕ (`marks`: живой `assert`, на который не ссылается ни один `reverses_id`, × `problems.kind ∈ ('обязательная','письменная')`), кода правки не читал. Все три требования — **зелёные**:
+* **Требование 1:** панелей проверено **23 из 23**, в каждой ровно 1 `th.sch`, `th.gt` и `td.gt` — **0**; клеток обязательных 1242, **клеток с двумя знаками 0**. Независимая сверка с базой — **1134 клетки из 1134**, расхождений **0**: галочка горит ровно там, где сданы все обязательные листка, счётчики совпали до обоих чисел; точка стоит ровно в 4 листках без обязательных (1д–4д), 216 клеток.
+* **Требование 2:** `td.pr` **1242**, без подсказки **0**; различных принимающих **14 из 14** сверено с `teachers` — имя, группа и кабинет совпали во всех 14, инициалы верны во всех 12 многословных именах.
+* **Требование 3:** галочек в годовых панелях **14**, подписано **14 из 14**; подписей-номеров **6 из 6** проверено прямым подсчётом по базе — **ложных 0** (у всех шести все задачи названного листка сданы); подписей «всё» **8 из 8** — у всех восьми по базе действительно закрыты все обязательные разреза.
+Три его оговорки, ни одна не отменена молча:
+* **№13 — принята и починена.** «долгов нет» рядом с «146 из 215» он прочитал как противоречие; подсказка переписана (см. часть 3 выше). Это и есть та правка, которую он оплатил.
+* **№11 — принята как известное ограничение.** Подпись называет ПЕРВЫЙ закрытый целиком листок (Цуканов закрыл 1 и 2, в клетке «1»); остальные названы в подсказке этой же клетки, и их клетки в строке и так покрашены как закрытые. Колонка узкая нарочно — владелец дважды просил не отбирать ширину у решётки.
+* **№12 — не дефект, решение названо в коде.** У двоих, кто сдал ВСЕ обязательные разреза и вдобавок закрыл листки целиком, подпись «всё», а не номер: «сдано всё обязательное» — утверждение СИЛЬНЕЕ любого одного листка, и подменять его номером значило бы занижать ответ. Подсказка листки называет.
+Последняя строка его ответа, дословно: «выдано 14 позиций из 14 найденных».
+
+### ЧЕГО НЕ ТРОГАЛ
+`veb/obshchee/karkas.py` (оболочка, скрипт перерисовки клетки), `veb/server.py`, `tools/*`, `core/*`, `migrations/*`, `data/*` — всё вне зоны. `tests/veb/` входит в зону, но не изменён ни на байт: чинить там нечего по этой задаче, а 52 красных в нём старше захода. В живую базу `data/spetsmat.db` не писал ни разу — работал по копии; копия снята чтением.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+**Повторится на следующей единице работы — значит заход, а не запись в очередь:** дефект «подсказка висит на вложенном элементе, а мишенью владелец считает клетку». Он не про столбец принимающего: после починки в самом кондуите осталось **589** таких подсказок в шапках задач (`<b class="sdalo" title=…>` внутри `<th class="zn">`) и **14 722** в личной карточке (`<i class="vsyo" title="<дата>">`). Каждый следующий экран, где кто-нибудь наведёт мышь, воспроизведёт жалобу 11.09 дословно. Здесь они НЕ тронуты: владелец назвал один столбец, а «ничего сверх задачи» — про содержание работы.
+**Не повторится — законно ушло в `## ВОПРОСЫ` пунктом очереди:** 52 красных теста `tests/veb` (пункт 2), адрес превью (пункт 3), оспоренная половина критерия готовности (пункт 4).
+
+### НЕОБРАТИМОЕ
+**Необратимого нет.** Ни одного удаления, переименования, перемещения, перезаписи, `git reset` или `checkout` поверх несохранённого; ни одной правки за пределами зоны. В живую базу `data/spetsmat.db` не писал — работал по копии, снятой чтением.
+
+🔴 И отдельно — то, что я едва не удалил, и почему не удалил. В `git status` ГЛАВНОЙ папки висит неотслеживаемый `?? scratchpad/verifikator/`; я решил, что это натоптал мой верификатор §3, и собрался прибрать за собой. Посмотрел содержимое ПЕРЕД удалением (по §«Before deleting, look at the target»): файлы датированы **10.09 20:10–20:18**, это девятнадцать чужих временных баз и `seed.py` другого захода, а мой верификатор писал в сессионный scratchpad (`…/bc6e3e54-…/scratchpad/verifikator/stranica.html`) и в репозиторий не заходил вовсе. Каталог не тронут. Он не мой, он вне зоны, и его существование — вопрос к тому заходу, а не к этому.
+
+### ВРЕМЯ ПРОГОНА И ТОКЕНЫ
+НЕПРИМЕНИМО: движок `opencode`, счётчика стоимости в логе нет.
+
+### ОТКРЫТОЕ «ВОЗВРАЩАТЬСЯ»
+Четыре пункта очереди в `## ВОПРОСЫ` и один урок фабрике выше. Ни один из них не блокирует эту работу.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
