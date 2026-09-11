@@ -119,6 +119,69 @@ def proshedshie_zanyatiya(den: str) -> list:
     return dni
 
 
+#: 🔴 ГРАНИЦЫ ЧЕТВЕРТЕЙ — ОДНО МЕСТО, И ДО ЭТОГО ЗАХОДА ИХ НЕ БЫЛО НИ ОДНОГО.
+#: Владелец 11.09: *«у нас будет вкладка четверть 1, потом четверть 2, 3, 4»*. Слово
+#: «четверть» встречалось в проекте только в прозе комментариев — `grep` по всем `*.py`
+#: и `*.sql` не находит ни таблицы, ни константы, ни функции. Поэтому границы пишутся
+#: здесь, ОДИН раз, парами `(месяц, число)`, и это СЕТКА ПО УМОЛЧАНИЮ — обычный
+#: календарь учебного года 2026/2027, а не даты, взятые из школы. Настоящие знает
+#: только владелец; вопрос стоит пунктом очереди в `## ВОПРОСЫ` захода, а неверная
+#: граница молча переносит занятия между вкладками, поэтому она названа вслух здесь.
+#:
+#: Четверть, начинающаяся с месяца сентября или позже, лежит в ПЕРВОМ календарном году
+#: учебного года, остальные — во втором. Год не вписывается: вписанный протухает молча.
+CHETVERTI = ((1, (9, 1), (10, 25)),
+             (2, (11, 5), (12, 27)),
+             (3, (1, 12), (3, 22)),
+             (4, (4, 1), (5, 31)))
+
+
+def chetverti_goda(den: str) -> list:
+    """`[(номер, начало, конец)]` — четыре четверти учебного года, в котором лежит `den`."""
+    god = int(nachalo_uchebnogo_goda(den)[:4])
+    itog = []
+    for nomer, (m1, d1), (m2, d2) in CHETVERTI:
+        g1 = god if m1 >= NACHALO_GODA_MESYAC else god + 1
+        g2 = god if m2 >= NACHALO_GODA_MESYAC else god + 1
+        itog.append((nomer, date(g1, m1, d1).isoformat(), date(g2, m2, d2).isoformat()))
+    return itog
+
+
+def zanyatiya_mezhdu(ot: str, do: str) -> list:
+    """Дни занятий в отрезке, включая оба конца.
+
+    Тот же календарь и тот же единственный источник, что у `proshedshie_zanyatiya`
+    выше: какие дни недели — занятия, знает `sostav_na_den.SLOTY_ZANYATIJ`, и
+    спрашивается он через `slot_of`. Второго календаря на странице нет.
+    """
+    d = date.fromisoformat(ot)
+    konec = date.fromisoformat(do)
+    dni = []
+    while d <= konec:
+        if slot_of(d.isoformat()) is not None:
+            dni.append(d.isoformat())
+        d += timedelta(days=1)
+    return dni
+
+
+def otkrytaya_chetvert(den: str, chetverti) -> int:
+    """Какая вкладка открыта, когда человек только зашёл.
+
+    Та, в которую попадает сегодняшний день. На каникулах сегодняшнего дня нет ни в
+    одной — тогда открывается БЛИЖАЙШАЯ БУДУЩАЯ: человек в каникулы смотрит вперёд,
+    а не назад, и это тот же выбор, который уже сделан у «следующего спецмата» выше.
+    После конца года открывается последняя: пустая вкладка «1 четверть» в июне
+    сказала бы «занятий нет» про год, который весь на экране.
+    """
+    for nomer, ot, do in chetverti:
+        if ot <= den <= do:
+            return nomer
+    for nomer, ot, _do in chetverti:
+        if den < ot:
+            return nomer
+    return chetverti[-1][0]
+
+
 #: Which of the two lesson slots a Monday is, so the row can say «пн» / «чт» without a
 #: second calendar of its own.  `sostav_na_den.SLOTY_ZANYATIJ` maps the ISO weekday to the
 #: slot; this maps it to the word, and both are read from the ONE place that has it.
@@ -229,7 +292,36 @@ SVOI_STILI = """
    вниз по первой колонке, потом во вторую, и порядок чтения остаётся
    хронологическим. `grid` с тем же числом колонок разложил бы их СЛЕВА НАПРАВО,
    то есть перемешал бы даты в каждой строке. */
-.kab-tablica{columns:4;column-gap:1.6rem;margin:.9rem 0 0}
+/* 🔴 ПЯТЬ КОЛОНОК — ЧИСЛО, НАЗВАННОЕ ВЛАДЕЛЬЦЕМ 11.09 ВСЛУХ: «нужно, чтобы 5 было
+   колонок, чтобы на всю четверть ты прям видел». Стояло четыре. Двадцать плиток
+   самой длинной четверти ложатся тогда в четыре строки по пять, и все они на
+   экране: плитки свёрнуты (пункт 4), поэтому высота плитки — одна строка. Сужение
+   ниже по ширинам оставлено: пять колонок на телефоне это не «видно всё», а
+   нечитаемо. */
+.kab-tablica{columns:5;column-gap:1.2rem;margin:0}
+/* Вкладки четвертей — радиокнопки и CSS, механизм оболочки сайта. Сами кнопки
+   спрятаны, работают метки; `:focus-visible` радиокнопки подсвечивает её метку,
+   поэтому вкладки переключаются с клавиатуры стрелками, как им и положено. */
+.kab-god{margin:.9rem 0 0}
+.kab-p{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.kab-vkladki{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1.1rem;
+  font-family:var(--sans)}
+.kab-vkladki label{cursor:pointer;border:1px solid var(--rule);border-radius:999px;
+  padding:.35em 1.1em;font-size:.95rem;color:var(--muted)}
+.kab-vkladki label:hover{color:var(--accent);border-color:var(--accent)}
+.kab-god>.kab-tablica{display:none}
+#kab-p-1:checked~#kab-ch-1,#kab-p-2:checked~#kab-ch-2,
+#kab-p-3:checked~#kab-ch-3,#kab-p-4:checked~#kab-ch-4{display:block}
+#kab-p-1:checked~.kab-vkladki label[for="kab-p-1"],
+#kab-p-2:checked~.kab-vkladki label[for="kab-p-2"],
+#kab-p-3:checked~.kab-vkladki label[for="kab-p-3"],
+#kab-p-4:checked~.kab-vkladki label[for="kab-p-4"]{color:var(--text);
+  border-color:var(--accent);background:var(--accent-soft)}
+#kab-p-1:focus-visible~.kab-vkladki label[for="kab-p-1"],
+#kab-p-2:focus-visible~.kab-vkladki label[for="kab-p-2"],
+#kab-p-3:focus-visible~.kab-vkladki label[for="kab-p-3"],
+#kab-p-4:focus-visible~.kab-vkladki label[for="kab-p-4"]{outline:2px solid var(--accent);
+  outline-offset:2px}
 .kab-zanyatie{break-inside:avoid;-webkit-column-break-inside:avoid;
   border:1px solid var(--rule);border-radius:12px;padding:.6rem .8rem;
   margin:0 0 .8rem;background:var(--bg);font-family:var(--sans)}
@@ -273,6 +365,7 @@ SVOI_STILI = """
 .kab-raskrytie .kab-nichego{color:var(--muted)}
 .kab-raskrytie .kab-zakryt{float:right;cursor:pointer;border:1px solid var(--rule);
   background:none;color:var(--muted);border-radius:8px;padding:.2em .7em;font:inherit}
+@media(max-width:1400px){.kab-tablica{columns:4}}
 @media(max-width:1200px){.kab-tablica{columns:3}}
 @media(max-width:900px){.kab-tablica{columns:2}}
 @media(max-width:640px){.kab-tablica{columns:1}}
@@ -396,13 +489,20 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                                     '<p class="net">Такого преподавателя нет в базе.</p>'
                                     '</div>', put_bazy(c))
 
-    # 🔴 ОТМЕТКИ СПРАШИВАЮТСЯ СРАЗУ ЗА ВСЮ ПОЛОСУ, ОДНИМ ЗАПРОСОМ. Раньше их брали
-    # только на восемь дней вперёд, потому что и рисовали только их; полоса красит
-    # ещё и прошлое, и запрос на восемь дней покрасил бы каждый прошедший день
-    # зелёным — то есть соврал бы ровно там, где владелец смотрит.
+    # 🔴 ВСЕ ТРИ ВОПРОСА К БАЗЕ ЗАДАЮТСЯ ОДИН РАЗ И ЗА ВЕСЬ ГОД, ДО ПЕРВОЙ РАЗМЕТКИ.
+    # Отметки отсутствия спрашивались «за полосу» — прошлое плюс восемь дней вперёд;
+    # вкладок четверти теперь четыре, и запрос на восемь дней покрасил бы три из них
+    # зелёным, то есть соврал бы ровно там, где владелец смотрит. Спрашивается сразу
+    # весь год (около семидесяти дат, один запрос), и той же выборкой пользуется блок
+    # «следующий спецмат» ниже: два ответа об одном дне обязаны быть одним ответом.
+    seichas = datetime.now(timezone.utc)
+    god = chetverti_goda(segodnya())
+    dni_chetvertej = [(nomer, zanyatiya_mezhdu(ot, do)) for nomer, ot, do in god]
+    vse_dni = [d for _n, spisok_dnej in dni_chetvertej for d in spisok_dnej]
+    proshlo_vse = [d for d in vse_dni if zanyatie_zaversheno(d, seichas=seichas)]
+    net_na = otsutstviya(c, teacher_id, vse_dni)
+    sdachi = sdachi_po_zanyatiyam(c, tuple(proshlo_vse))
     dni = blizhajshie_zanyatiya(segodnya(), GLUBINA_VPERYOD)
-    proshlo = proshedshie_zanyatiya(segodnya())
-    net_na = otsutstviya(c, teacher_id, proshlo + dni)
     blizhajshee = dni[0] if dni else None
 
     # ── СЛЕДУЮЩЕЕ ЗАНЯТИЕ. Оно же первая будущая клетка полосы ниже: два ответа об одном дне
@@ -444,7 +544,19 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
             f'<p class="kab-gde">кабинет {kab_html}</p>'
             f'{deti_html}</div>')
 
-    # ── ТАБЛИЦА ЗАНЯТИЙ С НАЧАЛА УЧЕБНОГО ГОДА (L1.3, владелец 10.09).
+    # ── ТАБЛИЦА ЗАНЯТИЙ, РАЗЛОЖЕННАЯ ПО ЧЕТВЕРТЯМ (пункт 5 рецензии 11.09).
+    # Владелец: *«можно оставить такую плитку, но тогда нужно, чтобы 5 было колонок,
+    # чтобы на всю четверть ты прям видел… у нас будет вкладка четверть 1, потом
+    # четверть 2, 3, 4»*. Занятия строились «с начала года и восемь дней вперёд» —
+    # один поток, который к маю становился лентой на семьдесят плиток. Теперь их
+    # четыре, по четверти в каждой, и открыта та, в которой сегодняшний день.
+    #
+    # 🔴 ВКЛАДКИ — РАДИОКНОПКИ И CSS, А НЕ СКРИПТ, и это способ САМОГО САЙТА:
+    # `karkas.obolochka()` переключает свои разделы ровно так же. Все четыре четверти
+    # уже лежат в документе, поэтому переключение ничего не грузит и работает при
+    # выключенном JS; третьего механизма показа/скрытия на странице не заводится.
+    #
+    # ── ТАБЛИЦА ЗАНЯТИЙ (L1.3, владелец 10.09).
     # Здесь стояла ПОЛОСА КНОПОК: дата и цвет, а кто на занятии был — только во
     # всплывающей подсказке. Владелец попросил другое: «строки — занятия, в каждой
     # список школьников, клик по школьнику раскрывает сдачу», и «вся четверть должна
@@ -471,11 +583,9 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
     # правки занятие, которое сегодня уже прошло, показывается зелёным и флажка не
     # предлагает, а дверь такую запись всё ещё приняла бы. Расширять или сужать дверь
     # этот заход не стал: это правка пути ЗАПИСИ, которой никто не просил.
-    seichas = datetime.now(timezone.utc)
-    sdachi = sdachi_po_zanyatiyam(c, tuple(proshlo))
-    bloki = []
     raskrytie: dict = {}
-    for den in proshlo + dni:
+
+    def plitka(den: str) -> str:
         proshlo_li = zanyatie_zaversheno(den, seichas=seichas)
         d = date.fromisoformat(den)
         wd = d.isoweekday()
@@ -520,7 +630,7 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
             # поиск по странице и печать работают без единой строки скрипта. Своя
             # пара «флажок + CSS» дала бы то же самое ценой третьего механизма
             # раскрытия на одной странице.
-            bloki.append(
+            return (
                 '<details class="kab-zanyatie %s" data-den="%s">'
                 '<summary class="kab-zag" data-den="%s">%s'
                 '<span class="kab-skolko">%s</span></summary>%s</details>'
@@ -538,7 +648,7 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
         else:
             imena = ", ".join("%s %s" % (e(r["surname"]), e(r["name"]))
                               for r in kto_byl)
-            bloki.append(
+            return (
                 '<div class="kab-zanyatie vperyod%s" data-den="%s">'
                 '<label class="kab-vpered-metka">'
                 '<input type="checkbox" data-den="%s"%s>'
@@ -550,6 +660,19 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                    ('<ul class="kab-spisok"><li>%s</li></ul>'
                     % imena.replace(", ", "</li><li>")) if imena
                    else '<p class="kab-nikogo">школьников пока нет</p>'))
+
+    otkryta = otkrytaya_chetvert(segodnya(), god)
+    perekluchateli = "".join(
+        '<input class="kab-p" type="radio" name="kab-chetvert" id="kab-p-%d"%s>'
+        % (nomer, " checked" if nomer == otkryta else "")
+        for nomer, _dni in dni_chetvertej)
+    vkladki = ('<nav class="kab-vkladki">%s</nav>' % "".join(
+        '<label for="kab-p-%d">%d четверть</label>' % (nomer, nomer)
+        for nomer, _dni in dni_chetvertej))
+    tela = "".join(
+        '<div class="kab-tablica" id="kab-ch-%d">%s</div>'
+        % (nomer, "".join(plitka(den) for den in spisok_dnej))
+        for nomer, spisok_dnej in dni_chetvertej)
 
     # 🔴 СВОДНОЙ СТРОКИ «С НАЧАЛА ГОДА: …» ЗДЕСЬ БОЛЬШЕ НЕТ, И ЭТО РЕШЕНИЕ
     # ВЛАДЕЛЬЦА 11.09, А НЕ УПРОЩЕНИЕ. Дословно: *«я не понял, что значит занятия с
@@ -569,14 +692,14 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
   <p class="kab-kto">кабинет преподавателя{gruppa_html}</p>
   {blok_blizh}
   <div class="kab-blok">
-    <p class="zag2">мои занятия с начала года</p>
+    <p class="zag2">мои занятия</p>
     <!-- 🔴 НИ ПОДПИСИ-ПОЯСНЕНИЯ, НИ СВОДНОЙ СТРОКИ ЗДЕСЬ НЕТ И НЕ ДОЛЖНО БЫТЬ.
          «Зелёная — вы были, красная — вас не было…» владелец назвал НЕЙРОСЛОПОМ
          10.09 и велел убрать целиком; сводную строку «с начала года: занятий с
          вашими школьниками 2 из 3…» он убрал 11.09 теми же словами — «фразы от
          себя лучше удалять». Короткая версия на том же месте — то же самое, только
          тише. Разбор — у места, где строка считалась, выше в этом файле. -->
-    <div class="kab-tablica">{"".join(bloki)}</div>
+    <div class="kab-god">{perekluchateli}{vkladki}{tela}</div>
     <p class="kab-beda" id="kab-beda"></p>
   </div>
   <div class="kab-raskrytie" id="kab-raskrytie" hidden>

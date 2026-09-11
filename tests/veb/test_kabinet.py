@@ -210,15 +210,18 @@ def test_the_table_covers_the_school_year_and_colours_only_the_past(running_serv
     from datetime import datetime, timezone
 
     from core.services.istoria_poseshchenij import zanyatie_zaversheno
-    from veb.razdely.kabinet import (GLUBINA_VPERYOD, proshedshie_zanyatiya, segodnya)
-    from core.services.sostav_na_den import blizhajshie_zanyatiya
+    from veb.razdely.kabinet import chetverti_goda, segodnya, zanyatiya_mezhdu
 
     _status, body, _h = _get(
         f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
     telo = body.decode("utf-8")
     seichas = datetime.now(timezone.utc)
-    vse = proshedshie_zanyatiya(segodnya()) + blizhajshie_zanyatiya(
-        segodnya(), GLUBINA_VPERYOD)
+    # 🔴 ГОД ЦЕЛИКОМ, А НЕ «ПРОШЛОЕ ПЛЮС ВОСЕМЬ ДНЕЙ». С пунктом 5 рецензии 11.09
+    # страница несёт ЧЕТЫРЕ четверти сразу — переключение вкладки ничего не грузит,
+    # потому что грузить уже нечего. Ожидаемое число плиток считается тем же
+    # календарём, что и у страницы, и никогда не вписывается числом.
+    vse = [d for _n, ot, do in chetverti_goda(segodnya())
+           for d in zanyatiya_mezhdu(ot, do)]
     proshlo = [d for d in vse if zanyatie_zaversheno(d, seichas=seichas)]
     vperyod = [d for d in vse if not zanyatie_zaversheno(d, seichas=seichas)]
 
@@ -502,7 +505,8 @@ def test_the_strip_of_chips_is_now_a_table_of_lessons_with_their_pupils(running_
     _status, body, _h = _get(
         f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
     telo = body.decode("utf-8")
-    assert '<div class="kab-tablica">' in telo, "занятия строками, а не полосой плашек"
+    assert '<div class="kab-tablica" id="kab-ch-1">' in telo, (
+        "занятия строками, а не полосой плашек")
     assert 'class="kab-polosa"' not in telo, "полоса плашек снята"
     assert 'class="kab-spisok"' in telo, "в блоке занятия стоит список школьников"
 
@@ -634,3 +638,55 @@ def test_every_past_lesson_tile_is_collapsed_until_it_is_clicked(running_server)
     assert "<details open" not in telo and 'kab-zanyatie" open' not in telo, (
         "ни одна плитка не приезжает раскрытой")
     assert "<summary class=\"kab-zag\"" in telo, "шапка плитки — сама себе выключатель"
+
+
+def test_the_year_is_laid_out_as_four_quarter_tabs_of_five_columns(running_server):
+    """Пункт 5 рецензии 11.09: *«нужно, чтобы 5 было колонок, чтобы на всю четверть ты
+    прям видел… у нас будет вкладка четверть 1, потом четверть 2, 3, 4»*.
+
+    Проверяются три вещи, и каждая может провалиться отдельно: вкладок ровно четыре;
+    все занятия четверти лежат в ЕЁ теле, а не размазаны по соседним; открыта та
+    вкладка, в которую попадает сегодняшний день. Число колонок — в таблице стилей,
+    и оно проверяется там же, потому что больше ему негде быть.
+    """
+    from veb.razdely.kabinet import (chetverti_goda, otkrytaya_chetvert, segodnya,
+                                     zanyatiya_mezhdu)
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    god = chetverti_goda(segodnya())
+    assert len(god) == 4
+
+    for nomer, _ot, _do in god:
+        assert f'<label for="kab-p-{nomer}">{nomer} четверть</label>' in telo
+        assert f'<div class="kab-tablica" id="kab-ch-{nomer}">' in telo
+
+    otkryta = otkrytaya_chetvert(segodnya(), god)
+    assert f'id="kab-p-{otkryta}" checked' in telo, "открыта четверть сегодняшнего дня"
+    assert telo.count(" checked>") >= 1
+    assert len(re.findall(r'id="kab-p-\d" checked', telo)) == 1, "отмечена ровно одна"
+
+    # 🔴 КАЖДОЕ ЗАНЯТИЕ — В ТЕЛЕ СВОЕЙ ВКЛАДКИ, А НЕ ПРОСТО ГДЕ-ТО НА СТРАНИЦЕ.
+    # Проверка «дата есть в документе» прошла бы и на прежней одной ленте, то есть
+    # не отличала бы сделанное от несделанного. Документ режется по меткам вкладок:
+    # кусок от `id="kab-ch-N"` до следующей такой метки и есть тело N-й четверти.
+    granicy = [(nomer, telo.index(f'<div class="kab-tablica" id="kab-ch-{nomer}">'))
+               for nomer, _ot, _do in god]
+    granicy.append((None, telo.index('<p class="kab-beda"')))
+    tela = {granicy[i][0]: telo[granicy[i][1]:granicy[i + 1][1]]
+            for i in range(len(granicy) - 1)}
+    for nomer, ot, do in god:
+        dni = zanyatiya_mezhdu(ot, do)
+        assert dni, f"четверть {nomer} обязана содержать дни занятий"
+        svoi = tela[nomer]
+        for den in dni:
+            assert f'data-den="{den}"' in svoi, (
+                f"{den} обязан лежать в теле четверти {nomer}")
+        chuzhie = [d for n, o, dd in god if n != nomer
+                   for d in zanyatiya_mezhdu(o, dd)]
+        for den in chuzhie:
+            assert f'data-den="{den}"' not in svoi, (
+                f"{den} не из четверти {nomer}, а лежит в ней")
+
+    assert ".kab-tablica{columns:5" in telo, "пять колонок — число, названное владельцем"
