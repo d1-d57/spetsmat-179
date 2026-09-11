@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import threading
 import urllib.error
@@ -99,6 +100,20 @@ def running_server(tmp_path):
         httpd.server_close()
         thread.join()
         connection.close()
+
+
+def _bez_kommentariev(telo: str) -> str:
+    """Страница без того, чего читатель не видит: стилей и всех комментариев.
+
+    🔴 БЕЗ ЭТОГО ПРОВЕРКА НА СЛОВО ЛОВИТ СОБСТВЕННЫЙ РАЗБОР КОДА. `kabinet.py`
+    объясняет свои решения прямо в `SVOI_STILI` и в `SKRIPT`, то есть внутри того,
+    что уезжает в документ, — и слово «сдач» стоит там в предложении, которое
+    рассказывает, почему его больше нет на экране. Проверка «слова нет в теле
+    ответа» краснела бы на объяснении, а не на экране.
+    """
+    telo = re.sub(r"<style\b.*?</style>", "", telo, flags=re.S)
+    telo = re.sub(r"<!--.*?-->", "", telo, flags=re.S)
+    return re.sub(r"/\*.*?\*/", "", telo, flags=re.S)
 
 
 def _kuka(rol: str, kto=None) -> str:
@@ -195,19 +210,25 @@ def test_the_table_covers_the_school_year_and_colours_only_the_past(running_serv
     from datetime import datetime, timezone
 
     from core.services.istoria_poseshchenij import zanyatie_zaversheno
-    from veb.razdely.kabinet import (GLUBINA_VPERYOD, proshedshie_zanyatiya, segodnya)
-    from core.services.sostav_na_den import blizhajshie_zanyatiya
+    from veb.razdely.kabinet import chetverti_goda, segodnya, zanyatiya_mezhdu
 
     _status, body, _h = _get(
         f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
     telo = body.decode("utf-8")
     seichas = datetime.now(timezone.utc)
-    vse = proshedshie_zanyatiya(segodnya()) + blizhajshie_zanyatiya(
-        segodnya(), GLUBINA_VPERYOD)
+    # 🔴 ГОД ЦЕЛИКОМ, А НЕ «ПРОШЛОЕ ПЛЮС ВОСЕМЬ ДНЕЙ». С пунктом 5 рецензии 11.09
+    # страница несёт ЧЕТЫРЕ четверти сразу — переключение вкладки ничего не грузит,
+    # потому что грузить уже нечего. Ожидаемое число плиток считается тем же
+    # календарём, что и у страницы, и никогда не вписывается числом.
+    vse = [d for _n, ot, do in chetverti_goda(segodnya())
+           for d in zanyatiya_mezhdu(ot, do)]
     proshlo = [d for d in vse if zanyatie_zaversheno(d, seichas=seichas)]
     vperyod = [d for d in vse if not zanyatie_zaversheno(d, seichas=seichas)]
 
-    blokov = telo.count('<div class="kab-zanyatie ')
+    # Прошедшая плитка — `<details>` (свёрнута по умолчанию, пункт 4 рецензии 11.09),
+    # будущая — `<div>`: разворачивать в ней нечего. Считаются обе.
+    blokov = (telo.count('<details class="kab-zanyatie ')
+              + telo.count('<div class="kab-zanyatie '))
     assert blokov == len(vse), f"блоков {blokov}, а занятий {len(vse)}"
     assert telo.count('kab-zanyatie byl') + telo.count('kab-zanyatie ne-byl') \
         == len(proshlo), "цветом красится ровно завершившееся"
@@ -484,7 +505,8 @@ def test_the_strip_of_chips_is_now_a_table_of_lessons_with_their_pupils(running_
     _status, body, _h = _get(
         f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
     telo = body.decode("utf-8")
-    assert '<div class="kab-tablica">' in telo, "занятия строками, а не полосой плашек"
+    assert '<div class="kab-tablica" id="kab-ch-1">' in telo, (
+        "занятия строками, а не полосой плашек")
     assert 'class="kab-polosa"' not in telo, "полоса плашек снята"
     assert 'class="kab-spisok"' in telo, "в блоке занятия стоит список школьников"
 
@@ -523,48 +545,425 @@ def test_clicking_a_lesson_and_a_pupil_has_something_to_open(running_server):
         assert "sdal" in dannye[k], f"раскрытие школьника {k} обязано называть сдачу"
 
 
-def test_the_cabinet_sums_itself_up_in_one_line(running_server):
-    """Владелец 10.09: «И это должно сводиться в один текст»."""
-    _status, body, _h = _get(
-        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
-    telo = body.decode("utf-8")
-    assert 'class="kab-svodka"' in telo
-    assert "с начала года: занятий с вашими школьниками" in telo
-    assert "принято сдач" in telo and "работал со школьниками" in telo
+def test_the_made_up_summary_line_is_gone(running_server):
+    """Пункт 1 рецензии владельца 11.09, дословно: *«я не понял, что значит занятия с
+    вашими школьниками 2 из 3… это какая-то фраза вставлена, которую можно удалить
+    вообще. Фразы от себя лучше удалять»*.
 
+    Здесь стояли ДВЕ проверки, и обе требовали ровно того, что владелец теперь велел
+    убрать: `test_the_cabinet_sums_itself_up_in_one_line` требовала подстроку «с начала
+    года: занятий с вашими школьниками», а `test_the_summary_does_not_count_a_lesson_
+    the_teacher_did_not_teach` — что первое число считает свои дни, а не календарные.
+    Они удалены вместе со строкой: тест, стерегущий удалённое поведение, это не
+    страховка, а запрет на выполнение просьбы. Их содержательная находка (сводка
+    складывала календарь с работой) не теряется — она записана у места, где сводка
+    считалась, в `veb/razdely/kabinet.py`.
 
-def test_the_summary_does_not_count_a_lesson_the_teacher_did_not_teach(running_server):
-    """Находка верификатора: сводка складывала календарь с работой.
-
-    «занятий N» считалось днями пн/чт с 1 сентября — то есть у преподавателя,
-    у которого в один из этих дней не было НИ ОДНОГО школьника, стояло на единицу
-    больше занятий, чем он вёл. Замер на боевых данных: у 13 принимающих из 14
-    календарных дней 3, а своих — 2. Здесь то же самое проверяется на фикстуре:
-    первое число обязано считать дни СО СВОИМИ школьниками, а не дни календаря.
+    Проверяется ОТСУТСТВИЕ: и текста, и класса, которым он был размечен.
     """
-    import re
-
-    from core.services.sostav_na_den import slot_of
-    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
-    from veb.razdely.lichnaya import deti_na_datu
-
     _status, body, _h = _get(
         f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
     telo = body.decode("utf-8")
-    chisla = re.search(r"занятий с вашими школьниками (\d+) из (\d+)", telo)
-    assert chisla, "сводка обязана называть оба числа"
-    svoi, kalendar = int(chisla.group(1)), int(chisla.group(2))
+    assert "с начала года: занятий с вашими школьниками" not in telo
+    assert 'class="kab-svodka"' not in telo, "класс сводки снят вместе с ней"
+    assert "принято сдач" not in telo
+    assert "работал со школьниками" not in telo
 
+
+def test_the_screen_says_zadach_and_never_sdach(running_server):
+    """Пункт 2 рецензии 11.09: *«слово „сдач“ очень странное. Лучше пиши „задач“»*.
+
+    Проверяется по ВИДИМОМУ тексту, а не по исходнику: слово живёт в шапке плитки
+    занятия, и именно там владелец на него и наткнулся. Формат — его собственный,
+    `задач: N`.
+    """
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = _bez_kommentariev(body.decode("utf-8"))
+    assert "сдач" not in telo, "слова «сдач» на экране быть не должно"
+    assert re.search(r"задач: \d+", telo), "шапка плитки называет число задач"
+
+
+def test_no_gendered_verb_is_printed_for_a_person_whose_sex_is_not_in_the_baza(
+        running_server):
+    """Пункт 3 рецензии 11.09: *«Бочарова Анна — она СДАЛА, а не сдал»*.
+
+    🔴 ПРОВЕРЯЕТСЯ ДВА ФАКТА СРАЗУ, И ВТОРОЙ — ПРИЧИНА ПЕРВОГО. Пола в базе нет:
+    здесь это утверждается не словами, а `pragma table_info` по тем же двум таблицам,
+    из которых страница берёт людей. Пока столбца нет, единственный способ не
+    напечатать неверный род — не печатать род вовсе, и экран проверяется именно на
+    это: ни «сдал», ни «сдала», ни «сдали».
+
+    Тест переживёт появление пола: в тот день первая половина покраснеет, и это
+    ровно то место, куда надо прийти и вернуть глагол.
+    """
     conn = sqlite3.connect(str(running_server["put"]))
-    conn.row_factory = sqlite3.Row
     try:
-        proshlo = proshedshie_zanyatiya(segodnya())
-        svoi_zhdyom = sum(1 for d in proshlo
-                          if slot_of(d) is not None
-                          and deti_na_datu(conn, running_server["t1"], d))
+        for tablica in ("students", "teachers"):
+            stolbcy = {r[1] for r in conn.execute(f"pragma table_info({tablica})")}
+            assert not (stolbcy & {"pol", "gender", "sex", "otchestvo", "patronymic"}), (
+                f"в {tablica} появился пол — глагол можно и нужно вернуть")
     finally:
         conn.close()
-    assert kalendar == len(proshlo), "второе число — дни календаря"
-    assert svoi == svoi_zhdyom, (
-        f"своих дней {svoi}, а по базе их {svoi_zhdyom}: сводка считает не то")
-    assert svoi <= kalendar
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = _bez_kommentariev(body.decode("utf-8"))
+    for glagol in ("сдал", "сдала", "сдали", "принял", "приняла"):
+        assert glagol not in telo, f"род глагола угадан: «{glagol}»"
+    assert "задач нет" in telo, "вместо глагола — безличное «задач нет»"
+
+
+def test_every_past_lesson_tile_is_collapsed_until_it_is_clicked(running_server):
+    """Пункт 4 рецензии 11.09: *«удобнее, если у тебя будет свёрнуто… потом я нажимаю,
+    оно разворачивается»*.
+
+    Свёрнутость проверяется по разметке, а не по картинке: `<details>` без атрибута
+    `open` браузер рисует свёрнутым. Красное здесь значит, что плитка приехала
+    раскрытой — то есть ровно тот экран, на который владелец и пожаловался.
+    """
+    from datetime import datetime, timezone
+
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    assert telo.count('<details class="kab-zanyatie ') == len(proshlo)
+    assert "<details open" not in telo and 'kab-zanyatie" open' not in telo, (
+        "ни одна плитка не приезжает раскрытой")
+    assert "<summary class=\"kab-zag\"" in telo, "шапка плитки — сама себе выключатель"
+
+
+def test_the_year_is_laid_out_as_four_quarter_tabs_of_five_columns(running_server):
+    """Пункт 5 рецензии 11.09: *«нужно, чтобы 5 было колонок, чтобы на всю четверть ты
+    прям видел… у нас будет вкладка четверть 1, потом четверть 2, 3, 4»*.
+
+    Проверяются три вещи, и каждая может провалиться отдельно: вкладок ровно четыре;
+    все занятия четверти лежат в ЕЁ теле, а не размазаны по соседним; открыта та
+    вкладка, в которую попадает сегодняшний день. Число колонок — в таблице стилей,
+    и оно проверяется там же, потому что больше ему негде быть.
+    """
+    from veb.razdely.kabinet import (chetverti_goda, otkrytaya_chetvert, segodnya,
+                                     zanyatiya_mezhdu)
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    god = chetverti_goda(segodnya())
+    assert len(god) == 4
+
+    for nomer, _ot, _do in god:
+        assert f'<label for="kab-p-{nomer}">{nomer} четверть</label>' in telo
+        assert f'<div class="kab-tablica" id="kab-ch-{nomer}">' in telo
+
+    otkryta = otkrytaya_chetvert(segodnya(), god)
+    assert f'id="kab-p-{otkryta}" checked' in telo, "открыта четверть сегодняшнего дня"
+    assert telo.count(" checked>") >= 1
+    assert len(re.findall(r'id="kab-p-\d" checked', telo)) == 1, "отмечена ровно одна"
+
+    # 🔴 КАЖДОЕ ЗАНЯТИЕ — В ТЕЛЕ СВОЕЙ ВКЛАДКИ, А НЕ ПРОСТО ГДЕ-ТО НА СТРАНИЦЕ.
+    # Проверка «дата есть в документе» прошла бы и на прежней одной ленте, то есть
+    # не отличала бы сделанное от несделанного. Документ режется по меткам вкладок:
+    # кусок от `id="kab-ch-N"` до следующей такой метки и есть тело N-й четверти.
+    granicy = [(nomer, telo.index(f'<div class="kab-tablica" id="kab-ch-{nomer}">'))
+               for nomer, _ot, _do in god]
+    granicy.append((None, telo.index('<p class="kab-beda"')))
+    tela = {granicy[i][0]: telo[granicy[i][1]:granicy[i + 1][1]]
+            for i in range(len(granicy) - 1)}
+    for nomer, ot, do in god:
+        dni = zanyatiya_mezhdu(ot, do)
+        assert dni, f"четверть {nomer} обязана содержать дни занятий"
+        svoi = tela[nomer]
+        for den in dni:
+            assert f'data-den="{den}"' in svoi, (
+                f"{den} обязан лежать в теле четверти {nomer}")
+        chuzhie = [d for n, o, dd in god if n != nomer
+                   for d in zanyatiya_mezhdu(o, dd)]
+        for den in chuzhie:
+            assert f'data-den="{den}"' not in svoi, (
+                f"{den} не из четверти {nomer}, а лежит в ней")
+
+    assert ".kab-tablica{columns:5" in telo, "пять колонок — число, названное владельцем"
+
+
+def test_a_future_tile_carries_a_date_and_a_button_and_no_pupils(running_server):
+    """Пункт 6 рецензии 11.09: *«на будущее точно не надо их заполнять сейчас… список
+    школьников я бы не ставил, на будущее пустые такие таблетки и просто возможность
+    нажать „меня не будет“»*.
+
+    Проверяется на ФАМИЛИЯХ ФИКСТУРЫ, а не на отсутствии тега: список мог бы уехать
+    в другую разметку и остаться списком. Оба школьника фикстуры ходят к своим
+    преподавателям обоими слотами, поэтому до правки их фамилии стояли в КАЖДОЙ
+    будущей плитке — это и есть то, на что владелец посмотрел.
+    """
+    from datetime import datetime, timezone
+
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import chetverti_goda, segodnya, zanyatiya_mezhdu
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    seichas = datetime.now(timezone.utc)
+    vse = [d for _n, ot, do in chetverti_goda(segodnya())
+           for d in zanyatiya_mezhdu(ot, do)]
+    vperyod = [d for d in vse if not zanyatie_zaversheno(d, seichas=seichas)]
+    assert vperyod, "фикстура обязана иметь хотя бы одно будущее занятие"
+
+    # Каждая будущая плитка целиком: от её `<div>` до закрывающего его `</div>`.
+    plitki = re.findall(r'<div class="kab-zanyatie vperyod[^"]*" data-den="[^"]*">'
+                        r'.*?</label></div>', telo, re.S)
+    assert len(plitki) == len(vperyod), (
+        f"будущих плиток {len(plitki)}, а будущих занятий {len(vperyod)}")
+    for p in plitki:
+        assert "Фефелов" not in p and "Агаркова" not in p, (
+            "будущая плитка снова несёт список школьников")
+        assert "kab-spisok" not in p, "списка в будущей плитке нет"
+        assert "меня не будет" in p, "орган остался на месте"
+        assert '<input type="checkbox"' in p, "дверь отметки не тронута"
+
+
+def test_the_lesson_konduit_is_a_named_button_and_not_a_click_on_the_date(running_server):
+    """Пункт 7 рецензии 11.09: *«чтобы вывести кондуит за занятие, я должен нажать на
+    дату. Должно быть гораздо более видно это. Должна быть кнопка „Кондуит за
+    занятие“»*.
+
+    Две половины, и вторая не менее важна первой: кнопка ЕСТЬ у каждого
+    завершившегося занятия, и раскрытие БОЛЬШЕ НЕ ВИСИТ на строке с датой — иначе
+    один и тот же клик и сворачивал бы плитку, и открывал панель.
+    """
+    from datetime import datetime, timezone
+
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    for den in proshlo:
+        assert (f'<button class="kab-konduit" type="button" data-den="{den}">'
+                "Кондуит за занятие</button>") in telo, (
+            f"у занятия {den} нет видимой кнопки кондуита")
+    assert '<summary class="kab-zag" data-den=' not in telo, (
+        "дата больше не несёт раскрытие: она выключатель <details>")
+    assert ".kab-konduit" in telo, "кнопка размечена своим классом"
+
+
+def test_the_konduit_is_a_row_per_sheet_whose_button_really_opens_that_sheet(
+        running_server):
+    """Пункт 8 рецензии 11.09 — владелец назвал его главным.
+
+    Дословно: *«кондуит записан странно: задачи записаны в список. Если было бы 10
+    задач, это было бы нереально поместить. Нужно писать в несколько колонок: первая
+    колонка — 16A, то есть название листка, кнопочкой большой красивой, и дальше
+    список задач тоже кнопочками, без слова „задача“: просто 3, 8, 10а. Вторая
+    строчка: 16 альфа и тоже 1, 2. По кнопке листка должна быть возможность перейти к
+    этому листку»*.
+
+    🔴 ПРОВЕРЯЕТСЯ И АДРЕС КНОПКИ, А НЕ ТОЛЬКО ЕЁ ВИД. Строку кондуита рисует
+    браузер, и отсюда её не увидеть; зато видно ДВЕ вещи, из которых она состоит, и
+    обе умеют сгнить молча: данные обязаны нести номер листка у каждой задачи, а
+    адрес `/listki/<номер>`, который скрипт из него собирает, обязан отвечать 200.
+    Кнопка, ведущая в 404, выглядит на экране ровно как рабочая.
+    """
+    import sqlite3 as _s
+    from datetime import timezone
+
+    from core.services.history import nachalo_zanyatia_iso
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    den = proshlo[-1]
+    kogda = nachalo_zanyatia_iso(den)
+
+    conn = _s.connect(str(running_server["put"]))
+    try:
+        sheet_id = conn.execute(
+            "insert into sheets (number, title, issued_at, ord) "
+            "values ('16A', '16A. Деревья', ?, 1)", (den,)).lastrowid
+        # Две задачи ОДНОГО листка: строка обязана быть одна, а не две.
+        zadachi = {}
+        for poryadok, metka in ((1, "3"), (2, "10а")):
+            zadachi[metka] = conn.execute(
+                "insert into problems (sheet_id, label, kind, ord) "
+                "values (?, ?, 'обычная', ?)", (sheet_id, metka, poryadok)).lastrowid
+        for problem_id in zadachi.values():
+            conn.execute(
+                "insert into marks (student_id, problem_id, event, teacher_id, "
+                "valid_at, recorded_at, source) "
+                "values (?, ?, 'assert', ?, ?, ?, 'кнопка')",
+                (running_server["s1"], problem_id, running_server["t1"], kogda, kogda))
+        conn.commit()
+    finally:
+        conn.close()
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+
+    blok = re.search(r'<script type="application/json" id="kab-dannye">(.*?)</script>',
+                     telo, re.S)
+    assert blok is not None
+    dannye = json.loads(blok.group(1))
+    klyuch = f'{den}|{running_server["s1"]}'
+    assert klyuch in dannye, "у школьника этого дня обязано быть что раскрывать"
+    sdal = dannye[klyuch]["sdal"]
+    assert [z["zadacha"] for z in sdal] == ["3", "10а"], sdal
+    assert {z["listok"] for z in sdal} == {"16A"}, (
+        "у КАЖДОЙ задачи стоит её листок — из него строится строка кондуита")
+    assert dannye[den]["deti"], "кондуит за занятие обязан называть школьников дня"
+
+    # Скрипт собирает адрес листка, и слово «задача» из кондуита ушло.
+    assert "'/listki/' + encodeURIComponent(r.listok)" in telo, (
+        "кнопка листка ведёт на сам листок")
+    kod = _bez_kommentariev(telo)   # разбор правки цитирует снятую строку — это не она
+    assert "'листок ' + z.listok" not in kod and "' · задача '" not in kod, (
+        "прежний список «листок X · задача Y» снят")
+
+    # 🔴 И АДРЕС ОТВЕЧАЕТ. Это та половина, которую разметка не проверяет.
+    status, _telo_listka, _h = _get(f'{running_server["baza"]}/listki/16A')
+    assert status == 200, f"кнопка листка ведёт в {status}"
+
+
+def test_no_name_in_the_page_script_is_both_a_var_and_a_function(running_server):
+    """🔴 ЭТО РЕГРЕССИЯ НА ЖИВОЙ ДЕФЕКТ, А НЕ ПРЕДОСТОРОЖНОСТЬ.
+
+    Пункт 8 приехал с `function uzel(…)`, а строкой выше в той же области уже стояло
+    `var uzel = document.getElementById('kab-dannye')`. `var` всплывает наверх области
+    и перетирает объявление функции: `pokazat` падал с `uzel is not a function`, и
+    панель кондуита не открывалась НИ РАЗУ. Разметка при этом была совершенно
+    правильной — поэтому ни один тест этого файла не покраснел, и поймал дефект
+    браузерный прогон.
+
+    Проверка дешёвая и ловит ровно этот класс: имя, объявленное в скрипте страницы и
+    как `var`, и как `function`. Она не заменяет браузерного прогона (ниже), а стоит
+    рядом с ним: она отвечает быстро и без Chromium.
+    """
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    skripty = re.findall(r"<script>(.*?)</script>", telo, re.S)
+    assert skripty, "страница обязана нести свой скрипт"
+    kod = "\n".join(_bez_kommentariev(x) for x in skripty)
+    peremennye = set(re.findall(r"\bvar\s+([A-Za-z_$][\w$]*)", kod))
+    funkcii = set(re.findall(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(", kod))
+    stolknulis = peremennye & funkcii
+    assert not stolknulis, (
+        f"имя объявлено и как var, и как function — var перетрёт функцию: {stolknulis}")
+
+
+def test_in_a_real_browser_the_konduit_button_opens_a_row_per_sheet(running_server):
+    """🔴 ПРОГОН В БРАУЗЕРЕ: половина этого экрана — скрипт, и Python его не исполняет.
+
+    Все проверки выше читают РАЗМЕТКУ. Разметка была правильной и в тот момент, когда
+    кнопка кондуита не открывала ничего (см. соседний тест про `var`/`function`).
+    Здесь страница действительно открывается, плитка действительно раскрывается,
+    кнопка действительно нажимается, и проверяется то, что после этого видно:
+    строка на листок, ссылка на сам листок, задачи отдельными пилюлями и ни одного
+    слова «задача».
+    """
+    pytest.importorskip("playwright.sync_api",
+                        reason="браузерный прогон требует playwright и Chromium")
+    from playwright.sync_api import sync_playwright
+
+    import sqlite3 as _s
+    from datetime import timezone
+
+    from core.services.history import nachalo_zanyatia_iso
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    den = proshlo[-1]
+    kogda = nachalo_zanyatia_iso(den)
+
+    conn = _s.connect(str(running_server["put"]))
+    try:
+        sheet_id = conn.execute(
+            "insert into sheets (number, title, issued_at, ord) "
+            "values ('16A', '16A. Деревья', ?, 1)", (den,)).lastrowid
+        for poryadok, metka in ((1, "3"), (2, "10а")):
+            problem_id = conn.execute(
+                "insert into problems (sheet_id, label, kind, ord) "
+                "values (?, ?, 'обычная', ?)",
+                (sheet_id, metka, poryadok)).lastrowid
+            conn.execute(
+                "insert into marks (student_id, problem_id, event, teacher_id, "
+                "valid_at, recorded_at, source) "
+                "values (?, ?, 'assert', ?, ?, ?, 'кнопка')",
+                (running_server["s1"], problem_id, running_server["t1"], kogda, kogda))
+        conn.commit()
+    finally:
+        conn.close()
+
+    kuka = vhod._make_cookie("prepod", running_server["t1"])
+    with sync_playwright() as pw:
+        br = pw.chromium.launch()
+        try:
+            ctx = br.new_context(viewport={"width": 1440, "height": 900})
+            ctx.add_cookies([{"name": vhod.COOKIE_NAME, "value": kuka,
+                              "domain": "127.0.0.1", "path": "/"}])
+            stranica = ctx.new_page()
+            oshibki = []
+            stranica.on("pageerror", lambda oshibka: oshibki.append(str(oshibka)))
+            stranica.goto(f'{running_server["baza"]}/kabinet', wait_until="networkidle")
+
+            # Ни одной горизонтальной прокрутки и ровно пять колонок (пункт 5).
+            geometriya = stranica.evaluate("""() => {
+              const d = document.documentElement;
+              const t = [...document.querySelectorAll('.kab-tablica')]
+                          .find(x => x.offsetParent !== null);
+              return {gorizont: d.scrollWidth > d.clientWidth,
+                      kolonki: t ? getComputedStyle(t).columnCount : null,
+                      raskryto_srazu:
+                        document.querySelectorAll('details.kab-zanyatie[open]').length};
+            }""")
+            assert geometriya["gorizont"] is False, "горизонтальной прокрутки быть не должно"
+            assert geometriya["kolonki"] == "5", geometriya
+            assert geometriya["raskryto_srazu"] == 0, "по умолчанию свёрнуты все"
+
+            plitka = stranica.query_selector(f'details.kab-zanyatie[data-den="{den}"]')
+            assert plitka is not None, f"плитка занятия {den} обязана быть на экране"
+            plitka.query_selector("summary").click()
+            knopka = plitka.query_selector(".kab-konduit")
+            assert knopka is not None, "кнопка «Кондуит за занятие» обязана быть видна"
+            knopka.click()
+
+            vidno = stranica.evaluate("""() => {
+              const p = document.getElementById('kab-raskrytie');
+              if (p.hidden) return null;
+              return {
+                stroki: [...p.querySelectorAll('.kab-stroka-listka')].map(s => ({
+                  listok: s.querySelector('.kab-listok-knopka').textContent,
+                  adres: s.querySelector('.kab-listok-knopka').getAttribute('href'),
+                  zadachi: [...s.querySelectorAll('.kab-zadacha')]
+                             .map(z => z.textContent),
+                })),
+                slovo_zadacha: p.textContent.includes('задача'),
+              };
+            }""")
+            assert not oshibki, f"скрипт страницы упал: {oshibki}"
+            assert vidno is not None, "кнопка кондуита обязана открыть панель"
+            assert vidno["stroki"] == [
+                {"listok": "16A", "adres": "/listki/16A", "zadachi": ["3", "10а"]}
+            ], vidno
+            assert vidno["slovo_zadacha"] is False, "слова «задача» в кондуите нет"
+        finally:
+            br.close()

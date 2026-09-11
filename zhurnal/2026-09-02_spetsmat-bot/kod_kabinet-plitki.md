@@ -226,7 +226,85 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### КРИТЕРИЙ ГОТОВНОСТИ, СФОРМУЛИРОВАННЫЙ КАК `pytest -q` → `rc=0`, НЕ ПРОВЕРЯЕТ ЭКРАН, ПОЛОВИНА КОТОРОГО — СКРИПТ
+
+ЦЕНА: пункт 8 — тот, который владелец назвал ГЛАВНЫМ, — приехал полностью нерабочим и
+был зелёным у всех тридцати тестов файла. `function uzel(…)` перекрылось стоявшим выше
+`var uzel = document.getElementById(…)`: `var` всплывает и перетирает объявление функции,
+`pokazat` падал с `uzel is not a function`, и панель кондуита не открывалась НИ РАЗУ.
+Разметка при этом была совершенно правильной, поэтому все проверки «в теле ответа есть
+такая-то строка» проходили. Нашёл дефект браузерный прогон (playwright, 1440×900), то
+есть тот самый «живой прогон на реальном объекте», который стоит в `§2 КРИТЕРИЙ
+ГОТОВНОСТИ` этого захода. Если бы я остановился на `pytest -q` → `31 passed`, владелец
+получил бы экран, где главная кнопка не делает ничего, и отчёт с честным «сделано».
+Обобщение для фабрики: там, где заход правит СТРАНИЦУ, «прогон на реальном объекте» это
+браузер, а не HTTP-ответ; `grep` по разметке и исполнение скрипта — разные проверки, и
+первая систематически зеленее второй.
+
 ## ПЛАН — (заполняет исполнитель)
+
+Все eight points of the owner's review touch ONE screen — `/kabinet`, drawn by
+`veb/razdely/kabinet.py::stranica`.  They are done in the order they are numbered, each
+its own commit, each with its own test in `tests/veb/test_kabinet.py`.
+
+**Assumptions stated BEFORE the code, per §1.**
+
+*A1 · THERE IS NO GENDER IN THE БАЗА, AND POINT 3 THEREFORE CHANGES SHAPE.*  Measured,
+not assumed: `students` is `(id, tg_id, surname, name, class, status, first_sheet_id,
+gruppa)` and `teachers` is `(id, tg_id, name, aka, is_owner, kabinet, aktiven, gruppa)`
+— no column carries sex, and no other table does either (20 tables checked on the live
+copy).  The заход itself forbids guessing it from the name.  So the screen stops
+printing a gendered verb at all instead of printing the wrong one: `сдал N` becomes
+`задач: N`, `ничего не сдал` becomes `задач нет`.  That answers what the owner actually
+objected to («Бочарова Анна — она СДАЛА, а не сдал»: no wrong form is shown) and it is
+the same word point 2 asks for.  Where the gender data should come from is named in
+`## ВОПРОСЫ` and in `## ОТЧЁТ`.  The other gendered verb, `принято сдач`, lives inside
+the summary line that point 1 deletes, so it leaves with it.
+
+*A2 · «16 ИЗ 16» IS AN ESTIMATE, NOT A FACT OF THE CALENDAR, AND I SAY SO BEFORE I START.*
+The критерий готовности asks for «плиток в четверти 16 из 16».  16 is the заход's own
+arithmetic («~8 недель × 2 занятия»).  The real count is whatever the quarter's dates
+and `SLOTY_ZANYATIJ` (пн, чт) produce, and no quarter calendar exists anywhere in this
+repo — `grep` over `*.py` and `*.sql` finds the word «четверть» only in prose.  So I
+write the quarter boundaries down once, in `kabinet.py`, as the standard grid of the
+2026/2027 school year, and I report the ACTUAL number with охват — «плиток N из N, то
+есть все дни занятий четверти на экране» — plus the part that is genuinely checkable and
+is what the owner asked for: five columns, everything visible, no horizontal scroll.  The
+boundaries themselves go to `## ВОПРОСЫ` with `ДОМ: владелец`, because only he knows them.
+
+*A3 · THE WHOLE YEAR IS DRAWN, NOT JUST THE PAST PLUS EIGHT DAYS.*  Four tabs means four
+quarters of tiles in the document.  This costs nothing new in queries: point 6 removes
+the pupil list from FUTURE tiles, so a future tile needs no `deti_na_datu` call at all,
+and the past is the same set of days the page already walked.
+
+**ORDER OF WORK — one commit per point.**
+
+1. Delete the summary line `с начала года: …` and everything computed only for it
+   (`prinyato_vsego`, `deti_vsego`, `_byli_deti`, `svoi_dni`, `svodka`, `.kab-svodka`).
+   Two tests assert that line and are removed with it; one new test asserts the line is
+   gone.
+2. `сдач: N` → `задач: N` in the tile header, `сдал N` → `задач: N` on the pupil.
+3. No gendered verb anywhere on the screen (A1): the two remaining `не сдал` strings in
+   the JS become `задач нет`.  Test greps the rendered page for `сдал`/`сдач`.
+4. Tiles collapse.  A past tile becomes `<details class="kab-zanyatie …">` with the date
+   row as its `<summary>` — closed by default, which is exactly «по умолчанию свёрнуто,
+   потом я нажимаю, оно разворачивается», and it costs no JS and keeps the keyboard.
+5. `.kab-tablica{columns:4}` → `columns:5`, and four tabs «1 четверть … 4 четверть» over
+   four bodies.  Tabs are radio inputs plus CSS siblings — the site's own way of doing
+   tabs (`karkas.obolochka`), not a new mechanism.  The tab holding today opens.
+6. A future tile loses its list of five surnames: date plus the «меня не будет» control,
+   nothing else.  The checkbox and its door stay exactly as they are.
+7. A visible `Кондуит за занятие` button inside every past tile.  The click that used to
+   hang on the date line moves onto it, because the date line is now the collapse toggle.
+8. The кондуит panel stops being a `<ul>` of «листок 16A · задача 3» and becomes one ROW
+   PER SHEET: a big sheet button that is a real link to `/listki/<номер>`, then the tasks
+   of that sheet as pills — `3`, `8`, `10а`, without the word «задача».
+
+**КРИТЕРИЙ, КОТОРЫЙ МОЖЕТ ПРОВАЛИТЬСЯ** — a live run against the live copy of the база
+(57 pupils, 15 847 marks), not only the fixture: `/kabinet` rendered for a real teacher,
+counted by script — tiles of the open quarter N of N, columns 5, future tiles carrying a
+pupil surname 0, occurrences of `сдач`/`сдал` 0, summary line absent, three past tiles
+expanded each carrying a `/listki/` sheet button and its task pills.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
@@ -243,6 +321,83 @@ grep -n '<как механизм назван в вызывающем коде>
 > `ДОМ: владелец` — законный адрес и НЕ недостижимый дом: он значит «дома-файла нет вовсе, решение за человеком». Не знаешь пути — пиши его, а не выдуманный путь. Для урока фабрике дом почти всегда `<эта арка>/UROKI-FABRIKE.md`. Аналитик при переносе меняет `ДОСТАВЛЕНО: нет` на `ДОСТАВЛЕНО: <имя-захода>#<N>` И дописывает ЭТУ ЖЕ строку-метку в файл по адресу ДОМ — `priyomka.py` (Г7) красным ловит и «доставлено» без метки на месте, и недостижимый дом сверх базы; достижимое-недоставленное печатает.
 > 🔴 **Метку ставь ТОЛЬКО одним ходом вместе с самим переносом содержания, никогда раньше.** Гейт проверяет факт «строка-метка на месте», а не смысл «содержание перенесено верно» — метка без содержания рядом даст ложно-зелёный Г7.
 
+1. THE БАЗА HOLDS NO SEX, SO POINT 3 CANNOT BE DONE AS «СДАЛА» UNTIL SOMEBODY PUTS IT
+   THERE. Measured on the live copy (57 pupils, 15 847 marks): `students` is
+   `(id, tg_id, surname, name, class, status, first_sheet_id, gruppa)` and `teachers` is
+   `(id, tg_id, name, aka, is_owner, kabinet, aktiven, gruppa)` — no sex column, no
+   patronymic to derive one from, and none of the other 18 tables carries either. The
+   screen therefore stopped using a gendered verb at all (`задач: N`, `задач нет`), which
+   is correct for every person and is the word point 2 asked for anyway. Where the data
+   could come from, cheapest first: (а) one `pol` column on `students` and on `teachers`,
+   filled by the owner in the same screen where he edits people — 57 + 19 rows, one
+   sitting; (б) the same column filled once from the class lists he already imports, if
+   those name it; (в) nothing automatic — guessing from the given name is what the заход
+   forbids, and it is wrong exactly on «Саша», «Женя», «Ян» and every non-Russian surname.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. THE SCHOOL YEAR HAS NO QUARTER CALENDAR ANYWHERE IN THE REPO, AND POINT 5 NEEDED ONE.
+   `grep` over every `*.py` and `*.sql` finds «четверть» only in prose comments. The four
+   boundaries are now written down once, as `CHETVERTI` in `veb/razdely/kabinet.py`, using
+   the standard grid of the 2026/2027 school year (01.09–25.10 · 05.11–27.12 · 12.01–22.03
+   · 01.04–31.05). They are a DEFAULT, not a fact taken from the school: only the owner
+   knows the real dates, and a wrong boundary silently moves lessons between tabs.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. ON THE LIVE БАЗА THE КОНДУИТ IS EMPTY FOR ALMOST EVERYONE, AND THE REASON IS THE DATA,
+   NOT THE SCREEN. Counted on a copy of the live база on 11.09, over all three lessons the
+   school year has had so far and all 19 teachers: marks exist on ONE day only, 2026-09-03
+   (53 of them), and on that day `enrollment` gives a composition to exactly ONE teacher of
+   the nineteen — Ольга Рыжая, 3 pupils. The other two lessons (07.09, 10.09) have a
+   composition for 14 teachers each and not a single mark. So «кондуит за занятие» prints
+   «задач нет» for thirteen of the fourteen working teachers, and it is right to: the задачи
+   of 03.09 belong to pupils who, according to `enrollment`, were not anybody's that day.
+   The формат of point 8 is verified on the one row that does exist (`[16α] 2 3 4`,
+   Симонова Анастасия, and `/listki/16α` answers 200). Whether the 03.09 распределение was
+   simply entered later, or those 53 marks belong to a day that has no composition at all,
+   is a question about the data and only the owner can answer it.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+4. TEN LESSON DAYS OF THE YEAR ARE IN NO TAB AT ALL, AND THAT IS THE PRICE OF THE DEFAULT
+   QUARTER GRID. Counted by the verifier and re-counted here: пн/чт between 01.09.2026 and
+   31.05.2027 number 78; the four quarters hold 68. The ten that fall out are the holiday
+   days 26.10 · 29.10 · 02.11 · 28.12 · 31.12 · 04.01 · 07.01 · 11.01 · 25.03 · 29.03 — они
+   ложатся между четвертями. If a lesson is ever held on one of them, it has nowhere to
+   appear and the teacher cannot tick «меня не будет» on it. Fixed by the same one answer
+   as item 2: the real quarter dates. Named separately because item 2 is «the boundaries
+   may be wrong» and this is «a day between two right boundaries still disappears».
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. THE «СЛЕДУЮЩИЙ СПЕЦМАТ» CARD STILL NAMES THE PUPILS OF A FUTURE LESSON, AND TWO OF THE
+   OWNER'S OWN REQUESTS POINT OPPOSITE WAYS HERE. 09.09 he asked for exactly that card:
+   *«я вижу, когда у меня следующий спецмат, какой там будет листок и какие у меня
+   школьники на следующий спецмат»*. 11.09, point 6, he said of the TILES: *«какие там
+   школьники на будущее, непонятно. Список школьников я бы не ставил»*. Point 6 is done to
+   its letter — the tiles carry no surnames (measured: 1235 future tiles across all 19
+   teachers, 0 surnames in them). The card above the table was left alone, because
+   removing it would silently undo the 09.09 request, and this заход was not asked to.
+   Found by the verifier. Which of the two stands is the owner's call.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+6. TWO TESTS OF THIS FILE SKIP OR NOT DEPENDING ON THE DAY OF THE WEEK THE RUN HAPPENS.
+   `tests/veb/test_kabinet.py` — `test_a_lesson_that_ended_today_reads_as_past_and_not_as_
+   future` and `test_a_future_lesson_is_frozen_even_though_it_is_weeks_away` both call
+   `pytest.skip("сегодня не день занятия")`. 11.09 is a Friday, so both skipped, and the
+   boundary «занятие сегодня уже кончилось» went unchecked on this run. The skip is honest
+   — the state genuinely does not exist on a Friday — but it means the suite's coverage is
+   a function of the calendar, and two thirds of the week it is lower without saying so.
+   Fixable by injecting the clock (the page already takes `seichas=` for exactly this
+   reason) instead of reading `date.today()`. Not done here: it is a change to tests of the
+   WRITE path that nobody asked for, and the заход says not to.
+   ДОМ: владелец
+   *(дом-файл назвать нечем: `ДОМ: tests/veb/test_kabinet.py` дверь отклоняет — «дом —
+   исполняемый код», а документа про покрытие тестов у этого проекта нет.)*
+   ДОСТАВЛЕНО: нет
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
@@ -255,30 +410,277 @@ grep -n '<как механизм назван в вызывающем коде>
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+🔴 **СУБАГЕНТА ГИТ-КОНТУРА §0.1 ОТМЕНИЛ ОРКЕСТРАТОР, И ЭТУ СЕКЦИЮ ЗАПОЛНИЛ ИСПОЛНИТЕЛЬ.**
+Причина названа оркестратором при запуске и замерена соседней волной: четыре захода из
+десяти умерли ровно на вызове этого субагента. Вместо всего блока §0.1 велено выполнить
+САМОМУ одну команду и вставить её вывод сюда. Она выполнена ПЕРВЫМ ходом, до всякой
+работы, и её вывод — ниже дословно.
+
+**СНИМОК ВХОДА** *(команда и её ВЫВОД, снято первым ходом)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
 ```
-<сюда — вывод, дословно>
+Остальное снято тем же ходом, из рабочей папки `spetsmat-bot-wt/kabinet-plitki`:
+```
+$ git branch --show-current
+zahod/kabinet-plitki
+$ git --no-optional-locks status --porcelain | wc -l
+0
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+fatal: no upstream configured for branch 'zahod/kabinet-plitki'
+$ python3 …/git_zona.py zayavki
+Охват: заявок открыто 0, переадресовано 28, постоянных исключений 0, сторож краснеет
+на 0, держателей 0, двойной захват на 0
+$ …/git_zona.py check --zone <каждый путь зоны по очереди>
+✅ veb/razdely/kabinet.py · ✅ veb/razdely/lichnaya.py · ✅ veb/obshchee/karkas.py
+✅ tests/veb/ · (зона чиста в HEAD — точку отката не фабриковал)
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Вливать на входе было НЕЧЕГО: невлитых `zahod/*`-веток 0, открытых заявок 0, вне git 0.
+Поэтому «сделано» на входе — ничего, и это не пропуск, а пустой контур. Своя ветка
+`zahod/kabinet-plitki` вливается ПОСЛЕДНИМ ходом, по §«ПОСЛЕДНИЙ ХОД ПЕРЕД ОТЧЁТОМ».
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+🔴 **ЧИСЛО ВЫРОСЛО ПО ХОДУ РАБОТЫ, И ЭТО НЕ МОЙ ДОЛГ — НАЗЫВАЮ ПОИМЁННО (Г3).**
+Повторный замер тем же способом в конце работы даёт **4** вместо 0:
+```
+$ git --no-optional-locks branch --no-merged main
+* zahod/kabinet-plitki                  ← моя
++ zahod/konduit-galochki-i-podskazki    ← чужая ЖИВАЯ рабочая папка (знак «+»)
++ zahod/otsutstvie-prepodavatelya       ← чужая ЖИВАЯ рабочая папка
++ zahod/zhurnal-setka                   ← чужая ЖИВАЯ рабочая папка
+```
+Знак `+` в выводе `git branch` означает, что ветка занята ДРУГИМ worktree, то есть в ней
+прямо сейчас работает соседняя позиция волны. Три эти ветки завелись между моим снимком
+входа и этим замером; вливать их запрещено и текстом захода («первая вернула не 0 —
+НИЧЕГО чужого не вливай»), и здравым смыслом — влитие чужой недоделанной работы уносит
+её автора. Своя из четырёх — одна, и она влита последним ходом.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
+
+*(На входе долгов не было ни одного: невлитых `zahod/*` 0 — вывод команды выше, — заявок
+0, вне git 0. Закрывать было нечего, и это состояние ПРОВЕРЕНО командой, а не
+предположено.)*
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/scratchpad/kabinet-plitki/1-po-umolchaniyu.png` — открыть просмотрщиком картинок (рядом ещё три снимка и `PROGON-zhivaya-kopiya.txt`, это вывод замера)
+
+Четыре снимка — то, как экран выглядит ПОСЛЕ всех восьми пунктов, сняты браузером на
+эталоне 1440×900 по копии боевой базы, преподаватель Ольга Рыжая (id=13 — единственный,
+у кого на живых данных кондуит непустой, разбор ниже):
+* `1-po-umolchaniyu.png` — то, что владелец увидит, открыв кабинет: 15 плиток первой
+  четверти в пять колонок, ВСЕ свёрнуты, четыре вкладки четвертей
+* `2-konduit-za-zanyatie.png` — раскрытая плитка и её кнопка «Кондуит за занятие»
+* `3-konduit-shkolnika.png` — **главный пункт 8**: строка `[16α] 2 3 4`, где `16α` —
+  кнопка-ссылка на сам листок, а `2 3 4` — задачи пилюлями, без слова «задача»
+* `4-chetvert-4.png` — переключение вкладки: четвёртая четверть, 18 плиток
+
+САМ ЭКРАН (он же настоящий артефакт — это заход про код) поднимается так:
+```
+cd /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot && SPETSMAT_BAZA=data/spetsmat.db \
+  SPETSMAT_VEB_SECRET=любая-строка PYTHONPATH=. python3 -m veb.server --port 8099
+# затем http://127.0.0.1:8099/kabinet, войдя ЛИЧНЫМ паролем (общий кабинет не покажет)
+```
+
+**РОД АРТЕФАКТА:** `исходник`
+*(продукт захода — код `veb/razdely/kabinet.py` и его тесты; снимки приложены как
+доказательство, а не как продукт.)*
+
+**КОММИТ:** `d618bba` — «kabinet: the konduit panel never opened — 'var uzel' shadowed
+'function uzel'; fixed, plus a browser test and a var/function collision gate»
+(последний из одиннадцати; полный список — ниже) · `git_zona.py check --zone` по всем
+пяти путям зоны → ✅ ✅ ✅ ✅ ✅
+
+---
+
+### ЧТО СДЕЛАНО И ЗАЧЕМ — ВОСЕМЬ ПУНКТОВ РЕЦЕНЗИИ, ПО ОДНОМУ КОММИТУ НА ПУНКТ
+
+| # | что просил владелец | коммит | чем закрыто |
+|---|---|---|---|
+| 1 | убрать сводную фразу «2 из 3» | `57e6558` | строка и все четыре счётчика, жившие только ради неё, удалены; два теста, ТРЕБОВАВШИХ эту строку, сняты вместе с ней и заменены тестом на её отсутствие |
+| 2 | «сдач» → «задач» | `e8f0414` | шапка плитки говорит `задач: N` — формат владельца дословно |
+| 3 | род глагола по полу | `fe55762` | **пола в базе НЕТ** (замер ниже) ⇒ экран перестал употреблять глагол вовсе |
+| 4 | плитки свёрнуты | `723c166` | прошедшая плитка — `<details>` без `open`; раскрывает браузер, ни строки скрипта |
+| 5 | 5 колонок и вкладки четвертей | `1ab5b69` | `columns:5`, четыре вкладки на радиокнопках и CSS — механизм самой оболочки сайта |
+| 6 | будущее не заполнять | `5ce95d3` | будущая плитка = дата + «меня не будет»; она же больше не спрашивает базу вовсе |
+| 7 | кондуит — видимой кнопкой | `c50c3fd` | `<button>Кондуит за занятие</button>` внутри плитки; клик уехал со строки-даты |
+| 8 | формат кондуита | `5ef8148` | строка на ЛИСТОК: кнопка-ссылка `/listki/<номер>` + задачи пилюлями |
+
+Ещё три коммита: `563017f` — замеренное число вместо обещания замера в комментарии;
+`771a0b2` — `## ГИГИЕНА ВХОДА` и пункты очереди; `d618bba` — починка дефекта, который
+нашёл браузерный прогон (ниже отдельно, это самое важное в отчёте).
+
+### 🔴 ГЛАВНОЕ: ПУНКТ 8 ПРИЕХАЛ НЕРАБОЧИМ И БЫЛ ЗЕЛЁНЫМ У ВСЕХ ТЕСТОВ
+
+`function uzel(…)` перекрылось стоявшим выше в той же области `var uzel =
+document.getElementById('kab-dannye')`. `var` всплывает наверх и перетирает объявление
+функции: `pokazat` падал с `uzel is not a function`, **панель кондуита не открывалась ни
+разу**. Разметка была правильной, поэтому тридцать тестов, читающих разметку, были
+зелёными. Поймал браузерный прогон (playwright, 1440×900) — то есть ровно тот «живой
+прогон на реальном объекте», которого требует `§2 КРИТЕРИЙ ГОТОВНОСТИ`.
+Починено (`d618bba`) и закрыто ДВУМЯ носителями, а не извинением:
+* `test_in_a_real_browser_the_konduit_button_opens_a_row_per_sheet` — настоящий браузер:
+  открывает страницу, раскрывает плитку, жмёт кнопку и проверяет ТО, ЧТО ПОСЛЕ ЭТОГО
+  ВИДНО (строка листка, адрес, пилюли), плюс ловит любую ошибку скрипта через `pageerror`;
+* `test_no_name_in_the_page_script_is_both_a_var_and_a_function` — дешёвый гейт ровно на
+  этот класс, отвечает без Chromium.
+Урок фабрике записан выше, с ценой.
+
+### КРИТЕРИЙ ГОТОВНОСТИ — ЖИВОЙ ПРОГОН ПО КОПИИ БОЕВОЙ БАЗЫ, С ОХВАТОМ
+
+Копия снята с `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/data/spetsmat.db`
+(3 940 352 байта) в свой scratchpad; **в саму базу не писал ни разу**.
+
+```
+СТАТУС                          : 200
+СЕГОДНЯ                         : 2026-09-11 · открыта четверть 1
+четверть 1 (2026-09-01 … 2026-10-25): занятий 15, плиток на экране 15 ✅
+четверть 2 (2026-11-05 … 2026-12-27): занятий 15, плиток на экране 15 ✅
+четверть 3 (2027-01-12 … 2027-03-22): занятий 20, плиток на экране 20 ✅
+четверть 4 (2027-04-01 … 2027-05-31): занятий 18, плиток на экране 18 ✅
+ПЛИТОК В ОТКРЫТОЙ ЧЕТВЕРТИ      : 15 из 15
+КОЛОНОК (из таблицы стилей)     : 5
+СВЁРНУТЫ ВСЕ ПЛИТКИ             : ✅ да
+СВОДНАЯ ФРАЗА «2 из 3»          : ✅ нет
+СЛОВО «сдач» НА ЭКРАНЕ          : ✅ 0
+ГЕНДЕРНЫЕ ГЛАГОЛЫ НА ЭКРАНЕ     : ✅ 0
+БУДУЩИХ ПЛИТОК                  : 65 · из них со списком школьников: 0 ✅
+КНОПОК «Кондуит за занятие»     : 3   (= числу завершившихся занятий, 3 из 3)
+── РАЗВЁРНУТО ТРИ ПРОШЕДШИЕ ПЛИТКИ ──
+  2026-09-03 · кнопка кондуита: есть · Симонова Анастасия  [16α] 2 3 4
+  2026-09-07 · кнопка кондуита: есть · школьников 3, задач нет
+  2026-09-10 · кнопка кондуита: есть · школьников 3, задач нет
+   /listki/16α → 200
+```
+И в БРАУЗЕРЕ, эталон 1440×900, роль `prepod` (гейт вёрстки эту роль не меряет вовсе —
+он сам это печатает в своём списке «не проверяется», и его прогон на `/kabinet` измерил
+заглушку для организатора, 206 знаков, а не кабинет):
+```
+горизонтальная прокрутка : НЕТ  (scrollWidth 1440 = clientWidth 1440)
+колонок фактически       : 5
+плиток видно             : 15 · за экраном 0 · ниже сгиба 0
+раскрытых при загрузке   : 0 из 3
+вкладок                  : 4 · переключение на 4 четверть → 18 плиток, первая скрыта
+будущих плиток со списком: 0
+панель кондуита          : [16α] → /listki/16%CE%B1 · пилюли «2» «3» «4» ·
+                           слова «задача» нет · горизонтальной прокрутки в панели нет
+```
+
+**🔴 ОТРИЦАТЕЛЬНЫЙ ВЕРДИКТ ПО «16 ИЗ 16» — С ОХВАТОМ.** Критерий просил «плиток в четверти
+16 из 16». **16 не подтвердилось: их 15**, и это не недоделка, а арифметика. 16 — оценка
+самого захода («~8 недель × 2 занятия»); реальное число даёт календарь: пн/чт между
+01.09 и 25.10 — пятнадцать. Что ПРОВЕРЕНО и держится: **все дни занятий четверти на
+экране, 15 из 15**, и то же по остальным трём — 15/15, 20/20, 18/18, **68 из 68 за год**,
+чужих дней в чужой вкладке 0 (пересчитано и мной, и верификатором независимо).
+
+### ЧТО НЕ СДЕЛАНО ТАК, КАК БЫЛО НАПИСАНО, И ПОЧЕМУ — ПУНКТ 3
+
+Пола в базе **нет**, и это замерено, а не предположено:
+```
+students : id, tg_id, surname, name, class, status, first_sheet_id, gruppa
+teachers : id, tg_id, name, aka, is_owner, kabinet, aktiven, gruppa
+```
+Ни столбца пола, ни отчества, из которого его выводят, — ни здесь, ни в остальных 18
+таблицах. Заход прямо запрещает угадывать пол по имени, и правильно делает: «Саша»,
+«Женя», «Ян» и любая нерусская фамилия дают ошибку молча. Поэтому сделано другое: **экран
+перестал употреблять глагол вовсе** — `сдал N` → `задач: N`, `ничего не сдал` → `задач
+нет`. Безличная форма рода не имеет и неверной быть не может; она же — то самое слово
+«задач», которое владелец просил пунктом 2. Второй гендерный глагол, «принято сдач», стоял
+внутри сводной строки и ушёл с ней по пункту 1. Откуда брать пол, если владелец хочет
+именно «сдала» — пункт очереди 1 в `## ВОПРОСЫ`, `ДОМ: владелец`.
+
+### ЧЕГО НЕ ТРОГАЛ
+
+* `veb/razdely/lichnaya.py` и `veb/obshchee/karkas.py` — в зоне, но менять их не
+  понадобилось ни разу: все восемь пунктов про то, ЧТО рисует кабинет
+* путь ЗАПИСИ отметки «меня не будет» (`otmetit_otsutstvie`, `teacher_attendance`,
+  заморозка в `core/`) — ни строки; пункт 6 менял только показ
+* карточка «следующий спецмат» — оставлена как есть (пункт очереди 5, разбор там)
+* всё вне зоны
+
+### ЧИСЛА ПРОГОНОВ
+
+* `pytest tests/veb/test_kabinet.py -q` → **31 passed, 2 skipped** (было на входе
+  23 passed, 2 skipped; +8 новых тестов, 2 снятых вместе со сводной строкой)
+* `pytest tests/veb/ -q` → **179 passed, 8 failed, 15 skipped, 2 xfailed, 13 errors**.
+  На ВХОДЕ, до единой моей правки: **173 passed, 8 failed, 15 skipped, 2 xfailed,
+  13 errors**. Списки красного сверены построчно: `comm` даёт ПУСТО в обе стороны —
+  ни одной новой поломки, ни одной случайно починенной. Красное унаследовано и лежит в
+  `test_priyom.py`, `test_server.py`, `test_kanon_verstki.py`; последний ошибается
+  потому, что `data/spetsmat.db` в рабочей папке — пустой файл 0 байт.
+* два теста этого файла пропущены по дню недели (11.09 — пятница) — пункт очереди 6
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА (§3, ПОСЛЕ-типа, свежий субагент, другой метод)
+
+Метод другой: он ходил в кабинет куками **всех 19 преподавателей** и считал по собранной
+странице, а не по коду. Вердикт — **все восемь пунктов ✅, ложных зелёных не найдено**.
+Его числа: сводная фраза 0/19 страниц · «сдач» видимо 0/19 · гендерных глаголов 0 даже в
+сыром HTML · `<details>` 57, с `open` 0 · дни четвертей 15/15/20/18=68 совпали поимённо
+у 19/19, чужих 0 · будущих плиток 1235, фамилий в них 0 (сверял по всем 57 фамилиям из
+`students`), «меня не будет» 1235, флажков 1235 · прошедших плиток 57, без кнопки
+кондуита 0 · все 21 номер листка из базы отвечают 200.
+Финальная строка получена: **«выдано 14 позиций из 14 найденных»** — ответ не усечён.
+Его находки сверх задания превращены в пункты очереди 3, 4, 5, 6 (я их перепроверил;
+одну его формулировку уточнил: состав 03.09 есть у одного преподавателя **с учётом
+слота**, без фильтра по слоту строк больше).
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+* **ПОВТОРИТСЯ на следующем же заходе, который правит страницу** — критерий готовности,
+  сформулированный как `pytest -q` → `rc=0`, не проверяет экран, половина которого скрипт.
+  Это НЕ пункт очереди, а заход ДО следующего прогона (класс НЕМЕДЛЕННОЕ): цена уже
+  оплачена здесь — главный пункт владельца приехал нерабочим и зелёным. Записано уроком
+  фабрике выше.
+* **НЕ повторится** — отсутствие пола в базе, отсутствие календаря четвертей, пустой
+  кондуит на живых данных, пропуск двух тестов по дню недели: это свойства ЭТОГО проекта
+  и этих данных. Законно ушли пунктами очереди 1–6.
+
+### НЕОБРАТИМОЕ
+
+Удалены две проверки в `tests/veb/test_kabinet.py` — `test_the_cabinet_sums_itself_up_in_
+one_line` и `test_the_summary_does_not_count_a_lesson_the_teacher_did_not_teach`. Обе
+требовали ровно ту строку, которую владелец пунктом 1 велел убрать; оставить их значило
+бы запретить выполнение просьбы. Восстанавливается `git show 5220b59:tests/veb/test_
+kabinet.py`; содержательная находка второй (сводка складывала календарь с работой)
+сохранена комментарием у места, где сводка считалась. Ничего другого необратимого нет:
+файлов не удалял, не переименовывал, не перемещал, `reset`/`checkout` поверх
+несохранённого не делал, за зону не выходил, в боевую базу не писал (работал с копией).
+
+### ГИГИЕНА §4.1 — ВЫВОД КОМАНД, НЕ ПЕРЕСКАЗ
+
+**Г1 · зона доехала в git** — пять команд, пять ✅:
+```
+✅ зона veb/razdely/kabinet.py: работа доехала в git, вне git ничего нет.
+✅ зона veb/razdely/lichnaya.py: работа доехала в git, вне git ничего нет.
+✅ зона veb/obshchee/karkas.py: работа доехала в git, вне git ничего нет.
+✅ зона tests/veb/: работа доехала в git, вне git ничего нет.
+✅ зона zhurnal/2026-09-02_spetsmat-bot/kod_kabinet-plitki.md: работа доехала в git…
+```
+**Г2 · второй репозиторий** — неприменимо, и это проверено, а не предположено: все пути,
+которых я касался, лежат внутри `spetsmat-bot`; за его пределы зона не выходила.
+**Г3 · невлитых не прибавилось МОИХ** — на входе 0, сейчас 4. Выросло на три ЧУЖИЕ,
+каждая названа поимённо с причиной в `## ГИГИЕНА ВХОДА`: это живые рабочие папки соседних
+позиций волны (знак `+` в выводе `git branch` = ветка занята другим worktree). Моя из
+четырёх одна, и она влита последним ходом.
+**Г4 · новый инструмент имеет точку вызова** — неприменимо: ни одного нового `.py` в
+`_generator/**` не заводил. Два `.py`, которые я завёл (`scratchpad/kabinet-plitki/
+progon.py` и `brauzer.py`), — это замеры прогона, а не инструменты фабрики, и лежат они
+в личном scratchpad захода, куда `check_tool_contract.py` не смотрит.
+**Г5 · новый `.md` зарегистрирован** — неприменимо: ни одного нового `.md` не заводил,
+`register_doc.py` не звал, `_studio/docs/KARTA.md` не трогал. Полный список добавленных
+файлов — семь, все в `scratchpad/kabinet-plitki/`, и ни одного `.md` среди них.
+**Г6 · чужих путей в коммите нет** — `git diff --name-only 5220b59..HEAD` даёт ровно
+десять путей, и все мои: `veb/razdely/kabinet.py` · `tests/veb/test_kabinet.py` ·
+`zhurnal/2026-09-02_spetsmat-bot/kod_kabinet-plitki.md` · семь файлов
+`scratchpad/kabinet-plitki/`. Ни одного чужого.
+
+**ВРЕМЯ ПРОГОНА + ТОКЕНЫ:** неприменимо — движок `opencode`, счётчика стоимости в логе нет.
+
+**ПРАВКИ ПРОЧИТАНЫ:** блок `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` пуст — правок не было.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.

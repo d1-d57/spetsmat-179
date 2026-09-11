@@ -119,6 +119,69 @@ def proshedshie_zanyatiya(den: str) -> list:
     return dni
 
 
+#: 🔴 ГРАНИЦЫ ЧЕТВЕРТЕЙ — ОДНО МЕСТО, И ДО ЭТОГО ЗАХОДА ИХ НЕ БЫЛО НИ ОДНОГО.
+#: Владелец 11.09: *«у нас будет вкладка четверть 1, потом четверть 2, 3, 4»*. Слово
+#: «четверть» встречалось в проекте только в прозе комментариев — `grep` по всем `*.py`
+#: и `*.sql` не находит ни таблицы, ни константы, ни функции. Поэтому границы пишутся
+#: здесь, ОДИН раз, парами `(месяц, число)`, и это СЕТКА ПО УМОЛЧАНИЮ — обычный
+#: календарь учебного года 2026/2027, а не даты, взятые из школы. Настоящие знает
+#: только владелец; вопрос стоит пунктом очереди в `## ВОПРОСЫ` захода, а неверная
+#: граница молча переносит занятия между вкладками, поэтому она названа вслух здесь.
+#:
+#: Четверть, начинающаяся с месяца сентября или позже, лежит в ПЕРВОМ календарном году
+#: учебного года, остальные — во втором. Год не вписывается: вписанный протухает молча.
+CHETVERTI = ((1, (9, 1), (10, 25)),
+             (2, (11, 5), (12, 27)),
+             (3, (1, 12), (3, 22)),
+             (4, (4, 1), (5, 31)))
+
+
+def chetverti_goda(den: str) -> list:
+    """`[(номер, начало, конец)]` — четыре четверти учебного года, в котором лежит `den`."""
+    god = int(nachalo_uchebnogo_goda(den)[:4])
+    itog = []
+    for nomer, (m1, d1), (m2, d2) in CHETVERTI:
+        g1 = god if m1 >= NACHALO_GODA_MESYAC else god + 1
+        g2 = god if m2 >= NACHALO_GODA_MESYAC else god + 1
+        itog.append((nomer, date(g1, m1, d1).isoformat(), date(g2, m2, d2).isoformat()))
+    return itog
+
+
+def zanyatiya_mezhdu(ot: str, do: str) -> list:
+    """Дни занятий в отрезке, включая оба конца.
+
+    Тот же календарь и тот же единственный источник, что у `proshedshie_zanyatiya`
+    выше: какие дни недели — занятия, знает `sostav_na_den.SLOTY_ZANYATIJ`, и
+    спрашивается он через `slot_of`. Второго календаря на странице нет.
+    """
+    d = date.fromisoformat(ot)
+    konec = date.fromisoformat(do)
+    dni = []
+    while d <= konec:
+        if slot_of(d.isoformat()) is not None:
+            dni.append(d.isoformat())
+        d += timedelta(days=1)
+    return dni
+
+
+def otkrytaya_chetvert(den: str, chetverti) -> int:
+    """Какая вкладка открыта, когда человек только зашёл.
+
+    Та, в которую попадает сегодняшний день. На каникулах сегодняшнего дня нет ни в
+    одной — тогда открывается БЛИЖАЙШАЯ БУДУЩАЯ: человек в каникулы смотрит вперёд,
+    а не назад, и это тот же выбор, который уже сделан у «следующего спецмата» выше.
+    После конца года открывается последняя: пустая вкладка «1 четверть» в июне
+    сказала бы «занятий нет» про год, который весь на экране.
+    """
+    for nomer, ot, do in chetverti:
+        if ot <= den <= do:
+            return nomer
+    for nomer, ot, _do in chetverti:
+        if den < ot:
+            return nomer
+    return chetverti[-1][0]
+
+
 #: Which of the two lesson slots a Monday is, so the row can say «пн» / «чт» without a
 #: second calendar of its own.  `sostav_na_den.SLOTY_ZANYATIJ` maps the ISO weekday to the
 #: slot; this maps it to the word, and both are read from the ONE place that has it.
@@ -229,18 +292,61 @@ SVOI_STILI = """
    вниз по первой колонке, потом во вторую, и порядок чтения остаётся
    хронологическим. `grid` с тем же числом колонок разложил бы их СЛЕВА НАПРАВО,
    то есть перемешал бы даты в каждой строке. */
-.kab-tablica{columns:4;column-gap:1.6rem;margin:.9rem 0 0}
+/* 🔴 ПЯТЬ КОЛОНОК — ЧИСЛО, НАЗВАННОЕ ВЛАДЕЛЬЦЕМ 11.09 ВСЛУХ: «нужно, чтобы 5 было
+   колонок, чтобы на всю четверть ты прям видел». Стояло четыре. Двадцать плиток
+   самой длинной четверти ложатся тогда в четыре строки по пять, и все они на
+   экране: плитки свёрнуты (пункт 4), поэтому высота плитки — одна строка. Сужение
+   ниже по ширинам оставлено: пять колонок на телефоне это не «видно всё», а
+   нечитаемо. */
+.kab-tablica{columns:5;column-gap:1.2rem;margin:0}
+/* Вкладки четвертей — радиокнопки и CSS, механизм оболочки сайта. Сами кнопки
+   спрятаны, работают метки; `:focus-visible` радиокнопки подсвечивает её метку,
+   поэтому вкладки переключаются с клавиатуры стрелками, как им и положено. */
+.kab-god{margin:.9rem 0 0}
+.kab-p{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.kab-vkladki{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1.1rem;
+  font-family:var(--sans)}
+.kab-vkladki label{cursor:pointer;border:1px solid var(--rule);border-radius:999px;
+  padding:.35em 1.1em;font-size:.95rem;color:var(--muted)}
+.kab-vkladki label:hover{color:var(--accent);border-color:var(--accent)}
+.kab-god>.kab-tablica{display:none}
+#kab-p-1:checked~#kab-ch-1,#kab-p-2:checked~#kab-ch-2,
+#kab-p-3:checked~#kab-ch-3,#kab-p-4:checked~#kab-ch-4{display:block}
+#kab-p-1:checked~.kab-vkladki label[for="kab-p-1"],
+#kab-p-2:checked~.kab-vkladki label[for="kab-p-2"],
+#kab-p-3:checked~.kab-vkladki label[for="kab-p-3"],
+#kab-p-4:checked~.kab-vkladki label[for="kab-p-4"]{color:var(--text);
+  border-color:var(--accent);background:var(--accent-soft)}
+#kab-p-1:focus-visible~.kab-vkladki label[for="kab-p-1"],
+#kab-p-2:focus-visible~.kab-vkladki label[for="kab-p-2"],
+#kab-p-3:focus-visible~.kab-vkladki label[for="kab-p-3"],
+#kab-p-4:focus-visible~.kab-vkladki label[for="kab-p-4"]{outline:2px solid var(--accent);
+  outline-offset:2px}
 .kab-zanyatie{break-inside:avoid;-webkit-column-break-inside:avoid;
   border:1px solid var(--rule);border-radius:12px;padding:.6rem .8rem;
   margin:0 0 .8rem;background:var(--bg);font-family:var(--sans)}
 .kab-zanyatie.byl{border-color:var(--zel);background:var(--zel-fon)}
 .kab-zanyatie.ne-byl{border-color:var(--krasn);background:var(--krasn-fon)}
 .kab-zanyatie.vperyod.netu{border-color:var(--krasn);background:var(--krasn-fon)}
+/* 🔴 СВОЙ ЗНАЧОК РАСКРЫТИЯ, ПОТОМУ ЧТО `display:flex` СЪЕДАЕТ РОДНОЙ. `<summary>`
+   рисует треугольник как маркер списка, а элемент с `display:flex` маркера не имеет
+   вовсе — то есть плитка осталась бы свёрнутой БЕЗ признака того, что её можно
+   развернуть, а это ровно половина просьбы владельца («потом я нажимаю, оно
+   разворачивается»). Значок ставится содержимым `::before` и меняется на `[open]`. */
 .kab-zag{display:flex;align-items:baseline;gap:.5rem;font-weight:600;font-size:1.02rem;
-  cursor:pointer}
+  cursor:pointer;list-style:none}
+.kab-zag::-webkit-details-marker{display:none}
+.kab-zag::before{content:"▸";font-size:.85em;color:var(--muted)}
+.kab-zanyatie[open]>.kab-zag::before{content:"▾"}
 .kab-zanyatie.byl .kab-zag{color:var(--zel)}
 .kab-zanyatie.ne-byl .kab-zag{color:var(--krasn)}
 .kab-skolko{margin-left:auto;font-weight:400;font-size:.85rem;color:var(--muted)}
+/* Кнопка «Кондуит за занятие»: орган, а не ссылка-невидимка (пункт 7). Цвета — те
+   же переменные каркаса, что у всей страницы; своего цвета здесь по-прежнему нет. */
+.kab-konduit{display:block;width:100%;margin:.55rem 0 0;padding:.4em .8em;
+  font:inherit;font-size:.9rem;cursor:pointer;color:var(--accent);
+  background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px}
+.kab-konduit:hover,.kab-konduit:focus-visible{background:var(--accent);color:var(--bg)}
 .kab-spisok{list-style:none;margin:.45rem 0 0;padding:0;font-size:.95rem}
 .kab-spisok li{padding:.1rem 0}
 .kab-shk{background:none;border:none;padding:.1rem 0;font:inherit;color:var(--text);
@@ -249,23 +355,52 @@ SVOI_STILI = """
 .kab-nikogo{color:var(--muted);font-size:.9rem;margin:.4rem 0 0}
 /* Будущее: клетка сама себе выключатель, как и была. Флажок спрятан, а не убран —
    им работают клавиатура и `:focus-visible`, и он же несёт дату для двери. */
-.kab-vpered-metka{display:flex;align-items:baseline;gap:.5rem;cursor:pointer;
+.kab-vpered-metka{display:flex;align-items:center;gap:.5rem;cursor:pointer;
   font-weight:600;font-size:1.02rem}
+/* «Меня не будет» — единственный орган будущей плитки (пункт 6), поэтому он и
+   выглядит органом: та же пилюля, что у вкладок четвертей, а не серая подпись
+   `.kab-skolko`, которой он был, пока рядом стоял список фамилий. */
+.kab-net-knopka{margin-left:auto;font-weight:400;font-size:.82rem;
+  border:1px solid var(--rule);border-radius:999px;padding:.2em .8em;
+  color:var(--muted);white-space:nowrap}
+.kab-vpered-metka:hover .kab-net-knopka{color:var(--accent);border-color:var(--accent)}
+.kab-zanyatie.vperyod.netu .kab-net-knopka{color:var(--krasn);
+  border-color:var(--krasn);text-decoration:none}
 .kab-zanyatie.vperyod.netu .kab-vpered-metka{color:var(--krasn);
   text-decoration:line-through}
 .kab-zanyatie input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .kab-zanyatie input:focus-visible+.kab-den-tekst{outline:2px solid var(--accent);
   outline-offset:3px;border-radius:3px}
-.kab-svodka{font-family:var(--sans);font-size:1.1rem;margin:.2rem 0 0}
 .kab-raskrytie{position:sticky;bottom:0;z-index:30;margin:1.2rem 0 0;
   background:var(--panel);border:1px solid var(--rule);border-radius:14px;
   padding:1rem 1.3rem;font-family:var(--sans);box-shadow:0 -2px 14px rgba(0,0,0,.06)}
 .kab-raskrytie[hidden]{display:none}
 .kab-raskrytie h2{font-size:1.1rem;margin:0 0 .5rem;font-family:var(--sans)}
-.kab-raskrytie ul{margin:.3rem 0 0;padding-left:1.2rem}
-.kab-raskrytie .kab-nichego{color:var(--muted)}
+.kab-raskrytie .kab-nichego{color:var(--muted);margin:.1rem 0 0;font-size:.95rem}
+/* 🔴 ПАНЕЛЬ ОБЯЗАНА ПРОКРУЧИВАТЬСЯ, И ЭТО СЛЕДСТВИЕ ПУНКТА 8. Кондуит за занятие —
+   это строки на КАЖДОГО школьника дня, то есть до пятнадцати блоков; панель прибита
+   к низу экрана (`position:sticky`), и без своей прокрутки она выехала бы за экран
+   вверх, унося первого школьника туда, откуда его не достать. */
+.kab-raskrytie{max-height:62vh;overflow-y:auto}
+.kab-konduit-shkolnik{margin:0 0 .9rem}
+.kab-konduit-shkolnik:last-child{margin-bottom:0}
+.kab-konduit-imya{font-weight:600;margin:0 0 .3rem}
+.kab-konduit-den{color:var(--muted);margin:0 0 .5rem}
+.kab-listki{display:flex;flex-direction:column;gap:.4rem}
+/* Строка листка: «первая колонка — 16A… кнопочкой большой красивой, и дальше список
+   задач тоже кнопочками». `flex-wrap` — чтобы десять задач переносились ВНУТРИ своей
+   строки, а не растягивали панель вбок: горизонтальной прокрутки на этой странице
+   нет нигде, и здесь тоже не заводится. */
+.kab-stroka-listka{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem}
+.kab-listok-knopka{font-family:var(--sans);font-weight:600;font-size:1.1rem;
+  padding:.25em .9em;margin-right:.35rem;border-radius:10px;background:var(--accent);
+  color:var(--panel);text-decoration:none;min-width:3.6rem;text-align:center}
+.kab-listok-knopka:hover,.kab-listok-knopka:focus-visible{background:var(--text)}
+.kab-zadacha{font-family:var(--sans);font-size:.98rem;padding:.2em .75em;
+  border:1px solid var(--rule);border-radius:9px;background:var(--bg);color:var(--text)}
 .kab-raskrytie .kab-zakryt{float:right;cursor:pointer;border:1px solid var(--rule);
   background:none;color:var(--muted);border-radius:8px;padding:.2em .7em;font:inherit}
+@media(max-width:1400px){.kab-tablica{columns:4}}
 @media(max-width:1200px){.kab-tablica{columns:3}}
 @media(max-width:900px){.kab-tablica{columns:2}}
 @media(max-width:640px){.kab-tablica{columns:1}}
@@ -278,6 +413,23 @@ SVOI_STILI = """
 #: of correction and there is no reason for this one to grow a Save button.  A refused
 #: write puts the checkbox back where it was: an unchecked box that the server rejected
 #: would otherwise read as «сохранено».
+#: 🔴 РОДА ГЛАГОЛА НА ЭТОМ ЭКРАНЕ БОЛЬШЕ НЕТ, ПОТОМУ ЧТО ПОЛА НЕТ В БАЗЕ (пункт 3
+#: рецензии владельца 11.09: *«Бочарова Анна — она СДАЛА, а не сдал»*).
+#:
+#: ЗАМЕРЕНО, А НЕ ПРЕДПОЛОЖЕНО, по копии боевой базы (57 школьников, 15 847 отметок):
+#:   students  = (id, tg_id, surname, name, class, status, first_sheet_id, gruppa)
+#:   teachers  = (id, tg_id, name, aka, is_owner, kabinet, aktiven, gruppa)
+#: Ни столбца пола, ни отчества, из которого его выводят, нет ни здесь, ни в остальных
+#: восемнадцати таблицах. Заход прямо запрещает угадывать пол по имени — и правильно
+#: делает: «Саша», «Женя», «Ян» и любая нерусская фамилия дают ошибку молча, а ошибка
+#: в роде это ровно то, на что владелец и пожаловался.
+#:
+#: ⇒ Экран перестаёт употреблять глагол вовсе: `сдал N` → `задач: N`, `ничего не сдал`
+#: → `задач нет`. Безличная форма рода не имеет, поэтому неверной быть не может, и она
+#: же — то самое слово «задач», которое владелец просил пунктом 2. Второй гендерный
+#: глагол, «принято сдач», стоял в сводной строке, которую снял пункт 1.
+#: Откуда брать пол, если владелец захочет именно «сдала» — вопрос к нему, и он стоит
+#: пунктом очереди в `## ВОПРОСЫ` захода `kod_kabinet-plitki.md`.
 SKRIPT = """
 <script>
 document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
@@ -317,26 +469,83 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
   var panel = document.getElementById('kab-raskrytie');
   var telo = document.getElementById('kab-raskrytie-telo');
   var zag = document.getElementById('kab-raskrytie-zag');
-  function zadachi(sdal){
-    return sdal.map(function(z){ return 'листок ' + z.listok + ' · задача ' + z.zadacha; });
+  /* 🔴 КОНДУИТ — СТРОКА НА ЛИСТОК, А НЕ СПИСОК ЗАДАЧ. Пункт 8 рецензии 11.09, и
+     владелец назвал его главным: *«кондуит записан странно: задачи записаны в
+     список. Если было бы 10 задач, это было бы нереально поместить. Нужно писать в
+     несколько колонок: первая колонка — 16A, то есть название листка, кнопочкой
+     большой красивой, и дальше список задач тоже кнопочками, без слова „задача“:
+     просто 3, 8, 10а. Вторая строчка: 16 альфа и тоже 1, 2. По кнопке листка должна
+     быть возможность перейти к этому листку»*.
+     Здесь стояло `'листок ' + z.listok + ' · задача ' + z.zadacha` пунктом `<li>` на
+     КАЖДУЮ задачу: десять задач — десять строк, в девяти из которых слово «листок»
+     повторяется зря. Стало: строка на листок, номер листка — ссылка на сам листок,
+     задачи — пилюли без слова «задача».
+     Адрес листка НЕ выдумывается здесь: `/listki/<номер>` — та самая дверь, которую
+     держит `veb/server.py::_listok` и которой пользуется весь сайт. */
+  function po_listkam(sdal){
+    /* [{listok, zadachi:[…]}] в порядке первого появления листка. Порядок задаёт
+       сервер (`order by s.ord, p.ord` в `sdachi_po_zanyatiyam`), и второго мнения о
+       нём здесь не заводится — группировка только собирает подряд идущее. */
+    var poryadok = [], po_nomeru = {};
+    sdal.forEach(function(z){
+      if (!po_nomeru[z.listok]) {
+        po_nomeru[z.listok] = {listok: z.listok, zadachi: []};
+        poryadok.push(po_nomeru[z.listok]);
+      }
+      po_nomeru[z.listok].zadachi.push(z.zadacha);
+    });
+    return poryadok;
   }
-  function spisok(punkty, pusto){
-    if (!punkty.length) return '<p class="kab-nichego">' + pusto + '</p>';
-    return '<ul>' + punkty.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul>';
+  /* Узлы строятся, а не склеиваются из строк: в кондуит попадают фамилии школьников
+     и метки задач, то есть данные, а `innerHTML` из данных — это разметка из данных. */
+  /* 🔴 ИМЯ `uzel` ЗАНЯТО, И ЭТО СТОИЛО ЖИВОГО ДЕФЕКТА. Строкой выше в этой же
+     функции стоит `var uzel = document.getElementById('kab-dannye')`; `var`
+     всплывает наверх области и перетирает объявление функции с тем же именем —
+     `pokazat` падал с `uzel is not a function`, панель кондуита не открывалась НИ
+     РАЗУ, и разметка при этом была правильной. Поймано браузерным прогоном
+     (playwright, 1440×900): тесты на Python читают разметку и скрипт не исполняют,
+     поэтому для них всё было зелено. */
+  function sozdat(tip, klass, tekst){
+    var u = document.createElement(tip);
+    if (klass) u.className = klass;
+    if (tekst !== undefined) u.textContent = tekst;
+    return u;
+  }
+  function konduit(sdal, pusto){
+    var stroki = po_listkam(sdal);
+    if (!stroki.length) return sozdat('p', 'kab-nichego', pusto);
+    var obolochka = sozdat('div', 'kab-listki');
+    stroki.forEach(function(r){
+      var stroka = sozdat('div', 'kab-stroka-listka');
+      var knopka = sozdat('a', 'kab-listok-knopka', r.listok);
+      knopka.href = '/listki/' + encodeURIComponent(r.listok);
+      stroka.appendChild(knopka);
+      r.zadachi.forEach(function(z){
+        stroka.appendChild(sozdat('span', 'kab-zadacha', z));
+      });
+      obolochka.appendChild(stroka);
+    });
+    return obolochka;
   }
   function zakryt(){ panel.hidden = true; }
   function pokazat(klyuch){
     var d = dannye[klyuch];
     if (!d) return;
     zag.textContent = d.kto;
+    telo.textContent = '';
     if (d.deti) {
-      telo.innerHTML = spisok(d.deti.map(function(r){
-        var z = zadachi(r.sdal);
-        return '<b>' + r.kto + '</b>' + (z.length ? ' — ' + z.join('; ') : ' — ничего не сдал');
-      }), 'в этот день школьников не было');
+      if (!d.deti.length) {
+        telo.appendChild(sozdat('p', 'kab-nichego', 'в этот день школьников не было'));
+      }
+      d.deti.forEach(function(r){
+        var blok = sozdat('div', 'kab-konduit-shkolnik');
+        blok.appendChild(sozdat('p', 'kab-konduit-imya', r.kto));
+        blok.appendChild(konduit(r.sdal, 'задач нет'));
+        telo.appendChild(blok);
+      });
     } else {
-      telo.innerHTML = '<p>' + d.den + '</p>'
-        + spisok(zadachi(d.sdal), 'в этот день ничего не сдал');
+      telo.appendChild(sozdat('p', 'kab-konduit-den', d.den));
+      telo.appendChild(konduit(d.sdal, 'в этот день задач нет'));
     }
     panel.hidden = false;
   }
@@ -344,17 +553,16 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
     if (!sob.target.closest) return;
     var shk = sob.target.closest('.kab-shk');
     if (shk) { pokazat(shk.dataset.den + '|' + shk.dataset.sid); return; }
-    var zagolovok = sob.target.closest('.kab-zag');
-    if (zagolovok) { pokazat(zagolovok.dataset.den); return; }
+    /* Кондуит за весь день — своя кнопка (пункт 7). Прежде это висело на
+       `.kab-zag`, то есть на строке с датой; строка стала выключателем
+       `<details>`, и обработчик уехал бы вместе с каждым сворачиванием. */
+    var knopka = sob.target.closest('.kab-konduit');
+    if (knopka) { pokazat(knopka.dataset.den); return; }
     if (sob.target.closest('#kab-raskrytie')) return;
     zakryt();
   });
   document.addEventListener('keydown', function(sob){
     if (sob.key === 'Escape') zakryt();
-    if ((sob.key === 'Enter' || sob.key === ' ')
-        && sob.target.classList && sob.target.classList.contains('kab-zag')) {
-      sob.preventDefault(); pokazat(sob.target.dataset.den);
-    }
   });
   document.getElementById('kab-zakryt').addEventListener('click', zakryt);
 })();
@@ -372,13 +580,20 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                                     '<p class="net">Такого преподавателя нет в базе.</p>'
                                     '</div>', put_bazy(c))
 
-    # 🔴 ОТМЕТКИ СПРАШИВАЮТСЯ СРАЗУ ЗА ВСЮ ПОЛОСУ, ОДНИМ ЗАПРОСОМ. Раньше их брали
-    # только на восемь дней вперёд, потому что и рисовали только их; полоса красит
-    # ещё и прошлое, и запрос на восемь дней покрасил бы каждый прошедший день
-    # зелёным — то есть соврал бы ровно там, где владелец смотрит.
+    # 🔴 ВСЕ ТРИ ВОПРОСА К БАЗЕ ЗАДАЮТСЯ ОДИН РАЗ И ЗА ВЕСЬ ГОД, ДО ПЕРВОЙ РАЗМЕТКИ.
+    # Отметки отсутствия спрашивались «за полосу» — прошлое плюс восемь дней вперёд;
+    # вкладок четверти теперь четыре, и запрос на восемь дней покрасил бы три из них
+    # зелёным, то есть соврал бы ровно там, где владелец смотрит. Спрашивается сразу
+    # весь год (около семидесяти дат, один запрос), и той же выборкой пользуется блок
+    # «следующий спецмат» ниже: два ответа об одном дне обязаны быть одним ответом.
+    seichas = datetime.now(timezone.utc)
+    god = chetverti_goda(segodnya())
+    dni_chetvertej = [(nomer, zanyatiya_mezhdu(ot, do)) for nomer, ot, do in god]
+    vse_dni = [d for _n, spisok_dnej in dni_chetvertej for d in spisok_dnej]
+    proshlo_vse = [d for d in vse_dni if zanyatie_zaversheno(d, seichas=seichas)]
+    net_na = otsutstviya(c, teacher_id, vse_dni)
+    sdachi = sdachi_po_zanyatiyam(c, tuple(proshlo_vse))
     dni = blizhajshie_zanyatiya(segodnya(), GLUBINA_VPERYOD)
-    proshlo = proshedshie_zanyatiya(segodnya())
-    net_na = otsutstviya(c, teacher_id, proshlo + dni)
     blizhajshee = dni[0] if dni else None
 
     # ── СЛЕДУЮЩЕЕ ЗАНЯТИЕ. Оно же первая будущая клетка полосы ниже: два ответа об одном дне
@@ -420,7 +635,19 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
             f'<p class="kab-gde">кабинет {kab_html}</p>'
             f'{deti_html}</div>')
 
-    # ── ТАБЛИЦА ЗАНЯТИЙ С НАЧАЛА УЧЕБНОГО ГОДА (L1.3, владелец 10.09).
+    # ── ТАБЛИЦА ЗАНЯТИЙ, РАЗЛОЖЕННАЯ ПО ЧЕТВЕРТЯМ (пункт 5 рецензии 11.09).
+    # Владелец: *«можно оставить такую плитку, но тогда нужно, чтобы 5 было колонок,
+    # чтобы на всю четверть ты прям видел… у нас будет вкладка четверть 1, потом
+    # четверть 2, 3, 4»*. Занятия строились «с начала года и восемь дней вперёд» —
+    # один поток, который к маю становился лентой на семьдесят плиток. Теперь их
+    # четыре, по четверти в каждой, и открыта та, в которой сегодняшний день.
+    #
+    # 🔴 ВКЛАДКИ — РАДИОКНОПКИ И CSS, А НЕ СКРИПТ, и это способ САМОГО САЙТА:
+    # `karkas.obolochka()` переключает свои разделы ровно так же. Все четыре четверти
+    # уже лежат в документе, поэтому переключение ничего не грузит и работает при
+    # выключенном JS; третьего механизма показа/скрытия на странице не заводится.
+    #
+    # ── ТАБЛИЦА ЗАНЯТИЙ (L1.3, владелец 10.09).
     # Здесь стояла ПОЛОСА КНОПОК: дата и цвет, а кто на занятии был — только во
     # всплывающей подсказке. Владелец попросил другое: «строки — занятия, в каждой
     # список школьников, клик по школьнику раскрывает сдачу», и «вся четверть должна
@@ -447,32 +674,33 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
     # правки занятие, которое сегодня уже прошло, показывается зелёным и флажка не
     # предлагает, а дверь такую запись всё ещё приняла бы. Расширять или сужать дверь
     # этот заход не стал: это правка пути ЗАПИСИ, которой никто не просил.
-    seichas = datetime.now(timezone.utc)
-    sdachi = sdachi_po_zanyatiyam(c, tuple(proshlo))
-    bloki = []
-    prinyato_vsego = 0
-    deti_vsego: set = set()
     raskrytie: dict = {}
-    #: День → были ли в этот день СВОИ школьники. Считается тем же обходом, что рисует
-    #: блоки, а не вторым запросом: сводка и таблица обязаны говорить одно и то же.
-    _byli_deti: dict = {}
-    for den in proshlo + dni:
+
+    def plitka(den: str) -> str:
         proshlo_li = zanyatie_zaversheno(den, seichas=seichas)
         d = date.fromisoformat(den)
         wd = d.isoweekday()
         podpis = "%s %02d.%02d" % (KOROTKO_DNYA.get(wd, ""), d.day, d.month)
-        # Наведение и список называют школьников ТОГО дня: `deti_na_datu` держит
-        # интервал `enrollment`, поэтому на прошедшую дату отвечает состав, который
-        # был тогда, а не сегодняшний.
-        kto_byl = deti_na_datu(c, teacher_id, den)
         netu = den in net_na
         if proshlo_li:
+            # Список называет школьников ТОГО дня: `deti_na_datu` держит интервал
+            # `enrollment`, поэтому на прошедшую дату отвечает состав, который был
+            # тогда, а не сегодняшний.
+            #
+            # 🔴 И СПРАШИВАЕТСЯ ОН ТОЛЬКО ЗДЕСЬ, А НЕ ДЛЯ КАЖДОГО ДНЯ ГОДА. Вызов
+            # стоял выше развилки, то есть отрабатывал и для будущего; с пунктом 6
+            # будущей плитке школьники не нужны вовсе, а страница несёт теперь все
+            # четыре четверти. Замер на копии боевой базы, 11.09: вызовов на один
+            # показ страницы 68 → 3, по ~1 мс каждый на тёплом соединении, то есть
+            # около 65 мс. Дело не в этих миллисекундах: вопрос, ответ на который
+            # некому прочитать, — это второй источник состава дня, которого никто не
+            # видит и потому никто не поправит.
+            kto_byl = deti_na_datu(c, teacher_id, den)
             punkty = []
             sdach_dnya = 0
             for r in kto_byl:
                 sdal = sdachi.get((den, r["id"]), ())
                 sdach_dnya += len(sdal)
-                deti_vsego.add(r["id"])
                 raskrytie["%s|%s" % (den, r["id"])] = {
                     "kto": "%s %s" % (r["surname"], r["name"]),
                     "den": po_russki(den),
@@ -482,9 +710,8 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                     '<li><button class="kab-shk" type="button" data-den="%s" '
                     'data-sid="%s"><b>%s</b> %s%s</button></li>'
                     % (e(den), r["id"], e(r["surname"]), e(r["name"]),
-                       (' <span class="kab-skolko">сдал %d</span>' % len(sdal))
+                       (' <span class="kab-skolko">задач: %d</span>' % len(sdal))
                        if sdal else ""))
-            prinyato_vsego += sdach_dnya
             raskrytie[den] = {
                 "kto": po_russki(den),
                 "den": po_russki(den),
@@ -493,58 +720,84 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                                    for z, l, _t in sdachi.get((den, r["id"]), ())]}
                          for r in kto_byl],
             }
-            _byli_deti[den] = bool(punkty)
+            # 🔴 КОНДУИТ ЗА ЗАНЯТИЕ — ВИДИМАЯ КНОПКА, ПУНКТ 7 РЕЦЕНЗИИ 11.09:
+            # *«чтобы вывести кондуит за занятие, я должен нажать на дату. Должно
+            # быть гораздо более видно это. Должна быть кнопка „Кондуит за
+            # занятие“»*. Раскрытие висело на строке с датой, и узнать об этом было
+            # неоткуда: строка не выглядела органом. Теперь дата — выключатель
+            # `<details>` (пункт 4), а кондуит за весь день зовётся своей кнопкой,
+            # написанной словами. Обе живут внутри плитки, поэтому кнопка видна
+            # ровно тогда, когда плитка раскрыта, — то есть когда на неё смотрят.
+            konduit = ('<button class="kab-konduit" type="button" data-den="%s">'
+                       'Кондуит за занятие</button>' % e(den))
             spisok = ('<ul class="kab-spisok">%s</ul>' % "".join(punkty) if punkty
                       else '<p class="kab-nikogo">школьников в этот день не было</p>')
-            bloki.append(
-                '<div class="kab-zanyatie %s" data-den="%s">'
-                '<div class="kab-zag" data-den="%s" tabindex="0">%s'
-                '<span class="kab-skolko">%s</span></div>%s</div>'
-                % ("ne-byl" if netu else "byl", e(den), e(den), e(podpis),
-                   e("вас не было" if netu else "сдач: %d" % sdach_dnya), spisok))
-        else:
-            imena = ", ".join("%s %s" % (e(r["surname"]), e(r["name"]))
-                              for r in kto_byl)
-            bloki.append(
-                '<div class="kab-zanyatie vperyod%s" data-den="%s">'
-                '<label class="kab-vpered-metka">'
-                '<input type="checkbox" data-den="%s"%s>'
-                '<span class="kab-den-tekst">%s</span>'
-                '<span class="kab-skolko">меня не будет</span></label>'
-                '%s</div>'
-                % (" netu" if netu else "", e(den), e(den),
-                   " checked" if netu else "", e(podpis),
-                   ('<ul class="kab-spisok"><li>%s</li></ul>'
-                    % imena.replace(", ", "</li><li>")) if imena
-                   else '<p class="kab-nikogo">школьников пока нет</p>'))
+            spisok = konduit + spisok
+            # 🔴 `<details>`, А НЕ DIV С ОБРАБОТЧИКОМ — ПУНКТ 4 РЕЦЕНЗИИ 11.09:
+            # *«мне кажется, что такой формат не очень удобный. Удобнее, если у тебя
+            # будет свёрнуто… потом я нажимаю, оно разворачивается»*. Свёрнутость по
+            # умолчанию — это отсутствие атрибута `open`, то есть состояние, которого
+            # нельзя забыть выставить; разворачивает браузер сам, поэтому клавиатура,
+            # поиск по странице и печать работают без единой строки скрипта. Своя
+            # пара «флажок + CSS» дала бы то же самое ценой третьего механизма
+            # раскрытия на одной странице.
+            return (
+                '<details class="kab-zanyatie %s" data-den="%s">'
+                '<summary class="kab-zag">%s'
+                '<span class="kab-skolko">%s</span></summary>%s</details>'
+                % ("ne-byl" if netu else "byl", e(den), e(podpis),
+                   # 🔴 «ЗАДАЧ», А НЕ «СДАЧ» — ПУНКТ 2 РЕЦЕНЗИИ ВЛАДЕЛЬЦА 11.09,
+                   # дословно: *«потом слово „сдач“ очень странное. Лучше пиши
+                   # „задач“»*, и формат он назвал тоже сам — `задач: 23`. Считается
+                   # ровно то же самое, что и считалось: сколько задач принято в этот
+                   # день у школьников этого преподавателя. Переименовано ТОЛЬКО
+                   # слово на экране; имя переменной `sdach_dnya` осталось, потому что
+                   # словарь, из которого число берётся, зовётся `sdachi` и живёт в
+                   # чужом файле (`istoria_zanyatij.sdachi_po_zanyatiyam`) — менять
+                   # имя здесь значило бы развести его с источником.
+                   e("вас не было" if netu else "задач: %d" % sdach_dnya), spisok))
+        # 🔴 БУДУЩАЯ ПЛИТКА ПУСТА, И ЭТО ПУНКТ 6 РЕЦЕНЗИИ 11.09, дословно: *«на
+        # будущее точно не надо их заполнять сейчас. Какие там школьники на будущее,
+        # непонятно. Список школьников я бы не ставил, на будущее пустые такие
+        # таблетки и просто возможность нажать „меня не будет“»*. Здесь стоял список
+        # фамилий, взятый у СЕГОДНЯШНЕГО распределения и показанный как состав дня,
+        # до которого ещё месяц: к тому дню состав поменяется, и плитка врала не
+        # ошибкой, а самим фактом своего существования. Остаётся дата и один орган —
+        # тот же флажок и та же дверь, ни строки в пути записи не тронуто.
+        return (
+            '<div class="kab-zanyatie vperyod%s" data-den="%s">'
+            '<label class="kab-vpered-metka">'
+            '<input type="checkbox" data-den="%s"%s>'
+            '<span class="kab-den-tekst">%s</span>'
+            '<span class="kab-net-knopka">меня не будет</span></label>'
+            '</div>'
+            % (" netu" if netu else "", e(den), e(den),
+               " checked" if netu else "", e(podpis)))
 
-    # 🔴 «И ЭТО ДОЛЖНО СВОДИТЬСЯ В ОДИН ТЕКСТ» — слова владельца 10.09 про кабинет.
-    # Одна строка, четыре числа, все посчитаны из того же, что нарисовано ниже: ни
-    # одного отдельного запроса ради сводки, поэтому сводка и таблица разойтись не
-    # могут по построению.
-    #
-    # 🔴 ДВА ЧИСЛА ВМЕСТО ОДНОГО, И ЭТО НАХОДКА ВЕРИФИКАТОРА, ОПЛАЧЕННАЯ ЗАМЕРОМ.
-    # Здесь стояло одно «занятий N», и N считалось КАЛЕНДАРЁМ — сколько было пн и чт
-    # с 1 сентября. Замер по всем четырнадцати принимающим: у ТРИНАДЦАТИ из них
-    # сводка говорила «занятий 3», а дней, в которые у них по `enrollment` был хоть
-    # один школьник, было ДВА. Третий день при этом ещё и зелёный — «был», потому что
-    # «был» на этой странице значит «нет отметки об отсутствии», а не «вёл занятие».
-    # Тринадцать карточек из четырнадцати показывали владельцу на единицу больше
-    # занятий, чем он вёл, — и показывали это рядом со словом «принято».
-    # Цвет клетки не переучивается (это правило страницы, и оно не этого захода), а
-    # сводка перестаёт складывать разные вещи в одно число: календарных дней столько,
-    # СВОИХ — столько.
-    # 🔴 СЧИТАЕТСЯ `_byli_deti`, И НИЧЕГО КРОМЕ. Здесь стояло ещё «или в этот день
-    # была хоть одна сдача» — по словарю `sdachi`, который держит сдачи ВСЕЙ школы,
-    # а не этого преподавателя. С ним день, в который сдавал кто угодно, засчитывался
-    # каждому: все четырнадцать карточек показали «3 из 3» вместо честных «2 из 3» у
-    # тринадцати. Поймано собственным замером сразу после правки — сводка, которая
-    # у всех одинаковая, и есть признак того, что она считает не то.
-    svoi_dni = sum(1 for den in proshlo if _byli_deti.get(den))
-    svodka = ("с начала года: занятий с вашими школьниками %d из %d · "
-              "принято сдач %d · работал со школьниками: %d"
-              % (svoi_dni, len(proshlo), prinyato_vsego, len(deti_vsego)))
+    otkryta = otkrytaya_chetvert(segodnya(), god)
+    perekluchateli = "".join(
+        '<input class="kab-p" type="radio" name="kab-chetvert" id="kab-p-%d"%s>'
+        % (nomer, " checked" if nomer == otkryta else "")
+        for nomer, _dni in dni_chetvertej)
+    vkladki = ('<nav class="kab-vkladki">%s</nav>' % "".join(
+        '<label for="kab-p-%d">%d четверть</label>' % (nomer, nomer)
+        for nomer, _dni in dni_chetvertej))
+    tela = "".join(
+        '<div class="kab-tablica" id="kab-ch-%d">%s</div>'
+        % (nomer, "".join(plitka(den) for den in spisok_dnej))
+        for nomer, spisok_dnej in dni_chetvertej)
 
+    # 🔴 СВОДНОЙ СТРОКИ «С НАЧАЛА ГОДА: …» ЗДЕСЬ БОЛЬШЕ НЕТ, И ЭТО РЕШЕНИЕ
+    # ВЛАДЕЛЬЦА 11.09, А НЕ УПРОЩЕНИЕ. Дословно: *«я не понял, что значит занятия с
+    # вашими школьниками 2 из 3… это какая-то фраза вставлена, которую можно удалить
+    # вообще. Фразы от себя лучше удалять»*. Строка родилась из его же «и это должно
+    # сводиться в один текст» 10.09 и была дописана здесь по догадке о том, ЧТО именно
+    # сводить; посмотрев на неё на живом сайте, он сказал, что не понимает её. Ни одно
+    # из четырёх чисел не спрашивалось отдельным запросом — все считались тем же
+    # обходом, который рисует блоки, — поэтому вместе со строкой уходят и счётчики
+    # (`prinyato_vsego`, `deti_vsego`, `_byli_deti`, `svoi_dni`): считать их больше
+    # не для кого, а счётчик без читателя это третье место, где записан тот же факт.
+    # Числа дня остались там, где владелец их и смотрит — в шапке самой плитки.
     gruppa_html = (' · <a href="/raspredelenie">группа %s</a>' % e(kto["gruppa"])
                    if kto["gruppa"] else "")
     telo = f"""<div class="kab-stranica">
@@ -552,14 +805,14 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
   <p class="kab-kto">кабинет преподавателя{gruppa_html}</p>
   {blok_blizh}
   <div class="kab-blok">
-    <p class="zag2">мои занятия с начала года</p>
-    <p class="kab-svodka">{e(svodka)}</p>
-    <!-- 🔴 ПОДПИСИ-ПОЯСНЕНИЯ ЗДЕСЬ НЕТ И НЕ ДОЛЖНО БЫТЬ (K1, владелец 10.09).
-         «Зелёная — вы были, красная — вас не было…» он назвал НЕЙРОСЛОПОМ и велел
-         убрать целиком. Короткая версия на том же месте — тот же нейрослоп, только
-         тише. Строка выше — НЕ пояснение: это три ЧИСЛА, то самое «должно сводиться
-         в один текст», которое он просил в той же надиктовке. -->
-    <div class="kab-tablica">{"".join(bloki)}</div>
+    <p class="zag2">мои занятия</p>
+    <!-- 🔴 НИ ПОДПИСИ-ПОЯСНЕНИЯ, НИ СВОДНОЙ СТРОКИ ЗДЕСЬ НЕТ И НЕ ДОЛЖНО БЫТЬ.
+         «Зелёная — вы были, красная — вас не было…» владелец назвал НЕЙРОСЛОПОМ
+         10.09 и велел убрать целиком; сводную строку «с начала года: занятий с
+         вашими школьниками 2 из 3…» он убрал 11.09 теми же словами — «фразы от
+         себя лучше удалять». Короткая версия на том же месте — то же самое, только
+         тише. Разбор — у места, где строка считалась, выше в этом файле. -->
+    <div class="kab-god">{perekluchateli}{vkladki}{tela}</div>
     <p class="kab-beda" id="kab-beda"></p>
   </div>
   <div class="kab-raskrytie" id="kab-raskrytie" hidden>
