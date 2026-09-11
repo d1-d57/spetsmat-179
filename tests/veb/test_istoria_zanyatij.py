@@ -191,7 +191,7 @@ def test_column_count_matches_a_direct_database_count(running_server, tmp_path):
     status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
-    assert telo.count('<th class="ist-zn"') == 2 * 2, "две решётки по два занятия"
+    assert telo.count('<th class="ist-zn') == 2 * 2, "две решётки по два занятия"
 
 
 def test_teacher_marked_absent_reads_as_absent_even_with_a_students_override(running_server):
@@ -325,13 +325,22 @@ def test_the_cell_is_a_place_with_empty_slots_for_a_mark_and_a_comment(running_s
         '<span class="kl-ocenka" data-mesto="оценка"></span>', "")
 
 
-def test_the_kind_of_the_lesson_is_visible_in_every_column(running_server):
-    """`sessions.kind` живой и показан. Столбец без подписи неотличим от нечитанного."""
+def test_the_header_of_a_column_is_the_date_and_nothing_else(running_server):
+    """Владелец 11.09: «там ничего другого не пиши, только даты».
+
+    🔴 ЭТОТ ТЕСТ — ПЕРЕВЁРНУТЫЙ `…_kind_of_the_lesson_is_visible_in_every_column`.
+    Тот требовал подпись рода У КАЖДОГО столбца и слово «обычное» на экране; ровно за
+    это слово владелец и поправил. Сторожится теперь другое и такое же проверяемое:
+    в шапке столбца стоит ДАТА и ничего кроме неё.
+    """
     status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
-    assert telo.count('class="ist-rod') >= 2 * 2, "род у каждого столбца обоих журналов"
-    assert "обычное" in telo
+    assert "обычное" not in telo
+    assert 'class="ist-rod' not in telo
+    for den in (MONDAY, FRIDAY):
+        shapka = "%s.%s" % (den[8:10], den[5:7])
+        assert telo.count(">%s</th>" % shapka) == 2, "дата в шапке обоих журналов"
 
 
 def test_a_zachyot_reads_as_kontrolnaya_and_a_cancelled_day_is_named_apart(running_server):
@@ -357,7 +366,13 @@ def test_a_zachyot_reads_as_kontrolnaya_and_a_cancelled_day_is_named_apart(runni
     status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
-    assert "контрольная" in telo, "«зачёт» в базе читается как «контрольная» на экране"
+    # 🔴 СЛОВА «контрольная» НА ЭКРАНЕ БОЛЬШЕ НЕТ, И ЭТО ТОЖЕ РЕШЕНИЕ ВЛАДЕЛЬЦА
+    # 11.09: «там ничего другого не пиши, только даты». Проверяется теперь то, во
+    # что род превратился — КЛАСС столбца; так факт «это была контрольная» остаётся
+    # предъявимым, а слова в шапке нет.
+    assert "контрольная" not in telo
+    assert "обычное" not in telo, "слово, которое владелец назвал первым"
+    assert "ist-zachyot" in telo, "зачёт помечен классом столбца"
     # 🔴 СТРОКИ «отменённые занятия (в решётке их нет…)» БОЛЬШЕ НЕТ, И ЭТО РЕШЕНИЕ
     # ВЛАДЕЛЬЦА 11.09, А НЕ ПОТЕРЯ ПРОВЕРКИ: «выкидываем все комментарии». Сам факт
     # отмены с экрана не уходит — он переезжает в сам столбец отменённого дня
