@@ -37,7 +37,7 @@ from __future__ import annotations
 import html
 import pathlib
 import sqlite3
-from datetime import date
+from datetime import date, datetime, timezone
 from dataclasses import dataclass, field
 
 KOREN = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -158,6 +158,15 @@ class Kontekst:
     # Кто из принимающих отмечен отсутствующим НА ЭТУ ДАТУ (`teacher_attendance`).
     # Пусто на постоянном экране: там нет «сегодня».
     otsutstvuyut_prepoda: frozenset = frozenset()
+    # 🔴 ПЕРИОД ОТСУТСТВИЯ — ЭТО ДРУГОЙ ФАКТ, ЧЕМ СТРОКА ВЫШЕ, И ПОЛЕ ПОТОМУ ВТОРОЕ.
+    # `otsutstvuyut_prepoda` отвечает про ОДНУ дату и только там, где занятие уже
+    # заведено (`teacher_attendance` висит на `sessions`); это поле отвечает про
+    # ЛЮБУЮ дату страницы, включая будущую, у которой строки `sessions` нет и не
+    # будет до самого занятия. `{ISO-дата: frozenset(teacher_id)}` — по одному
+    # ключу на каждую дату из `DNI`, то есть один ключ на экране занятия и два на
+    # постоянном. Пустой словарь значит «периодов на эти даты нет», а не «не
+    # спрашивали»: заполняет его `sobrat_kontekst`, всегда.
+    otsutstvie_po_dnyam: dict = field(default_factory=dict)
     shk_dnya: dict = field(default_factory=dict)   # day → rows of pupils
     shk: list = field(default_factory=list)        # Monday's pupils
     # Who the page belongs to, when it belongs to somebody: `teachers.id`.
@@ -221,6 +230,140 @@ class Kontekst:
                   if ot else "")
         klass = "kab staryj" if ot else "kab"
         return f'<span class="{klass}"{podpis}>{e(k)}</span>'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ПЕРИОДЫ ОТСУТСТВИЯ ПРИНИМАЮЩЕГО (`migrations/013_otsutstvie_prepodavatelya.sql`)
+#
+# 🔴 ПОЧЕМУ ЭТИ ПЯТЬ ФУНКЦИЙ ЖИВУТ ЗДЕСЬ, А НЕ В РАЗДЕЛЕ. Их читателей ДВА, и они
+# в разных файлах: распределение (`veb/razdely/shkolniki.py` — кого вообще можно
+# предложить принимающим) и журнал (`veb/razdely/istoria_zanyatij.py` — как
+# выглядит клетка дня периода и кто остался без принимающего). Оба уже импортируют
+# этот модуль, и ничего другого общего у них нет. Копия разбора в каждом из двух
+# была бы вторым мнением о том, отсутствует человек в этот день или нет, — то есть
+# ровно тем, от чего лечится весь этот файл.
+#
+# 🔴 `infra/` — НЕ ВАРИАНТ ДЛЯ ЭТОГО ЗАХОДА: он вне зоны. Приём тот же, что уже
+# стоит у `infra/prepodavatel_den_repo`, и назван вслух здесь, а не унаследован
+# молча: таблица заводится по требованию, потому что живая база старше миграции.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Почему человека не будет. Набор ЗАКРЫТ — его называет само задание владельца
+#: («болезнь/отъезд/иное»), и он же стоит в `CHECK` миграции 013. Свободная строка
+#: за семестр собрала бы «болеет · болен · заболела · б-нь», и посчитать их было бы
+#: уже нечем.
+PRICHINY_OTSUTSTVIYA = ("болезнь", "отъезд", "иное")
+
+_SOZDAT_OTSUTSTVIYA = """
+create table if not exists otsutstvie_prepodavatelya (
+    id           integer primary key,
+    teacher_id   integer not null references teachers(id),
+    s_daty       text not null
+        check (s_daty glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    po_datu      text not null
+        check (po_datu glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    prichina     text not null
+        check (prichina in ('болезнь', 'отъезд', 'иное')),
+    zametka      text,
+    kto_otmetil  integer references teachers(id),
+    kogda        text not null,
+    check (s_daty <= po_datu)
+)
+"""
+
+
+def obespechit_otsutstvia(c: sqlite3.Connection) -> None:
+    """Завести таблицу периодов, если база старше миграции 013.
+
+    🔴 ТОТ ЖЕ ПРИЁМ, ЧТО У `infra/prepodavatel_den_repo.obespechit`, И ПО ТОЙ ЖЕ
+    ПРИЧИНЕ: боевая база живёт на сервере и мигрируется отдельно от выкладки кода,
+    поэтому между выкладкой и миграцией есть окно, в котором страница уже зовёт
+    таблицу, а таблицы ещё нет. Без этой строки окно выглядело бы как `sqlite3
+    .OperationalError: no such table` на ГЛАВНОЙ странице сайта, а не как пустой
+    список периодов.
+
+    Определение здесь — БУКВАЛЬНАЯ КОПИЯ миграции, и это сказано вслух, потому что
+    копия — это долг: разойдясь, две версии дадут разную таблицу на разных машинах.
+    Держать их вместе нечем внутри зоны этого захода (`infra/` вне зоны), поэтому
+    расхождение ловится проверкой в `tests/veb/test_otsutstvie_prepodavatelya.py`,
+    которая сверяет обе схемы полем за полем.
+    """
+    c.execute(_SOZDAT_OTSUTSTVIYA)
+    c.execute("create index if not exists otsutstvie_po_prepodavatelyu "
+              "on otsutstvie_prepodavatelya (teacher_id, s_daty)")
+    c.execute("create index if not exists otsutstvie_po_datam "
+              "on otsutstvie_prepodavatelya (s_daty, po_datu)")
+
+
+def periody_otsutstvij(c: sqlite3.Connection, teacher_id=None) -> tuple:
+    """Все отмеченные периоды, свежие сверху: `({id, teacher_id, s_daty, …}, …)`.
+
+    Порядок — по началу периода вниз: человек, отмечающий отсутствие, смотрит на
+    ближайшее, а не на прошлогоднее.
+    """
+    obespechit_otsutstvia(c)
+    uslovie, parametry = "", ()
+    if teacher_id is not None:
+        uslovie, parametry = "where teacher_id = ? ", (teacher_id,)
+    return tuple(dict(r) for r in c.execute(
+        "select id, teacher_id, s_daty, po_datu, prichina, zametka, "
+        "kto_otmetil, kogda from otsutstvie_prepodavatelya " + uslovie +
+        "order by s_daty desc, id desc", parametry))
+
+
+def otsutstvuyushchie_na_datu(c: sqlite3.Connection, den: str) -> frozenset:
+    """`{teacher_id, …}` — кого нет В ЭТОТ ДЕНЬ по отмеченному периоду.
+
+    🔴 СРАВНЕНИЕ СТРОКАМИ, И ЭТО ВЕРНО, А НЕ СОЙДЁТ. ISO-8601 в форме
+    `ГГГГ-ММ-ДД` сортируется лексикографически ровно так же, как хронологически, —
+    на этом уже стоит весь `enrollment` (`valid_from < valid_to`, `valid_to =
+    '9999-12-31'`). Разбор в `date` добавил бы здесь только повод уронить страницу
+    на кривой строке, которую `CHECK` в базу и не пустил.
+
+    Оба конца ВКЛЮЧЕНЫ: `between` в SQLite включает границы, и это то самое «с 1 по
+    12 октября» — двенадцать дней, а не одиннадцать.
+    """
+    obespechit_otsutstvia(c)
+    return frozenset(r[0] for r in c.execute(
+        "select distinct teacher_id from otsutstvie_prepodavatelya "
+        "where ? between s_daty and po_datu", (den,)))
+
+
+def otmetit_otsutstvie(c: sqlite3.Connection, teacher_id: int, s_daty: str,
+                       po_datu: str, prichina: str, kto_otmetil=None,
+                       zametka=None) -> int:
+    """Отметить период. Возвращает `id` заведённой строки.
+
+    🔴 НАЗАД И ВПЕРЁД — ОДНА И ТА ЖЕ СТРОКА, И НИКАКОЙ ПРОВЕРКИ «НЕ В ПРОШЛОМ»
+    ЗДЕСЬ НЕТ. Владелец назвал оба случая одним предложением: *«Мы можем отмечать
+    это в текущем распределении, что он заболел, а можем отмечать это в
+    распределении на будущее»*. Запрет на прошлое сделал бы невозможным именно
+    первый — «заболел сегодня» отмечают, когда день уже идёт.
+    """
+    if prichina not in PRICHINY_OTSUTSTVIYA:
+        raise ValueError("причина: " + " | ".join(PRICHINY_OTSUTSTVIYA))
+    if s_daty > po_datu:
+        raise ValueError("начало периода позже его конца: %s > %s" % (s_daty, po_datu))
+    obespechit_otsutstvia(c)
+    kur = c.execute(
+        "insert into otsutstvie_prepodavatelya "
+        "(teacher_id, s_daty, po_datu, prichina, zametka, kto_otmetil, kogda) "
+        "values (?, ?, ?, ?, ?, ?, ?)",
+        (teacher_id, s_daty, po_datu, prichina, zametka, kto_otmetil,
+         datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    return int(kur.lastrowid)
+
+
+def snyat_otsutstvie(c: sqlite3.Connection, period_id: int) -> bool:
+    """Убрать отметку целиком. `False` — такой строки не было.
+
+    Отметка СНИМАЕТСЯ, а не гасится флагом: «я ошибся, он будет» — это не событие
+    истории школы, это опечатка. Сам факт отсутствия, когда он состоялся, живёт в
+    журнале посещений (`teacher_attendance`), и оттуда его никто не убирает.
+    """
+    obespechit_otsutstvia(c)
+    kur = c.execute("delete from otsutstvie_prepodavatelya where id = ?", (period_id,))
+    return kur.rowcount > 0
 
 
 def _razobrat_rezhim(rezhim: str) -> tuple:
@@ -385,6 +528,16 @@ def sobrat_kontekst(rezhim: str = "gost", den=None, baza=None) -> Kontekst:
                   kabinety_dnya=kabinety_dnya, otkuda_kabinet=otkuda_kabinet,
                   kabinety=kabinety, gruppy=gruppy, prep=prep,
                   dni_prepodavatelej=dni_prep, den=den, prepod_id=prepod_id)
+
+    # 🔴 ПЕРИОДЫ ЧИТАЮТСЯ ДЛЯ КАЖДОЙ ДАТЫ СТРАНИЦЫ, А НЕ ТОЛЬКО ДЛЯ «СЕГОДНЯ», И
+    # ИМЕННО ЭТИМ ЗАКРЫВАЕТСЯ «В ОБЕИХ ВЕРСИЯХ РАСПРЕДЕЛЕНИЯ». На экране занятия
+    # дата одна — та, которую спросили. На ПОСТОЯННОМ экране их две: ближайший
+    # понедельник и ближайший четверг, и они лежат в `DNI` третьим полем каждой
+    # записи. Строкой ниже обе версии получают один и тот же ответ из одного и того
+    # же места; отдельной ветки «а на постоянном экране считаем иначе» нет и быть не
+    # должно — она и была бы вторым мнением о том, кого сегодня нет.
+    kt.otsutstvie_po_dnyam = {dat: otsutstvuyushchie_na_datu(c, dat)
+                             for (_, _, dat, _s) in DNI.values()}
 
     # 🔴 THE IMPORT SITS INSIDE THE FUNCTION, AND THAT IS NOT SLOPPINESS.
     # "Who counts as a pupil" is a question belonging to the pupils section, so

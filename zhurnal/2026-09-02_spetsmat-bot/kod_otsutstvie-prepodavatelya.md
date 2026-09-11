@@ -228,6 +228,97 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Read first, decided before writing code.** The zone is
+`veb/razdely/istoria_zanyatij.py` · `veb/razdely/shkolniki.py` ·
+`veb/obshchee/karkas.py` · `migrations/` · `tests/veb/`. Everything below stays
+inside it; the one thing that does not fit is named at the end as a debt.
+
+### What the existing code already holds, and why a new table is still needed
+* `teacher_attendance(session_id, teacher_id, status)` is «сегодня заболел» — it
+  hangs off a `sessions` row, so it can only speak about a date on which a lesson
+  has already been opened. `_OtsutstvieNaDatuAdapter` in `veb/server.py` says this
+  out loud: *«A date with no `sessions` row has no absence either»*. A period of
+  twelve October days, ten of which are not lesson days at all, cannot live there.
+* `prepodavatel_ne_prihodit(teacher_id, slot)` is «по четвергам не хожу вообще» —
+  a weekday rule with no dates. Also not a period.
+* So part 1 of the задание («строка в базе: кто, с какой даты, по какую, почему,
+  кто отметил, когда») is a new table, exactly as the задание says.
+
+### Part 1 — ХРАНИЛИЩЕ (own commit)
+* `migrations/013_otsutstvie_prepodavatelya.sql` (yoyo, plain SQL, `-- depends: 012_…`):
+  `otsutstvie_prepodavatelya(id, teacher_id, s_daty, po_datu, prichina, kto_otmetil, kogda)`.
+  Both ends INCLUSIVE — the owner said «с 1 по 12 октября» and the готовности
+  criterion counts twelve days, which is `01..12` inclusive. `check (s_daty <= po_datu)`,
+  ISO `glob` checks like the rest of the schema, index on `(teacher_id, s_daty)`.
+  Several periods per teacher are allowed; overlaps are not forbidden by the schema
+  (two overlapping «болезнь» rows are not a contradiction, they are two notes).
+* The access layer goes into `veb/obshchee/karkas.py`, because both readers
+  (`shkolniki.py` for the distribution, `istoria_zanyatij.py` for the journal) already
+  import that module and nothing else is shared by the two. Functions:
+  `obespechit_otsutstvia(c)` (create-if-missing, the same idiom
+  `infra/prepodavatel_den_repo.obespechit` already uses for a live база older than its
+  migration), `periody_otsutstvij(c)`, `otsutstvuyushchie_na_datu(c, den)`,
+  `otmetit_otsutstvie(...)`, `snyat_otsutstvie(c, id)`.
+
+### What happens to pupils ALREADY assigned to those days — decision
+**Nothing is deleted, and the fact is shown instead.** The `enrollment` row stays as
+it is; the journal page grows a block «остались без принимающего» listing, per period,
+every pupil whose open row on the period's slots points at the absent teacher. Reason:
+the period ends (she is back on the 13th) — deleting the standing assignment would
+destroy a fact that is still true, to express a fact that is temporary. This follows
+the задание's own suggestion and is named again in `## ОТЧЁТ`.
+
+### Part 2 — ОТМЕТИТЬ (own commit)
+A form on the teachers' journal (`/istoria`, tab «Преподаватели»): teacher, `с`, `по`,
+reason, save. New route `/api/otsutstvie` declared by
+`istoria_zanyatij.marshruty()` — the seam is dispatched on **both** GET and POST by
+`veb/server.py` (`do_GET` and `do_POST` each end with the same `_marshruty_razdelov()`
+branch), so the door can live inside the zone. `POST` marks, `DELETE`-by-`snyat` field
+removes. Backdating is not restricted in any way: «заболел сегодня» and «не будет с
+1 октября» are the same row, which is exactly what the owner asked for.
+
+### Part 3 — ВИДНО (own commit)
+* In the teachers' grid a cell whose day falls in a period renders as its **own kind**
+  (`ist-otsut`, sign `О`, its own colour and `title` naming the reason and the period)
+  — not `✕` («не был»), not empty («не отмечено»). This is what covers a backdated mark.
+* The grid's columns are PAST lessons only (`IstoriyaService` folds over `sessions`),
+  so a future period — the live case, 01–12.10 — has no column to colour. Therefore the
+  page also gets a **day-by-day strip per marked period**: one cell per calendar day of
+  the period, each of the same special kind. That is where the «12 клеток особого вида»
+  of the готовности criterion actually are, and it is the only way to show a future
+  period without inventing lesson days that do not exist.
+
+### Part 4 — ДЕЙСТВУЕТ (own commit)
+* `shkolniki.prihodyashchie_v_slot(kt, sl, tekushchij)` is the ONE place that decides
+  who may be offered as принимающий, and it already serves **both** versions: the
+  permanent screen calls it once per column (slots 1 and 2), the lesson screen once for
+  the single column. Narrowing it therefore covers both versions with one rule.
+* The date of a column comes from `kt.DNI` (`{ключ: (имя, слот, дата, сокр)}`) — the
+  lesson screen carries the requested date, the permanent screen carries the nearest
+  Monday and Thursday. `Kontekst` gets `otsutstvie_po_dnyam: {дата: frozenset(teacher_id)}`,
+  filled by `sobrat_kontekst` for every date in `DNI`.
+* **The absent teacher is removed even when she is the CURRENT value**, which is the one
+  exception to the existing «текущий остаётся в списке всегда» rule, and it is deliberate:
+  that rule exists so a field can show its own value, and here the field says instead
+  «— нет — (принимающий отсутствует)» on the selected option. That is not a silent lie —
+  it names the state — and it is what «не серым, а отсутствует в выборе» requires.
+  Nothing is saved by rendering it: the shell's script enqueues a правка only on a
+  `change` event (`karkas.py`, `pravki` Map), so an untouched field writes nothing.
+
+### Part 5 — ПЕРЕЖИВАЕТ ПЕРЕЗАГРУЗКУ (checked, not claimed)
+A live run on a COPY of the боевая база (`data/spetsmat.db`, copied — the original is
+never written): mark Ольга Рыжая 01.10–12.10, check 12 days × 2 versions = 24, count the
+special cells, stop the server, start it again, repeat all 24 + the cell count.
+
+### What does NOT fit in the zone, and is reported rather than done
+The second half of part 4 — *«если выбор всё же придёт запросом (старая вкладка), дверь
+записи ОТКАЗЫВАЕТ»* — lives in `veb/server.py` (`_OtsutstvieNaDatuAdapter`, line ~443,
+used at line ~1583 for the lesson layer) and in `core/services/enrollment.py`
+(`enforce_calendar_and_ceiling`) for the permanent layer. Both are outside the zone and
+both are READ-ONLY for this заход. The exact patch is written out in `## ВОПРОСЫ` so
+that whoever owns `veb/server.py` next can apply it without re-deriving it.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
