@@ -1872,7 +1872,7 @@ tr:has(.tsch.ploho) td:first-child,.para:has(.sch.ploho),#s-rasp .para.krasn{{
    целиком — она в этой таблице главное, а имя преподавателя и так повторено
    справа, в его карточке. */
 #v-В .org.pr-sel,#v-Д .org.pr-sel,#v-Н .org.pr-sel{{max-width:8.6rem}}
-#s-rasp #v-В .kol .org.pr-sel,#s-rasp #v-Д .kol .org.pr-sel,#s-rasp #v-Н .kol .org.pr-sel{{max-width:10rem}}
+#s-rasp #v-В .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-Д .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-Н .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-В .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-Д .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-Н .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-В .kol .org.pr-sel,#s-rasp #v-Д .kol .org.pr-sel,#s-rasp #v-Н .kol .org.pr-sel{{flex:0 0 11rem;max-width:11rem}}
 #v-В .org.gr-sel,#v-Д .org.gr-sel,#v-Н .org.gr-sel{{width:3.2rem;flex:0 0 3.2rem}}
 #v-В .otsut,#v-Д .otsut,#v-Н .otsut{{font-size:.76rem;padding:.12em .45em}}
 /* 🔴 ИМЯ ПЕРЕНОСИТСЯ, А НЕ ОБРЕЗАЕТСЯ. Владелец 07.09: «посмотри, как обрезалась
