@@ -222,7 +222,10 @@ def test_the_table_covers_the_school_year_and_colours_only_the_past(running_serv
     proshlo = [d for d in vse if zanyatie_zaversheno(d, seichas=seichas)]
     vperyod = [d for d in vse if not zanyatie_zaversheno(d, seichas=seichas)]
 
-    blokov = telo.count('<div class="kab-zanyatie ')
+    # Прошедшая плитка — `<details>` (свёрнута по умолчанию, пункт 4 рецензии 11.09),
+    # будущая — `<div>`: разворачивать в ней нечего. Считаются обе.
+    blokov = (telo.count('<details class="kab-zanyatie ')
+              + telo.count('<div class="kab-zanyatie '))
     assert blokov == len(vse), f"блоков {blokov}, а занятий {len(vse)}"
     assert telo.count('kab-zanyatie byl') + telo.count('kab-zanyatie ne-byl') \
         == len(proshlo), "цветом красится ровно завершившееся"
@@ -605,3 +608,29 @@ def test_no_gendered_verb_is_printed_for_a_person_whose_sex_is_not_in_the_baza(
     for glagol in ("сдал", "сдала", "сдали", "принял", "приняла"):
         assert glagol not in telo, f"род глагола угадан: «{glagol}»"
     assert "задач нет" in telo, "вместо глагола — безличное «задач нет»"
+
+
+def test_every_past_lesson_tile_is_collapsed_until_it_is_clicked(running_server):
+    """Пункт 4 рецензии 11.09: *«удобнее, если у тебя будет свёрнуто… потом я нажимаю,
+    оно разворачивается»*.
+
+    Свёрнутость проверяется по разметке, а не по картинке: `<details>` без атрибута
+    `open` браузер рисует свёрнутым. Красное здесь значит, что плитка приехала
+    раскрытой — то есть ровно тот экран, на который владелец и пожаловался.
+    """
+    from datetime import datetime, timezone
+
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    assert telo.count('<details class="kab-zanyatie ') == len(proshlo)
+    assert "<details open" not in telo and 'kab-zanyatie" open' not in telo, (
+        "ни одна плитка не приезжает раскрытой")
+    assert "<summary class=\"kab-zag\"" in telo, "шапка плитки — сама себе выключатель"

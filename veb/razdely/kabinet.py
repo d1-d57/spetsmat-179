@@ -236,8 +236,16 @@ SVOI_STILI = """
 .kab-zanyatie.byl{border-color:var(--zel);background:var(--zel-fon)}
 .kab-zanyatie.ne-byl{border-color:var(--krasn);background:var(--krasn-fon)}
 .kab-zanyatie.vperyod.netu{border-color:var(--krasn);background:var(--krasn-fon)}
+/* 🔴 СВОЙ ЗНАЧОК РАСКРЫТИЯ, ПОТОМУ ЧТО `display:flex` СЪЕДАЕТ РОДНОЙ. `<summary>`
+   рисует треугольник как маркер списка, а элемент с `display:flex` маркера не имеет
+   вовсе — то есть плитка осталась бы свёрнутой БЕЗ признака того, что её можно
+   развернуть, а это ровно половина просьбы владельца («потом я нажимаю, оно
+   разворачивается»). Значок ставится содержимым `::before` и меняется на `[open]`. */
 .kab-zag{display:flex;align-items:baseline;gap:.5rem;font-weight:600;font-size:1.02rem;
-  cursor:pointer}
+  cursor:pointer;list-style:none}
+.kab-zag::-webkit-details-marker{display:none}
+.kab-zag::before{content:"▸";font-size:.85em;color:var(--muted)}
+.kab-zanyatie[open]>.kab-zag::before{content:"▾"}
 .kab-zanyatie.byl .kab-zag{color:var(--zel)}
 .kab-zanyatie.ne-byl .kab-zag{color:var(--krasn)}
 .kab-skolko{margin-left:auto;font-weight:400;font-size:.85rem;color:var(--muted)}
@@ -504,10 +512,18 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
             }
             spisok = ('<ul class="kab-spisok">%s</ul>' % "".join(punkty) if punkty
                       else '<p class="kab-nikogo">школьников в этот день не было</p>')
+            # 🔴 `<details>`, А НЕ DIV С ОБРАБОТЧИКОМ — ПУНКТ 4 РЕЦЕНЗИИ 11.09:
+            # *«мне кажется, что такой формат не очень удобный. Удобнее, если у тебя
+            # будет свёрнуто… потом я нажимаю, оно разворачивается»*. Свёрнутость по
+            # умолчанию — это отсутствие атрибута `open`, то есть состояние, которого
+            # нельзя забыть выставить; разворачивает браузер сам, поэтому клавиатура,
+            # поиск по странице и печать работают без единой строки скрипта. Своя
+            # пара «флажок + CSS» дала бы то же самое ценой третьего механизма
+            # раскрытия на одной странице.
             bloki.append(
-                '<div class="kab-zanyatie %s" data-den="%s">'
-                '<div class="kab-zag" data-den="%s" tabindex="0">%s'
-                '<span class="kab-skolko">%s</span></div>%s</div>'
+                '<details class="kab-zanyatie %s" data-den="%s">'
+                '<summary class="kab-zag" data-den="%s">%s'
+                '<span class="kab-skolko">%s</span></summary>%s</details>'
                 % ("ne-byl" if netu else "byl", e(den), e(den), e(podpis),
                    # 🔴 «ЗАДАЧ», А НЕ «СДАЧ» — ПУНКТ 2 РЕЦЕНЗИИ ВЛАДЕЛЬЦА 11.09,
                    # дословно: *«потом слово „сдач“ очень странное. Лучше пиши
