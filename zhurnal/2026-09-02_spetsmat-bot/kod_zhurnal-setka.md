@@ -446,12 +446,224 @@ $ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_z
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/veb/razdely/istoria_zanyatij.py` — код страницы `/istoria`
+**РОД АРТЕФАКТА:** `исходник`
+**ЧТО ОТКРЫТЬ ГЛАЗАМИ (не гейтовая строка, а адрес для владельца):**
+`/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/zhurnal-setka/scratchpad/zhurnal-setka/istoria.html`
+— готовая страница, собранная на копии боевой базы (157 546 байт, 12:11), открывается
+двойным щелчком в браузере. Живьём то же самое: `http://math-kluychiki.ru/istoria`
+после выкатки (деплоя в этом заходе нет — так стояло в задании).
+**КОММИТ:** `7c05787` — `журнал: one receiver, named once — and the numbers behind the several (item 6)` · `git_zona.py check --zone <вся зона>` → ✅ на всех четырёх путях
+*(это последний коммит СОДЕРЖАНИЯ; всего их семь, список ниже — заход требовал коммитить каждую часть отдельно)*
+
+---
+
+### ЧТО СДЕЛАНО И ЗАЧЕМ — ШЕСТЬ ПУНКТОВ РЕЦЕНЗИИ, ШЕСТЬ ОТДЕЛЬНЫХ КОММИТОВ
+
+| # | коммит | что закрыто |
+|---|--------|-------------|
+| 1 | `82428d0` | explanatory prose off the screen |
+| 2 | `b4db1a5` | the column header is the date and nothing else |
+| 3 | `e2d6f9d` | sixteen narrow columns, a whole quarter ahead |
+| 4 | `9940a7f` | the cell opens a row per sheet, tasks as buttons |
+| 5 | `a9e6916` | grammatical gender |
+| 6 | `7c05787` | one receiver, named once |
+| — | `e355744` | entrance hygiene, ВОПРОСЫ, factory lesson |
+
+**1 · PROSE.** Removed: «занятий N · без принимающего в этот день N», both per-journal
+explanations («посещения и сдача… прообраз личного кабинета» / «по нему считается
+зарплата — цена ошибки в клетке…»), and «отменённые занятия (в решётке их нет…)». The
+journals keep their NAMES; only what explained them is gone. WHY those sentences were
+written in the first place is still recorded — in the code, where the owner does not
+have to read it.
+
+**2 · HEADER.** `<th>` is now exactly `07.09`: no weekday prefix, no kind of lesson.
+The kind did not vanish with the word — it became the CLASS of the column (`ist-zachyot`
+accent, `ist-otmen` struck through), so «когда были контрольные, когда был праздник»
+(his request of 10.09) is still answerable by sight. `обычное` draws nothing: it is the
+norm, and it was the noise.
+
+**3 · SIXTEEN COLUMNS.** The columns stopped being «days that have a `sessions` row»
+(there is ONE such day in the live base, which is why he saw a one-column table) and
+became the CALENDAR of a quarter, with the recorded days laid on top. A day with no
+record is an EMPTY cell — never a ✕, because ✕ means «не был», an assertion about a
+person, and nobody has asserted anything about a lesson that has not happened.
+A quarter = 16 consecutive lesson days from 1 September; that is the owner's own
+arithmetic and the only definition this repository can compute, since it holds no
+holiday calendar anywhere. The definition, the switcher and its styles are SHARED, in
+`veb/obshchee/karkas.py`, because the `kabinet-plitki` position was asked for the same
+switch — one place, not two that drift.
+
+**4 · THE CELL.** One row per листок: a листок button (a link to the sheet's page) plus
+the tasks as buttons. Written ONCE, as `karkas.SDACHI_SKRIPT` / `SDACHI_STILI`; the
+journal holds a call and no markup of its own. A task is a `<span>` styled as a button
+rather than a real button — a single task has no address anywhere in this project, and
+a button that leads nowhere promises a click it cannot answer. (The §3 verifier
+measured exactly this and called it out; it is deliberate and is written down in the
+helper.)
+
+**5 · GENDER.** There is no gender column in the schema, so the rule derives it from the
+name: SURNAME first, first name only when the surname is indeclinable. Measured: the
+naive «имя на -а/-я значит женское» is wrong 5 times out of 19 on the live base.
+Gendered now: «принимала X», «не была», «ничего не сдала», «в этот день не принимала»,
+and the cell's hover title.
+
+**6 · ONE RECEIVER.** Said ONCE, as the cell's own line; «— принял X» is gone from every
+task row, and the per-task field is gone from the data block.
+
+### КАК ПРОВЕРЕНО
+
+**Живой прогон на реальном объекте** (не только фикстура) — копия боевой базы
+`data/spetsmat.db` (57 школьников, 15 900 отметок), в саму базу не писалось ни разу:
+* сборка страницы: `PYTHONPATH=. python3 scratchpad/zhurnal-setka/render.py` → rc=0,
+  157 546 байт, 32 столбца (16 + 16), ни одной из семи запрещённых строк.
+* браузер, chromium 1440×900 (playwright): 16 из 16 дат в шапке, решётка 916 px в окне
+  1440 px, `document.scrollWidth == window.innerWidth == 1440` — горизонтальной
+  прокрутки страницы нет; открыто 3 клетки из 3, в них 1 / 2 / 3 строки листков и
+  3 / 5 / 7 кнопок задач, ссылки `/listki/1`, `/listki/2`, `/listki/3`.
+* согласование по роду, счётом по всему блоку данных: **212 фраз проверено, мужских
+  форм про женщину 0** (22 клетки, где принимала женщина, 23 — где принимал мужчина).
+* правило рода прогнано по ВСЕМ людям базы: **19 преподавателей из 19 верно, 57
+  школьников из 57 верно**. Пятьдесят семь стали пятьюдесятью семью только после того,
+  как замер нашёл одну ошибку — «Кахиани Нино».
+
+**Тесты.** `tests/veb/test_istoria_zanyatij.py` + новый `tests/veb/test_rod_imeni.py` →
+**42 зелёных**. Вся `tests/veb`: **203 passed, 8 failed, 13 errors, 15 skipped,
+2 xfailed**. 🔴 Восемь падений и тринадцать ошибок — УНАСЛЕДОВАННЫЕ, и это не слово, а
+замер: та же `tests/veb` прогнана в одноразовой рабочей папке на коммите `5220b59`
+(точка ветвления) и дала ТЕ ЖЕ ВОСЕМЬ ИМЁН и те же тринадцать ошибок; `diff` двух
+списков пуст. Папку снял за собой (`git worktree remove`). Было 174 зелёных, стало 203
+— плюс 29 моих.
+
+**Верификатор §3** — свежий субагент, ДРУГИМ методом: своя копия базы, свои дописанные
+отметки, свой сервер, свой браузер, своя независимая таблица пола всех 68 человек,
+составленная ДО чтения страницы. Ответ кончается обязательной строкой «выдано 10
+позиций из 10 найденных». Его вердикт по всем шести пунктам — **HOLDS**, с числами:
+1. запрещённой прозы: 0 из 7 строк в четырёх прочтениях страницы (28 проверок);
+2. шапки: 16 из 16 в обоих журналах — только `^\d\d\.\d\d$`, без `title`;
+3. решётка: 54×16 = 864 клетки у школьников (54 живых, 810 пустых), 14×16 = 224 у
+   преподавателей; переключатель 4 из 4, открытая помечена цветом;
+4. панель: открыто **5 клеток (3 школьника + 2 преподавателя) при требуемых 3**, по 3
+   строки листков и 6 задач; `/listki/1` и `/listki/9` отвечают 200;
+5. род: **210 фраз проверено, 0 расхождений**, 0 неклассифицированных из 68 человек;
+6. принимающий назван **ровно 1 раз** в каждой из 5 открытых панелей, 0 повторов в
+   строках листков и на кнопках задач;
+7. горизонтальной прокрутки нет: три замера, `scrollWidth == innerWidth == 1440`;
+8. четверти дают 4 различных набора из 16 дат, `?ch=1` и `?ch=2` расходятся 16 из 16;
+9. тесты 42 passed;
+10. **его собственная находка сверх задания:** принимающий клетки берётся из
+    `enrollment`, а НЕ из `marks.teacher_id` — он нарочно записал сдачи под другим
+    преподавателем, и они не появились в журнале преподавателей. На живых данных
+    расхождения нет (замер: из 53 не-импортных отметок `teacher_id` не несёт НИ ОДНА),
+    но шов настоящий, и он вписан пунктом 3 в `## ВОПРОСЫ` с домом.
+
+### ОТКУДА БЕРУТСЯ «РАЗНЫЕ ПРИНИМАЮЩИЕ» — ЧИСЛОМ, А НЕ ЗАМАЗКОЙ
+
+Владелец: «принимающий один на занятие». На этой базе буквально это НЕВЕРНО, и вот чем
+это измерено (день 2026-09-10, единственное записанное занятие):
+* 54 активных школьника, **14 РАЗНЫХ принимающих** в этом дне, по 3–5 школьников у
+  каждого;
+* источник — `enrollment`: **90 действующих строк, 14 разных преподавателей**. Постоянное
+  распределение выдаёт КАЖДОМУ школьнику своего преподавателя, кабинет и слот. Это не
+  дефект — это то, что пишет экран распределения;
+* правок слоя занятия с названным принимающим (`attendance.teacher_id`): **0**;
+* школьников, у кого в один день ДВА принявших: **0**;
+* отметок, спорящих с клеткой: **0**;
+* школьников вовсе без принимающего: **9 из 54**;
+* и главное: из 53 не-импортных отметок базы `teacher_id` не несёт **ни одна** — строка
+  «— принял X», которая повторялась у каждой задачи, на живых данных не печатала ничего.
+
+Вывод, который и реализован: «один принимающий» верно ПРО ШКОЛЬНИКА В ЗАНЯТИИ, и
+именно так он теперь и назван — один раз. Четырнадцать осталось числом в отчёте.
+
+### ЧЕГО НЕ ТРОГАЛ
+
+`core/services/istoria_poseshchenij.py` · `core/services/sostav_na_den.py` ·
+`veb/razdely/kabinet.py` · `veb/server.py` · `migrations/` · вся остальная `veb/` — вне
+зоны. Наложение календаря на данные сделано в странице, где и календарь, и данные уже в
+руках; `sdachi_po_zanyatiyam` сохранила подпись и форму кортежа, потому что её второй
+зватель — `kabinet.py`, а он вне зоны. Найденное вне зоны ушло в `## ВОПРОСЫ`, не в код.
+
+### НЕОБРАТИМОЕ
+
+Удалены (всё — внутри своей зоны, восстанавливается `git show 5220b59:<путь>`):
+* `_otmenennye()` и строка про отменённые занятия — `veb/razdely/istoria_zanyatij.py`,
+  вместе с их поводом (пункт 1 рецензии); факт переехал в класс столбца;
+* `IMYA_RODA`, `ROD_OBYCHNYJ`, `DNI_NEDELI`, `_shapka_dnya` — там же, по пункту 2;
+* тест `test_the_kind_of_the_lesson_is_visible_in_every_column` ПЕРЕВЁРНУТ в
+  `test_the_header_of_a_column_is_the_date_and_nothing_else`, тест
+  `…_say_what_each_is_for` — в `…_and_nothing_explains_them`. Оба требовали ровно того,
+  что владелец запретил; это не ослабление, а смена стороны, и в каждом написано, чем
+  он был.
+* временная рабочая папка `scratchpad/baseline` на коммите `5220b59` — заведена ради
+  замера унаследованных падений и снята за собой (`git worktree remove --force`);
+  `git worktree list` её больше не содержит.
+Ничего вне зоны не удалялось, не переименовывалось и не перемещалось. Боевая база
+`data/spetsmat.db` НЕ открывалась на запись ни разу — работа шла на копиях в
+`scratchpad/zhurnal-setka/`.
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+
+* **ПОВТОРИТСЯ на следующей единице работы (класс НЕМЕДЛЕННОЕ, заход ДО следующего
+  прогона):** критерий готовности, который проверяется «на живой базе», не проверен на
+  ИСПОЛНИМОСТЬ по этим данным. Здесь он требовал открыть три клетки со сдачами, а сдач,
+  доезжающих до клетки, в базе НОЛЬ. Это повторится у каждого следующего захода,
+  который просит «проверить на боевых данных» экран, показывающий то, чего в базе ещё
+  нет, — и каждый раз будет выглядеть как брак исполнителя. Оформлено уроком фабрике.
+* **ПОВТОРИТСЯ:** фикстура тестов, считающая свои даты от «сегодня минус N», ломается
+  при любой смене того, ЧЕМ страница нарезает время. Здесь это уже второй раз в одном
+  файле — предыдущий разбор стоит в его же комментарии. Починено адресно: даты берутся
+  из той же функции, что строит столбцы. Но приём «дата от сегодня» жив в других
+  фикстурах.
+* **ПОВТОРИТСЯ:** браузерный тест, которому нужна машина целиком
+  (`test_offlajn_brauzer.py`), падает при втором chromium. У параллельной волны второй
+  chromium есть всегда. Пункт 8 `## ВОПРОСЫ`.
+* **НЕ повторится** (законно уходит записью): определение четверти без календаря
+  каникул, дубль `nachalo_uchebnogo_goda` в `kabinet.py`, отсутствие колонки пола,
+  9 школьников без принимающего — всё это про эту базу и эти файлы, пункты 1–6
+  `## ВОПРОСЫ`.
+
+### ГИТ-ГИГИЕНА ПОСЛЕДНИМ ХОДОМ — ЧИСЛА КОМАНДОЙ
+
+**Г1. Зона доехала в git** — четыре команды, четыре ✅:
+```
+✅ зона veb/razdely/istoria_zanyatij.py: работа доехала в git, вне git ничего нет.
+✅ зона veb/obshchee/karkas.py: работа доехала в git, вне git ничего нет.
+✅ зона tests/veb/: работа доехала в git, вне git ничего нет.
+✅ зона zhurnal/2026-09-02_spetsmat-bot/kod_zhurnal-setka.md: работа доехала в git, вне git ничего нет.
+```
+**Г2. Второй репозиторий** — неприменимо: все пути зоны лежат внутри `spetsmat-bot`,
+за его пределы зона по ходу работы не вышла. Инструменты `disciplina` только ЗВАЛИСЬ,
+ни один её файл не правился (`git -C /Users/ivanyakovlev/Documents/GitHub/disciplina --no-optional-locks status --porcelain` — см. число ниже).
+
+**Г3. Невлитых веток.** На входе `git --no-optional-locks branch --no-merged main | grep -c zahod/` → **0**.
+Перед влитием — **4**, и все четыре законны поимённо:
+`zahod/kabinet-plitki`, `zahod/konduit-galochki-i-podskazki`,
+`zahod/otsutstvie-prepodavatelya` — живые рабочие папки ПАРАЛЛЕЛЬНЫХ позиций этой же
+волны (сессии видны в списке соседей), вливать чужое мне запрещено; `zahod/zhurnal-setka`
+— моя, влита последним ходом, число после влития — ниже.
+
+**Г4. Новый инструмент имеет живую точку вызова** — неприменимо: ни одного нового `.py`
+в `_generator/**` не заведено. Единственный новый `.py` за заход —
+`tests/veb/test_rod_imeni.py`, и его точка вызова — сама `pytest` (26 зелёных).
+
+**Г5. Новый `.md` зарегистрирован** — неприменимо: ни одного нового `.md` не заведено
+(`git diff --name-status --diff-filter=A main...HEAD -- '*.md'` пуст). `register_doc.py`
+не звался, `_studio/docs/KARTA.md` не трогался.
+
+**Г6. В коммите нет чужих путей.** `git --no-optional-locks diff --name-only main...HEAD`
+за все семь коммитов даёт ровно пять файлов, и все пять — зона:
+```
+tests/veb/test_istoria_zanyatij.py
+tests/veb/test_rod_imeni.py
+veb/obshchee/karkas.py
+veb/razdely/istoria_zanyatij.py
+zhurnal/2026-09-02_spetsmat-bot/kod_zhurnal-setka.md
+```
+
+**Время прогона + токены — НЕПРИМЕНИМО:** движок `opencode`, счётчика стоимости в логе
+нет.
+
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
