@@ -450,6 +450,37 @@ def test_the_cell_opens_a_row_per_sheet_with_the_tasks_as_buttons(running_server
         ("16A", "3"), ("16A", "5"), ("17", "1")]
 
 
+def test_no_masculine_verb_is_said_about_a_woman(running_server):
+    """Владелец 11.09: «опять у тебя „принял Саша Оревкова“. Ну пол учитывай».
+
+    Критерий готовности захода назван числом: «слов „сдал“ про девочек — ноль».
+    Сторожится он здесь, и сторожится по ВСЕЙ странице, а не на одном примере:
+    каждая согласуемая фраза блока данных сверяется с родом того, О КОМ она.
+    Фикстура держит и женщину (Иванова Мария, Агаркова Ирина), и мужчин.
+    """
+    import re
+
+    from veb.obshchee.karkas import rod_imeni
+
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
+    assert status == 200
+    dannye = _dannye_stranicy(body.decode("utf-8"))
+
+    muzhskoe = re.compile(r"(^|\s)(не был|ничего не сдал|не принимал|принимал)(\s|$)")
+    proverok = 0
+    for zapis in dannye.values():
+        pary = [(zapis[pole], zapis["kto"])
+                for pole in ("ne_byl", "ne_sdal", "ne_prinimal") if zapis.get(pole)]
+        if zapis.get("prinyal") and zapis.get("komu"):
+            pary.append((zapis["prinyal"], zapis["komu"]))
+        pary += [(r["ne_sdal"], r["kto"]) for r in zapis.get("deti", []) if r.get("ne_sdal")]
+        for fraza, o_kom in pary:
+            proverok += 1
+            if rod_imeni(*reversed(o_kom.split(None, 1))) == "ж":
+                assert not muzhskoe.search(fraza), (o_kom, fraza)
+    assert proverok > 0, "на странице есть что согласовывать"
+
+
 def _dannye_stranicy(telo: str) -> dict:
     import json
     import re

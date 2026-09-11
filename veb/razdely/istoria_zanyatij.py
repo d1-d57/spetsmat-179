@@ -64,7 +64,8 @@ from infra.sessions_repo import SqliteSessionBook
 from veb import vhod
 from veb.obshchee.karkas import (CHETVERTI_STILI, SDACHI_SKRIPT, SDACHI_STILI,
                                 chetverti_goda, e, menyu_ssylkami,
-                                nomer_chetverti, perekluchatel_chetvertej)
+                                nomer_chetverti, perekluchatel_chetvertej,
+                                v_rode)
 from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
 
@@ -343,6 +344,13 @@ KLETKA_PUSTAYA = '<td class="ist-pusta"></td>'
 
 def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni) -> str:
     est = set(istoriya.dni)
+    # Всплывающая подсказка клетки — тоже фраза о человеке, и род у неё тот же.
+    # Считается по разу на школьника, а не по разу на клетку: клеток 57 × 16.
+    ne_byl = {u["id"]: v_rode(u["name"], "не был", "не была", u["surname"])
+              for u in students}
+    byl_bez = {u["id"]: v_rode(u["name"], "был, но принимающий не назначен",
+                               "была, но принимающий не назначен", u["surname"])
+               for u in students}
     stroki = []
     for u in students:
         po_dnyam = istoriya.shkolniki.get(u["id"], {})
@@ -352,9 +360,10 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni) -> str:
             if den not in est:
                 kletki.append(KLETKA_PUSTAYA)
             elif yacheika is None or not yacheika.prisutstvoval:
-                kletki.append(_kletka("ist-net", "✕", "не был", den, "shk", u["id"]))
+                kletki.append(_kletka("ist-net", "✕", ne_byl[u["id"]],
+                                      den, "shk", u["id"]))
             elif yacheika.nekuda_det:
-                kletki.append(_kletka("ist-def", "?", "был, но принимающий не назначен",
+                kletki.append(_kletka("ist-def", "?", byl_bez[u["id"]],
                                       den, "shk", u["id"]))
             else:
                 prep = teachers_by_id.get(yacheika.prepodavatel_id)
@@ -381,7 +390,9 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni) -> s
             if den not in est:
                 kletki.append(KLETKA_PUSTAYA)
             elif yacheika is None or not yacheika.prisutstvoval:
-                kletki.append(_kletka("ist-net", "✕", "не был", den, "prep", t["id"]))
+                kletki.append(_kletka("ist-net", "✕",
+                                      v_rode(t["name"], "не был", "не была"),
+                                      den, "prep", t["id"]))
             else:
                 imena = ", ".join(
                     _imya_shkolnika(students_by_id[sid])
@@ -410,6 +421,7 @@ def _chto_raskryvaetsya(students, teachers, istoriya, sdachi, dni) -> dict:
     """
     imena_prepov = {t["id"]: t["name"] for t in teachers}
     imena_detej = {u["id"]: _imya_shkolnika(u) for u in students}
+    students_po_id = {u["id"]: u for u in students}
     # Только те дни решётки, о которых запись ЕСТЬ: пустая клетка не кликается, и
     # содержимое для неё было бы мёртвым весом в каждом ответе страницы.
     dni = tuple(d for d in dni if d in set(istoriya.dni))
@@ -419,13 +431,24 @@ def _chto_raskryvaetsya(students, teachers, istoriya, sdachi, dni) -> dict:
         for den in dni:
             ya = po_dnyam.get(den)
             sdal = sdachi.get((den, u["id"]), ())
+            komu = (imena_prepov.get(ya.prepodavatel_id)
+                    if ya is not None and ya.prisutstvoval else None)
             itog["shk|%s|%s" % (den, u["id"])] = {
                 "kto": imena_detej[u["id"]],
                 "byl": bool(ya is not None and ya.prisutstvoval),
-                "komu": (imena_prepov.get(ya.prepodavatel_id)
-                         if ya is not None and ya.prisutstvoval else None),
-                "sdal": [{"zadacha": z, "listok": l,
-                          "prinyal": imena_prepov.get(tid)} for z, l, tid in sdal],
+                "komu": komu,
+                # 🔴 СЛОВА, КОТОРЫЕ МЕНЯЮТСЯ ПО РОДУ, СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В
+                # БРАУЗЕРЕ. Род выводится из имени (`karkas.rod_imeni`), имя есть
+                # только на сервере, и посылать в JSON ещё и род значило бы
+                # посылать промежуточный ответ вместо готового. Поэтому в клетку
+                # уезжает уже согласованная строка.
+                "prinyal": ("принимающий не назначен" if not komu
+                            else "%s %s" % (v_rode(komu, "принимал", "принимала"),
+                                            komu)),
+                "ne_byl": v_rode(u["name"], "не был", "не была", u["surname"]),
+                "ne_sdal": v_rode(u["name"], "ничего не сдал", "ничего не сдала",
+                                  u["surname"]),
+                "sdal": [{"zadacha": z, "listok": l} for z, l, _tid in sdal],
             }
     for t in teachers:
         po_dnyam = istoriya.prepodavateli.get(t["id"], {})
@@ -436,8 +459,11 @@ def _chto_raskryvaetsya(students, teachers, istoriya, sdachi, dni) -> dict:
                 for sid in ya.ucheniki:
                     if sid not in imena_detej:
                         continue
+                    rebyonok = students_po_id[sid]
                     deti.append({
                         "kto": imena_detej[sid],
+                        "ne_sdal": v_rode(rebyonok["name"], "ничего не сдал",
+                                          "ничего не сдала", rebyonok["surname"]),
                         "sdal": [{"zadacha": z, "listok": l}
                                  for z, l, tid in sdachi.get((den, sid), ())
                                  if tid is None or tid == t["id"]],
@@ -445,6 +471,8 @@ def _chto_raskryvaetsya(students, teachers, istoriya, sdachi, dni) -> dict:
             itog["prep|%s|%s" % (den, t["id"])] = {
                 "kto": t["name"],
                 "byl": bool(ya is not None and ya.prisutstvoval),
+                "ne_prinimal": v_rode(t["name"], "в этот день не принимал",
+                                      "в этот день не принимала"),
                 "deti": deti,
             }
     return itog
@@ -570,17 +598,19 @@ SKRIPT = """
     otkryta = kletka; kletka.classList.add('ist-otkryta');
     zag.textContent = d.kto + ' · ' + kletka.dataset.den;
     if (kletka.dataset.vid === 'shk') {
+      // Слова уже согласованы по роду на сервере (`_chto_raskryvaetsya`): здесь
+      // печатается готовая строка, а не собирается фраза из кусков.
       telo.innerHTML = !d.byl
-        ? '<p class="ist-nichego">на этом занятии не был</p>'
-        : '<p class="ist-komu">принимал: ' + (d.komu || 'принимающий не назначен') + '</p>'
-          + sdachi(d.sdal, 'в этот день ничего не сдал');
+        ? '<p class="ist-nichego">на этом занятии ' + d.ne_byl + '</p>'
+        : '<p class="ist-komu">' + d.prinyal + '</p>'
+          + sdachi(d.sdal, 'в этот день ' + d.ne_sdal);
     } else {
       telo.innerHTML = !d.byl
-        ? '<p class="ist-nichego">в этот день не принимал</p>'
+        ? '<p class="ist-nichego">' + d.ne_prinimal + '</p>'
         : (d.deti.length
              ? d.deti.map(function(r){
                  return '<div class="ist-rebyonok"><p class="ist-imya">' + r.kto + '</p>'
-                      + sdachi(r.sdal, 'ничего не сдал') + '</div>';
+                      + sdachi(r.sdal, r.ne_sdal) + '</div>';
                }).join('')
              : '<p class="ist-nichego">в этот день никого</p>');
     }
