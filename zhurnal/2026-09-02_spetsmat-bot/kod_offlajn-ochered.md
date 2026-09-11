@@ -866,6 +866,9 @@ $ git branch --no-merged main                            →  zahod/shirina-prep
 **ВЕТКА РАБОТЫ:** `zahod/offlajn-ochered`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
 
+
+**ЗАЯВОК НЕТ:** ни одна из пяти операций не понадобилась этой приёмке отдельной заявкой — влитие и вывоз сделаны в ходе волны и проверены фактом (`merge-base --is-ancestor` по каждой ветке, `vyvezti --yes` по каждой). Двадцать четыре заявки, висевшие с 10.09, закрыты оркестратором 11.09 в 10:26 с разбором: работа ни одной из них не потеряна, все ветки 10.09 влиты в main, main вывезен зелёным.
+
 **ЗАЯВКИ, ПОСТАВЛЕННЫЕ ЭТОЙ ПРИЁМКОЙ — ПРОДУБЛИРУЙ СЮДА ТО, ЧТО УЖЕ ЛЕЖИТ В СПИСКЕ:**
 > Адрес списка: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/_INFRA-git/zayavki`
 > Читается командой (из любой папки, в том числе из worktree): `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki`

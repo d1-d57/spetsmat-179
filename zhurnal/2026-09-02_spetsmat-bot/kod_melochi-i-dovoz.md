@@ -322,7 +322,7 @@ git --no-optional-locks branch --no-merged main | grep -c zahod/
 **ЧТО СДЕЛАНО** *(с хэшами)*
 Merged branch zahod/melochi-i-dovoz into main (commit 01391ae). Two commits: b54c457 (fix Elena->Lena), 540b39c (add three docs). Zone checks passed for all 5 zone paths.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** yes
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** да — проверено оркестратором на приёмке 11.09: `git --no-optional-locks branch --no-merged main | grep -c zahod/` → 0; ветка позиции влита в main (01391ae) и погашена.
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
@@ -362,6 +362,9 @@ Merged branch zahod/melochi-i-dovoz into main (commit 01391ae). Two commits: b54
 
 **ВЕТКА РАБОТЫ:** `zahod/melochi-i-dovoz`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
+
+
+**ЗАЯВОК НЕТ:** ни одна из пяти операций не понадобилась этой приёмке отдельной заявкой — влитие и вывоз сделаны в ходе волны и проверены фактом (`merge-base --is-ancestor` по каждой ветке, `vyvezti --yes` по каждой). Двадцать четыре заявки, висевшие с 10.09, закрыты оркестратором 11.09 в 10:26 с разбором: работа ни одной из них не потеряна, все ветки 10.09 влиты в main, main вывезен зелёным.
 
 **ЗАЯВКИ, ПОСТАВЛЕННЫЕ ЭТОЙ ПРИЁМКОЙ — ПРОДУБЛИРУЙ СЮДА ТО, ЧТО УЖЕ ЛЕЖИТ В СПИСКЕ:**
 > Адрес списка: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/zhurnal/_INFRA-git/zayavki`
