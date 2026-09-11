@@ -349,8 +349,17 @@ SVOI_STILI = """
 .kab-nikogo{color:var(--muted);font-size:.9rem;margin:.4rem 0 0}
 /* Будущее: клетка сама себе выключатель, как и была. Флажок спрятан, а не убран —
    им работают клавиатура и `:focus-visible`, и он же несёт дату для двери. */
-.kab-vpered-metka{display:flex;align-items:baseline;gap:.5rem;cursor:pointer;
+.kab-vpered-metka{display:flex;align-items:center;gap:.5rem;cursor:pointer;
   font-weight:600;font-size:1.02rem}
+/* «Меня не будет» — единственный орган будущей плитки (пункт 6), поэтому он и
+   выглядит органом: та же пилюля, что у вкладок четвертей, а не серая подпись
+   `.kab-skolko`, которой он был, пока рядом стоял список фамилий. */
+.kab-net-knopka{margin-left:auto;font-weight:400;font-size:.82rem;
+  border:1px solid var(--rule);border-radius:999px;padding:.2em .8em;
+  color:var(--muted);white-space:nowrap}
+.kab-vpered-metka:hover .kab-net-knopka{color:var(--accent);border-color:var(--accent)}
+.kab-zanyatie.vperyod.netu .kab-net-knopka{color:var(--krasn);
+  border-color:var(--krasn);text-decoration:none}
 .kab-zanyatie.vperyod.netu .kab-vpered-metka{color:var(--krasn);
   text-decoration:line-through}
 .kab-zanyatie input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
@@ -590,12 +599,18 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
         d = date.fromisoformat(den)
         wd = d.isoweekday()
         podpis = "%s %02d.%02d" % (KOROTKO_DNYA.get(wd, ""), d.day, d.month)
-        # Наведение и список называют школьников ТОГО дня: `deti_na_datu` держит
-        # интервал `enrollment`, поэтому на прошедшую дату отвечает состав, который
-        # был тогда, а не сегодняшний.
-        kto_byl = deti_na_datu(c, teacher_id, den)
         netu = den in net_na
         if proshlo_li:
+            # Список называет школьников ТОГО дня: `deti_na_datu` держит интервал
+            # `enrollment`, поэтому на прошедшую дату отвечает состав, который был
+            # тогда, а не сегодняшний.
+            #
+            # 🔴 И СПРАШИВАЕТСЯ ОН ТОЛЬКО ЗДЕСЬ, А НЕ ДЛЯ КАЖДОГО ДНЯ ГОДА. Вызов
+            # стоял выше развилки, то есть отрабатывал и для будущего; с пунктом 6
+            # будущей плитке школьники не нужны вовсе, а страница несёт теперь все
+            # четыре четверти — это полсотни `SostavService.sostav(den)` за один
+            # показ страницы. Замер на копии боевой базы до и после — в `## ОТЧЁТ`.
+            kto_byl = deti_na_datu(c, teacher_id, den)
             punkty = []
             sdach_dnya = 0
             for r in kto_byl:
@@ -645,21 +660,23 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                    # чужом файле (`istoria_zanyatij.sdachi_po_zanyatiyam`) — менять
                    # имя здесь значило бы развести его с источником.
                    e("вас не было" if netu else "задач: %d" % sdach_dnya), spisok))
-        else:
-            imena = ", ".join("%s %s" % (e(r["surname"]), e(r["name"]))
-                              for r in kto_byl)
-            return (
-                '<div class="kab-zanyatie vperyod%s" data-den="%s">'
-                '<label class="kab-vpered-metka">'
-                '<input type="checkbox" data-den="%s"%s>'
-                '<span class="kab-den-tekst">%s</span>'
-                '<span class="kab-skolko">меня не будет</span></label>'
-                '%s</div>'
-                % (" netu" if netu else "", e(den), e(den),
-                   " checked" if netu else "", e(podpis),
-                   ('<ul class="kab-spisok"><li>%s</li></ul>'
-                    % imena.replace(", ", "</li><li>")) if imena
-                   else '<p class="kab-nikogo">школьников пока нет</p>'))
+        # 🔴 БУДУЩАЯ ПЛИТКА ПУСТА, И ЭТО ПУНКТ 6 РЕЦЕНЗИИ 11.09, дословно: *«на
+        # будущее точно не надо их заполнять сейчас. Какие там школьники на будущее,
+        # непонятно. Список школьников я бы не ставил, на будущее пустые такие
+        # таблетки и просто возможность нажать „меня не будет“»*. Здесь стоял список
+        # фамилий, взятый у СЕГОДНЯШНЕГО распределения и показанный как состав дня,
+        # до которого ещё месяц: к тому дню состав поменяется, и плитка врала не
+        # ошибкой, а самим фактом своего существования. Остаётся дата и один орган —
+        # тот же флажок и та же дверь, ни строки в пути записи не тронуто.
+        return (
+            '<div class="kab-zanyatie vperyod%s" data-den="%s">'
+            '<label class="kab-vpered-metka">'
+            '<input type="checkbox" data-den="%s"%s>'
+            '<span class="kab-den-tekst">%s</span>'
+            '<span class="kab-net-knopka">меня не будет</span></label>'
+            '</div>'
+            % (" netu" if netu else "", e(den), e(den),
+               " checked" if netu else "", e(podpis)))
 
     otkryta = otkrytaya_chetvert(segodnya(), god)
     perekluchateli = "".join(

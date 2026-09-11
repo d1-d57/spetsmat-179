@@ -690,3 +690,40 @@ def test_the_year_is_laid_out_as_four_quarter_tabs_of_five_columns(running_serve
                 f"{den} не из четверти {nomer}, а лежит в ней")
 
     assert ".kab-tablica{columns:5" in telo, "пять колонок — число, названное владельцем"
+
+
+def test_a_future_tile_carries_a_date_and_a_button_and_no_pupils(running_server):
+    """Пункт 6 рецензии 11.09: *«на будущее точно не надо их заполнять сейчас… список
+    школьников я бы не ставил, на будущее пустые такие таблетки и просто возможность
+    нажать „меня не будет“»*.
+
+    Проверяется на ФАМИЛИЯХ ФИКСТУРЫ, а не на отсутствии тега: список мог бы уехать
+    в другую разметку и остаться списком. Оба школьника фикстуры ходят к своим
+    преподавателям обоими слотами, поэтому до правки их фамилии стояли в КАЖДОЙ
+    будущей плитке — это и есть то, на что владелец посмотрел.
+    """
+    from datetime import datetime, timezone
+
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import chetverti_goda, segodnya, zanyatiya_mezhdu
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    seichas = datetime.now(timezone.utc)
+    vse = [d for _n, ot, do in chetverti_goda(segodnya())
+           for d in zanyatiya_mezhdu(ot, do)]
+    vperyod = [d for d in vse if not zanyatie_zaversheno(d, seichas=seichas)]
+    assert vperyod, "фикстура обязана иметь хотя бы одно будущее занятие"
+
+    # Каждая будущая плитка целиком: от её `<div>` до закрывающего его `</div>`.
+    plitki = re.findall(r'<div class="kab-zanyatie vperyod[^"]*" data-den="[^"]*">'
+                        r'.*?</label></div>', telo, re.S)
+    assert len(plitki) == len(vperyod), (
+        f"будущих плиток {len(plitki)}, а будущих занятий {len(vperyod)}")
+    for p in plitki:
+        assert "Фефелов" not in p and "Агаркова" not in p, (
+            "будущая плитка снова несёт список школьников")
+        assert "kab-spisok" not in p, "списка в будущей плитке нет"
+        assert "меня не будет" in p, "орган остался на месте"
+        assert '<input type="checkbox"' in p, "дверь отметки не тронута"
