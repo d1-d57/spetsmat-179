@@ -2016,13 +2016,13 @@ tr:has(.tsch.ploho) td:first-child,.para:has(.sch.ploho),#s-rasp .para.krasn{{
 #s-rasp .para .kto{{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 #s-rasp .para .komu{{flex:0 0 auto;white-space:nowrap}}
 #s-rasp .para .komu.deti{{flex:1 1 auto;white-space:normal}}
-.org.pr-sel{{max-width:9.6rem;flex:0 0 auto}}
+.org.pr-sel{{max-width:12.5rem;flex:0 0 auto}}
 /* 🔴 НА ВКЛАДКАХ ГРУПП КОЛОНКА ВДВОЕ УЖЕ: там рядом стоит список принимающих.
    Поля здесь компактнее ровно настолько, чтобы фамилия школьника помещалась
    целиком — она в этой таблице главное, а имя преподавателя и так повторено
    справа, в его карточке. */
-#v-В .org.pr-sel,#v-Д .org.pr-sel,#v-Н .org.pr-sel{{max-width:8.6rem}}
-#s-rasp #v-В .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-Д .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-Н .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-В .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-Д .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-Н .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-В .kol .org.pr-sel,#s-rasp #v-Д .kol .org.pr-sel,#s-rasp #v-Н .kol .org.pr-sel{{flex:0 0 11rem;max-width:11rem}}
+#v-В .org.pr-sel,#v-Д .org.pr-sel,#v-Н .org.pr-sel{{max-width:12.5rem}}
+#s-rasp #v-В .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-Д .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-Н .kol .para .komu .dv-pn:has(.org.pr-sel),#s-rasp #v-В .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-Д .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-Н .kol .para .komu .dv-cht:has(.org.pr-sel),#s-rasp #v-В .kol .org.pr-sel,#s-rasp #v-Д .kol .org.pr-sel,#s-rasp #v-Н .kol .org.pr-sel{{flex:0 0 12.5rem;max-width:12.5rem}}
 #v-В .org.gr-sel,#v-Д .org.gr-sel,#v-Н .org.gr-sel{{width:3.2rem;flex:0 0 3.2rem}}
 #v-В .otsut,#v-Д .otsut,#v-Н .otsut{{font-size:.76rem;padding:.12em .45em}}
 /* 🔴 ИМЯ ПЕРЕНОСИТСЯ, А НЕ ОБРЕЗАЕТСЯ. Владелец 07.09: «посмотри, как обрезалась
@@ -2164,7 +2164,7 @@ body{{padding-bottom:2rem}}
    (`flex:1 1 auto`, отдаёт место соседу), `.kab-mesto` — несжимаемое
    (`flex:0 0 auto`): плашка держит своё место у правого края ВСЕГДА, чем бы имя
    ни было. */
-.para .komu .dv{{flex:0 0 9.6rem;min-width:0;display:flex;align-items:baseline;
+.para .komu .dv{{flex:0 0 12.5rem;min-width:0;display:flex;align-items:baseline;
   justify-content:flex-end;gap:.3rem}}
 .para .komu .dv .prep-imya{{flex:1 1 auto;min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;text-align:right}}
