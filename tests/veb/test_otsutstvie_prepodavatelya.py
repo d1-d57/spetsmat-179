@@ -315,6 +315,26 @@ def test_deti_ne_udalyayutsya_a_nazvany_spiskom(server_s_bazoj):
     assert zhivyh == 4, "закрепления не удаляются — период кончится, а они верны"
 
 
+def test_knopki_snyat_u_neorganizatora_net(server_s_bazoj):
+    """🔴 НАЙДЕНО ВЕРИФИКАТОРОМ, А НЕ ЧТЕНИЕМ, И ПОТОМУ СТОРОЖИТСЯ ТЕСТОМ.
+
+    Форма отметки пряталась правильно, а кнопка «снять» рисовалась ВСЕМ: под ролью
+    `prepod` их было три на три периода. Дверь нажатие отбивает (403, тест ниже),
+    так что данные не пострадали бы никогда, — но орган правки, показанный тому,
+    кто править не может, обещает действие, которого не будет.
+    """
+    for nomer in range(3):
+        _post(server_s_bazoj["adres"], {
+            "teacher_id": server_s_bazoj["olga"],
+            "s_daty": "2026-1%d-01" % nomer, "po_datu": "2026-1%d-02" % nomer,
+            "prichina": "болезнь"})
+    u_organizatora = _stranica(server_s_bazoj["adres"])
+    assert u_organizatora.count('class="ots-snyat"') == 3
+    u_prepoda = _stranica(server_s_bazoj["adres"], rol_cheloveka="prepod")
+    assert u_prepoda.count('class="ots-snyat"') == 0
+    assert "ots-zapis" in u_prepoda, "сами отметки преподаватель видеть обязан"
+
+
 def test_formy_u_neorganizatora_net(server_s_bazoj):
     _post(server_s_bazoj["adres"], {"teacher_id": server_s_bazoj["olga"],
                                     "s_daty": S_DATY, "po_datu": PO_DATU,

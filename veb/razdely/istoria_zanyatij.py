@@ -2,7 +2,18 @@
 # TOOL-CONTRACT: called-by-code — the route below is declared by `marshruty()` and
 # collected by `veb.server._marshruty_razdelov` (`RAZDELY_S_MARSHRUTAMI`), the same seam
 # `veb/razdely/istoria.py` already uses.
-"""История занятий: кто был на каждом ПРОШЕДШЕМ занятии, и у кого/с кем.
+r"""История занятий: кто был на каждом ПРОШЕДШЕМ занятии, и у кого/с кем.
+
+🔴 СТРОКА МОДУЛЯ СЫРАЯ (префикс `r` у тройной кавычки) ИЗ-ЗА ОДНОЙ
+ПОСЛЕДОВАТЕЛЬНОСТИ `\|` НИЖЕ, И
+ЭТО НЕ КОСМЕТИКА. `grep -n 'menyu\|ssyl'` в обычной строке — НЕВЕРНАЯ
+управляющая последовательность: Python пока только предупреждает, но pytest
+умеет поднимать предупреждения до ошибок, и тогда падает не тест, а ИМПОРТ
+модуля, то есть весь файл тестов разом. Поймано живьём в этой сессии: первая
+же компиляция после правки (пустой `__pycache__`) дала
+`SyntaxError: invalid escape sequence \|` на строке 5 и увела в красное 42
+зелёных теста; на втором прогоне, уже из кэша, всё было зелено — то есть
+ловушка срабатывает ровно на чистой машине и молчит на своей.
 
 WHAT THE OWNER ASKED FOR, 09.09, in his own words: *«я бы сделал вкладку История, где
 вывел бы слева список… внутри было бы две вкладки, преподаватели и школьники… и у каждого
@@ -554,14 +565,30 @@ def _forma_otsutstvia(teachers) -> str:
 </form>"""
 
 
-def _spisok_periodov(periody, teachers_by_id, siroty) -> str:
-    """Уже отмеченные периоды, поимённо и со снятием.
+def _spisok_periodov(periody, teachers_by_id, siroty, mozhno_pravit=False) -> str:
+    """Уже отмеченные периоды, поимённо — и со снятием ТОЛЬКО у того, кто правит.
 
     Пустой список говорит об этом словами: строка «отметок нет» отличима от
     страницы, на которой список просто не нарисовался.
+
+    🔴 `mozhno_pravit` СТОИТ ЗДЕСЬ ПОТОМУ, ЧТО КНОПКА «СНЯТЬ» РИСОВАЛАСЬ ВСЕМ, И
+    ЭТО НАШЁЛ ВЕРИФИКАТОР, А НЕ ЧТЕНИЕ. Замер: под ролью `prepod` страница
+    `/istoria` честно прятала форму отметки и при этом показывала ТРИ кнопки
+    «снять» на три периода. Дверь нажатие отбивала (403, проверено четырьмя
+    запросами), то есть данные не пострадали бы никогда, — но орган правки,
+    показанный тому, кто править не может, это обещание действия, которого не
+    будет, и ровно то, что запрещает докстринг `stranica()` двадцатью строками
+    ниже. Видеть отметку преподаватель обязан: его отсутствие — факт про него.
     """
     if not periody:
         return '<p class="ots-pusto">отметок об отсутствии нет</p>'
+
+    def knopka_snyat(per: dict) -> str:
+        if not mozhno_pravit:
+            return ""
+        return ('<button type="button" class="ots-snyat" data-id="%d">снять</button>'
+                % per["id"])
+
     stroki = []
     for per in periody:
         kto = teachers_by_id.get(per["teacher_id"])
@@ -572,7 +599,7 @@ def _spisok_periodov(periody, teachers_by_id, siroty) -> str:
             f'&#8202;–&#8202;{e(_kratko(per["po_datu"]))}</span>'
             f'<span class="ots-prichina">{e(per["prichina"])}</span>'
             f'<span class="ots-skolko">{_dlina_perioda(per["s_daty"], per["po_datu"])}&nbsp;дн.</span>'
-            f'<button type="button" class="ots-snyat" data-id="{per["id"]}">снять</button>'
+            f'{knopka_snyat(per)}'
             f'{_polosa_dnej(per)}'
             f'{_stroka_bez_prinimayushchego(siroty.get(per["id"], ()))}'
             f'</li>')
@@ -966,7 +993,7 @@ def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False) -> str:
     {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody)}</section>
   <section id="is-prep">{zagolovok("prep")}
     {_forma_otsutstvia(teachers) if mozhno_pravit else ""}
-    {_spisok_periodov(periody, teachers_by_id, siroty)}
+    {_spisok_periodov(periody, teachers_by_id, siroty, mozhno_pravit)}
     {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, ots_po_dnyam)}</section>
   {stroka_otmen}
   <div class="ist-raskrytie" id="ist-raskrytie" hidden>

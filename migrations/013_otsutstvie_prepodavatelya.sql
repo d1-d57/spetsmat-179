@@ -43,8 +43,18 @@
 create table if not exists otsutstvie_prepodavatelya (
     id           integer primary key,
     teacher_id   integer not null references teachers(id),
-    -- ISO-8601, both ends INCLUSIVE. Same `glob` shape the rest of the schema uses:
-    -- a date that is not a date has to be refused by the база, not by the caller.
+    -- ISO-8601, both ends INCLUSIVE. Same `glob` shape the rest of the schema uses.
+    -- 🔴 ЧТО ЭТОТ `CHECK` ДЕЛАЕТ И ЧЕГО НЕ ДЕЛАЕТ — ПОПРАВЛЕНО ПОСЛЕ ПРОВЕРКИ НА
+    -- ОБХОД, А НЕ НАПИСАНО НА ВЕРУ. Здесь стояло «a date that is not a date has to
+    -- be refused by the база, not by the caller». Это НЕВЕРНО: `glob` проверяет
+    -- ФОРМУ, а не существование дня, и прямой `insert` с `s_daty='2026-13-45'`
+    -- прошёл — тринадцатый месяц лежит в базе (замерено верификатором захода,
+    -- строк стало 2). Существование дня проверяет ДВЕРЬ, `strptime` в
+    -- `veb/razdely/istoria_zanyatij._den_ili_nichego`, и она отвечает 400.
+    -- Обещание исправлено, а не удалено: строка, обещающая больше, чем механизм
+    -- даёт, опаснее отсутствующей — ей верят вместо того, чтобы проверить. Тот же
+    -- класс и та же правка, что в `012_metka_znaet_svoj_put.sql` («ПОПРАВКА
+    -- ОРКЕСТРАТОРА 10.09, ПОСЛЕ ПРОВЕРКИ НА ОБХОД»).
     s_daty       text not null
         check (s_daty glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     po_datu      text not null
