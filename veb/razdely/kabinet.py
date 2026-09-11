@@ -72,7 +72,7 @@ from core.services.sostav_na_den import (
     slot_of,
 )
 from veb import vhod
-from veb.obshchee.karkas import VREMYA, e, menyu_ssylkami
+from veb.obshchee.karkas import SKRIPT_PAMYAT_VKLADOK, VREMYA, e, menyu_ssylkami
 from veb.razdely.istoria_zanyatij import sdachi_po_zanyatiyam
 from veb.razdely.lichnaya import deti_na_datu, kabinet_na_datu, segodnya
 from core.istochnik import put_bazy
@@ -842,6 +842,7 @@ def _dokument(zagolovok: str, telo: str, baza=None) -> str:
 <body>
 {menyu_ssylkami("/kabinet")}
 {telo}
+{SKRIPT_PAMYAT_VKLADOK}
 </body></html>"""
 
 

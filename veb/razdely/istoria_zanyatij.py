@@ -75,6 +75,7 @@ from infra.room_repo import SqliteAttendance, SqliteSessions
 from infra.sessions_repo import SqliteSessionBook
 from veb import vhod
 from veb.obshchee.karkas import (
+    SKRIPT_PAMYAT_VKLADOK,
     CHETVERTI_STILI, PRICHINY_OTSUTSTVIYA, SDACHI_SKRIPT, SDACHI_STILI,
     chetverti_goda, e, menyu_ssylkami, nomer_chetverti, otmetit_otsutstvie,
     perekluchatel_chetvertej, periody_otsutstvij, snyat_otsutstvie, v_rode)
@@ -1058,6 +1059,7 @@ def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False,
 <script type="application/json" id="ist-dannye">{json.dumps(dannye, ensure_ascii=False)}</script>
 {SDACHI_SKRIPT}
 {SKRIPT}{SKRIPT_OTSUTSTVIE if mozhno_pravit else ''}
+{SKRIPT_PAMYAT_VKLADOK}
 </body></html>"""
 
 
@@ -1208,15 +1210,72 @@ def dver_otsutstvia(h) -> bool:
                 # решётке ПУСТО НЕОТЛИЧИМО ОТ КРЕСТИКА: клетка без строки в
                 # `teacher_attendance` и так рисуется «не был». Состояние, которого
                 # не видно, — это не состояние, а обещание.
-                novoe = ne_byl if tek == byl else byl
+                # 🔴 ЦИКЛ НАЧИНАЕТСЯ С ТОГО, ЧТО ЧЕЛОВЕК ВИДИТ, А НЕ С ТОГО, ЧТО
+                # ЛЕЖИТ В ТАБЛИЦЕ. Найдено на живом случае, названном владельцем:
+                # «поставить крестик у Нади не получается, хотя она не была ни разу».
+                # У неё в `teacher_attendance` строки НЕТ — клетка показывает ✓
+                # автоматом, потому что на неё записаны принятые задачи. Прежний
+                # цикл начинал с «пусто → был», то есть первый клик писал ровно то,
+                # что и так на экране, и до крестика было не добраться ВООБЩЕ.
+                if tek is None:
+                    # Клетка показывает ✓ по ДВУМ причинам: за человеком записаны
+                    # принятые задачи этого дня ИЛИ на него назначены школьники в
+                    # слоте этого дня. Спрашиваем обе — иначе у того, кто ни разу не
+                    # принимал, но стоит в постоянном распределении (случай Нади),
+                    # первый клик снова написал бы «был».
+                    from core.services.sostav_na_den import slot_of
+                    sl = slot_of(den)
+                    # 🔴 ОТМЕТКИ ПРИВЯЗАНЫ К ДНЮ ДАТОЙ, А НЕ ЗАНЯТИЕМ. Замер на живой
+                    # базе 11.09: `select count(*) from marks where session_id is not
+                    # null` → НОЛЬ при 15 900 отметках, тогда как `teacher_id` стоит у
+                    # 15 526. Связь «отметка → занятие» в данных не заведена вовсе, и
+                    # запрос по `session_id` не нашёл бы ничего никогда.
+                    est_zadachi = c.execute(
+                        "select 1 from marks where substr(valid_at, 1, 10) = ? "
+                        "and teacher_id = ? limit 1", (den, tid)).fetchone() is not None
+                    est_deti = bool(sl) and c.execute(
+                        "select 1 from enrollment where teacher_id = ? and slot = ? "
+                        "and (valid_from is null or valid_from <= ?) "
+                        "and (valid_to is null or valid_to >= ?) limit 1",
+                        (tid, sl, den, den)).fetchone() is not None
+                    vidno_galochku = est_zadachi or est_deti
+                    novoe = ne_byl if vidno_galochku else byl
+                else:
+                    novoe = ne_byl if tek == byl else byl
                 if True:
                     c.execute(
                         "insert or replace into teacher_attendance "
                         "(session_id, teacher_id, status, answered_at) values (?, ?, ?, ?)",
                         (session_id, tid, novoe,
                          datetime.now(ZoneInfo(config.TZ_DISPLAY)).isoformat(timespec="seconds")))
+                # 🔴 «ЕГО НЕ БЫЛО» ОБЯЗАНО СНИМАТЬ ЕГО ИМЯ С ПРИНЯТЫХ ЗАДАЧ.
+                # Владелец 11.09, дословно: «плюсики, которые ставили её детям другие
+                # преподаватели, записали на неё… мы не знаем, кто принимал у её
+                # учеников, но самое главное — мы должны знать, что её не было;
+                # значит её плюсики будут анонимными, такая возможность тоже должна
+                # быть». Иначе отметка «не был» противоречит самим данным: человека
+                # не было, а задачи приняты им же. Отметки НЕ УДАЛЯЮТСЯ — сдача
+                # школьника была, — у них лишь пропадает ложный принимающий.
+                # 🔴 ОБЕЗЛИЧИТЬ ПЛЮСИКИ ЗДЕСЬ НЕЛЬЗЯ, И ЭТО НЕ ЛЕНЬ, А ЗАПРЕТ СХЕМЫ.
+                # Владелец 11.09 просил: «её плюсики будут анонимными, такая
+                # возможность тоже должна быть». Прямой `update marks set teacher_id
+                # = null` ОТКЛОНЁН базой живьём: «marks is append-only: UPDATE
+                # forbidden, write a retract or an erratum event instead». Журнал
+                # сдач принципиально дописываемый: сдача ребёнка не переписывается
+                # задним числом, у неё добавляется событие-исправление. Значит
+                # обезличивание — это ПАЧКА СОБЫТИЙ erratum, а не правка строки, и
+                # оно трогает журнал сдач; делать это попутно с отметкой явки
+                # нельзя. Здесь считается и возвращается ТОЛЬКО ЧИСЛО — сколько
+                # плюсиков этого дня всё ещё записаны на него, — чтобы человек видел
+                # масштаб и решил отдельно.
+                obezlicheno = 0
+                na_nyom = c.execute(
+                    "select count(*) from marks where substr(valid_at, 1, 10) = ? "
+                    "and teacher_id = ?", (den, tid)).fetchone()
+                na_nyom = (na_nyom[0] if na_nyom else 0)
                 c.commit()
-                _otdat_json(h, 200, {"ok": True, "den": den, "stalo": novoe or "пусто"})
+                _otdat_json(h, 200, {"ok": True, "den": den, "stalo": novoe or "пусто",
+                                     "plyusikov_na_nyom": na_nyom})
                 return True
             otmetit_otsutstvie(c, tid, den, den, PRICHINY_OTSUTSTVIYA[0])
             _otdat_json(h, 200, {"ok": True, "den": den, "stalo": "отмечено"})

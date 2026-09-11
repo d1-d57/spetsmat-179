@@ -2888,3 +2888,47 @@ body{{padding-bottom:2rem}}
 {poisk_skript}
 {hvost}
 """
+
+# ─────────────────────────────────── ПАМЯТЬ ВКЛАДОК, ОБЩАЯ ДЛЯ ВСЕХ СТРАНИЦ
+
+#: 🔴 ВКЛАДКА СБРАСЫВАЛАСЬ НА ПЕРВУЮ ПРИ КАЖДОЙ ПЕРЕЗАГРУЗКЕ, И ЭТО БЫЛО ВИДНО
+#: ВЛАДЕЛЬЦУ КАЖДЫЙ ДЕНЬ. Его слова 11.09: «когда я перезагружаю страницу, часто
+#: переключается вкладка; в том числе если зайти на страницу журнала преподавателей
+#: и обновить, открывается журнал школьников; на других страницах тоже такое бывает».
+#: ПРИЧИНА, НАЙДЕННАЯ ЗАМЕРОМ, А НЕ ДОГАДКОЙ: механизм памяти вкладок в проекте УЖЕ
+#: БЫЛ (`spetsmat-vkladki`, localStorage), но жил внутри скрипта ГЛАВНОЙ страницы, а
+#: разделы `/istoria` и `/kabinet` собирают свой документ сами и этот скрипт не
+#: подключают — проверено: `"spetsmat-vkladki" in html` давало False на обеих.
+#: Поэтому память вынесена сюда и подключается КАЖДОЙ страницей с вкладками.
+#: Запоминаются все радио-вкладки по имени группы, а не только класс `rd`: вкладки
+#: четвертей в кабинете носят класс `kab-p`, и прежний селектор их не видел.
+SKRIPT_PAMYAT_VKLADOK = """
+<script>
+(function(){
+  var PAMYAT = "spetsmat-vkladki";
+  function vse(){ return document.querySelectorAll('input[type=radio][name]'); }
+  function zapomnit(){
+    try{
+      var bylo = {};
+      try{ bylo = JSON.parse(localStorage.getItem(PAMYAT) || "{}"); }catch(e){}
+      vse().forEach(function(r){ if(r.checked && r.id){ bylo[r.name] = r.id; } });
+      localStorage.setItem(PAMYAT, JSON.stringify(bylo));
+    }catch(e){}
+  }
+  function vspomnit(){
+    try{
+      var bylo = JSON.parse(localStorage.getItem(PAMYAT) || "{}");
+      Object.keys(bylo).forEach(function(imya){
+        var r = document.getElementById(bylo[imya]);
+        if(r && r.name === imya && r.type === "radio"){ r.checked = true; }
+      });
+    }catch(e){}
+  }
+  vspomnit();
+  document.addEventListener("change", function(sob){
+    var t = sob.target;
+    if(t && t.type === "radio" && t.name){ zapomnit(); }
+  });
+})();
+</script>
+"""
