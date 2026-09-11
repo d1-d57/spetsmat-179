@@ -406,6 +406,47 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni, mozhno_p
             f'<tbody>{"".join(stroki)}</tbody></table></div>')
 
 
+def otmetki_prisutstviya_po_dnyam(c) -> dict:
+    """`{teacher_id: {день, …}}` — где человек отмечен «был» РУКОЙ.
+
+    Нужна, чтобы ручная правка одной даты перевешивала постоянное правило «по
+    четвергам не приходит»: владелец назвал эту возможность прямо — «пока не
+    изменится текущее распределение или кто-то руками не поправит текущее
+    распределение на одну из дат».
+    """
+    po: dict = {}
+    for r in c.execute(
+            "select ta.teacher_id tid, s.held_on den from teacher_attendance ta "
+            "join sessions s on s.id = ta.session_id where ta.status = ?", ("был",)):
+        tid = r["tid"] if hasattr(r, "keys") else r[0]
+        den = r["den"] if hasattr(r, "keys") else r[1]
+        po.setdefault(tid, set()).add(den)
+    return po
+
+
+def postoyanno_ne_prihodit(c) -> dict:
+    """`{slot: {teacher_id, …}}` — кто НЕ ХОДИТ в этот слот вообще, всегда.
+
+    🔴 ТРЕТИЙ ИСТОЧНИК ТОГО ЖЕ ФАКТА, И ЖУРНАЛ ОБЯЗАН ЕГО ЧИТАТЬ. Владелец 11.09:
+    «в постоянном распределении зафиксировано, что по четвергам Ольга не в школе —
+    это должно передаваться в текущее распределение на все будущие четверги и
+    фиксироваться в журнале, то есть у неё во все четверги должны стоять крестики.
+    Но не стоят». Факт лежит в `prepodavatel_ne_prihodit (teacher_id, slot)` —
+    замер боевой базы 11.09: ровно одна строка, Ольга Рыжая, слот 2 (четверг).
+    Распределение её читает (`core/services/sostav_na_den`), журнал — не читал.
+
+    ПОРЯДОК СИЛЫ, И ОН ЕДИНСТВЕННЫЙ ЧЕСТНЫЙ: отметка на КОНКРЕТНУЮ дату
+    (`teacher_attendance`) сильнее постоянного правила — иначе «поправить руками
+    одну дату» стало бы невозможно, а владелец назвал эту возможность прямо.
+    """
+    po: dict = {}
+    for r in c.execute("select teacher_id, slot from prepodavatel_ne_prihodit"):
+        tid = r["teacher_id"] if hasattr(r, "keys") else r[0]
+        sl = r["slot"] if hasattr(r, "keys") else r[1]
+        po.setdefault(sl, set()).add(tid)
+    return po
+
+
 def otmetki_otsutstviya_po_dnyam(c) -> dict:
     """`{teacher_id: {день, …}}` — где человек отмечен «не был/не будет».
 
@@ -451,9 +492,15 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
     # включая дни, до которых история ещё не дошла (будущее).
     net_po_prepam = (otmetki_otsutstviya_po_dnyam(soedinenie_istorii)
                      if soedinenie_istorii is not None else {})
+    byl_po_prepam = (otmetki_prisutstviya_po_dnyam(soedinenie_istorii)
+                     if soedinenie_istorii is not None else {})
+    ne_hodit = (postoyanno_ne_prihodit(soedinenie_istorii)
+                if soedinenie_istorii is not None else {})
+    from core.services.sostav_na_den import slot_of
     for t in teachers:
         po_dnyam = istoriya.prepodavateli.get(t["id"], {})
         otmecheno_net = net_po_prepam.get(t["id"], frozenset())
+        otmecheno_byl = byl_po_prepam.get(t["id"], frozenset())
         kletki = []
         for den in dni:
             svoi_periody = [x for x in ots_po_dnyam.get(den, ())
@@ -465,7 +512,26 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
                         _podpis_perioda(x) for x in svoi_periody)),
                     den, "prep", t["id"], ugolok=mozhno_pravit))
                 continue
+            # Постоянное «по четвергам не приходит» — крестик на КАЖДЫЙ такой день,
+            # пока конкретная дата не поправлена рукой.
+            sl_dnya = slot_of(den)
+            if (sl_dnya in ne_hodit and t["id"] in ne_hodit[sl_dnya]
+                    and den not in otmecheno_byl):
+                kletki.append(_kletka(
+                    "ist-otsut", "✕",
+                    v_rode(t["name"], "по этим дням не приходит",
+                           "по этим дням не приходит"),
+                    den, "prep", t["id"], ugolok=mozhno_pravit))
+                continue
             yacheika = po_dnyam.get(den)
+            if den in otmecheno_byl and den not in est:
+                # Рука сказала «будет» на дату, где правило говорит обратное —
+                # показываем галочку, иначе снятое исключение выглядит как пустота
+                # и человек не видит, что его правка сохранилась.
+                kletki.append(_kletka("ist-byl", "✓",
+                                      v_rode(t["name"], "будет", "будет"),
+                                      den, "prep", t["id"], ugolok=mozhno_pravit))
+                continue
             if den in otmecheno_net and den not in est:
                 # 🔴 ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ, И ЖУРНАЛ ЧИТАЕТ ЕГО ДАЖЕ ДЛЯ БУДУЩЕГО.
                 # Требование владельца 11.09: «ровно одно место, которое
@@ -1336,10 +1402,21 @@ def dver_otsutstvia(h) -> bool:
                     est_zadachi = c.execute(
                         "select 1 from marks where substr(valid_at, 1, 10) = ? "
                         "and teacher_id = ? limit 1", (den, tid)).fetchone() is not None
-                    # На БУДУЩЕМ дне решётка галочек не рисует вовсе — клетка пуста,
-                    # значит первый клик обязан означать «его не будет», а не «был».
+                    # 🔴 ЧТО ВИДНО НА БУДУЩЕМ ДНЕ, ЗАВИСИТ ОТ ПОСТОЯННОГО ПРАВИЛА.
+                    # Обычно клетка будущего пуста → первый клик значит «не будет».
+                    # Но если человек по этому слоту НЕ ХОДИТ ВООБЩЕ
+                    # (`prepodavatel_ne_prihodit`), клетка уже показывает крестик, и
+                    # первый клик обязан значить обратное — «на эту дату будет».
+                    # Иначе снять исключение на одну дату нечем, а владелец назвал
+                    # эту возможность прямо.
+                    from core.services.sostav_na_den import slot_of as _slot
+                    _sl = _slot(den)
+                    po_pravilu_net = _sl is not None and c.execute(
+                        "select 1 from prepodavatel_ne_prihodit "
+                        "where teacher_id = ? and slot = ? limit 1",
+                        (tid, _sl)).fetchone() is not None
                     if den > segodnya:
-                        vidno_galochku = True
+                        vidno_galochku = not po_pravilu_net
                         est_zadachi = est_deti = False
                     est_deti = (not (den > segodnya)) and bool(sl) and c.execute(
                         "select 1 from enrollment where teacher_id = ? and slot = ? "
@@ -1347,7 +1424,7 @@ def dver_otsutstvia(h) -> bool:
                         "and (valid_to is null or valid_to >= ?) limit 1",
                         (tid, sl, den, den)).fetchone() is not None
                     if den <= segodnya:
-                        vidno_galochku = est_zadachi or est_deti
+                        vidno_galochku = (est_zadachi or est_deti) and not po_pravilu_net
                     novoe = ne_byl if vidno_galochku else byl
                 else:
                     novoe = ne_byl if tek == byl else byl
