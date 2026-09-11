@@ -341,6 +341,12 @@ SVOI_STILI = """
 .kab-zanyatie.byl .kab-zag{color:var(--zel)}
 .kab-zanyatie.ne-byl .kab-zag{color:var(--krasn)}
 .kab-skolko{margin-left:auto;font-weight:400;font-size:.85rem;color:var(--muted)}
+/* Кнопка «Кондуит за занятие»: орган, а не ссылка-невидимка (пункт 7). Цвета — те
+   же переменные каркаса, что у всей страницы; своего цвета здесь по-прежнему нет. */
+.kab-konduit{display:block;width:100%;margin:.55rem 0 0;padding:.4em .8em;
+  font:inherit;font-size:.9rem;cursor:pointer;color:var(--accent);
+  background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px}
+.kab-konduit:hover,.kab-konduit:focus-visible{background:var(--accent);color:var(--bg)}
 .kab-spisok{list-style:none;margin:.45rem 0 0;padding:0;font-size:.95rem}
 .kab-spisok li{padding:.1rem 0}
 .kab-shk{background:none;border:none;padding:.1rem 0;font:inherit;color:var(--text);
@@ -470,17 +476,16 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
     if (!sob.target.closest) return;
     var shk = sob.target.closest('.kab-shk');
     if (shk) { pokazat(shk.dataset.den + '|' + shk.dataset.sid); return; }
-    var zagolovok = sob.target.closest('.kab-zag');
-    if (zagolovok) { pokazat(zagolovok.dataset.den); return; }
+    /* Кондуит за весь день — своя кнопка (пункт 7). Прежде это висело на
+       `.kab-zag`, то есть на строке с датой; строка стала выключателем
+       `<details>`, и обработчик уехал бы вместе с каждым сворачиванием. */
+    var knopka = sob.target.closest('.kab-konduit');
+    if (knopka) { pokazat(knopka.dataset.den); return; }
     if (sob.target.closest('#kab-raskrytie')) return;
     zakryt();
   });
   document.addEventListener('keydown', function(sob){
     if (sob.key === 'Escape') zakryt();
-    if ((sob.key === 'Enter' || sob.key === ' ')
-        && sob.target.classList && sob.target.classList.contains('kab-zag')) {
-      sob.preventDefault(); pokazat(sob.target.dataset.den);
-    }
   });
   document.getElementById('kab-zakryt').addEventListener('click', zakryt);
 })();
@@ -635,8 +640,19 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                                    for z, l, _t in sdachi.get((den, r["id"]), ())]}
                          for r in kto_byl],
             }
+            # 🔴 КОНДУИТ ЗА ЗАНЯТИЕ — ВИДИМАЯ КНОПКА, ПУНКТ 7 РЕЦЕНЗИИ 11.09:
+            # *«чтобы вывести кондуит за занятие, я должен нажать на дату. Должно
+            # быть гораздо более видно это. Должна быть кнопка „Кондуит за
+            # занятие“»*. Раскрытие висело на строке с датой, и узнать об этом было
+            # неоткуда: строка не выглядела органом. Теперь дата — выключатель
+            # `<details>` (пункт 4), а кондуит за весь день зовётся своей кнопкой,
+            # написанной словами. Обе живут внутри плитки, поэтому кнопка видна
+            # ровно тогда, когда плитка раскрыта, — то есть когда на неё смотрят.
+            konduit = ('<button class="kab-konduit" type="button" data-den="%s">'
+                       'Кондуит за занятие</button>' % e(den))
             spisok = ('<ul class="kab-spisok">%s</ul>' % "".join(punkty) if punkty
                       else '<p class="kab-nikogo">школьников в этот день не было</p>')
+            spisok = konduit + spisok
             # 🔴 `<details>`, А НЕ DIV С ОБРАБОТЧИКОМ — ПУНКТ 4 РЕЦЕНЗИИ 11.09:
             # *«мне кажется, что такой формат не очень удобный. Удобнее, если у тебя
             # будет свёрнуто… потом я нажимаю, оно разворачивается»*. Свёрнутость по
@@ -647,9 +663,9 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
             # раскрытия на одной странице.
             return (
                 '<details class="kab-zanyatie %s" data-den="%s">'
-                '<summary class="kab-zag" data-den="%s">%s'
+                '<summary class="kab-zag">%s'
                 '<span class="kab-skolko">%s</span></summary>%s</details>'
-                % ("ne-byl" if netu else "byl", e(den), e(den), e(podpis),
+                % ("ne-byl" if netu else "byl", e(den), e(podpis),
                    # 🔴 «ЗАДАЧ», А НЕ «СДАЧ» — ПУНКТ 2 РЕЦЕНЗИИ ВЛАДЕЛЬЦА 11.09,
                    # дословно: *«потом слово „сдач“ очень странное. Лучше пиши
                    # „задач“»*, и формат он назвал тоже сам — `задач: 23`. Считается

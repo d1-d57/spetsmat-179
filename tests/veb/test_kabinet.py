@@ -727,3 +727,33 @@ def test_a_future_tile_carries_a_date_and_a_button_and_no_pupils(running_server)
         assert "kab-spisok" not in p, "списка в будущей плитке нет"
         assert "меня не будет" in p, "орган остался на месте"
         assert '<input type="checkbox"' in p, "дверь отметки не тронута"
+
+
+def test_the_lesson_konduit_is_a_named_button_and_not_a_click_on_the_date(running_server):
+    """Пункт 7 рецензии 11.09: *«чтобы вывести кондуит за занятие, я должен нажать на
+    дату. Должно быть гораздо более видно это. Должна быть кнопка „Кондуит за
+    занятие“»*.
+
+    Две половины, и вторая не менее важна первой: кнопка ЕСТЬ у каждого
+    завершившегося занятия, и раскрытие БОЛЬШЕ НЕ ВИСИТ на строке с датой — иначе
+    один и тот же клик и сворачивал бы плитку, и открывал панель.
+    """
+    from datetime import datetime, timezone
+
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    for den in proshlo:
+        assert (f'<button class="kab-konduit" type="button" data-den="{den}">'
+                "Кондуит за занятие</button>") in telo, (
+            f"у занятия {den} нет видимой кнопки кондуита")
+    assert '<summary class="kab-zag" data-den=' not in telo, (
+        "дата больше не несёт раскрытие: она выключатель <details>")
+    assert ".kab-konduit" in telo, "кнопка размечена своим классом"
