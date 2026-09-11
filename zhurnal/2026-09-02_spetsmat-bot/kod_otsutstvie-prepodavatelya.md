@@ -220,6 +220,24 @@ grep -n '<как механизм назван в вызывающем коде>
 🔴 **Отчёт без этих чисел не принимается.** «Я закоммитил» — не то же самое, что `status --porcelain`
 пустой: за одну сессию работа не доезжала трижды, каждый раз с честным «сделано» в отчёте.
 ## УРОКИ ФАБРИКЕ — (заполняет исполнитель; пусто — нормальный исход)
+
+### Критерий готовности требовал того, чего названная зона показать не может
+
+Критерий гласил: «в журнале преподавателей 12 клеток особого вида». Живой случай —
+01–12.10, то есть период целиком В БУДУЩЕМ. Решётка журнала строится из `sessions`
+(`IstoriyaService.sostavit`), а строки `sessions` на будущую дату нет и не будет до самого
+занятия: столбцов у будущего периода НОЛЬ. Двенадцать клеток в решётке были физически
+невозможны, и починить это внутри зоны было нечем — отбор живёт в
+`core/services/istoria_poseshchenij.py`, вне зоны.
+
+ЦЕНА: полчаса на разбор и вторая раскладка (полоса дней периода рядом с решёткой),
+придуманная исполнителем вместо того, чтобы быть названной в задании. Исполнитель, который
+разбираться не станет, имеет два выхода, и оба плохие: посчитать что-нибудь другое и
+назвать это двенадцатью клетками, либо сдать красный критерий при работающей функции.
+Аналитик, пишущий критерий по числу клеток, обязан проверить, что клетки этого рода вообще
+существуют на экране, который он называет, — одним запросом к тому файлу, из которого экран
+собирается.
+
 > Находка не про эту сессию, а закономерность про саму фабрику, годная другим заходам, — оформи как пункт очереди в `## ВОПРОСЫ` (формат там же) с `ДОМ: <эта арка>/UROKI-FABRIKE.md`, а не пиши прямо сюда неструктурированной строкой.
 > **Не про задачу — про САМУ ФАБРИКУ.** Ты работаешь с пустым контекстом и потому видишь то, чего не видит аналитик: он писал этот заход и ему приятно, что заход хорош. Сломался ВХОД (издание не то, id врёт, зона не содержит файла с ответом)? Критерий готовности кривой? Инструкция канона противоречит живому файлу? — сюда, строкой.
 > Формат жёсткий (по нему гейт): `### <что произошло>` / `ЦЕНА: <что сломалось и сколько стоило>`.
@@ -228,7 +246,158 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**Read first, decided before writing code.** The zone is
+`veb/razdely/istoria_zanyatij.py` · `veb/razdely/shkolniki.py` ·
+`veb/obshchee/karkas.py` · `migrations/` · `tests/veb/`. Everything below stays
+inside it; the one thing that does not fit is named at the end as a debt.
+
+### What the existing code already holds, and why a new table is still needed
+* `teacher_attendance(session_id, teacher_id, status)` is «сегодня заболел» — it
+  hangs off a `sessions` row, so it can only speak about a date on which a lesson
+  has already been opened. `_OtsutstvieNaDatuAdapter` in `veb/server.py` says this
+  out loud: *«A date with no `sessions` row has no absence either»*. A period of
+  twelve October days, ten of which are not lesson days at all, cannot live there.
+* `prepodavatel_ne_prihodit(teacher_id, slot)` is «по четвергам не хожу вообще» —
+  a weekday rule with no dates. Also not a period.
+* So part 1 of the задание («строка в базе: кто, с какой даты, по какую, почему,
+  кто отметил, когда») is a new table, exactly as the задание says.
+
+### Part 1 — ХРАНИЛИЩЕ (own commit)
+* `migrations/013_otsutstvie_prepodavatelya.sql` (yoyo, plain SQL, `-- depends: 012_…`):
+  `otsutstvie_prepodavatelya(id, teacher_id, s_daty, po_datu, prichina, kto_otmetil, kogda)`.
+  Both ends INCLUSIVE — the owner said «с 1 по 12 октября» and the готовности
+  criterion counts twelve days, which is `01..12` inclusive. `check (s_daty <= po_datu)`,
+  ISO `glob` checks like the rest of the schema, index on `(teacher_id, s_daty)`.
+  Several periods per teacher are allowed; overlaps are not forbidden by the schema
+  (two overlapping «болезнь» rows are not a contradiction, they are two notes).
+* The access layer goes into `veb/obshchee/karkas.py`, because both readers
+  (`shkolniki.py` for the distribution, `istoria_zanyatij.py` for the journal) already
+  import that module and nothing else is shared by the two. Functions:
+  `obespechit_otsutstvia(c)` (create-if-missing, the same idiom
+  `infra/prepodavatel_den_repo.obespechit` already uses for a live база older than its
+  migration), `periody_otsutstvij(c)`, `otsutstvuyushchie_na_datu(c, den)`,
+  `otmetit_otsutstvie(...)`, `snyat_otsutstvie(c, id)`.
+
+### What happens to pupils ALREADY assigned to those days — decision
+**Nothing is deleted, and the fact is shown instead.** The `enrollment` row stays as
+it is; the journal page grows a block «остались без принимающего» listing, per period,
+every pupil whose open row on the period's slots points at the absent teacher. Reason:
+the period ends (she is back on the 13th) — deleting the standing assignment would
+destroy a fact that is still true, to express a fact that is temporary. This follows
+the задание's own suggestion and is named again in `## ОТЧЁТ`.
+
+### Part 2 — ОТМЕТИТЬ (own commit)
+A form on the teachers' journal (`/istoria`, tab «Преподаватели»): teacher, `с`, `по`,
+reason, save. New route `/api/otsutstvie` declared by
+`istoria_zanyatij.marshruty()` — the seam is dispatched on **both** GET and POST by
+`veb/server.py` (`do_GET` and `do_POST` each end with the same `_marshruty_razdelov()`
+branch), so the door can live inside the zone. `POST` marks, `DELETE`-by-`snyat` field
+removes. Backdating is not restricted in any way: «заболел сегодня» and «не будет с
+1 октября» are the same row, which is exactly what the owner asked for.
+
+### Part 3 — ВИДНО (own commit)
+* In the teachers' grid a cell whose day falls in a period renders as its **own kind**
+  (`ist-otsut`, sign `О`, its own colour and `title` naming the reason and the period)
+  — not `✕` («не был»), not empty («не отмечено»). This is what covers a backdated mark.
+* The grid's columns are PAST lessons only (`IstoriyaService` folds over `sessions`),
+  so a future period — the live case, 01–12.10 — has no column to colour. Therefore the
+  page also gets a **day-by-day strip per marked period**: one cell per calendar day of
+  the period, each of the same special kind. That is where the «12 клеток особого вида»
+  of the готовности criterion actually are, and it is the only way to show a future
+  period without inventing lesson days that do not exist.
+
+### Part 4 — ДЕЙСТВУЕТ (own commit)
+* `shkolniki.prihodyashchie_v_slot(kt, sl, tekushchij)` is the ONE place that decides
+  who may be offered as принимающий, and it already serves **both** versions: the
+  permanent screen calls it once per column (slots 1 and 2), the lesson screen once for
+  the single column. Narrowing it therefore covers both versions with one rule.
+* The date of a column comes from `kt.DNI` (`{ключ: (имя, слот, дата, сокр)}`) — the
+  lesson screen carries the requested date, the permanent screen carries the nearest
+  Monday and Thursday. `Kontekst` gets `otsutstvie_po_dnyam: {дата: frozenset(teacher_id)}`,
+  filled by `sobrat_kontekst` for every date in `DNI`.
+* **The absent teacher is removed even when she is the CURRENT value**, which is the one
+  exception to the existing «текущий остаётся в списке всегда» rule, and it is deliberate:
+  that rule exists so a field can show its own value, and here the field says instead
+  «— нет — (принимающий отсутствует)» on the selected option. That is not a silent lie —
+  it names the state — and it is what «не серым, а отсутствует в выборе» requires.
+  Nothing is saved by rendering it: the shell's script enqueues a правка only on a
+  `change` event (`karkas.py`, `pravki` Map), so an untouched field writes nothing.
+
+### Part 5 — ПЕРЕЖИВАЕТ ПЕРЕЗАГРУЗКУ (checked, not claimed)
+A live run on a COPY of the боевая база (`data/spetsmat.db`, copied — the original is
+never written): mark Ольга Рыжая 01.10–12.10, check 12 days × 2 versions = 24, count the
+special cells, stop the server, start it again, repeat all 24 + the cell count.
+
+### What does NOT fit in the zone, and is reported rather than done
+The second half of part 4 — *«если выбор всё же придёт запросом (старая вкладка), дверь
+записи ОТКАЗЫВАЕТ»* — lives in `veb/server.py` (`_OtsutstvieNaDatuAdapter`, line ~443,
+used at line ~1583 for the lesson layer) and in `core/services/enrollment.py`
+(`enforce_calendar_and_ceiling`) for the permanent layer. Both are outside the zone and
+both are READ-ONLY for this заход. The exact patch is written out in `## ВОПРОСЫ` so
+that whoever owns `veb/server.py` next can apply it without re-deriving it.
+
+
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. The WRITE DOOR of the lesson layer still refuses only on `teacher_attendance`, so a
+   stale tab that already carries the absent teacher's id in its `<select>` can still POST
+   it. The patch is one condition next to the existing one at `veb/server.py:1583`
+   (`_OtsutstvieNaDatuAdapter(conn).otsutstvuet(teacher_id, den)`): add
+   `or teacher_id in karkas.otsutstvuyushchie_na_datu(conn, den)` and answer 409 with
+   «преподавателя нет в этот день — отмечен период отсутствия». Outside this заход's zone,
+   which is why it is written out rather than applied.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. The WRITE DOOR of the permanent layer (`enforce_calendar_and_ceiling`) knows
+   `TeacherCalendarPort.attends(teacher_id, slot)` — a weekday question with no date, so it
+   cannot see a period at all. It needs a second port asking «отсутствует ли он в день
+   `effective_from`», the same shape `TeacherPresencePort` already has for the lesson layer.
+   Until then the permanent screen is protected by the list only, not by the door.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+3. `karkas.obespechit_otsutstvia` repeats the `create table` of
+   `migrations/013_otsutstvie_prepodavatelya.sql` word for word, because the home of such a
+   repository (`infra/`) is outside this заход's zone. The copy is guarded by
+   `tests/veb/test_otsutstvie_prepodavatelya.py::test_obespechit_povtoryaet_migraciyu_pole_v_pole`,
+   which compares the two schemas column for column — but the right fix is to move the five
+   functions next to `prepodavatel_den_repo`, which already solves the same problem for
+   migration 007.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+4. The teacher CARDS on a group tab are filtered by `kt.otsutstvuyut_prepoda` only
+   (`veb/razdely/gruppy.py:68`), i.e. by `teacher_attendance`. A teacher with a marked
+   period therefore vanishes from the receiver LIST but still has a card on the group tab of
+   a day inside the period. One line, `kt.otsutstvie_po_dnyam`, fixes it; outside the zone.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. The word «отсутствует» on the teachers' tab of the distribution
+   (`veb/razdely/prepodavateli.py:226` and `:323`) is likewise read out of
+   `kt.otsutstvuyut_prepoda` alone, so a marked period does not put it there. Same one-field
+   fix, same reason it is not applied here.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+6. The journal grid can only carry columns for PAST lessons: `IstoriyaService.sostavit`
+   unfolds `sessions`, and a future date has no row there. A future absence period therefore
+   has no grid column to mark, which is why this заход added a day strip beside the grid. If
+   the owner wants future days as real columns, the selection must grow a «планируемые дни»
+   source, and that lives in the service, not in the page.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+7. `tests/veb/test_kanon_verstki.py` errors at SETUP on this machine — thirteen errors,
+   all `config.IstochnikNeNazvan: переменная среды SPETSMAT_BAZA не выставлена`. It is not
+   caused by this заход (the same errors stand on the commit before it), but it means the
+   layout canon suite is silent by default, and a заход that breaks the canon would find that
+   out from the owner rather than from a gate. The fixture should name a copy of its own the
+   way the other suites do, or say out loud that it is skipped.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -255,30 +424,266 @@ grep -n '<как механизм назван в вызывающем коде>
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+> 🔴 **БЛОК §0.1 ОТМЕНЁН ОРКЕСТРАТОРОМ ПЕРЕД ЗАПУСКОМ, И ЭТО НЕ РЕШЕНИЕ ИСПОЛНИТЕЛЯ.**
+> Указание дословно: «СУБАГЕНТА ГИТ-КОНТУРА §0.1 НЕ ЗАПУСКАЙ… Причина замерена соседней
+> волной: четыре захода из десяти умерли ровно на этом вызове. Вместо всего блока §0.1
+> выполни САМ одну команду и вставь её вывод». Команда выполнена первым ходом, её вывод —
+> ниже. Гейт Г12 краснеет здесь по отмене, а не по несделанной работе.
+
+**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снят ПЕРВЫМ ходом, до всякой работы)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
 ```
-<сюда — вывод, дословно>
+Это и есть та единственная команда, которой оркестратор заменил весь §0.1. Остальные три
+команды снимка §0.1 отменены вместе с блоком; ниже — то, что снято по ним ПОСЛЕ работы, в
+рамках §4.1 (`Г3`) и финальной гигиены, чтобы число входа было с чем сравнить:
+```
+$ git --no-optional-locks branch --no-merged main | grep zahod/     # ПОСЛЕ работы
++ zahod/kabinet-plitki
++ zahod/konduit-galochki-i-podskazki
+* zahod/otsutstvie-prepodavatelya
++ zahod/zhurnal-setka
+$ python3 .../git_zona.py zayavki
+Охват: заявок открыто 0, переадресовано 28, постоянных исключений 0, сторож краснеет на 0
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Долгов входа не было: на входе невлитых `zahod/*`-веток НОЛЬ, открытых заявок НОЛЬ.
+Вливать, гасить и закрывать было нечего — ни одной чужой ветки и ни одной заявки к моменту
+первого хода не существовало. Своя работа — пять коммитов, они названы в `## ОТЧЁТ`.
+🔴 Три ЧУЖИЕ невлитые ветки (`kabinet-plitki`, `konduit-galochki-i-podskazki`,
+`zhurnal-setka`) появились УЖЕ ПОСЛЕ снимка входа: это соседние заходы той же волны,
+работающие прямо сейчас в своих рабочих папках. Они не мои долги входа и вливать их
+нельзя — каждая вливает себя сама последним ходом (тот же порядок, что у меня).
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/veb/razdely/istoria_zanyatij.py` — the teachers' journal, opened in a browser at `http://math-kluychiki.ru/istoria` (locally: `SPETSMAT_BAZA=<копия> SPETSMAT_VEB_SECRET=<строка> PYTHONPATH=. python3 -m veb.server --port 8731`, then `/istoria`, tab «Преподаватели»). Beside it: `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/migrations/013_otsutstvie_prepodavatelya.sql` and `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/veb/obshchee/karkas.py`.
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `1426974` — `otsutstvie: two verifier findings, and a landmine my own edit exposed` (последний из СЕМИ; предыдущие — `474ffdf` · `8d7aa19` · `d7eaaf1` · `7998a51` · `9e8ced5` · `db330c2`) · `git_zona.py check --zone <каждый путь зоны по очереди>` → ✅ (шесть путей, шесть ✅)
+
+### ЧТО СДЕЛАНО, ПО ЧАСТЯМ ЗАДАНИЯ, КАЖДАЯ СВОИМ КОММИТОМ
+
+| часть | коммит | что в нём |
+|---|---|---|
+| 1 · ХРАНИЛИЩЕ | `474ffdf` | `migrations/013_otsutstvie_prepodavatelya.sql` + пять функций доступа в `veb/obshchee/karkas.py` |
+| 2 · ОТМЕТИТЬ | `8d7aa19` | дверь `POST /api/otsutstvie` и форма в журнале преподавателей |
+| 3 · ВИДНО | `d7eaaf1` | отдельный вид клетки `ist-otsut`, полоса дней периода, список «остались без принимающего» |
+| 4 · ДЕЙСТВУЕТ | `7998a51` | сужение `shkolniki.prihodyashchie_v_slot` по дате колонки + 41 тест |
+| 5 · ПЕРЕЗАГРУЗКА | `9e8ced5` | живой прогон + отчёт; отдельного кода не требует |
+| гигиена | `db330c2` | DDL убран с пути каждого рендера |
+| по находкам верификатора | `1426974` | кнопка «снять» только правящему · честный комментарий миграции · сырая строка модуля |
+
+**ЗАЧЕМ ИМЕННО ТАК — три решения, которые стоило бы оспорить, и почему они такие.**
+
+1. **Третья таблица, а не третье значение в чужой.** `teacher_attendance` висит на строке
+   `sessions`, и `veb/server.py::_OtsutstvieNaDatuAdapter` сам пишет в докстроке: *«A date
+   with no `sessions` row has no absence either»*. Из двенадцати дней 01–12.10 занятий
+   четыре, строк `sessions` — ноль. `prepodavatel_ne_prihodit` — день НЕДЕЛИ без дат:
+   записав туда, мы убрали бы человека со всех понедельников года, а не с двух.
+2. **Уже назначенные дети НЕ удаляются** (это был открытый вопрос §1 задания). Период
+   кончается — тринадцатого она на месте, — и стереть постоянное закрепление значило бы
+   уничтожить верный факт ради временного. Вместо этого организатору показан список
+   «остались без принимающего: N — имена», и на живой базе это **3 ребёнка: Быков
+   Владислав, Кудишин Андрей, Фёдоров Михаил**. Закрепления в `enrollment` целы —
+   проверено счётом строк в тесте `test_deti_ne_udalyayutsya_a_nazvany_spiskom`.
+3. **Отсутствующая снимается со списка ДАЖЕ будучи текущим значением поля** — единственное
+   исключение из стоящего в коде правила «текущий остаётся в списке всегда». Правило
+   существует, чтобы поле могло показать своё значение; здесь поле показывает подписанный
+   пустой пункт `— нет — (принимающий отсутствует)`, то есть НАЗЫВАЕТ состояние, а не врёт
+   о нём. Ничего при этом не сохраняется: скрипт оболочки кладёт правку в очередь только
+   по событию `change` (`karkas.py`, `pravki`), а нетронутое поле не пишет ничего.
+
+### КАК ПРОВЕРЕНО (числа, а не «должно работать»)
+
+**ЖИВОЙ ПРОГОН НА КОПИИ БОЕВОЙ БАЗЫ** (копия снята штатной дверью
+`core/istochnik.py --snyat-kopiyu`; в боевую базу не записано ничего). База: 57 школьников,
+15 900 отметок, 14 действующих принимающих, «Ольга Рыжая» = `teachers.id 13`. Период отмечен
+через ЖИВУЮ HTTP-дверь, а не вставкой в базу: `POST /api/otsutstvie` → `200 {'ok': True,
+'id': 1, 'dnej': 12}`.
+
+```
+клеток особого вида в журнале преподавателей: 12 —
+  2026-10-01 … 2026-10-12 (все двенадцать, поимённо)
+остались без принимающего: 3 — Быков Владислав, Кудишин Андрей, Фёдоров Михаил
+
+== ДО ПЕРЕЗАПУСКА ==   (12 строк, по одной на день; печатались все)
+  2026-10-01 занятие | по занятию: НЕТ ✅ (в списке 13) | постоянное: НЕТ ✅ (в списке 13)
+  …
+  2026-10-12 занятие | по занятию: НЕТ ✅ (в списке 13) | постоянное: НЕТ ✅ (в списке 13)
+  проверено 24 из 24, зелёных 24
+— сервер остановлен, поднят заново —
+клеток особого вида после перезапуска: 12
+== ПОСЛЕ ПЕРЕЗАПУСКА ==
+  проверено 24 из 24, зелёных 24
+ИТОГ: 24/24 до · 24/24 после · 12 клеток до · 12 клеток после → ЗЕЛЁНО ✅   (rc=0)
+```
+
+**ОТРИЦАТЕЛЬНАЯ ПОЛОВИНА — критерий СПОСОБЕН провалиться, и это показано числом.** На той же
+живой копии:
+```
+2026-09-28 | принимающих в списке: 14 | Ольга Рыжая: ЕСТЬ
+2026-10-01 | принимающих в списке: 13 | Ольга Рыжая: нет
+2026-10-12 | принимающих в списке: 13 | Ольга Рыжая: нет
+2026-10-15 | принимающих в списке: 14 | Ольга Рыжая: ЕСТЬ
+активных преподавателей в базе: 14
+```
+Без этой половины зелёные 24 проверки были бы зелены и у пустой школы.
+
+**ТЕСТЫ.** Новый файл `tests/veb/test_otsutstvie_prepodavatelya.py` — **41 тест, все
+зелёные** (в том числе 12 дней × 2 версии параметризацией, отказы двери на кривой дате,
+перевёрнутом периоде, выдуманной причине и несуществующем преподавателе, 403 без куки и
+под ролью `prepod`, снятие отметки, и перезапуск сервера внутри одного теста).
+
+**ВСЯ ПАПКА `tests/veb/`** (без трёх браузерных файлов, которым нужен playwright и
+`SPETSMAT_BAZA`): `207 passed, 8 failed, 9 skipped`.
+🔴 **Эти 8 красных — НЕ мои, и это ЗАМЕРЕНО, а не предположено.** Прогнал те же файлы на
+`main` в отдельной отцепленной рабочей папке (`git worktree add --detach`, `b921b26`):
+**тот же список из 8, файл в файл, тест в тест** (`test_server.py` — 7, `test_priyom.py` — 1).
+Папка после замера удалена.
+
+**`tests/veb/test_kanon_verstki.py` — 13 ошибок НА SETUP**, все
+`config.IstochnikNeNazvan: переменная среды SPETSMAT_BAZA не выставлена`. Тоже не моё
+(фикстура требует названного источника), но означает, что канон вёрстки по умолчанию молчит —
+пункт 7 в `## ВОПРОСЫ`.
+
+### ЧЕГО Я НЕ СДЕЛАЛ — СПИСКОМ, И ПОЧЕМУ
+
+* **Отказ ДВЕРИ ЗАПИСИ на пришедший запросом выбор** (вторая половина §4 задания: *«если
+  выбор всё же придёт запросом (старая вкладка), дверь записи ОТКАЗЫВАЕТ с внятной
+  причиной»*). Обе двери — вне зоны: слой занятия в `veb/server.py:1583`, постоянный слой в
+  `core/services/enrollment.py::enforce_calendar_and_ceiling`. Правка выписана дословно в
+  пунктах 1 и 2 `## ВОПРОСЫ`, чтобы её не пришлось выводить заново. **Сегодня старая
+  вкладка запись ПРОВЕДЁТ** — список сужен, дверь нет.
+* **Карточки преподавателей на вкладке группы и слово «отсутствует» на вкладке
+  принимающих** читают только `teacher_attendance` и периода не видят
+  (`veb/razdely/gruppy.py:68`, `veb/razdely/prepodavateli.py:226`). Одна строка в каждом,
+  оба вне зоны — пункты 4 и 5.
+* **Будущие дни периода не становятся СТОЛБЦАМИ решётки** — отбор столбцов живёт в
+  `core/services/istoria_poseshchenij.py`, вне зоны. Вместо этого сделана полоса дней
+  (пункт 6 и урок фабрике).
+
+### ЧТО НЕ ТРОГАЛ
+Ничего вне зоны: `veb/server.py`, `core/`, `infra/`, `tools/`, `docs/`, `veb/razdely/*`
+кроме `shkolniki.py` и `istoria_zanyatij.py` — не изменены ни байтом (`git show --stat` по
+каждому коммиту несёт только пути зоны). Новых `.md` не заводил, поэтому `register_doc.py`
+не звался и `_studio/docs/KARTA.md` не трогался.
+
+### НЕОБРАТИМОЕ
+* **Прогон через `git stash push -u` и обратно.** Чтобы сравнить красные тесты с `main`, я
+  на минуту убрал незакоммиченную правку файла-захода в стеш и вернул её `stash apply` по
+  SHA, затем удалил запись. · где: `zhurnal/2026-09-02_spetsmat-bot/kod_otsutstvie-prepodavatelya.md`
+  · чем восстанавливается: уже восстановлено (`git stash apply 3486767…`, запись `stash@{0}`
+  удалена, `git stash list` пуст); правка целиком лежит в коммите отчёта. Приём назван
+  вслух, потому что стек стеша общий с соседними рабочими папками — риск был, ущерба нет.
+* **Временная отцепленная рабочая папка** `…/scratchpad/baza-main` на `main` для замера
+  чужих красных · удалена `git worktree remove --force`, `git worktree list` её не
+  показывает.
+* **Копия боевой базы** в личный scratchpad (`progon.db`). В саму боевую базу
+  `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/data/spetsmat.db` не записано ничего —
+  копия снята штатной дверью, сервер прогона поднимался с `SPETSMAT_BAZA=<копия>`.
+* Ничего не удалено, не переименовано и не перезаписано в репозитории. **Другого
+  необратимого нет.**
+
+### ПОВТОРЯЕМОСТЬ НАХОДОК
+* **ПОВТОРИТСЯ на следующем заходе этой волны, то есть это заход, а не запись в очередь:**
+  критерий готовности, требующий N клеток на экране, который этих клеток по устройству
+  данных дать не может (урок фабрике ниже). Волна идёт по одному шаблону критериев, и
+  следующий заход по журналу упрётся в то же самое.
+* **ПОВТОРИТСЯ:** восемь красных тестов `test_server.py`/`test_priyom.py` на `main` —
+  каждый следующий исполнитель этой зоны потратит те же 10 минут, чтобы выяснить, что они
+  не его. Их надо либо починить, либо пометить `xfail` с причиной.
+* **НЕ повторится** (законно уходит пунктами очереди): двери записи, карточки групп,
+  слово «отсутствует» на вкладке принимающих, столбцы будущих дней — это конкретные места
+  конкретной фичи, а не форма работы.
+
+### ВРЕМЯ ПРОГОНА И ТОКЕНЫ
+**НЕПРИМЕНИМО:** движок `opencode`, счётчика стоимости в логе нет.
+
+### ПРАВКИ ПРОЧИТАНЫ
+Блок `## ПРАВКИ ПОСЛЕ ВЫДАЧИ` пуст (`<правок нет>`) — заход не правился с момента выдачи.
+
+### ОТКРЫТОЕ «ВОЗВРАЩАТЬСЯ»
+Две двери записи (пункты 1–2 `## ВОПРОСЫ`) — до них старая вкладка проводит запись на
+отсутствующего человека. Это самое дорогое из оставшегося и единственное, что стоило бы
+взять следующим заходом сразу.
+
+### РЕЗУЛЬТАТ ВЕРИФИКАТОРА §3
+
+Тип — ПОСЛЕ. Свежий субагент, СВОЙ прогон другим методом: своя копия боевой базы, свой
+сервер на своём порту, отметка через HTTP-дверь, свои скрипты. Финальная строка получена
+дословно: **«выдано 127 позиций из 127 найденных»** — ответ не усечён.
+
+**ВЕРДИКТ ВЕРИФИКАТОРА: утверждение ПОДТВЕРЖДАЕТСЯ, охват 123 проверки из 127 прошли,
+2 неприменимы, 2 — находки ниже; ни одна проверка не провалилась.**
+
+* **(A) 24 из 24.** На учебных днях периода (01.10 чт, 05.10 пн, 08.10 чт, 12.10 пн)
+  список **13** вместо 14. Сильнее моего скрипта: он взял НАСТОЯЩИЙ HTML по HTTP и
+  посчитал `<option>` — `/raspredelenie?den=2026-10-01` дал **99 → 0** опций «Ольга
+  Рыжая» при контроле «Андрей Рябичев» 99 → 99; главная страница при периоде, накрывшем
+  ближайшие пн/чт, **198 → 0**. `tekushchij=13` её не возвращает (5 дней).
+* **(B) 12 клеток, ровно те дни**, `title="болезнь · 01.10–12.10"`, крестиков в строке
+  Ольги ноль. Отдельно проверил вид клетки РЕШЁТКИ, отметив период 08–11.09: клетка за
+  10.09 перешла `ist-byl/✓` → `ist-otsut/О`.
+* **(C) переживает перезапуск** — повторил всё целиком, снова 24/24 и 12 клеток.
+* **(D) проверка способна провалиться:** 15.10, 28.09, 19.10, 22.10 — список 14, Ольга
+  ЕСТЬ.
+* **Попытки сломать (его главная работа):** кривые даты/причина/`teacher_id`/не-JSON →
+  400/404 и **0 строк записано**; POST без куки и под ролью `prepod` → 403, 4 из 4;
+  `GET /api/otsutstvie` → 405; после снятия отметки Ольга вернулась в список, а
+  **`enrollment` побайтово тот же** (108 строк, SHA `acd6f982…`, все 8 строк с
+  `teacher_id 13` целы); два пересекающихся периода легли оба и снимаются по одному;
+  отметка соседу не протекает на Ольгу; **база БЕЗ миграции 013 — а боевая сейчас именно
+  такая — заводит таблицу сама при первом рендере, и `CHECK`-и на ней живы.**
+
+**ДВЕ НАХОДКИ ВЕРИФИКАТОРА, ОБЕ ПОЧИНЕНЫ ТУТ ЖЕ — коммит `1426974`:**
+
+1. **Кнопка «снять» рисовалась ВСЕМ.** Форма отметки пряталась от преподавателя
+   правильно, а кнопок «снять» под ролью `prepod` было ТРИ на три периода. Дверь
+   нажатие отбивает (403, замерено четырьмя запросами), данные не пострадали бы никогда,
+   но орган правки, показанный тому, кто править не может, обещает действие, которого не
+   будет — ровно против правила, записанного в докстринге `stranica()`. Починено, и
+   сторожится тестом `test_knopki_snyat_u_neorganizatora_net` (3 кнопки у организатора,
+   0 у преподавателя, сами отметки видны обоим).
+2. **Комментарий миграции 013 обещал больше, чем даёт механизм:** «a date that is not a
+   date has to be refused by the база, not by the caller». Неверно — `glob` проверяет
+   ФОРМУ, и прямой `insert` с `s_daty='2026-13-45'` прошёл. Существование дня проверяет
+   ДВЕРЬ (`strptime`), а не база. Обещание исправлено, а не удалено: строка, обещающая
+   больше механизма, опаснее отсутствующей. Тот же класс и та же правка, что «ПОПРАВКА
+   ОРКЕСТРАТОРА 10.09» в миграции 012.
+
+**УТОЧНЕНИЕ ВЕРИФИКАТОРА ПО (B), И ОНО СПРАВЕДЛИВО.** Формулировка критерия «в журнале
+преподавателей 12 клеток особого вида» читается шире, чем есть на самом деле: 12 клеток —
+это **полоса дней периода** (`.ots-polosa`) в панели отметок, а не ячейки решётки.
+В решётке на 11.09 один столбец (10.09), октябрьских столбцов в ней нет ФИЗИЧЕСКИ — они
+строятся из прошедших `sessions`. Класс и счёт верны, но читать это надо именно так; почему
+иначе нельзя внутри зоны — пункт 6 `## ВОПРОСЫ` и урок фабрике выше.
+
+### ТРЕТЬЯ НАХОДКА — МОЯ СОБСТВЕННАЯ, ВСКРЫТАЯ МОЕЙ ЖЕ ПРАВКОЙ (тот же коммит `1426974`)
+Строка модуля `veb/razdely/istoria_zanyatij.py` несёт внутри обычной (не сырой) строки
+последовательность `\|` — грепом в цитате. Python пока только предупреждает, но pytest
+умеет поднимать предупреждения до ошибок, и тогда падает не тест, а ИМПОРТ модуля, то есть
+весь файл тестов разом. Поймано живьём: первая же компиляция после правки (пустой
+`__pycache__`) увела в красное 42 зелёных теста с `SyntaxError: invalid escape sequence`,
+а второй прогон, уже из кэша, был зелёным. **Ловушка срабатывает ровно на чистой машине и
+молчит на своей.** Строка сделана сырой; `python3 -W error -c "import …"` теперь чист.
+
+### ЗАМЕР В БРАУЗЕРЕ (playwright, 1440×900, живая копия базы)
+```
+skroll_po_gorizontali : false        (ширина документа ровно 1440 — канон, правило 4)
+forma_vidna           : true
+kletok_vidno          : 12
+cvet_kletki           : rgb(201, 116, 58)   — тёплый, не приглушённый `--faint`
+fon_kletki            : var(--warm) 14 %    — клетка ПОМЕЧЕНА, а не ослаблена
+siroty                : «остались без принимающего: 3 — Быков Владислав, Кудишин Андрей, Фёдоров Михаил»
+```
+Снимок экрана: `/private/tmp/claude-501/-Users-ivanyakovlev-Documents-GitHub-spetsmat-bot-wt-otsutstvie-prepodavatelya/d862f339-1f93-437a-a592-bb091c2528c5/scratchpad/zhurnal-1440x900.png`
+(временная папка сессии — она исчезнет; страница пересобирается командой из строки АРТЕФАКТ).
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.

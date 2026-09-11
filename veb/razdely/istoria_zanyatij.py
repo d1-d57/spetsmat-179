@@ -2,7 +2,18 @@
 # TOOL-CONTRACT: called-by-code — the route below is declared by `marshruty()` and
 # collected by `veb.server._marshruty_razdelov` (`RAZDELY_S_MARSHRUTAMI`), the same seam
 # `veb/razdely/istoria.py` already uses.
-"""История занятий: кто был на каждом ПРОШЕДШЕМ занятии, и у кого/с кем.
+r"""История занятий: кто был на каждом ПРОШЕДШЕМ занятии, и у кого/с кем.
+
+🔴 СТРОКА МОДУЛЯ СЫРАЯ (префикс `r` у тройной кавычки) ИЗ-ЗА ОДНОЙ
+ПОСЛЕДОВАТЕЛЬНОСТИ `\|` НИЖЕ, И
+ЭТО НЕ КОСМЕТИКА. `grep -n 'menyu\|ssyl'` в обычной строке — НЕВЕРНАЯ
+управляющая последовательность: Python пока только предупреждает, но pytest
+умеет поднимать предупреждения до ошибок, и тогда падает не тест, а ИМПОРТ
+модуля, то есть весь файл тестов разом. Поймано живьём в этой сессии: первая
+же компиляция после правки (пустой `__pycache__`) дала
+`SyntaxError: invalid escape sequence \|` на строке 5 и увела в красное 42
+зелёных теста; на втором прогоне, уже из кэша, всё было зелено — то есть
+ловушка срабатывает ровно на чистой машине и молчит на своей.
 
 WHAT THE OWNER ASKED FOR, 09.09, in his own words: *«я бы сделал вкладку История, где
 вывел бы слева список… внутри было бы две вкладки, преподаватели и школьники… и у каждого
@@ -62,7 +73,9 @@ from infra.enrollment_repo import SqliteEnrollmentRepo
 from infra.room_repo import SqliteAttendance, SqliteSessions
 from infra.sessions_repo import SqliteSessionBook
 from veb import vhod
-from veb.obshchee.karkas import e, menyu_ssylkami
+from veb.obshchee.karkas import (
+    PRICHINY_OTSUTSTVIYA, e, menyu_ssylkami, otmetit_otsutstvie,
+    periody_otsutstvij, snyat_otsutstvie)
 from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
 
@@ -372,14 +385,39 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody) -> str:
             f'<tbody>{"".join(stroki)}</tbody></table>')
 
 
-def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody) -> str:
+def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody,
+                             ots_po_dnyam=None) -> str:
+    """Журнал преподавателей. Клетка дня отмеченного периода — СВОЕГО вида.
+
+    🔴 ТРИ СОСТОЯНИЯ, А НЕ ДВА, И СПУТАТЬ ИХ НЕЛЬЗЯ (задание §3). `✕` значит «не
+    был» — человек должен был прийти и не пришёл; `О` значит «его и не ждали, это
+    отмеченный период»; пустая клетка значила бы «не отмечено». Раньше первые два
+    выглядели одинаково, то есть журнал, ПО КОТОРОМУ СЧИТАЕТСЯ ЗАРПЛАТА, не
+    отличал прогул от согласованного отсутствия.
+
+    🔴 ПЕРИОД ПОБЕЖДАЕТ ОТМЕТКУ ПРИСУТСТВИЯ, И ЭТО НАМЕРЕННО. Если на день периода
+    всё-таки стоит `teacher_attendance`-строка «был», сильнее человек, который
+    отметил период: он говорил про весь отрезок, а строка присутствия могла
+    приехать автоматом. Случай виден во всплывающей подсказке — она называет
+    причину и сам период, — а не скрыт.
+    """
     if not istoriya.dni:
         return '<p class="ist-pusto">прошедших занятий пока нет</p>'
+    ots_po_dnyam = ots_po_dnyam or {}
     stroki = []
     for t in teachers:
         po_dnyam = istoriya.prepodavateli.get(t["id"], {})
         kletki = []
         for den in istoriya.dni:
+            svoi_periody = [x for x in ots_po_dnyam.get(den, ())
+                            if x["teacher_id"] == t["id"]]
+            if svoi_periody:
+                kletki.append(_kletka(
+                    "ist-otsut", "О",
+                    e("отсутствует · " + "; ".join(
+                        _podpis_perioda(x) for x in svoi_periody)),
+                    den, "prep", t["id"]))
+                continue
             yacheika = po_dnyam.get(den)
             if yacheika is None or not yacheika.prisutstvoval:
                 kletki.append(_kletka("ist-net", "✕", "не был", den, "prep", t["id"]))
@@ -448,6 +486,193 @@ def _chto_raskryvaetsya(students, teachers, istoriya, sdachi) -> dict:
     return itog
 
 
+# ──────────────────────────────────── ОТСУТСТВИЕ ПРЕПОДАВАТЕЛЯ: РАЗБОР И ФОРМА
+
+
+def _dni_perioda(s_daty: str, po_datu: str) -> tuple:
+    """Все календарные дни периода, ОБА КОНЦА ВКЛЮЧЕНЫ: `('2026-10-01', …, '2026-10-12')`.
+
+    🔴 ВСЕ ДНИ, А НЕ ТОЛЬКО ДНИ ЗАНЯТИЙ, И ЭТО НЕ ИЗБЫТОЧНОСТЬ. Владелец отмечает
+    период жизни человека («её физически нет»), а не расписание: он говорит «с
+    первого по двенадцатое», и двенадцать клеток на экране — это его двенадцать
+    дней. Сузив полосу до пн/чт, экран показал бы четыре клетки на период из
+    двенадцати дней, и сверить его со словами владельца стало бы нечем.
+    """
+    from datetime import date, timedelta
+
+    nachalo, konec = date.fromisoformat(s_daty), date.fromisoformat(po_datu)
+    dni, d = [], nachalo
+    while d <= konec:
+        dni.append(d.isoformat())
+        d += timedelta(days=1)
+    return tuple(dni)
+
+
+def _dlina_perioda(s_daty: str, po_datu: str) -> int:
+    return len(_dni_perioda(s_daty, po_datu))
+
+
+def _po_dnyam_otsutstvija(periody) -> dict:
+    """`{ISO-день: (период, …)}` — разложенные по дням отметки.
+
+    Одно чтение базы разворачивается здесь один раз, и дальше и решётка, и полоса
+    спрашивают готовый словарь. Пересечения периодов законны (`migrations/013`
+    их не запрещает), поэтому значение — КОРТЕЖ: «болезнь» и объявленный позже
+    «отъезд» на те же дни оба остаются названными.
+    """
+    itog: dict = {}
+    for per in periody:
+        for den in _dni_perioda(per["s_daty"], per["po_datu"]):
+            itog.setdefault(den, []).append(per)
+    return {k: tuple(v) for k, v in itog.items()}
+
+
+def _podpis_perioda(per: dict) -> str:
+    """`болезнь · 01.10–12.10` — то, что стоит во всплывающей подсказке клетки."""
+    return "%s · %s–%s" % (per["prichina"], _kratko(per["s_daty"]),
+                           _kratko(per["po_datu"]))
+
+
+def _forma_otsutstvia(teachers) -> str:
+    """Окно «Отметить отсутствие»: кто, с какой даты, по какую, почему.
+
+    🔴 ФОРМА СТОИТ В ЖУРНАЛЕ ПРЕПОДАВАТЕЛЕЙ, И МЕСТО НАЗВАНО САМИМ ЗАДАНИЕМ
+    («Из журнала преподавателей: выбрать преподавателя, назвать период,
+    сохранить»). Это же и единственный экран, на котором человека видно по дням:
+    отметив период, организатор видит его действие тут же, не уходя со страницы.
+
+    🔴 НИКАКОГО «НЕ РАНЬШЕ СЕГОДНЯ» У ПОЛЕЙ ДАТ НЕТ, И ЭТО ТРЕБОВАНИЕ, А НЕ
+    НЕДОСМОТР: «Работает и назад („заболел сегодня“), и вперёд („не будет с 1 по
+    12 октября“)». Атрибут `min` на поле даты запретил бы ровно первый случай.
+    """
+    opts = "".join(f'<option value="{t["id"]}">{e(t["name"])}</option>'
+                   for t in teachers)
+    prichiny = "".join(f'<option value="{e(x)}">{e(x)}</option>'
+                       for x in PRICHINY_OTSUTSTVIYA)
+    return f"""
+<form class="ots-forma" id="ots-forma" autocomplete="off">
+  <h3>Отметить отсутствие</h3>
+  <p class="ots-zachem">Человека не будет в эти дни — он исчезнет из списка
+     принимающих на каждый день периода, в обеих версиях распределения.</p>
+  <div class="ots-polya">
+    <label>кто<select name="teacher_id" id="ots-kto" required>{opts}</select></label>
+    <label>с<input type="date" name="s_daty" id="ots-s" required></label>
+    <label>по<input type="date" name="po_datu" id="ots-po" required></label>
+    <label>почему<select name="prichina" id="ots-prichina">{prichiny}</select></label>
+    <button type="submit" class="ots-knopka">Отметить</button>
+  </div>
+  <p class="ots-oshibka" id="ots-oshibka" hidden></p>
+</form>"""
+
+
+def _spisok_periodov(periody, teachers_by_id, siroty, mozhno_pravit=False) -> str:
+    """Уже отмеченные периоды, поимённо — и со снятием ТОЛЬКО у того, кто правит.
+
+    Пустой список говорит об этом словами: строка «отметок нет» отличима от
+    страницы, на которой список просто не нарисовался.
+
+    🔴 `mozhno_pravit` СТОИТ ЗДЕСЬ ПОТОМУ, ЧТО КНОПКА «СНЯТЬ» РИСОВАЛАСЬ ВСЕМ, И
+    ЭТО НАШЁЛ ВЕРИФИКАТОР, А НЕ ЧТЕНИЕ. Замер: под ролью `prepod` страница
+    `/istoria` честно прятала форму отметки и при этом показывала ТРИ кнопки
+    «снять» на три периода. Дверь нажатие отбивала (403, проверено четырьмя
+    запросами), то есть данные не пострадали бы никогда, — но орган правки,
+    показанный тому, кто править не может, это обещание действия, которого не
+    будет, и ровно то, что запрещает докстринг `stranica()` двадцатью строками
+    ниже. Видеть отметку преподаватель обязан: его отсутствие — факт про него.
+    """
+    if not periody:
+        return '<p class="ots-pusto">отметок об отсутствии нет</p>'
+
+    def knopka_snyat(per: dict) -> str:
+        if not mozhno_pravit:
+            return ""
+        return ('<button type="button" class="ots-snyat" data-id="%d">снять</button>'
+                % per["id"])
+
+    stroki = []
+    for per in periody:
+        kto = teachers_by_id.get(per["teacher_id"])
+        imya = e(kto["name"]) if kto else "преподаватель №%d" % per["teacher_id"]
+        stroki.append(
+            f'<li class="ots-zapis"><b>{imya}</b>'
+            f'<span class="ots-srok">{e(_kratko(per["s_daty"]))}'
+            f'&#8202;–&#8202;{e(_kratko(per["po_datu"]))}</span>'
+            f'<span class="ots-prichina">{e(per["prichina"])}</span>'
+            f'<span class="ots-skolko">{_dlina_perioda(per["s_daty"], per["po_datu"])}&nbsp;дн.</span>'
+            f'{knopka_snyat(per)}'
+            f'{_polosa_dnej(per)}'
+            f'{_stroka_bez_prinimayushchego(siroty.get(per["id"], ()))}'
+            f'</li>')
+    return '<ul class="ots-spisok">' + "".join(stroki) + "</ul>"
+
+
+def _polosa_dnej(per: dict) -> str:
+    """Полоса дней ОДНОГО периода: по клетке на каждый календарный день.
+
+    🔴 ЗАЧЕМ ОНА НУЖНА СВЕРХ РЕШЁТКИ, И ЭТО НЕ УКРАШЕНИЕ, А ЕДИНСТВЕННЫЙ СПОСОБ
+    ПОКАЗАТЬ БУДУЩИЙ ПЕРИОД. Столбцы решётки — ПРОШЕДШИЕ занятия:
+    `IstoriyaService.sostavit` разворачивает `sessions`, а строки `sessions` на
+    будущее не существует до самого занятия. Живой случай владельца — 01–12.10,
+    то есть целиком впереди: в решётке у него НОЛЬ столбцов, и «выделить клетки
+    периода» там физически нечего. Полоса и есть те двенадцать клеток особого
+    вида, которые называет критерий готовности.
+
+    Клетка полосы НЕСЁТ ТОТ ЖЕ КЛАСС `ist-otsut`, что и клетка решётки: один вид —
+    один класс, иначе «отдельный вид» пришлось бы узнавать в двух местах и они бы
+    разошлись при первой же правке цвета.
+    """
+    kletki = []
+    for den in _dni_perioda(per["s_daty"], per["po_datu"]):
+        kletki.append(
+            f'<span class="ist-otsut ots-den" title="{e(_podpis_perioda(per))}" '
+            f'data-den="{e(den)}">{e(_kratko(den))}</span>')
+    return '<div class="ots-polosa">' + "".join(kletki) + "</div>"
+
+
+def _bez_prinimayushchego(c: sqlite3.Connection, per: dict) -> tuple:
+    """Дети, у которых на дни периода стоит ИМЕННО этот отсутствующий человек.
+
+    🔴 РЕШЕНИЕ ПО ЗАДАНИЮ §1, И ОНО НАЗВАНО ВСЛУХ: НИЧЕГО НЕ УДАЛЯЕТСЯ.
+    Постоянная строка `enrollment` остаётся как стояла. Причина простая: период
+    КОНЧАЕТСЯ — тринадцатого она снова на месте, — и стереть закрепление значило
+    бы уничтожить факт, который всё ещё верен, ради факта временного. Взамен
+    организатору показывается список: «эти дети остались без принимающего».
+
+    СЛОТЫ БЕРУТСЯ ИЗ САМИХ ДНЕЙ ПЕРИОДА, а не вписаны парой «1, 2»: период может
+    целиком лечь между занятиями (вторник–среда), и тогда без принимающего не
+    остаётся никто — правильный ответ, а не пустая забывчивость.
+    """
+    from core.services.sostav_na_den import slot_of
+
+    sloty = {slot_of(d) for d in _dni_perioda(per["s_daty"], per["po_datu"])}
+    sloty.discard(None)
+    if not sloty:
+        return ()
+    mesta = ",".join("?" * len(sloty))
+    ryady = c.execute(
+        "select s.id as id, s.surname as surname, s.name as name, e.slot as slot "
+        "from enrollment e join students s on s.id = e.student_id "
+        "where e.teacher_id = ? and e.valid_to = ? and e.slot in (" + mesta + ") "
+        "and (s.status is null or s.status <> 'left') "
+        "order by s.surname, s.name",
+        (per["teacher_id"], config.OPEN_END_DATE, *sorted(sloty))).fetchall()
+    return tuple(dict(r) for r in ryady)
+
+
+def _stroka_bez_prinimayushchego(deti) -> str:
+    """Одна строка под полосой: сколько детей осталось без принимающего и кто.
+
+    Пусто — так и сказано словами. Молчание здесь читалось бы как «никого», а это
+    разные вещи: «ни у кого не стоял этот человек» и «список не нарисовался».
+    """
+    if not deti:
+        return ('<p class="ots-sirot-net">на дни периода этот человек ни у кого не '
+                'стоит принимающим</p>')
+    imena = ", ".join(sorted({_imya_shkolnika(r) for r in deti}))
+    return ('<p class="ots-siroty"><b>остались без принимающего: %d</b> — %s</p>'
+            % (len({r["id"] for r in deti}), e(imena)))
+
+
 SVOI_STILI = """
 .istoria{max-width:none;padding:1.3em 2.4em 2.4em}
 .istoria h1{font-family:var(--sans);font-size:1.6em;margin:0 0 .3em}
@@ -509,6 +734,46 @@ SVOI_STILI = """
 .ist-raskrytie ul{margin:.3rem 0 0;padding-left:1.2rem}
 .ist-raskrytie li{padding:.12rem 0}
 .ist-raskrytie .ist-nichego{color:var(--muted)}
+/* ── ОТСУТСТВИЕ ПРЕПОДАВАТЕЛЯ: форма, список отметок ───────────────────────────
+   Форма стоит НАД решёткой, а не под ней: её нажимают до того, как смотрят на
+   журнал, и искать её прокруткой за четырьмя тысячами клеток было бы издевательством. */
+.ots-forma{border:1px solid var(--rule);border-radius:14px;padding:.9rem 1.1rem;
+  margin:0 0 .9rem;background:var(--panel);font-family:var(--sans)}
+.ots-forma h3{margin:0 0 .2rem;font-size:1.02rem}
+.ots-zachem{color:var(--muted);font-size:.88rem;margin:0 0 .7rem}
+.ots-polya{display:flex;flex-wrap:wrap;gap:.7rem 1rem;align-items:flex-end}
+.ots-polya label{display:flex;flex-direction:column;gap:.2rem;font-size:.82rem;
+  color:var(--muted)}
+.ots-polya select,.ots-polya input{font:inherit;font-size:.94rem;padding:.3em .5em;
+  border:1px solid var(--rule);border-radius:8px;background:var(--bg);color:inherit}
+.ots-knopka{font:inherit;font-weight:600;padding:.42em 1.2em;border-radius:8px;
+  border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);
+  cursor:pointer}
+.ots-oshibka{color:var(--warm);font-size:.9rem;margin:.6rem 0 0}
+.ots-spisok{list-style:none;margin:0 0 1rem;padding:0;font-family:var(--sans);
+  font-size:.92rem}
+.ots-zapis{display:flex;flex-wrap:wrap;gap:.55rem .9rem;align-items:baseline;
+  padding:.32rem 0;border-bottom:1px solid var(--rule)}
+.ots-srok{font-variant-numeric:tabular-nums}
+.ots-prichina,.ots-skolko{color:var(--muted)}
+.ots-snyat{margin-left:auto;font:inherit;font-size:.85rem;cursor:pointer;
+  border:1px solid var(--rule);border-radius:8px;background:none;color:var(--muted);
+  padding:.12em .7em}
+.ots-pusto{color:var(--muted);font-family:var(--sans);font-size:.92rem;margin:0 0 1rem}
+/* 🔴 ОТДЕЛЬНЫЙ ВИД КЛЕТКИ, А НЕ ОТТЕНОК КРЕСТИКА. `ist-net` — приглушённый
+   `--faint` («не был»), `ist-otsut` — заливка и рамка тёплым: он читается как
+   ПОМЕЧЕННЫЙ, а не как слабый. Ровно этого требует §3 задания: пустая клетка уже
+   значит «не отмечено», и спутать эти два состояния нельзя. */
+.ist-tabl td.ist-otsut{color:var(--warm);font-weight:700;
+  background:color-mix(in srgb, var(--warm) 14%, transparent)}
+.ots-polosa{display:flex;flex-wrap:wrap;gap:.22rem;margin:.45rem 0 .1rem;
+  flex-basis:100%}
+.ist-otsut.ots-den{display:inline-block;font-size:.72rem;font-weight:700;
+  font-variant-numeric:tabular-nums;padding:.16em .42em;border-radius:6px;
+  color:var(--warm);border:1px solid var(--warm);
+  background:color-mix(in srgb, var(--warm) 14%, transparent)}
+.ots-siroty{flex-basis:100%;margin:.3rem 0 0;font-size:.88rem;color:var(--warm)}
+.ots-sirot-net{flex-basis:100%;margin:.3rem 0 0;font-size:.88rem;color:var(--muted)}
 .ist-zhurnal{margin:0 0 .2rem;font-family:var(--sans);font-size:1.15rem;font-weight:600}
 .ist-zachem{color:var(--muted);font-family:var(--sans);font-size:.92rem;margin:0 0 .8rem}
 @media(max-width:760px){
@@ -602,13 +867,79 @@ SKRIPT = """
 </script>"""
 
 
-def stranica(c: sqlite3.Connection) -> str:
-    """Вся страница: два журнала, собранные по одному разу каждый."""
+#: Форма отсутствия. Отдельный блок, а не ветка в `SKRIPT`: тот раскрывает клетки
+#: и не пишет в базу вовсе, а этот — единственное место страницы, которое ПИШЕТ.
+#: Смешав их, следующий читатель искал бы дверь записи внутри обработчика клика по
+#: клетке.
+SKRIPT_OTSUTSTVIE = """
+<script>
+(function(){
+  var forma = document.getElementById('ots-forma');
+  if(!forma) return;                      // не организатор: формы на странице нет
+  var oshibka = document.getElementById('ots-oshibka');
+
+  function skazat(text){
+    oshibka.textContent = text;
+    oshibka.hidden = !text;
+  }
+  function poslat(telo, chto){
+    return fetch('/api/otsutstvie', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(telo)
+    }).then(function(otvet){
+      return otvet.json().catch(function(){ return {}; }).then(function(d){
+        if(!otvet.ok){ skazat(d.error || (chto + ' не удалось: ' + otvet.status)); return; }
+        /* 🔴 СТРАНИЦА ПЕРЕЧИТЫВАЕТСЯ ЦЕЛИКОМ, А НЕ ПОДПРАВЛЯЕТСЯ НА МЕСТЕ.
+           Отметка меняет ТРИ вещи сразу: список отметок, вид клеток в решётке и
+           полосу дней периода. Подправить их руками — значит завести второе
+           описание того же факта в браузере, и оно разойдётся с сервером на
+           первом же пересечении периодов. */
+        location.reload();
+      });
+    }).catch(function(){ skazat(chto + ' не удалось: сервер не ответил'); });
+  }
+
+  forma.addEventListener('submit', function(sob){
+    sob.preventDefault();
+    skazat('');
+    var s = document.getElementById('ots-s').value;
+    var po = document.getElementById('ots-po').value;
+    if(!s || !po){ skazat('нужны обе даты'); return; }
+    if(s > po){ skazat('начало периода позже его конца'); return; }
+    poslat({
+      teacher_id: +document.getElementById('ots-kto').value,
+      s_daty: s, po_datu: po,
+      prichina: document.getElementById('ots-prichina').value
+    }, 'отметка');
+  });
+
+  document.addEventListener('click', function(sob){
+    var knopka = sob.target.closest ? sob.target.closest('.ots-snyat') : null;
+    if(!knopka) return;
+    skazat('');
+    poslat({snyat: +knopka.dataset.id}, 'снятие отметки');
+  });
+})();
+</script>"""
+
+
+def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False) -> str:
+    """Вся страница: два журнала, собранные по одному разу каждый.
+
+    `mozhno_pravit` — рисовать ли форму отметки отсутствия. Она ОРГАН ПРАВКИ, и
+    показывать её тому, кому дверь всё равно ответит 403, значит обещать действие,
+    которого не будет. Сам порог живёт в двери (`_pravit_nelzya`): форма — только
+    его отражение, и её отсутствие ничего не запрещает само по себе.
+    """
     students, teachers = _spravochniki(c)
     students_by_id = {u["id"]: u for u in students}
     teachers_by_id = {t["id"]: t for t in teachers}
     istoriya, sessii = _sostavit(c)
     rody = _rod_zanyatiya(c, sessii)
+    periody = periody_otsutstvij(c)
+    ots_po_dnyam = _po_dnyam_otsutstvija(periody)
+    siroty = {per["id"]: _bez_prinimayushchego(c, per) for per in periody}
     otmeneno = _otmenennye(sessii, istoriya.dni)
     sdachi = sdachi_po_zanyatiyam(c, istoriya.dni)
     dannye = _chto_raskryvaetsya(students, teachers, istoriya, sdachi)
@@ -661,7 +992,9 @@ def stranica(c: sqlite3.Connection) -> str:
   <section id="is-shk">{zagolovok("shk")}
     {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody)}</section>
   <section id="is-prep">{zagolovok("prep")}
-    {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody)}</section>
+    {_forma_otsutstvia(teachers) if mozhno_pravit else ""}
+    {_spisok_periodov(periody, teachers_by_id, siroty, mozhno_pravit)}
+    {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, ots_po_dnyam)}</section>
   {stroka_otmen}
   <div class="ist-raskrytie" id="ist-raskrytie" hidden>
     <button class="ist-zakryt" id="ist-zakryt" type="button">закрыть</button>
@@ -670,8 +1003,152 @@ def stranica(c: sqlite3.Connection) -> str:
   </div>
 </main>
 <script type="application/json" id="ist-dannye">{json.dumps(dannye, ensure_ascii=False)}</script>
-{SKRIPT}
+{SKRIPT}{SKRIPT_OTSUTSTVIE}
 </body></html>"""
+
+
+# ────────────────────────────────────────────── ОТМЕТИТЬ ОТСУТСТВИЕ (часть 2)
+
+
+def _pravit_nelzya(h) -> bool:
+    """Тот же порог, что у правящих роутов `veb/server.py::_pravka_zapreshchena`.
+
+    🔴 ПОРОГ СКОПИРОВАН НЕ ОТ ЛЕНИ, А ПОТОМУ ЧТО ЗВАТЬ ОРИГИНАЛ НЕЧЕМ: он МЕТОД
+    обработчика (`self._pravka_zapreshchena`), а не функция, и снаружи у него нет
+    имени. Копируется при этом ровно условие, включая переключатель
+    `SVOBODNAYA_PRAVKA`, — и вот почему он здесь обязателен. Д1 живого прогона:
+    `/api/prepodavateli` спрашивал роль напрямую и отвечал 403 ВСЕГДА, потому что
+    при выключенном пароле куки никто не ставит и роли нет. Дверь, которая
+    отказывает всем, выглядит как мёртвая вкладка, а не как защищённая.
+
+    `SVOBODNAYA_PRAVKA` берётся из `veb.server` ИМПОРТОМ ВНУТРИ ФУНКЦИИ: модуль
+    сервера импортирует ЭТОТ модуль (`RAZDELY_S_MARSHRUTAMI`), и импорт наверху
+    замкнул бы кольцо. К моменту вызова оба модуля загружены — тот же приём, что
+    `karkas.sobrat_kontekst` уже применяет к `veb.razdely.shkolniki`.
+    """
+    if _mozhno_pravit(h):
+        return False
+    if vhod.rol(h.headers) is None:
+        _otdat_json(h, 403, {"error": "нужно войти"})
+    else:
+        _otdat_json(h, 403, {"error": "отмечает отсутствие только организатор"})
+    return True
+
+
+def _mozhno_pravit(h) -> bool:
+    """Тот же вопрос БЕЗ побочного действия: страница спрашивает его, чтобы решить,
+    рисовать ли форму, и ответ «нет» здесь не должен отправлять 403 в середину
+    HTML. Дверь выше зовёт эту же функцию, и второго условия в файле нет.
+    """
+    from veb.server import SVOBODNAYA_PRAVKA
+
+    return bool(SVOBODNAYA_PRAVKA) or vhod.rol(h.headers) == "organizator"
+
+
+def _telo_zaprosa(h) -> dict:
+    """JSON тела запроса; нечитаемое тело — пустой словарь, а не исключение."""
+    try:
+        syroe = h.rfile.read(int(h.headers.get("Content-Length", 0) or 0))
+        return json.loads(syroe or b"{}")
+    except (ValueError, TypeError):
+        return {}
+
+
+ISO_DEN = "%Y-%m-%d"
+
+
+def _den_ili_nichego(znachenie) -> str | None:
+    """`'2026-10-01'` → та же строка; что угодно другое → `None`.
+
+    Дата проверяется РАЗБОРОМ, а не длиной строки: `'2026-13-45'` имеет ту же
+    длину и тот же вид, и `CHECK` миграции его пропустит — `glob` проверяет форму,
+    а не существование дня. Отказ здесь стоит одного `if`; тринадцатый месяц,
+    доехавший в базу, стоит поиска по всем страницам, на которых он потом не
+    нашёлся.
+    """
+    if not isinstance(znachenie, str):
+        return None
+    try:
+        datetime.strptime(znachenie, ISO_DEN)
+    except ValueError:
+        return None
+    return znachenie
+
+
+def dver_otsutstvia(h) -> bool:
+    """`/api/otsutstvie` — отметить период и снять отметку. Только POST.
+
+    🔴 МАРШРУТ ОБЪЯВЛЕН ЗДЕСЬ, А НЕ В `veb/server.py`, И ЭТО НЕ ОБХОД ЗОНЫ, А ШОВ,
+    КОТОРЫЙ СЕРВЕР САМ ДЛЯ ЭТОГО И ДЕРЖИТ. `_marshruty_razdelov()` спрашивается и в
+    `do_GET`, и в `do_POST` — второе добавлено заходом `veb-priyom-zadach` ровно
+    потому, что дверь раздела, которая ПИШЕТ, есть POST. Так что раздел, объявивший
+    путь, объявил его для обоих методов.
+
+    Два действия и одно тело:
+      * `{"teacher_id": 7, "s_daty": "2026-10-01", "po_datu": "2026-10-12",
+         "prichina": "болезнь", "zametka": null}` — отметить;
+      * `{"snyat": 3}` — снять отметку целиком.
+    Разделять их на два пути незачем: это одно окно на экране и одна форма.
+    """
+    if getattr(h, "command", "POST") != "POST":
+        _otdat_json(h, 405, {"error": "только POST"})
+        return True
+    if _pravit_nelzya(h):
+        return True
+    p = _telo_zaprosa(h)
+    c = _soedinenie(h)
+    try:
+        if p.get("snyat") is not None:
+            try:
+                snyato = snyat_otsutstvie(c, int(p["snyat"]))
+            except (TypeError, ValueError):
+                _otdat_json(h, 400, {"error": "нужен числовой id отметки"})
+                return True
+            c.commit()
+            if not snyato:
+                _otdat_json(h, 404, {"error": "такой отметки нет"})
+                return True
+            _otdat_json(h, 200, {"ok": True, "snyato": int(p["snyat"])})
+            return True
+
+        syroj_tid = p.get("teacher_id")
+        try:
+            teacher_id = int(syroj_tid)
+        except (TypeError, ValueError):
+            _otdat_json(h, 400, {"error": "нужен teacher_id"})
+            return True
+        s_daty = _den_ili_nichego(p.get("s_daty"))
+        po_datu = _den_ili_nichego(p.get("po_datu"))
+        if s_daty is None or po_datu is None:
+            _otdat_json(h, 400, {"error": "нужны даты в виде ГГГГ-ММ-ДД"})
+            return True
+        prichina = p.get("prichina") or PRICHINY_OTSUTSTVIYA[0]
+        # Преподаватель обязан существовать и быть активным: отметка на снятого
+        # человека не влияет ни на один список и потому неотличима от потерянной.
+        est = c.execute("select 1 from teachers where id = ? and aktiven = 1",
+                        (teacher_id,)).fetchone()
+        if est is None:
+            _otdat_json(h, 404, {"error": "нет такого действующего преподавателя"})
+            return True
+        try:
+            novyj = otmetit_otsutstvie(
+                c, teacher_id, s_daty, po_datu, prichina,
+                # 🔴 `vhod.kto` ОТДАЁТ `None` ПРИ ОБЩЕМ ПАРОЛЕ, И ЭТО ИЗВЕСТНОЕ
+                # СОСТОЯНИЕ, А НЕ ПОТЕРЯ. `proverit_parol` на общем пароле
+                # организатора возвращает `("organizator", None)`, то есть «кто-то
+                # из организаторов». Та же `NULL` уже законна в
+                # `mark_lesson_override.teacher_id` ровно по этой причине.
+                kto_otmetil=vhod.kto(h.headers),
+                zametka=(p.get("zametka") or None))
+        except ValueError as oshibka:
+            _otdat_json(h, 400, {"error": str(oshibka)})
+            return True
+        c.commit()
+        _otdat_json(h, 200, {"ok": True, "id": novyj, "s_daty": s_daty,
+                             "po_datu": po_datu, "dnej": _dlina_perioda(s_daty, po_datu)})
+        return True
+    finally:
+        c.close()
 
 
 def _soedinenie(h) -> sqlite3.Connection:
@@ -707,6 +1184,15 @@ def _otdat_html(h, status: int, telo: str) -> None:
     h.wfile.write(telo_bytes)
 
 
+def _otdat_json(h, status: int, telo: dict) -> None:
+    telo_bytes = json.dumps(telo, ensure_ascii=False).encode("utf-8")
+    h.send_response(status)
+    h.send_header("Content-Type", "application/json; charset=utf-8")
+    h.send_header("Content-Length", str(len(telo_bytes)))
+    h.end_headers()
+    h.wfile.write(telo_bytes)
+
+
 def pokazat_istoriyu(h) -> bool:
     """`/istoria` — обе решётки на одной странице. Только для вошедших.
 
@@ -719,7 +1205,7 @@ def pokazat_istoriyu(h) -> bool:
         return True
     c = _soedinenie(h)
     try:
-        _otdat_html(h, 200, stranica(c))
+        _otdat_html(h, 200, stranica(c, mozhno_pravit=_mozhno_pravit(h)))
     finally:
         c.close()
     return True
@@ -727,4 +1213,5 @@ def pokazat_istoriyu(h) -> bool:
 
 def marshruty():
     """Пути этого раздела: `{путь: обработчик}`. Зовётся сборкой сервера."""
-    return {"/istoria": pokazat_istoriyu}
+    return {"/istoria": pokazat_istoriyu,
+            "/api/otsutstvie": dver_otsutstvia}
