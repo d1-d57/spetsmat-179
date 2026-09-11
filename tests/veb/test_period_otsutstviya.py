@@ -298,7 +298,7 @@ def test_v_zhurnale_dvenadcat_kletok_osobogo_vida(server_s_bazoj):
                                     "prichina": "болезнь"})
     html = _stranica(server_s_bazoj["adres"])
     kletki = sorted(set(re.findall(
-        r'class="ist-kl ist-otsut ots-klik"[^>]*data-den="(\d{4}-\d\d-\d\d)"', html)))
+        r'class="ist-kl ist-otsut"[^>]*data-den="(\d{4}-\d\d-\d\d)"', html)))
     # 🔴 РЕШЁТКА ПОКАЗЫВАЕТ ДНИ ЗАНЯТИЙ, А НЕ КАЛЕНДАРЬ. Период 01–12.10 длится
     # двенадцать календарных дней, но занятий в нём столько, сколько понедельников
     # и четвергов; отмечены обязаны быть ИМЕННО ОНИ и только они.
@@ -318,7 +318,7 @@ def test_kletka_proshedshego_dnya_ne_krestik_i_ne_pustota(server_s_bazoj):
                                     "prichina": "болезнь"})
     html = _stranica(server_s_bazoj["adres"])
     kletka = re.search(
-        r'<td class="ist-kl ist-otsut ots-klik" title="([^"]*)" data-den="%s" data-vid="prep" '
+        r'<td class="ist-kl ist-otsut" title="([^"]*)" data-den="%s" data-vid="prep" '
         r'data-kto="%d"' % (ponedelnik, server_s_bazoj["olga"]), html)
     assert kletka, "клетка дня периода обязана быть своего вида — крестик ✕ отсутствия"
     assert "отсутствует" in kletka.group(1) and "болезнь" in kletka.group(1)
@@ -358,9 +358,9 @@ def test_knopki_snyat_u_neorganizatora_net(server_s_bazoj):
             "s_daty": "2026-1%d-01" % nomer, "po_datu": "2026-1%d-02" % nomer,
             "prichina": "болезнь"})
     u_organizatora = _stranica(server_s_bazoj["adres"])
-    assert 'class="ist-kl ist-vpered ots-klik"' in u_organizatora or 'ist-otsut ots-klik' in u_organizatora, "организатор обязан иметь кликабельные клетки"
+    assert '<span class="kl-ugol' in u_organizatora, "организатор обязан иметь уголок-переключатель"
     u_prepoda = _stranica(server_s_bazoj["adres"], rol_cheloveka="prepod")
-    assert 'ots-klik" ' not in u_prepoda.replace("<td class=\"ist-kl \"", ""), "тому, кто править не может, кликалку не показываем"
+    assert '<span class="kl-ugol' not in u_prepoda, "тому, кто править не может, уголок не показываем"
     assert "ist-otsut" in u_prepoda, "сами отметки преподаватель видеть обязан"
 
 
@@ -478,7 +478,7 @@ def test_otmetka_perezhivaet_perezapusk_servera(baza):
     httpd, potok, adres = podnyat()
     try:
         html = _stranica(adres)
-        assert len(re.findall(r'class="ist-kl ist-otsut ots-klik"', html)) >= 1
+        assert len(re.findall(r'class="ist-kl ist-otsut"', html)) >= 1
         kt = karkas.sobrat_kontekst("admin", den="2026-10-07", baza=baza["put"])
         assert "Ольга Рыжая" not in _spisok_prinimayushchih(kt, kt.DNI["den"][1],
                                                             baza["olga"])

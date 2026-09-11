@@ -460,10 +460,10 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
                             if x["teacher_id"] == t["id"]]
             if svoi_periody:
                 kletki.append(_kletka(
-                    "ist-otsut ots-klik" if mozhno_pravit else "ist-otsut", "✕",
+                    "ist-otsut", "✕",
                     e("отсутствует · " + "; ".join(
                         _podpis_perioda(x) for x in svoi_periody)),
-                    den, "prep", t["id"]))
+                    den, "prep", t["id"], ugolok=mozhno_pravit))
                 continue
             yacheika = po_dnyam.get(den)
             if den in otmecheno_net and den not in est:
@@ -488,10 +488,14 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
                 if not mozhno_pravit:
                     kletki.append(KLETKA_PUSTAYA)
                     continue
-                kletki.append(_kletka("ist-vpered ots-klik", "",
-                                      v_rode(t["name"], "нажмите, если его не будет",
-                                             "нажмите, если её не будет"),
-                                      den, "prep", t["id"]))
+                # 🔴 И ЗДЕСЬ ТОЖЕ ТОЛЬКО УГОЛОК. Владелец 11.09, повторно: «нажатие
+                # на галочку меняет её на крестик, а я просил, чтобы нажатие
+                # показывало, у кого принимал преподаватель, а где-то в углу было
+                # маленькое место, куда можно нажать и переключить». Значит правило
+                # ОДНО для всех трёх видов клетки: тело — показать, уголок — править.
+                kletki.append(_kletka("ist-vpered", "",
+                                      v_rode(t["name"], "его не будет?", "её не будет?"),
+                                      den, "prep", t["id"], ugolok=mozhno_pravit))
             elif yacheika is None or not yacheika.prisutstvoval:
                 kletki.append(_kletka(
                     "ist-net", "✕",
@@ -812,11 +816,19 @@ SVOI_STILI = """
    и «узкими» перестали бы быть ровно там, где владелец смотрит. Замер на 1440:
    12.5rem имени + 16 × 2.7rem дат = 55.7rem ≈ 890px, прокрутки нет. */
 .ist-prokrutka{overflow-x:auto}
-.ist-tabl{font-size:.95rem;width:auto;table-layout:fixed;
+/* 🔴 РЕШЁТКА ЗАНИМАЕТ ВЕСЬ ЭКРАН, И ЭТО ТРЕБОВАНИЕ, А НЕ ВКУС. Владелец 11.09,
+   дважды: «табличку растянуть на весь экран… клеточки всё ещё очень маленькие, а
+   чтобы уголок работал, клетки должны быть большими». Прежняя ширина была `auto` с
+   колонкой в 2.7rem: на 1440 решётка занимала меньше двух третей ширины, а клетка
+   была размером со знак — попасть в уголок мышью в ней нельзя. Теперь колонки
+   делят всю доступную ширину, а клетка имеет рост. */
+.ist-tabl{font-size:1rem;width:100%;table-layout:fixed;
   border-collapse:separate;border-spacing:0}
-.ist-tabl th.ist-zn{width:2.7rem;padding:.5rem .1rem;text-align:center;font-size:.7rem;
+.ist-tabl th.ist-zn{width:auto;padding:.5rem .1rem;text-align:center;font-size:.72rem;
   border-bottom:2px solid var(--rule);border-left:1px solid var(--rule)}
-.ist-tabl thead th:first-child{width:12.5rem}
+.ist-tabl thead th:first-child{width:13rem}
+.ist-tabl td.ist-kl,.ist-tabl td.ist-pusta{height:2.6rem}
+.ist-tabl td.ist-kl{cursor:pointer}
 /* Клетка дня, о котором записи нет: будущее занятие четверти или прошедшее, но не
    заведённое. Ничего не рисует, ничего не открывает — см. `KLETKA_PUSTAYA`. */
 .ist-tabl td.ist-pusta{border-left:1px solid var(--rule);
@@ -896,9 +908,14 @@ SVOI_STILI = """
   background:color-mix(in srgb, var(--warm) 14%, transparent)}
 .ist-vpered{cursor:pointer}
 .ist-kl{position:relative}
-.kl-ugol{position:absolute;right:2px;bottom:0;font-size:.62rem;line-height:1;
-  color:var(--muted);opacity:.35;cursor:pointer;padding:2px 3px}
-.kl-ugol:hover{opacity:1;color:var(--warm)}
+/* Уголок — своя зона нажатия, не «символ рядом»: у него есть площадь (минимум
+   палец на телефоне), он прижат к правому нижнему углу и проявляется на наведении.
+   Тело клетки остаётся под главный жест — «показать, у кого принимал». */
+.kl-ugol{position:absolute;right:0;bottom:0;width:1.15rem;height:1.15rem;
+  display:flex;align-items:center;justify-content:center;font-size:.8rem;line-height:1;
+  color:var(--muted);opacity:.25;cursor:pointer;border-top-left-radius:6px}
+.ist-kl:hover .kl-ugol{opacity:.75;background:color-mix(in srgb, var(--warm) 18%, transparent)}
+.kl-ugol:hover{opacity:1;color:var(--warm);background:color-mix(in srgb, var(--warm) 32%, transparent)}
 .ist-vpered:hover{background:color-mix(in srgb, var(--warm) 10%, transparent)}
 .ots-klik{cursor:pointer}
 .ots-zhdyot{opacity:.45}
