@@ -374,14 +374,39 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody) -> str:
             f'<tbody>{"".join(stroki)}</tbody></table>')
 
 
-def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody) -> str:
+def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody,
+                             ots_po_dnyam=None) -> str:
+    """Журнал преподавателей. Клетка дня отмеченного периода — СВОЕГО вида.
+
+    🔴 ТРИ СОСТОЯНИЯ, А НЕ ДВА, И СПУТАТЬ ИХ НЕЛЬЗЯ (задание §3). `✕` значит «не
+    был» — человек должен был прийти и не пришёл; `О` значит «его и не ждали, это
+    отмеченный период»; пустая клетка значила бы «не отмечено». Раньше первые два
+    выглядели одинаково, то есть журнал, ПО КОТОРОМУ СЧИТАЕТСЯ ЗАРПЛАТА, не
+    отличал прогул от согласованного отсутствия.
+
+    🔴 ПЕРИОД ПОБЕЖДАЕТ ОТМЕТКУ ПРИСУТСТВИЯ, И ЭТО НАМЕРЕННО. Если на день периода
+    всё-таки стоит `teacher_attendance`-строка «был», сильнее человек, который
+    отметил период: он говорил про весь отрезок, а строка присутствия могла
+    приехать автоматом. Случай виден во всплывающей подсказке — она называет
+    причину и сам период, — а не скрыт.
+    """
     if not istoriya.dni:
         return '<p class="ist-pusto">прошедших занятий пока нет</p>'
+    ots_po_dnyam = ots_po_dnyam or {}
     stroki = []
     for t in teachers:
         po_dnyam = istoriya.prepodavateli.get(t["id"], {})
         kletki = []
         for den in istoriya.dni:
+            svoi_periody = [x for x in ots_po_dnyam.get(den, ())
+                            if x["teacher_id"] == t["id"]]
+            if svoi_periody:
+                kletki.append(_kletka(
+                    "ist-otsut", "О",
+                    e("отсутствует · " + "; ".join(
+                        _podpis_perioda(x) for x in svoi_periody)),
+                    den, "prep", t["id"]))
+                continue
             yacheika = po_dnyam.get(den)
             if yacheika is None or not yacheika.prisutstvoval:
                 kletki.append(_kletka("ist-net", "✕", "не был", den, "prep", t["id"]))
@@ -529,7 +554,7 @@ def _forma_otsutstvia(teachers) -> str:
 </form>"""
 
 
-def _spisok_periodov(periody, teachers_by_id) -> str:
+def _spisok_periodov(periody, teachers_by_id, siroty) -> str:
     """Уже отмеченные периоды, поимённо и со снятием.
 
     Пустой список говорит об этом словами: строка «отметок нет» отличима от
@@ -548,8 +573,77 @@ def _spisok_periodov(periody, teachers_by_id) -> str:
             f'<span class="ots-prichina">{e(per["prichina"])}</span>'
             f'<span class="ots-skolko">{_dlina_perioda(per["s_daty"], per["po_datu"])}&nbsp;дн.</span>'
             f'<button type="button" class="ots-snyat" data-id="{per["id"]}">снять</button>'
+            f'{_polosa_dnej(per)}'
+            f'{_stroka_bez_prinimayushchego(siroty.get(per["id"], ()))}'
             f'</li>')
     return '<ul class="ots-spisok">' + "".join(stroki) + "</ul>"
+
+
+def _polosa_dnej(per: dict) -> str:
+    """Полоса дней ОДНОГО периода: по клетке на каждый календарный день.
+
+    🔴 ЗАЧЕМ ОНА НУЖНА СВЕРХ РЕШЁТКИ, И ЭТО НЕ УКРАШЕНИЕ, А ЕДИНСТВЕННЫЙ СПОСОБ
+    ПОКАЗАТЬ БУДУЩИЙ ПЕРИОД. Столбцы решётки — ПРОШЕДШИЕ занятия:
+    `IstoriyaService.sostavit` разворачивает `sessions`, а строки `sessions` на
+    будущее не существует до самого занятия. Живой случай владельца — 01–12.10,
+    то есть целиком впереди: в решётке у него НОЛЬ столбцов, и «выделить клетки
+    периода» там физически нечего. Полоса и есть те двенадцать клеток особого
+    вида, которые называет критерий готовности.
+
+    Клетка полосы НЕСЁТ ТОТ ЖЕ КЛАСС `ist-otsut`, что и клетка решётки: один вид —
+    один класс, иначе «отдельный вид» пришлось бы узнавать в двух местах и они бы
+    разошлись при первой же правке цвета.
+    """
+    kletki = []
+    for den in _dni_perioda(per["s_daty"], per["po_datu"]):
+        kletki.append(
+            f'<span class="ist-otsut ots-den" title="{e(_podpis_perioda(per))}" '
+            f'data-den="{e(den)}">{e(_kratko(den))}</span>')
+    return '<div class="ots-polosa">' + "".join(kletki) + "</div>"
+
+
+def _bez_prinimayushchego(c: sqlite3.Connection, per: dict) -> tuple:
+    """Дети, у которых на дни периода стоит ИМЕННО этот отсутствующий человек.
+
+    🔴 РЕШЕНИЕ ПО ЗАДАНИЮ §1, И ОНО НАЗВАНО ВСЛУХ: НИЧЕГО НЕ УДАЛЯЕТСЯ.
+    Постоянная строка `enrollment` остаётся как стояла. Причина простая: период
+    КОНЧАЕТСЯ — тринадцатого она снова на месте, — и стереть закрепление значило
+    бы уничтожить факт, который всё ещё верен, ради факта временного. Взамен
+    организатору показывается список: «эти дети остались без принимающего».
+
+    СЛОТЫ БЕРУТСЯ ИЗ САМИХ ДНЕЙ ПЕРИОДА, а не вписаны парой «1, 2»: период может
+    целиком лечь между занятиями (вторник–среда), и тогда без принимающего не
+    остаётся никто — правильный ответ, а не пустая забывчивость.
+    """
+    from core.services.sostav_na_den import slot_of
+
+    sloty = {slot_of(d) for d in _dni_perioda(per["s_daty"], per["po_datu"])}
+    sloty.discard(None)
+    if not sloty:
+        return ()
+    mesta = ",".join("?" * len(sloty))
+    ryady = c.execute(
+        "select s.id as id, s.surname as surname, s.name as name, e.slot as slot "
+        "from enrollment e join students s on s.id = e.student_id "
+        "where e.teacher_id = ? and e.valid_to = ? and e.slot in (" + mesta + ") "
+        "and (s.status is null or s.status <> 'left') "
+        "order by s.surname, s.name",
+        (per["teacher_id"], config.OPEN_END_DATE, *sorted(sloty))).fetchall()
+    return tuple(dict(r) for r in ryady)
+
+
+def _stroka_bez_prinimayushchego(deti) -> str:
+    """Одна строка под полосой: сколько детей осталось без принимающего и кто.
+
+    Пусто — так и сказано словами. Молчание здесь читалось бы как «никого», а это
+    разные вещи: «ни у кого не стоял этот человек» и «список не нарисовался».
+    """
+    if not deti:
+        return ('<p class="ots-sirot-net">на дни периода этот человек ни у кого не '
+                'стоит принимающим</p>')
+    imena = ", ".join(sorted({_imya_shkolnika(r) for r in deti}))
+    return ('<p class="ots-siroty"><b>остались без принимающего: %d</b> — %s</p>'
+            % (len({r["id"] for r in deti}), e(imena)))
 
 
 SVOI_STILI = """
@@ -639,6 +733,20 @@ SVOI_STILI = """
   border:1px solid var(--rule);border-radius:8px;background:none;color:var(--muted);
   padding:.12em .7em}
 .ots-pusto{color:var(--muted);font-family:var(--sans);font-size:.92rem;margin:0 0 1rem}
+/* 🔴 ОТДЕЛЬНЫЙ ВИД КЛЕТКИ, А НЕ ОТТЕНОК КРЕСТИКА. `ist-net` — приглушённый
+   `--faint` («не был»), `ist-otsut` — заливка и рамка тёплым: он читается как
+   ПОМЕЧЕННЫЙ, а не как слабый. Ровно этого требует §3 задания: пустая клетка уже
+   значит «не отмечено», и спутать эти два состояния нельзя. */
+.ist-tabl td.ist-otsut{color:var(--warm);font-weight:700;
+  background:color-mix(in srgb, var(--warm) 14%, transparent)}
+.ots-polosa{display:flex;flex-wrap:wrap;gap:.22rem;margin:.45rem 0 .1rem;
+  flex-basis:100%}
+.ist-otsut.ots-den{display:inline-block;font-size:.72rem;font-weight:700;
+  font-variant-numeric:tabular-nums;padding:.16em .42em;border-radius:6px;
+  color:var(--warm);border:1px solid var(--warm);
+  background:color-mix(in srgb, var(--warm) 14%, transparent)}
+.ots-siroty{flex-basis:100%;margin:.3rem 0 0;font-size:.88rem;color:var(--warm)}
+.ots-sirot-net{flex-basis:100%;margin:.3rem 0 0;font-size:.88rem;color:var(--muted)}
 .ist-zhurnal{margin:0 0 .2rem;font-family:var(--sans);font-size:1.15rem;font-weight:600}
 .ist-zachem{color:var(--muted);font-family:var(--sans);font-size:.92rem;margin:0 0 .8rem}
 @media(max-width:760px){
@@ -803,6 +911,8 @@ def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False) -> str:
     istoriya, sessii = _sostavit(c)
     rody = _rod_zanyatiya(c, sessii)
     periody = periody_otsutstvij(c)
+    ots_po_dnyam = _po_dnyam_otsutstvija(periody)
+    siroty = {per["id"]: _bez_prinimayushchego(c, per) for per in periody}
     otmeneno = _otmenennye(sessii, istoriya.dni)
     sdachi = sdachi_po_zanyatiyam(c, istoriya.dni)
     dannye = _chto_raskryvaetsya(students, teachers, istoriya, sdachi)
@@ -856,8 +966,8 @@ def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False) -> str:
     {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody)}</section>
   <section id="is-prep">{zagolovok("prep")}
     {_forma_otsutstvia(teachers) if mozhno_pravit else ""}
-    {_spisok_periodov(periody, teachers_by_id)}
-    {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody)}</section>
+    {_spisok_periodov(periody, teachers_by_id, siroty)}
+    {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, ots_po_dnyam)}</section>
   {stroka_otmen}
   <div class="ist-raskrytie" id="ist-raskrytie" hidden>
     <button class="ist-zakryt" id="ist-zakryt" type="button">закрыть</button>
