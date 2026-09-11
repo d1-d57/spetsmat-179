@@ -837,3 +837,133 @@ def test_the_konduit_is_a_row_per_sheet_whose_button_really_opens_that_sheet(
     # 🔴 И АДРЕС ОТВЕЧАЕТ. Это та половина, которую разметка не проверяет.
     status, _telo_listka, _h = _get(f'{running_server["baza"]}/listki/16A')
     assert status == 200, f"кнопка листка ведёт в {status}"
+
+
+def test_no_name_in_the_page_script_is_both_a_var_and_a_function(running_server):
+    """🔴 ЭТО РЕГРЕССИЯ НА ЖИВОЙ ДЕФЕКТ, А НЕ ПРЕДОСТОРОЖНОСТЬ.
+
+    Пункт 8 приехал с `function uzel(…)`, а строкой выше в той же области уже стояло
+    `var uzel = document.getElementById('kab-dannye')`. `var` всплывает наверх области
+    и перетирает объявление функции: `pokazat` падал с `uzel is not a function`, и
+    панель кондуита не открывалась НИ РАЗУ. Разметка при этом была совершенно
+    правильной — поэтому ни один тест этого файла не покраснел, и поймал дефект
+    браузерный прогон.
+
+    Проверка дешёвая и ловит ровно этот класс: имя, объявленное в скрипте страницы и
+    как `var`, и как `function`. Она не заменяет браузерного прогона (ниже), а стоит
+    рядом с ним: она отвечает быстро и без Chromium.
+    """
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+    skripty = re.findall(r"<script>(.*?)</script>", telo, re.S)
+    assert skripty, "страница обязана нести свой скрипт"
+    kod = "\n".join(_bez_kommentariev(x) for x in skripty)
+    peremennye = set(re.findall(r"\bvar\s+([A-Za-z_$][\w$]*)", kod))
+    funkcii = set(re.findall(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(", kod))
+    stolknulis = peremennye & funkcii
+    assert not stolknulis, (
+        f"имя объявлено и как var, и как function — var перетрёт функцию: {stolknulis}")
+
+
+def test_in_a_real_browser_the_konduit_button_opens_a_row_per_sheet(running_server):
+    """🔴 ПРОГОН В БРАУЗЕРЕ: половина этого экрана — скрипт, и Python его не исполняет.
+
+    Все проверки выше читают РАЗМЕТКУ. Разметка была правильной и в тот момент, когда
+    кнопка кондуита не открывала ничего (см. соседний тест про `var`/`function`).
+    Здесь страница действительно открывается, плитка действительно раскрывается,
+    кнопка действительно нажимается, и проверяется то, что после этого видно:
+    строка на листок, ссылка на сам листок, задачи отдельными пилюлями и ни одного
+    слова «задача».
+    """
+    pytest.importorskip("playwright.sync_api",
+                        reason="браузерный прогон требует playwright и Chromium")
+    from playwright.sync_api import sync_playwright
+
+    import sqlite3 as _s
+    from datetime import timezone
+
+    from core.services.history import nachalo_zanyatia_iso
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    den = proshlo[-1]
+    kogda = nachalo_zanyatia_iso(den)
+
+    conn = _s.connect(str(running_server["put"]))
+    try:
+        sheet_id = conn.execute(
+            "insert into sheets (number, title, issued_at, ord) "
+            "values ('16A', '16A. Деревья', ?, 1)", (den,)).lastrowid
+        for poryadok, metka in ((1, "3"), (2, "10а")):
+            problem_id = conn.execute(
+                "insert into problems (sheet_id, label, kind, ord) "
+                "values (?, ?, 'обычная', ?)",
+                (sheet_id, metka, poryadok)).lastrowid
+            conn.execute(
+                "insert into marks (student_id, problem_id, event, teacher_id, "
+                "valid_at, recorded_at, source) "
+                "values (?, ?, 'assert', ?, ?, ?, 'кнопка')",
+                (running_server["s1"], problem_id, running_server["t1"], kogda, kogda))
+        conn.commit()
+    finally:
+        conn.close()
+
+    kuka = vhod._make_cookie("prepod", running_server["t1"])
+    with sync_playwright() as pw:
+        br = pw.chromium.launch()
+        try:
+            ctx = br.new_context(viewport={"width": 1440, "height": 900})
+            ctx.add_cookies([{"name": vhod.COOKIE_NAME, "value": kuka,
+                              "domain": "127.0.0.1", "path": "/"}])
+            stranica = ctx.new_page()
+            oshibki = []
+            stranica.on("pageerror", lambda oshibka: oshibki.append(str(oshibka)))
+            stranica.goto(f'{running_server["baza"]}/kabinet', wait_until="networkidle")
+
+            # Ни одной горизонтальной прокрутки и ровно пять колонок (пункт 5).
+            geometriya = stranica.evaluate("""() => {
+              const d = document.documentElement;
+              const t = [...document.querySelectorAll('.kab-tablica')]
+                          .find(x => x.offsetParent !== null);
+              return {gorizont: d.scrollWidth > d.clientWidth,
+                      kolonki: t ? getComputedStyle(t).columnCount : null,
+                      raskryto_srazu:
+                        document.querySelectorAll('details.kab-zanyatie[open]').length};
+            }""")
+            assert geometriya["gorizont"] is False, "горизонтальной прокрутки быть не должно"
+            assert geometriya["kolonki"] == "5", geometriya
+            assert geometriya["raskryto_srazu"] == 0, "по умолчанию свёрнуты все"
+
+            plitka = stranica.query_selector(f'details.kab-zanyatie[data-den="{den}"]')
+            assert plitka is not None, f"плитка занятия {den} обязана быть на экране"
+            plitka.query_selector("summary").click()
+            knopka = plitka.query_selector(".kab-konduit")
+            assert knopka is not None, "кнопка «Кондуит за занятие» обязана быть видна"
+            knopka.click()
+
+            vidno = stranica.evaluate("""() => {
+              const p = document.getElementById('kab-raskrytie');
+              if (p.hidden) return null;
+              return {
+                stroki: [...p.querySelectorAll('.kab-stroka-listka')].map(s => ({
+                  listok: s.querySelector('.kab-listok-knopka').textContent,
+                  adres: s.querySelector('.kab-listok-knopka').getAttribute('href'),
+                  zadachi: [...s.querySelectorAll('.kab-zadacha')]
+                             .map(z => z.textContent),
+                })),
+                slovo_zadacha: p.textContent.includes('задача'),
+              };
+            }""")
+            assert not oshibki, f"скрипт страницы упал: {oshibki}"
+            assert vidno is not None, "кнопка кондуита обязана открыть панель"
+            assert vidno["stroki"] == [
+                {"listok": "16A", "adres": "/listki/16A", "zadachi": ["3", "10а"]}
+            ], vidno
+            assert vidno["slovo_zadacha"] is False, "слова «задача» в кондуите нет"
+        finally:
+            br.close()

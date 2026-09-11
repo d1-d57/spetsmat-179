@@ -498,7 +498,14 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
   }
   /* Узлы строятся, а не склеиваются из строк: в кондуит попадают фамилии школьников
      и метки задач, то есть данные, а `innerHTML` из данных — это разметка из данных. */
-  function uzel(tip, klass, tekst){
+  /* 🔴 ИМЯ `uzel` ЗАНЯТО, И ЭТО СТОИЛО ЖИВОГО ДЕФЕКТА. Строкой выше в этой же
+     функции стоит `var uzel = document.getElementById('kab-dannye')`; `var`
+     всплывает наверх области и перетирает объявление функции с тем же именем —
+     `pokazat` падал с `uzel is not a function`, панель кондуита не открывалась НИ
+     РАЗУ, и разметка при этом была правильной. Поймано браузерным прогоном
+     (playwright, 1440×900): тесты на Python читают разметку и скрипт не исполняют,
+     поэтому для них всё было зелено. */
+  function sozdat(tip, klass, tekst){
     var u = document.createElement(tip);
     if (klass) u.className = klass;
     if (tekst !== undefined) u.textContent = tekst;
@@ -506,15 +513,15 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
   }
   function konduit(sdal, pusto){
     var stroki = po_listkam(sdal);
-    if (!stroki.length) return uzel('p', 'kab-nichego', pusto);
-    var obolochka = uzel('div', 'kab-listki');
+    if (!stroki.length) return sozdat('p', 'kab-nichego', pusto);
+    var obolochka = sozdat('div', 'kab-listki');
     stroki.forEach(function(r){
-      var stroka = uzel('div', 'kab-stroka-listka');
-      var knopka = uzel('a', 'kab-listok-knopka', r.listok);
+      var stroka = sozdat('div', 'kab-stroka-listka');
+      var knopka = sozdat('a', 'kab-listok-knopka', r.listok);
       knopka.href = '/listki/' + encodeURIComponent(r.listok);
       stroka.appendChild(knopka);
       r.zadachi.forEach(function(z){
-        stroka.appendChild(uzel('span', 'kab-zadacha', z));
+        stroka.appendChild(sozdat('span', 'kab-zadacha', z));
       });
       obolochka.appendChild(stroka);
     });
@@ -528,16 +535,16 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
     telo.textContent = '';
     if (d.deti) {
       if (!d.deti.length) {
-        telo.appendChild(uzel('p', 'kab-nichego', 'в этот день школьников не было'));
+        telo.appendChild(sozdat('p', 'kab-nichego', 'в этот день школьников не было'));
       }
       d.deti.forEach(function(r){
-        var blok = uzel('div', 'kab-konduit-shkolnik');
-        blok.appendChild(uzel('p', 'kab-konduit-imya', r.kto));
+        var blok = sozdat('div', 'kab-konduit-shkolnik');
+        blok.appendChild(sozdat('p', 'kab-konduit-imya', r.kto));
         blok.appendChild(konduit(r.sdal, 'задач нет'));
         telo.appendChild(blok);
       });
     } else {
-      telo.appendChild(uzel('p', 'kab-konduit-den', d.den));
+      telo.appendChild(sozdat('p', 'kab-konduit-den', d.den));
       telo.appendChild(konduit(d.sdal, 'в этот день задач нет'));
     }
     panel.hidden = false;
