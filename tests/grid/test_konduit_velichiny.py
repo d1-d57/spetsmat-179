@@ -97,14 +97,31 @@ def panel(html: str, imya: str) -> str:
 
 
 def schyotchiki(kusok: str) -> list:
-    """Every obligatory counter of a panel, top to bottom: `(сдано, всего)` or `None`."""
+    """Клетка обязательных каждой строки: `(сдано, всего)`, `None` — точка, `"\u2713"` — галочка.
+
+    🔴 ТРЕТИЙ ИСХОД ПОЯВИЛСЯ 11.09 И ЭТО НЕ ПОСЛАБЛЕНИЕ ПРОВЕРКИ.  Владелец: «когда у
+    тебя обязательные задачи все сданы, вместо того чтобы ставить счётчик вида N из N,
+    ставить большую красивую галочку».  Клетка по-прежнему говорит РОВНО ОДНО — и
+    функция по-прежнему возвращает ровно одно значение на строку; изменилось то, что
+    одним из значений стала галочка.  Читается КЛЕТКА целиком, а не вложенный `<i>`:
+    счётчик и галочка обязаны быть взаимоисключающими, и клетка, где они окажутся
+    рядом, должна отсюда выйти красной, а не тихо показать первый попавшийся.
+    """
     out = []
-    for m in re.finditer(r'<i class="ob-sch( net)?"[^>]*>(.*?)</i>', kusok, re.S):
-        if m.group(1):
+    for m in re.finditer(r'<td class="sch"[^>]*>(.*?)</td>', kusok, re.S):
+        nutro = m.group(1)
+        znaki = re.findall(r'<i class="ob-sch([^"]*)">(.*?)</i>', nutro, re.S)
+        assert len(znaki) == 1, "в клетке обязательных не один знак: %r" % nutro
+        klass, soderzhimoe = znaki[0]
+        if "net" in klass:
             out.append(None)
             continue
-        chisla = re.match(r'(\d+)<span class="iz">/(\d+)</span>$', m.group(2))
-        assert chisla, "счётчик написан не двумя числами: %r" % m.group(2)
+        if "gt-da" in klass:
+            assert soderzhimoe.startswith("\u2713"), soderzhimoe
+            out.append("\u2713")
+            continue
+        chisla = re.match(r'(\d+)<span class="iz">/(\d+)</span>$', soderzhimoe)
+        assert chisla, "счётчик написан не двумя числами: %r" % soderzhimoe
         out.append((int(chisla.group(1)), int(chisla.group(2))))
     return out
 
@@ -155,13 +172,15 @@ def test_a_retracted_obligatory_is_not_counted_as_handed_in(mir, connection, mar
 
 
 def galki(kusok: str) -> list:
-    """Столбец галочки, сверху вниз: `True` там, где она горит.
+    """Клетка обязательных, сверху вниз: `True` там, где вместо числа стоит галочка.
 
-    Читается по КЛАССУ клетки, а не по символу: галочка, дорисованная где-нибудь ещё
-    (в клетке фамилии, в счётчике), этой проверкой не считается — она и не должна.
+    🔴 ЧИТАЕТСЯ ПО КЛАССУ ЗНАКА В КЛЕТКЕ `sch`, А НЕ ПО СИМВОЛУ.  До 11.09 галочка
+    стояла в собственном столбце `td.gt`, и эта функция читала его; правка владельца
+    («ставить галочку там, где написано слово „обязательное“») столбец упразднила,
+    и признак переехал в клетку счётчика.  Символ ✓ в решётке значит совсем другое —
+    «задача сдана», — поэтому судится класс `ob-sch gt-da`, а не знак.
     """
-    return [bool(m.group(1))
-            for m in re.finditer(r'<td class="gt( gt-da)?"', kusok)]
+    return ["\u2713" == z for z in schyotchiki(kusok)]
 
 
 def test_no_row_glows_for_having_closed_the_obligatory_problems(
@@ -190,14 +209,21 @@ def test_no_row_glows_for_having_closed_the_obligatory_problems(
     assert "gotov" not in kusok, "класс подсветки не остался нигде в разметке"
 
 
-def test_the_green_tick_lights_in_its_own_column_exactly_for_who_closed_everything(
+def test_the_green_tick_lights_in_the_counters_own_cell_for_who_closed_everything(
     mir, connection, marking
 ):
-    """O2: «должна возникать большая зелёная галочка… мы увидим, что школьник всё сдал».
+    """O2 (10.09) as the owner RE-DECIDED it on 11.09: the tick stands where the counter would.
+
+    Дословно: «я галочки предлагал ставить в другом месте — там, где написано слово
+    „обязательное“.  Когда у тебя обязательные задачи все сданы, вместо того чтобы
+    ставить счётчик вида N из N, ставить большую красивую галочку».  До 11.09 галочка
+    жила в собственном столбце `td.gt` рядом со счётчиком, и у закрывшего горели ОБА —
+    `3/3` и галочка вплотную.  Этот тест требовал именно того столбца; теперь он
+    требует, чтобы столбца НЕ БЫЛО, а знак стоял в клетке счётчика.
 
     The same world as the test above: the first pupil closes all three obligatory
     problems, the second takes a звезда and an обычная and closes none.  The признак the
-    row lost is checked HERE, in the column that now carries it — that is the whole of
+    row lost is checked HERE, in the cell that now carries it — that is the whole of
     O1+O2 together, and checking only the loss would leave the fact silently dropped.
     """
     zadachi = mir.problems_by_sheet[mir.sheet_ids[0]]
@@ -209,11 +235,15 @@ def test_the_green_tick_lights_in_its_own_column_exactly_for_who_closed_everythi
     html = konduit.razdel(kontekst(connection))
     kusok = panel(html, str(mir.sheet_ids[0]))
     assert galki(kusok) == [True, False, False, False, False]
-    # It IS a column: a header of its own, in the same thead as the счётчик.
+    # Того, кто закрыл всё, счётчик больше не называет числами — на их месте знак.
+    assert schyotchiki(kusok) == ["\u2713", (0, 3), (0, 3), (0, 3), (0, 3)]
+    # И столбца под галочку в шапке НЕТ: колонка обязательных ровно одна.
     shapka_html = re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
-    assert shapka_html.count('<th class="gt"') == 1, shapka_html
+    assert '<th class="gt"' not in shapka_html, shapka_html
+    assert shapka_html.count('<th class="sch"') == 1, shapka_html
     # And the tick is drawn green by the class, not by a colour written in the cell.
-    assert re.search(r"td\.gt\b[^}]*var\(--zel\)", konduit.stili(kontekst(connection)))
+    assert re.search(r"\.ob-sch\.gt-da\{[^}]*var\(--zel\)",
+                     konduit.stili(kontekst(connection)))
 
 
 def test_the_tick_is_not_smeared_over_the_surname_cell_or_the_counter(
@@ -230,10 +260,16 @@ def test_the_tick_is_not_smeared_over_the_surname_cell_or_the_counter(
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
     telo = re.search(r"<tbody>(.*?)</tbody>", kusok, re.S).group(1)
     stroka = re.search(r"<tr[^>]*>(.*?)</tr>", telo, re.S).group(1)
-    assert '<td class="gt gt-da"' in stroka, "галочка у этого школьника вообще есть"
+    assert '<i class="ob-sch gt-da">' in stroka, "галочка у этого школьника вообще есть"
     kto = re.search(r'<td class="kto">(.*?)</td>', stroka, re.S).group(1)
-    sch = re.search(r'<td class="sch">(.*?)</td>', stroka, re.S).group(1)
-    assert "✓" not in kto and "✓" not in sch, (kto, sch)
+    sch = re.search(r'<td class="sch"[^>]*>(.*?)</td>', stroka, re.S).group(1)
+    pr = re.search(r'<td class="pr"[^>]*>(.*?)</td>', stroka, re.S).group(1)
+    assert "✓" not in kto and "✓" not in pr, (kto, pr)
+    # 🔴 И В САМОЙ КЛЕТКЕ ОБЯЗАТЕЛЬНЫХ ЗНАК НЕ СТОИТ РЯДОМ С ЧИСЛОМ, А ВМЕСТО НЕГО.
+    # Правка 11.09 — это ЗАМЕНА, а не добавление: «вместо того чтобы ставить счётчик
+    # вида N из N».  Галочка, приписанная к `3/3`, выглядела бы исполнением просьбы и
+    # была бы прежним столбцом `gt`, сдвинутым на два пикселя влево.
+    assert not re.search(r"\d", sch), sch
 
 
 def test_a_listok_with_no_obligatory_problems_lights_up_nobody(connection, marking):
@@ -306,7 +342,15 @@ def test_on_the_year_tab_the_tick_also_lights_for_one_listok_closed_entirely(
     connection.commit()
     god = panel(konduit.razdel(kontekst(connection)), "vse8")
     assert galki(god) == [True, False, False]
-    assert schyotchiki(god)[0] == (3, 6), "по обязательным разреза он ещё не закрыл всё"
+    # 🔴 ЧИСЛА НЕ ПРОПАЛИ ВМЕСТЕ СО СЧЁТЧИКОМ, А ПЕРЕЕХАЛИ В ПОДСКАЗКУ КЛЕТКИ.
+    # С 11.09 галочка занимает место счётчика, и именно на этом школьнике видно, чего
+    # замена могла стоить: по обязательным разреза у него 3 из 6, и долга при этом нет.
+    # Исчезни это число совсем — правка «поставить галочку вместо счётчика» отняла бы
+    # факт, о потере которого никто не просил.
+    assert schyotchiki(god)[0] == "\u2713", "вместо числа у него стоит галочка"
+    podskazka = re.search(r'<td class="sch" title="([^"]*)"', god).group(1)
+    assert "обязательных сдано 3 из 6" in podskazka, podskazka
+    assert schyotchiki(god)[1] == (3, 6), "у соседа без галочки числа стоят как стояли"
 
 
 def test_on_a_listok_tab_closing_that_listok_whole_is_not_a_second_criterion(
@@ -347,7 +391,8 @@ def test_the_year_tick_says_in_words_which_of_the_two_facts_lit_it(
         otmetit(marking, mir.student_ids[0], zadacha)
     connection.commit()
     god = panel(konduit.razdel(kontekst(connection)), "vse8")
-    podskazka = re.search(r'<td class="gt gt-da" title="([^"]*)"', god).group(1)
+    podskazka = re.search(r'<td class="sch" title="([^"]*)"[^>]*>'
+                          r'<i class="ob-sch gt-da"', god).group(1)
     assert "листок" in podskazka and "целиком" in podskazka, podskazka
 
 
@@ -447,9 +492,11 @@ def test_the_initials_stand_in_a_column_of_their_own_and_not_in_the_surname_cell
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1)
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    FAMILIA, PRINIMAYUSHCHIJ, SCHYOTCHIK, GALKA = 1, 1, 1, 1
+    # 🔴 СТОЛБЦА ГАЛОЧКИ В ЭТОЙ СУММЕ БОЛЬШЕ НЕТ — ПРАВКА ВЛАДЕЛЬЦА 11.09: галочка
+    # переехала в клетку счётчика, и колонок стало на одну МЕНЬШЕ, а не больше.
+    FAMILIA, PRINIMAYUSHCHIJ, OBYAZATELNYE = 1, 1, 1
     assert len(re.findall(r"<th[ >]", kusok)) == (
-        FAMILIA + PRINIMAYUSHCHIJ + SCHYOTCHIK + GALKA + len(LISTOK))
+        FAMILIA + PRINIMAYUSHCHIJ + OBYAZATELNYE + len(LISTOK))
     shapka_html = re.search(r"<thead>(.*?)</thead>", kusok, re.S).group(1)
     assert len(re.findall(r'<th class="pr"', shapka_html)) == PRINIMAYUSHCHIJ
     # 🔴 И ЭТО ТА ЖЕ ПРОВЕРКА ФОРМОЙ, ЧТО БЫЛА: клетка фамилии не несёт второго
