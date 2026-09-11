@@ -411,7 +411,13 @@ def test_a_retracted_hand_in_does_not_count_towards_closing_a_problem(
 # --------------------------------------------- величина 4: инициалы принимающего
 
 
-PRIN = re.compile(r'<i class="prin( net)?" title="принимающий:? ?([^"]*)">([^<]*)</i>')
+#: Клетка принимающего целиком: подсказка висит на `<td>`, инициалы лежат внутри.
+#: 🔴 ЧИТАЕТСЯ ИМЕННО КЛЕТКА, А НЕ ВЛОЖЕННЫЙ `<i>`, И ЭТО СУТЬ ДЕФЕКТА 11.09.  Владелец
+#: навёл «на клеточку» и не увидел ничего: `title` стоял на инициалах — двух сантиметрах
+#: текста внутри клетки `3.4rem`.  Выражение, знающее только `<i ... title=...>`, было бы
+#: зелёным ровно в том состоянии, на которое он пожаловался.
+PRIN = re.compile(r'<td class="pr" title="принимающий:? ?([^"]*)">'
+                  r'<i class="prin( net)?">([^<]*)</i></td>')
 
 
 def zapisat(connection, student_id, teacher_id, slot, room="303",
@@ -451,7 +457,7 @@ def test_the_initials_stand_in_a_column_of_their_own_and_not_in_the_surname_cell
     # проверяется одно и то же место, и подменить его словами по-прежнему нельзя.
     yacheyka = re.search(r'<td class="kto">(.*?)</td>', kusok, re.S).group(1)
     assert "prin" not in yacheyka, yacheyka
-    assert '<td class="pr"><i class="prin"' in kusok
+    assert '<td class="pr" title="принимающий: ' in kusok
 
 
 def test_the_hover_carries_the_name_the_group_and_the_room(mir, connection):
@@ -460,10 +466,46 @@ def test_the_hover_carries_the_name_the_group_and_the_room(mir, connection):
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1, room="302")
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    net, title, txt = PRIN.findall(kusok)[0]
+    title, net, txt = PRIN.findall(kusok)[0]
     assert txt == "А.Р."
     assert title == "Андрей Рябичев · группа Д · кабинет 302"
     assert not net
+
+
+def test_the_hover_target_is_the_whole_cell_and_not_the_initials_inside_it(
+    mir, connection
+):
+    """🔴 ЖАЛОБА ВЛАДЕЛЬЦА 11.09 ДОСЛОВНО: «тут написано ДМ… я навожу на клеточку —
+    не всплывает Даня Макаров».
+
+    Текст подсказки был верен и до правки — на живой базе все 1242 клетки несли
+    «принимающий: Даня Макаров · группа Д · кабинет 302».  Неверна была МИШЕНЬ: `title`
+    стоял на `<i class="prin">`, то есть на инициалах внутри клетки `3.4rem` с полями, и
+    наведение на клетку мимо букв не показывало ничего.  Поэтому проверяется не наличие
+    текста, а то, НА ЧЁМ он висит: подсказка обязана быть на `<td>`, и внутри неё не
+    должно остаться второй такой же на `<i>` — иначе мишень снова сожмётся до текста, а
+    в разметке появится два носителя одного факта.
+    """
+    connection.execute("update teachers set name = ?, gruppa = ? where id = ?",
+                       ("Даня Макаров", "Д", mir.teacher_ids[0]))
+    zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 1, room="302")
+    connection.commit()
+    html = konduit.razdel(kontekst(connection))
+    kletki = re.findall(r'<td class="pr"[^>]*>.*?</td>', html, re.S)
+    assert kletki, "клетки принимающего вообще нарисованы"
+    bez_podskazki = [k for k in kletki if not k.startswith('<td class="pr" title="')]
+    assert bez_podskazki == [], (
+        "клетка принимающего без подсказки — ровно тот промах, на который "
+        "пожаловался владелец: %r" % bez_podskazki[:2])
+    vnutri = [k for k in kletki if re.search(r'<i class="prin[^"]*" title=', k)]
+    assert vnutri == [], (
+        "подсказка осталась и на инициалах: мишень снова сжата до текста, %r"
+        % vnutri[:2])
+    nash = [k for k in kletki if "Даня Макаров" in k]
+    assert len(nash) >= 1, "имя принимающего не доехало в подсказку клетки"
+    assert "Д.М." in nash[0], nash[0]
+    # И курсор обещает подсказку по всей площади клетки, а не над буквами.
+    assert re.search(r"tbody td\.pr\{[^}]*cursor:help", konduit.stili(kontekst(connection)))
 
 
 def test_a_pupil_with_no_open_row_gets_a_dash_and_not_a_blank(mir, connection):
@@ -472,7 +514,7 @@ def test_a_pupil_with_no_open_row_gets_a_dash_and_not_a_blank(mir, connection):
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
     nayden = PRIN.findall(kusok)
     assert len(nayden) == 5
-    assert all(net and txt == "—" for net, _title, txt in nayden)
+    assert all(net and txt == "—" for _title, net, txt in nayden)
 
 
 def test_a_row_that_is_already_closed_does_not_name_a_принимающий(mir, connection):
@@ -498,7 +540,7 @@ def test_two_different_принимающих_are_both_named_with_their_days(mir
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[1], 2, room="303")
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    _net, title, txt = PRIN.findall(kusok)[0]
+    title, _net, txt = PRIN.findall(kusok)[0]
     assert txt == "А.Р./В.Я."
     assert title == ("пн — Андрей Рябичев · группа Д · кабинет 302; "
                      "чт — Ваня Яковлев · группа В · кабинет 303")
@@ -513,7 +555,7 @@ def test_one_принимающий_in_both_slots_is_one_person_and_one_pair_of_
     zapisat(connection, mir.student_ids[0], mir.teacher_ids[0], 2, room="302")
     connection.commit()
     kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
-    _net, title, txt = PRIN.findall(kusok)[0]
+    title, _net, txt = PRIN.findall(kusok)[0]
     assert txt == "А.Р.", "один человек — одни инициалы, а не «А.Р./А.Р.»"
     assert title.startswith("Андрей Рябичев"), "дня недели тут не нужно: он один и тот же"
 

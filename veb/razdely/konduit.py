@@ -265,7 +265,19 @@ def initsialy(imya: str) -> str:
 
 
 def _prinimayushchie(kt, den: str) -> dict:
-    """`{student_id: <разметка инициалов>}` — кто принимает у школьника на эту дату.
+    """`{student_id: (подсказка, <разметка инициалов>)}` — кто принимает на эту дату.
+
+    🔴 ПОДСКАЗКА ЕДЕТ ОТДЕЛЬНО ОТ РАЗМЕТКИ, ПОТОМУ ЧТО ВЕШАЕТСЯ НЕ НА НЕЁ.  Владелец
+    11.09: «тут написано ДМ.  Это, видимо, Даня Макаров.  Я навожу на клеточку — не
+    всплывает Даня Макаров».  Текст подсказки при этом был верен и стоял на месте —
+    замерено на живой базе: 1242 клетки `td.pr`, и во всех 1242 внутри лежит
+    `title="принимающий: Даня Макаров · группа Д · кабинет 302"`.  Не работало НЕ
+    содержание, а МИШЕНЬ: `title` висел на `<i class="prin">`, то есть на двух
+    сантиметрах текста внутри клетки шириной `3.4rem` с полями по краям, и наведение
+    на саму клетку — ровно то движение, которое владелец описал, — приходилось мимо.
+    Поэтому подсказка теперь возвращается отдельным полем и вешается на `<td>`
+    (`_stolbec_prin`): мишенью становится вся клетка.  Второго носителя это не
+    заводит — подсказка одна, просто у неё другой хозяин.
 
     🔴 НЕ КОЛОНКОЙ — РЕШЕНИЕ ВЛАДЕЛЬЦА 09.09.  «Я бы показывал инициалы преподавателя, и
     номер группы, и номер кабинета» — но инициалы стоят У ФАМИЛИИ, а имя, группа и кабинет
@@ -375,14 +387,14 @@ def _prinimayushchie(kt, den: str) -> dict:
             podpisi.append(("%s — %s · %s" % (den_slota, imya, hvost)) if len(prepody) > 1
                            else "%s · %s" % (imya, hvost))
         razmetka[student_id] = (
-            '<i class="prin" title="принимающий: %s">%s</i>'
-            % (e("; ".join(podpisi)),
-               e("/".join(initsialy(imya) for _s, _p, imya, _g, _k in prepody))))
+            "принимающий: %s" % "; ".join(podpisi),
+            '<i class="prin">%s</i>'
+            % e("/".join(initsialy(imya) for _s, _p, imya, _g, _k in prepody)))
     return razmetka
 
 
-def _prin(prinimayushchie, student_id) -> str:
-    """Инициалы школьника, а где распределения нет — прочерк, а не пустое место.
+def _prin(prinimayushchie, student_id) -> tuple:
+    """`(подсказка, разметка)` школьника; распределения нет — прочерк, а не пустое место.
 
     Пустое место читается как «забыли нарисовать»; прочерк с подсказкой говорит, что
     вопрос задан и ответа нет.  На живой базе таких школьников есть, и молчание о них
@@ -397,7 +409,8 @@ def _prin(prinimayushchie, student_id) -> str:
     """
     return prinimayushchie.get(
         student_id,
-        '<i class="prin net" title="принимающий на сегодня не назначен">\u2014</i>')
+        ("принимающий на сегодня не назначен",
+         '<i class="prin net">\u2014</i>'))
 
 
 #: Шапка столбца принимающего.  Сокращение — по той же причине, что и у столбца счётчика:
@@ -417,8 +430,16 @@ def _stolbec_prin(prinimayushchie, student_id) -> str:
     ширину: «там, где заканчивается самая длинная фамилия (Тухватулин-Йалчын Дэвин),
     ещё есть место».  Это тот же его канон «нельзя смешивать» (`Q4`): в клетке с
     фамилией жили ДВА разных факта — кто этот школьник и кто у него принимает.
+
+    🔴 ПОДСКАЗКА ВИСИТ НА КЛЕТКЕ, А НЕ НА ИНИЦИАЛАХ ВНУТРИ НЕЁ — ДЕФЕКТ 11.09.
+    Владелец наводит «на клеточку», и до этой правки попадание засчитывалось только по
+    самому тексту инициалов: `<i class="prin">` занимает около двух сантиметров внутри
+    клетки `3.4rem` с полями по краям, и промах был штатным исходом, а не невезением.
+    Клетка — это и есть та мишень, о которой он говорит; `cursor:help` на ней же обещает
+    подсказку по всей её площади, а не только над буквами.
     """
-    return '<td class="pr">%s</td>' % _prin(prinimayushchie, student_id)
+    podskazka, razmetka = _prin(prinimayushchie, student_id)
+    return '<td class="pr" title="%s">%s</td>' % (e(podskazka), razmetka)
 
 
 def _uchastniki(catalogue) -> tuple:
@@ -1231,7 +1252,7 @@ def stili(kt) -> str:
   border-left:1px solid var(--rule)}}
 #s-kond .kond tbody td.pr{{text-align:center;white-space:nowrap;width:3.4rem;
   min-width:3.4rem;padding:.3rem .35rem;border-bottom:1px solid var(--rule);
-  border-left:1px solid var(--rule);background:var(--bg)}}
+  border-left:1px solid var(--rule);background:var(--bg);cursor:help}}
 #s-kond .kond td.pr .prin{{font-style:normal;font-family:var(--sans);font-size:.72rem;
   font-weight:600;color:var(--faint);cursor:help;white-space:nowrap}}
 #s-kond .kond td.pr .prin.net{{font-weight:400}}

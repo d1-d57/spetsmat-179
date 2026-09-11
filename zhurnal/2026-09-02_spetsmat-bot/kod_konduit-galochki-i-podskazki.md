@@ -224,6 +224,62 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+**BASELINE, MEASURED BEFORE ANY EDIT** (render of `konduit.razdel` over a copy of the live
+`data/spetsmat.db`, organizer mode): 78 panels in the DOM, of which 24 are grids and 23 carry
+the `th.gt` header (the 24th is the гробарий, which has no such column); 1242 `td.gt` cells,
+558 of them lit; 1242 `td.sch` cells; 1242 `td.pr` cells — **0 of which carry a `title`**,
+while all 1242 inner `<i class="prin">` do. 23 is therefore the denominator the readiness
+criterion names, and it is a fact of the live база rather than a number copied from the заход.
+
+### PART 1 — the tick takes the place of the counter
+Today the row draws TWO cells side by side: `<td class="sch">` with `N/M` and `<td class="gt">`
+with the tick. The owner wants one: where the counter would say `N из N`, a big green tick
+stands instead. So the `gt` column goes away and `_schyotchik` becomes the single carrier of
+the cell, drawing exactly one of three things and never two at once:
+  * `·` — this листок has no обязательные at all (unchanged);
+  * the tick — this pupil has no debts in this cut;
+  * `N/M` — how many of the обязательные are in.
+`ZAGOLOVOK_GT` / `ZAGOLOVOK_GT_GOD` disappear; their explanation moves into the two `sch`
+headers (листок cut and year cut keep separate hover text, because the tick means two
+different things on them — see O5). The CSS block of `td.gt` moves onto `.ob-sch.gt-da`, so
+the tick keeps the size (`1.15rem`) and the colour (`var(--zel)`) it has today.
+
+### PART 2 — the hover target is the CELL, not the two centimetres of text in it
+Measured, not guessed: the tooltip text is correct and has always been correct — the live
+render carries `title="принимающий: Даня Макаров · группа Д · кабинет 302"`. It sits on the
+inner `<i class="prin">`, which is ~2rem of text inside a 3.4rem cell with padding. Hovering
+«на клеточку», as the owner described it, lands outside that inline box and nothing pops up.
+Fix: `_prinimayushchie` hands back `(подсказка, разметка)` instead of one blob, and
+`_stolbec_prin` puts the `title` on the `<td class="pr">` itself; `cursor:help` goes on the
+cell too. One carrier, one tooltip, whole-cell target.
+
+### PART 3 — the year tick says WHICH листок it is about
+`_obzor` already computes `listok_celikom` (the number of a листок closed whole) and
+`schyot.zakryl`. Today both facts collapse into a bare `✓`. Now the tick carries a label in
+the same smaller type the counter's denominator already uses (`<span class="iz">`), so this is
+the established «one fact, two type sizes», not a second carrier.
+
+**🔴 I DISPUTE ONE HALF OF THE READINESS CRITERION, BEFORE WRITING CODE, AS §1 REQUIRES.**
+The criterion says «в разрезе „Весь год“ у каждой галочки назван номер листка». There is a
+state of the база where no листок number exists to name and naming one would be a lie: a pupil
+who has done every обязательная of the cut without closing any single листок whole (the
+обязательные are a subset of each листок, so this is not a corner case). His tick is lit by
+`schyot.zakryl`, and there is no «16A» behind it. For that state the label reads `всё`, and
+the hover says «долгов нет: закрыл все N обязательных этого разреза». Where a листок IS the
+reason — the owner's own example — the label is the листок number, exactly as asked. The
+report will carry both counts separately, so the owner can see how often each occurs.
+
+### ORDER OF WORK, ONE COMMIT PER PART
+1. Part 2 (tooltip) — code + tests + live run.
+2. Part 1 (tick into the counter cell) — code + tests + live run.
+3. Part 3 (листок number beside the year tick) — code + tests + live run.
+4. §3 verifier subagent, then the git hygiene block.
+Parts 1 and 3 touch the same two functions, so 3 follows 1; part 2 is independent and goes
+first. Tests that encode the OLD canon (`tests/grid/test_odna_kletka_odin_smysl.py` declares
+`gt` a column of its own, `tests/grid/test_konduit_velichiny.py` counts `th.gt`) are in the
+zone and are rewritten to the new decision rather than deleted: the property «one cell says
+one thing» survives the move, only its address changes.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
