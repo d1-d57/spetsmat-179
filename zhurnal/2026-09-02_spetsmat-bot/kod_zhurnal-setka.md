@@ -226,6 +226,22 @@ grep -n '<как механизм назван в вызывающем коде>
 > **ЦЕНА обязательна.** Без неё это наблюдение, а не урок, и в канон оно не пойдёт. Не знаешь цены — не пиши.
 > **Не сочиняй.** Пустая секция — законный отчёт. Выдуманный урок хуже отсутствующего: он попадёт в канон, который читают ВСЕ будущие проекты.
 
+### Критерий готовности требовал того, чего живые данные дать не могут
+
+ЦЕНА: критерий захода — «открыто 3 из 3 проверенных клеток, в каждой формат „листок +
+задачи“» — на боевой базе НЕИСПОЛНИМ, и это выяснилось только прогоном. В базе 15 900
+отметок, но в клетку решётки не попадает НИ ОДНА: 15 112 — `источник=импорт`, который
+исключён по устройству (прошлогодняя бумажная книга дат занятий не хранит вовсе, все
+её строки несут один `valid_at`), а оставшиеся 53 стоят на 2026-09-03, для которого нет
+строки `sessions`. Верификатор, честно выполнивший критерий на боевой копии, вернул бы
+«0 из 3» и это выглядело бы как провал работы, а не как пустота данных. Стоило: один
+лишний круг на постройку пробных данных В КОПИИ базы (`scratchpad/zhurnal-setka/
+proba_dannye.py`) и отдельный абзац в заходе верификатору, объясняющий, почему копию
+надо ДОЗАПОЛНИТЬ. Правило, которое из этого следует: критерий готовности, который
+проверяется на живых данных, аналитик обязан проверить на исполнимость ОДНОЙ командой
+по этим данным до того, как вписать его в заход, — иначе цену платит верификатор, а
+выглядит это как брак исполнителя.
+
 ## ПЛАН — (заполняет исполнитель)
 
 Six items of the owner's review, done IN ORDER, each committed on its own.
@@ -296,6 +312,72 @@ the reading that IS true and is what the owner's sentence «я бы писал �
 the report as a number rather than smoothed over.
 
 ## ВОПРОСЫ — (заполняет исполнитель)
+
+1. A quarter is defined here as 16 consecutive lesson days from 1 September, because no
+   holiday calendar exists anywhere in this repository. The consequence is measurable and
+   should be seen before it bites: quarter 4 of 2026/27 ends 2027-04-12, whereas the real
+   school year runs into May. Four quarters of 16 lessons cover 64 lessons, and the real
+   year has more because holidays push them apart. A real quarter boundary is a decision
+   (a table of dates, or a migration), not something this заход could compute.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+2. `veb/razdely/kabinet.py::nachalo_uchebnogo_goda` and the new
+   `veb/obshchee/karkas.py::nachalo_uchebnogo_goda` are the same rule written twice. The
+   second exists because `kabinet.py` is outside this заход's zone and could not be moved
+   into. Whoever owns `kabinet.py` next should delete its copy and call the shared one —
+   together with `chetverti_goda` / `perekluchatel_chetvertej`, which the owner asked for
+   on that page too («переключатель четвертей — как в кабинете»).
+   ДОМ: doc/PLAN-veb-2026-09.md
+   ДОСТАВЛЕНО: нет
+
+3. Of the 53 non-import marks in the live base, 0 carry a `teacher_id`. That is why «принял
+   X» under each task printed nothing on real data: nobody records WHO accepted a task. The
+   acceptance path itself would have to write it. Until it does, the receiver shown in the
+   journal is the one from `enrollment`, not the one who actually took the notebook.
+   ДОМ: doc/HRUPKOST.md
+   ДОСТАВЛЕНО: нет
+
+4. On 2026-09-10, 9 of 54 active pupils have no receiver at all (`nekuda_det`): no standing
+   `enrollment` row in force and no day-layer override. The journal shows them as `?`. This
+   is a question about the data, not about the screen.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
+5. `core/services/istoria_poseshchenij.py` filters cancelled lessons out of `dni`. That was
+   right while columns WERE the recorded days; now that columns are the calendar of the
+   quarter, a cancelled day is a column whose cells are all empty, indistinguishable from a
+   day nobody has recorded yet. The page marks the HEADER of such a column (struck through),
+   which is the most this zone could do; distinguishing «отменено» from «ещё нет записи» in
+   the CELLS needs the service to return the day.
+   ДОМ: doc/PLAN-veb-2026-09.md
+   ДОСТАВЛЕНО: нет
+
+6. There is no gender column in `teachers` or `students`, so gender is derived from the name
+   (`karkas.rod_imeni`). The rule is right on 19 of 19 teachers and 57 of 57 pupils of the
+   live base TODAY, and one of those 57 only became right after an exception list was added
+   for «Кахиани Нино». A person whose name the rule misreads can be corrected only by editing
+   that list — there is no per-person override. A column would settle it.
+   ДОМ: doc/HRUPKOST.md
+   ДОСТАВЛЕНО: нет
+
+7. `tests/veb` carries 8 failing tests and 13 errors that predate this заход: verified by
+   running the suite in a throwaway worktree at 5220b59, the commit this branch starts from,
+   and getting exactly the same 8 names and the same 13 errors. Seven of the eight are in
+   `test_server.py` (распределение / enrollment), one in `test_priyom.py`; the 13 errors are
+   fixture errors in `test_kanon_verstki.py`. Nothing in this заход touches them, and nothing
+   in this заход can, since they are outside its zone.
+   ДОМ: doc/HRUPKOST.md
+   ДОСТАВЛЕНО: нет
+
+8. `tests/veb/test_offlajn_brauzer.py::test_set_est_otmetka_uezzhaet_srazu_i_ochered_pusta`
+   fails when a SECOND chromium is running on the same machine (it failed once here while the
+   §3 verifier was driving its own browser, and passed 7 of 7 on its own immediately after).
+   A browser test that depends on having the machine to itself is a trap for every parallel
+   wave, not just this one.
+   ДОМ: doc/HRUPKOST.md
+   ДОСТАВЛЕНО: нет
+
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```
 > N. <текст находки>
@@ -322,19 +404,43 @@ the report as a number rather than smoothed over.
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+> 🔴 **ЭТУ СЕКЦИЮ ЗАПОЛНИЛ ИСПОЛНИТЕЛЬ, А НЕ СУБАГЕНТ ГИТ-КОНТУРА, И ЭТО РЕШЕНИЕ
+> ОРКЕСТРАТОРА, СИЛЬНЕЕ ТЕКСТА ЗАХОДА.** Весь блок §0.1 (вызов субагента гит-контура)
+> ОТМЕНЁН при запуске: соседняя волна замерила, что четыре захода из десяти умирали
+> ровно на этом вызове. Вместо блока велено выполнить САМОМУ одну команду и вставить
+> её вывод сюда. Пустота здесь была бы виной отмены, а не исполнителя, — но она не
+> нужна: команда выполнена и её вывод ниже.
+
+**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; сняты ПЕРВЫМ ходом, до всякой работы)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
 ```
-<сюда — вывод, дословно>
+*(Это ТА САМАЯ команда, которую велел выполнить оркестратор вместо отменённого §0.1.
+Ноль на входе — весь контур был пуст: вливать было нечего, и заявки на влитие
+ставить не на что.)*
+
+Остальные три строки снимка, снятые тем же первым ходом:
+```
+$ git --no-optional-locks status --porcelain | wc -l
+       0
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+fatal: no upstream configured for branch 'zahod/zhurnal-setka'
+$ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki
+Охват: заявок открыто 0, переадресовано 28, постоянных исключений 0, сторож краснеет на 0, держателей 0, двойной захват на 0
+```
+*(У ветки нет upstream'а: рабочая папка отпочкована локально, `origin` для неё не
+заведён. Это не долг и не ошибка — это отсутствие удалённой копии, и «не вывезено»
+на такой ветке неисчислимо. Строка стоит здесь целиком, вместе с отказом, потому
+что пересказ отказа неотличим от пересказа нуля.)*
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Долгов входа не было — закрывать было нечего: невлитых веток 0, незакоммиченного 0,
+открытых заявок 0. Сделано за заход, в своей зоне, шесть коммитов подряд:
+`82428d0` · `b4db1a5` · `e2d6f9d` · `9940a7f` · `a9e6916` · `7c05787` (расшифровка —
+в `## ОТЧЁТ`), плюс влитие своей ветки последним ходом.
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
