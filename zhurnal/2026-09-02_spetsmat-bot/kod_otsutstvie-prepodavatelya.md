@@ -676,6 +676,48 @@ veb/razdely/shkolniki.py:381    r["teacher_id"] and r["teacher_id"] in otsutstvu
 | невывезенных `main` | **42** (блокирует чужая открытая заявка от 07.09) |
 | пост-проверка | **зелёная**, отката не было |
 
+### 🔴 ПОСЛЕДНЕЕ СОСТОЯНИЕ ГЛАВНОЙ ПАПКИ — ЧУЖОЙ ОТКРЫТЫЙ КОНФЛИКТ, НЕ МОЙ, И НЕ ЧИНЮ
+
+Через минуту после моего влития `git_zona.py check` покраснел на трёх путях зоны. Причина
+снята фактом, а не догадкой: в ГЛАВНОЙ папке идёт ЧУЖОЕ слияние, прямо сейчас.
+```
+$ cat .git/MERGE_HEAD                     → cc6e1fa693b3a0f446296c1fa2dbdd817f4120df
+$ git branch --contains cc6e1fa           → + zahod/zhurnal-setka
+$ head -1 .git/MERGE_MSG                  → Merge branch 'zahod/zhurnal-setka'
+$ git status --porcelain | grep veb/      → UU veb/razdely/istoria_zanyatij.py
+$ ls -la .git/MERGE_HEAD                  → Sep 11 12:13   (сейчас 12:14)
+```
+Соседний заход той же волны правит ТОТ ЖЕ файл журнала и разрешает конфликт в эту минуту.
+По §4 это ровно тот случай: *«чужое состояние репозитория НЕ чини»*. Не трогал ничего.
+
+**МОЯ РАБОТА ПРИ ЭТОМ В `main` УЖЕ ЛЕЖИТ — проверено по КОММИТУ, а не по рабочему дереву**
+(`git show 4789ea1:<файл> | grep -c`):
+```
+veb/razdely/istoria_zanyatij.py              15 совпадений
+veb/obshchee/karkas.py                       22
+veb/razdely/shkolniki.py                      6
+migrations/013_otsutstvie_prepodavatelya.sql  5
+tests/veb/test_otsutstvie_prepodavatelya.py  21
+```
+Мои слияния: **`64a97d3`** (код) и **`4789ea1`** (отчёт), оба «без конфликтов».
+
+🔴 **ЧТО ПРОВЕРИТЬ ПРИЁМКЕ ПЕРВЫМ ХОДОМ, И ПОЧЕМУ ИМЕННО ЭТО.** Сосед разрешает конфликт
+в `veb/razdely/istoria_zanyatij.py` — файле, половина которого моя. Разрешение «выбором
+стороны» молча уничтожит либо его правку, либо мою (дверь `/api/otsutstvie`, полоса дней,
+клетка `ist-otsut`, список «остались без принимающего»). Сверить одной командой:
+```
+git -C /Users/ivanyakovlev/Documents/GitHub/spetsmat-bot show main:veb/razdely/istoria_zanyatij.py | grep -c 'dver_otsutstvia\|ots-polosa\|ist-otsut'
+```
+Ноль или заметно меньше пятнадцати — мою половину потеряли при разрешении конфликта;
+восстанавливается из `64a97d3` и из `origin/zahod/otsutstvie-prepodavatelya`.
+
+**ЭТА СЕКЦИЯ ОСТАЛАСЬ НА ВЕТКЕ И В `origin`, А НЕ В `main`,** и это законный исход, а не
+забывчивость: влить её я не могу, пока в главной папке открыто чужое слияние — влитие
+отказывает на грязном дереве, а чинить чужой конфликт мне запрещено. Ветка вывезена
+(`origin/zahod/otsutstvie-prepodavatelya`, невывезенных 0); секция доедет в `main` тем же
+`git_zona.py vlit-v-osnovnuyu`, как только сосед закроет своё слияние. Всё СОДЕРЖАТЕЛЬНОЕ
+(код, миграция, тесты, весь остальной отчёт) в `main` уже стоит — см. числа выше.
+
 ### ВРЕМЯ ПРОГОНА И ТОКЕНЫ
 **НЕПРИМЕНИМО:** движок `opencode`, счётчика стоимости в логе нет.
 
