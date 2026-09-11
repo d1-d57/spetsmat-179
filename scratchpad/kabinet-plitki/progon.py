@@ -1,3 +1,7 @@
+# TOOL-CONTRACT: called-by-hand — замер прогона захода `kod_kabinet-plitki.md`,
+# зовётся рукой и только рукой: точки вызова у него нет и быть не должно, он
+# ходит в КОПИЮ боевой базы, которую снимают отдельно. Команда — в `## ОТЧЁТ`
+# того же захода.
 """Живой прогон /kabinet по КОПИИ боевой базы. Только чтение, POST не делается."""
 import json, os, re, sys, threading, urllib.parse, urllib.request
 from datetime import datetime, timezone
