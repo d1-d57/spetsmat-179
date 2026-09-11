@@ -62,9 +62,9 @@ from infra.enrollment_repo import SqliteEnrollmentRepo
 from infra.room_repo import SqliteAttendance, SqliteSessions
 from infra.sessions_repo import SqliteSessionBook
 from veb import vhod
-from veb.obshchee.karkas import (CHETVERTI_STILI, chetverti_goda, e,
-                                menyu_ssylkami, nomer_chetverti,
-                                perekluchatel_chetvertej)
+from veb.obshchee.karkas import (CHETVERTI_STILI, SDACHI_SKRIPT, SDACHI_STILI,
+                                chetverti_goda, e, menyu_ssylkami,
+                                nomer_chetverti, perekluchatel_chetvertej)
 from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
 
@@ -514,9 +514,11 @@ SVOI_STILI = """
 .ist-raskrytie h2{font-size:1.1rem;margin:0 0 .5rem;font-family:var(--sans)}
 .ist-raskrytie .ist-zakryt{float:right;cursor:pointer;border:1px solid var(--rule);
   background:none;color:var(--muted);border-radius:8px;padding:.2em .7em;font:inherit}
-.ist-raskrytie ul{margin:.3rem 0 0;padding-left:1.2rem}
-.ist-raskrytie li{padding:.12rem 0}
 .ist-raskrytie .ist-nichego{color:var(--muted)}
+.ist-raskrytie .ist-komu{margin:0 0 .5rem;font-weight:600}
+.ist-raskrytie .ist-rebyonok{padding:.35rem 0;border-top:1px solid var(--rule)}
+.ist-raskrytie .ist-rebyonok:first-of-type{border-top:none}
+.ist-raskrytie .ist-imya{margin:0;font-weight:600}
 .ist-zhurnal{margin:0 0 .8rem;font-family:var(--sans);font-size:1.15rem;font-weight:600}
 @media(max-width:760px){
   .istoria{padding-left:1.1rem;padding-right:1.1rem}
@@ -551,16 +553,11 @@ SKRIPT = """
   var zag = document.getElementById('ist-raskrytie-zag');
   var otkryta = null;
 
-  function spisok(punkty, pusto){
-    if (!punkty.length) return '<p class="ist-nichego">' + pusto + '</p>';
-    return '<ul>' + punkty.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul>';
-  }
-  function zadachi(sdal){
-    return sdal.map(function(z){
-      return 'листок ' + z.listok + ' · задача ' + z.zadacha
-             + (z.prinyal ? ' — принял ' + z.prinyal : '');
-    });
-  }
+  // 🔴 ВИД СДАЧИ БОЛЬШЕ НЕ ЖИВЁТ ЗДЕСЬ. Он один на весь сайт и лежит в
+  // `karkas.SDACHI_SKRIPT` — та же строка на листок и те же задачи кнопками, что
+  // просил владелец 11.09 и что показывает плитка кабинета. Здесь остаётся только
+  // зов: две копии одного списка разошлись бы молча.
+  var sdachi = window.Kluchiki.sdachiPoListkam;
   function zakryt(){
     panel.hidden = true;
     if (otkryta) { otkryta.classList.remove('ist-otkryta'); otkryta = null; }
@@ -575,15 +572,17 @@ SKRIPT = """
     if (kletka.dataset.vid === 'shk') {
       telo.innerHTML = !d.byl
         ? '<p class="ist-nichego">на этом занятии не был</p>'
-        : '<p>принимал: <b>' + (d.komu || 'принимающий не назначен') + '</b></p>'
-          + '<p>сдал:</p>' + spisok(zadachi(d.sdal), 'в этот день ничего не сдал');
+        : '<p class="ist-komu">принимал: ' + (d.komu || 'принимающий не назначен') + '</p>'
+          + sdachi(d.sdal, 'в этот день ничего не сдал');
     } else {
       telo.innerHTML = !d.byl
         ? '<p class="ist-nichego">в этот день не принимал</p>'
-        : '<p>принимал:</p>' + spisok(d.deti.map(function(r){
-            var z = zadachi(r.sdal);
-            return '<b>' + r.kto + '</b>' + (z.length ? ' — ' + z.join('; ') : ' — ничего не сдал');
-          }), 'в этот день никого');
+        : (d.deti.length
+             ? d.deti.map(function(r){
+                 return '<div class="ist-rebyonok"><p class="ist-imya">' + r.kto + '</p>'
+                      + sdachi(r.sdal, 'ничего не сдал') + '</div>';
+               }).join('')
+             : '<p class="ist-nichego">в этот день никого</p>');
     }
     panel.hidden = false;
   }
@@ -633,7 +632,7 @@ def stranica(c: sqlite3.Connection, chetvert=None, segodnya: str = "") -> str:
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Журнал — Ключики</title>
-<style>{_obshchij_stil(put_bazy(c))}{CHETVERTI_STILI}{SVOI_STILI}</style></head>
+<style>{_obshchij_stil(put_bazy(c))}{CHETVERTI_STILI}{SDACHI_STILI}{SVOI_STILI}</style></head>
 <body>
 {menyu_ssylkami("/istoria")}
 <main class="istoria">
@@ -670,6 +669,7 @@ def stranica(c: sqlite3.Connection, chetvert=None, segodnya: str = "") -> str:
   </div>
 </main>
 <script type="application/json" id="ist-dannye">{json.dumps(dannye, ensure_ascii=False)}</script>
+{SDACHI_SKRIPT}
 {SKRIPT}
 </body></html>"""
 

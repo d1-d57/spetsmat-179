@@ -393,6 +393,72 @@ def test_the_quarter_switch_offers_every_quarter_and_marks_the_open_one(running_
     assert f'data-den="{MONDAY}"' not in inoe, "дни чужой четверти сюда не попадают"
 
 
+def _sdal(db: str, student_id: int, den: str, pary) -> None:
+    """Кладёт в базу сдачи `[(листок, задача), …]` школьника в день `den`.
+
+    Время отметки — начало занятия этого дня, то есть ровно та граница, по которой
+    `sdachi_po_zanyatiyam` относит галочку к занятию. Источник `фото`, а не `импорт`:
+    импорт исключён по устройству (все 15 112 строк прошлогодней книги несут один
+    `valid_at`, разбор — в docstring самой функции).
+    """
+    import sqlite3
+
+    from core.services.history import nachalo_zanyatia_iso
+
+    kogda = nachalo_zanyatia_iso(den)
+    conn = sqlite3.connect(db)
+    for ord_, (listok, zadacha) in enumerate(pary, 1):
+        ryad = conn.execute("select id from sheets where number = ?", (listok,)).fetchone()
+        if ryad is None:
+            ryad = (conn.execute(
+                "insert into sheets (number, issued_at, ord) values (?, ?, ?)",
+                (listok, den, ord_)).lastrowid,)
+        pid = conn.execute(
+            "insert into problems (sheet_id, label, kind, ord) "
+            "values (?, ?, 'обычная', ?)", (ryad[0], zadacha, ord_)).lastrowid
+        conn.execute(
+            "insert into marks (student_id, problem_id, event, source, valid_at,"
+            " recorded_at) values (?, ?, 'assert', 'фото', ?, ?)",
+            (student_id, pid, kogda, kogda))
+    conn.commit()
+    conn.close()
+
+
+def test_the_cell_opens_a_row_per_sheet_with_the_tasks_as_buttons(running_server):
+    """Владелец 11.09: «чтобы была возможность нажать и посмотреть, что кто сдал».
+
+    Формат он назвал тем же, что у плитки кабинета: строка на листок, кнопка листка
+    плюс задачи кнопками. 🔴 РИСУЕТ ЕГО ОДИН ПОМОЩНИК НА ВЕСЬ САЙТ —
+    `karkas.SDACHI_SKRIPT`, — и тест сторожит ИМЕННО ЭТО: страница включает помощника
+    и зовёт его, а своей копии списка сдач у неё нет. Две копии одного вида разошлись
+    бы молча, обе оставаясь зелёными.
+    """
+    _sdal(running_server["db"], running_server["s1"], MONDAY,
+          [("16A", "3"), ("16A", "5"), ("17", "1")])
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
+    assert status == 200
+    telo = body.decode("utf-8")
+
+    assert telo.count("Kluchiki.sdachiPoListkam = function") == 1, "помощник включён один раз"
+    assert "window.Kluchiki.sdachiPoListkam;" in telo, "страница зовёт его, а не копирует"
+    assert "' · задача '" not in telo, "плоской строки «листок N · задача X» больше нет"
+
+    # Данные для клетки приехали парами «листок/задача» — тем, что помощник и ест.
+    dannye = _dannye_stranicy(telo)
+    kletka = dannye["shk|%s|%s" % (MONDAY, running_server["s1"])]
+    assert [(z["listok"], z["zadacha"]) for z in kletka["sdal"]] == [
+        ("16A", "3"), ("16A", "5"), ("17", "1")]
+
+
+def _dannye_stranicy(telo: str) -> dict:
+    import json
+    import re
+
+    kusok = re.search(r'id="ist-dannye">(.*?)</script>', telo, re.S)
+    assert kusok, "блок данных раскрытия на месте"
+    return json.loads(kusok.group(1))
+
+
 def test_the_header_of_a_column_is_the_date_and_nothing_else(running_server):
     """Владелец 11.09: «там ничего другого не пиши, только даты».
 

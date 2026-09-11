@@ -1447,6 +1447,76 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
 # ВЫШЕ него и в сравнение не попадает. А пометка `videt-svoyo` на этом пункте
 # сняла бы его со страницы преподавателя и оставила у организатора — то есть ровно
 # наоборот тому, зачем пункт заведён.
+# ───────────────────────────────────── ЧТО СДАНО: СТРОКА НА ЛИСТОК, ЗАДАЧИ КНОПКАМИ
+#
+# 🔴 ОДИН ВИД СДАЧИ НА ВЕСЬ САЙТ, И ЖИВЁТ ОН ЗДЕСЬ. Владелец 11.09 попросил, чтобы
+# клетка журнала открывала то же, что открывает плитка кабинета: «чтобы была
+# возможность нажать и посмотреть, что кто сдал», формат — «строка на листок, кнопка
+# листка + задачи кнопками». Две страницы, каждая со своей разметкой этого списка,
+# разошлись бы на первой же правке и обе остались бы зелёными; разметка поэтому
+# написана один раз — ЗДЕСЬ, браузерной функцией, которую обе страницы включают.
+#
+# 🔴 ФУНКЦИЯ БРАУЗЕРНАЯ, А НЕ ПИТОНОВСКАЯ, И ЭТО НЕ ВКУС. Раскрытие клетки рисуется
+# на клиенте из блока JSON: решётка это 57 школьников × 16 занятий, и спрятанная в
+# каждой клетке разметка удвоила бы документ ради того, что читатель откроет три
+# раза (разбор — `istoria_zanyatij._chto_raskryvaetsya`). Помощник обязан стоять там
+# же, где рисуют, иначе он не помощник.
+#
+# 🔴 ЛИСТОК — ССЫЛКА НА СВОЮ СТРАНИЦУ; ЗАДАЧА — НЕ ССЫЛКА, И ЭТО СКАЗАНО ВСЛУХ.
+# У листка адрес есть (`/listki/<номер>`, его отдаёт `veb/server.py::_listok`), у
+# отдельной задачи — нет ни одного. Кнопка, которая никуда не ведёт, обещает нажатие
+# и не отвечает на него; поэтому задачи нарисованы как кнопки, но являются
+# `<span>` — вид владельца, без ложного обещания.
+
+#: Стили вида «что сдано». Рядом с функцией, а не в странице: их двое читателей.
+SDACHI_STILI = """
+.sd{margin:.3rem 0 0}
+.sd-ryad{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;padding:.18rem 0}
+.sd-listok{flex:0 0 auto;min-width:6.5rem;text-decoration:none;font-weight:600;
+  color:var(--accent);border:1px solid var(--rule);border-radius:8px;
+  padding:.16em .6rem;font-size:.92rem}
+.sd-listok:hover{border-color:var(--accent);background:var(--accent-soft)}
+.sd-zad{display:inline-block;border:1px solid var(--rule);border-radius:7px;
+  padding:.1em .5rem;font-size:.9rem;color:var(--text);background:var(--bg)}
+.sd-nichego{color:var(--muted);margin:.3rem 0 0}
+"""
+
+#: Браузерная половина того же помощника. Включается страницей ОДИН раз, до её
+#: собственного скрипта; обе страницы зовут `Kluchiki.sdachiPoListkam(сдачи, пусто)`.
+SDACHI_SKRIPT = """
+<script>
+window.Kluchiki = window.Kluchiki || {};
+(function(){
+  function ekran(s){
+    var u = document.createElement('span');
+    u.textContent = s === null || s === undefined ? '' : String(s);
+    return u.innerHTML;
+  }
+  // `сдачи` — массив `{listok, zadacha}` в порядке листков и задач, как их отдала
+  // база (`order by s.ord, p.ord`); порядок здесь не пересчитывается, иначе он стал
+  // бы вторым мнением о том, в каком порядке идут листки.
+  window.Kluchiki.sdachiPoListkam = function(sdachi, pusto){
+    if (!sdachi || !sdachi.length) {
+      return '<p class="sd-nichego">' + ekran(pusto) + '</p>';
+    }
+    var poryadok = [], po = {};
+    sdachi.forEach(function(z){
+      if (!po[z.listok]) { po[z.listok] = []; poryadok.push(z.listok); }
+      po[z.listok].push(z.zadacha);
+    });
+    return '<div class="sd">' + poryadok.map(function(n){
+      return '<div class="sd-ryad"><a class="sd-listok" href="/listki/'
+           + encodeURIComponent(n) + '">листок ' + ekran(n) + '</a>'
+           + po[n].map(function(z){
+               return '<span class="sd-zad">' + ekran(z) + '</span>';
+             }).join('')
+           + '</div>';
+    }).join('') + '</div>';
+  };
+})();
+</script>"""
+
+
 # ──────────────────────────────────────────── ЧЕТВЕРТЬ: ШЕСТНАДЦАТЬ ЗАНЯТИЙ ВПЕРЁД
 #
 # 🔴 ЭТО ОБЩИЙ ПОМОЩНИК, А НЕ ЧАСТЬ ЖУРНАЛА, И ИМЕННО ПОЭТОМУ ОН ЗДЕСЬ. Владелец
