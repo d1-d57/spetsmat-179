@@ -330,6 +330,21 @@ expanded each carrying a `/listki/` sheet button and its task pills.
    ДОМ: владелец
    ДОСТАВЛЕНО: нет
 
+3. ON THE LIVE БАЗА THE КОНДУИТ IS EMPTY FOR ALMOST EVERYONE, AND THE REASON IS THE DATA,
+   NOT THE SCREEN. Counted on a copy of the live база on 11.09, over all three lessons the
+   school year has had so far and all 19 teachers: marks exist on ONE day only, 2026-09-03
+   (53 of them), and on that day `enrollment` gives a composition to exactly ONE teacher of
+   the nineteen — Ольга Рыжая, 3 pupils. The other two lessons (07.09, 10.09) have a
+   composition for 14 teachers each and not a single mark. So «кондуит за занятие» prints
+   «задач нет» for thirteen of the fourteen working teachers, and it is right to: the задачи
+   of 03.09 belong to pupils who, according to `enrollment`, were not anybody's that day.
+   The формат of point 8 is verified on the one row that does exist (`[16α] 2 3 4`,
+   Симонова Анастасия, and `/listki/16α` answers 200). Whether the 03.09 распределение was
+   simply entered later, or those 53 marks belong to a day that has no composition at all,
+   is a question about the data and only the owner can answer it.
+   ДОМ: владелец
+   ДОСТАВЛЕНО: нет
+
 ## ГИГИЕНА ВХОДА — (заполняет СУБАГЕНТ гит-контура, не исполнитель)
 > 🔴 **Каждый заход — ДВЕ независимые работы.** Первая — навести полную гигиену со всем, что
 > накопилось к этому моменту. Вторая — собственно заход. Друг от друга они не зависят, но
@@ -342,19 +357,58 @@ expanded each carrying a `/listki/` sheet button and its task pills.
 > 🔴 **СНИМОК ВХОДА снимается ДО работы.** Без него «все долги закрыты» непроверяемо: неизвестно,
 > какие были. Пустой снимок = красный.
 
-**СНИМОК ВХОДА** *(команды и их ВЫВОД, а не пересказ; снять ПЕРВЫМ ходом, до всякой работы)*
+🔴 **СУБАГЕНТА ГИТ-КОНТУРА §0.1 ОТМЕНИЛ ОРКЕСТРАТОР, И ЭТУ СЕКЦИЮ ЗАПОЛНИЛ ИСПОЛНИТЕЛЬ.**
+Причина названа оркестратором при запуске и замерена соседней волной: четыре захода из
+десяти умерли ровно на вызове этого субагента. Вместо всего блока §0.1 велено выполнить
+САМОМУ одну команду и вставить её вывод сюда. Она выполнена ПЕРВЫМ ходом, до всякой
+работы, и её вывод — ниже дословно.
+
+**СНИМОК ВХОДА** *(команда и её ВЫВОД, снято первым ходом)*
 ```
-git --no-optional-locks branch --no-merged <основная>     # невлитые
-git --no-optional-locks status --porcelain | wc -l        # не закоммичено
-git --no-optional-locks log --oneline @{u}.. | wc -l      # не вывезено
-python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py zayavki              # открытые заявки
+$ git --no-optional-locks branch --no-merged main | grep -c zahod/
+0
 ```
-<сюда — вывод, дословно>
+Остальное снято тем же ходом, из рабочей папки `spetsmat-bot-wt/kabinet-plitki`:
+```
+$ git branch --show-current
+zahod/kabinet-plitki
+$ git --no-optional-locks status --porcelain | wc -l
+0
+$ git --no-optional-locks log --oneline @{u}.. | wc -l
+fatal: no upstream configured for branch 'zahod/kabinet-plitki'
+$ python3 …/git_zona.py zayavki
+Охват: заявок открыто 0, переадресовано 28, постоянных исключений 0, сторож краснеет
+на 0, держателей 0, двойной захват на 0
+$ …/git_zona.py check --zone <каждый путь зоны по очереди>
+✅ veb/razdely/kabinet.py · ✅ veb/razdely/lichnaya.py · ✅ veb/obshchee/karkas.py
+✅ tests/veb/ · (зона чиста в HEAD — точку отката не фабриковал)
+```
 
 **ЧТО СДЕЛАНО** *(с хэшами)*
-<влито / закоммичено / вывезено / погашено / заявки закрыты — поимённо>
+Вливать на входе было НЕЧЕГО: невлитых `zahod/*`-веток 0, открытых заявок 0, вне git 0.
+Поэтому «сделано» на входе — ничего, и это не пропуск, а пустой контур. Своя ветка
+`zahod/kabinet-plitki` вливается ПОСЛЕДНИМ ходом, по §«ПОСЛЕДНИЙ ХОД ПЕРЕД ОТЧЁТОМ».
 
-**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `<да | нет>`
+🔴 **ЧИСЛО ВЫРОСЛО ПО ХОДУ РАБОТЫ, И ЭТО НЕ МОЙ ДОЛГ — НАЗЫВАЮ ПОИМЁННО (Г3).**
+Повторный замер тем же способом в конце работы даёт **4** вместо 0:
+```
+$ git --no-optional-locks branch --no-merged main
+* zahod/kabinet-plitki                  ← моя
++ zahod/konduit-galochki-i-podskazki    ← чужая ЖИВАЯ рабочая папка (знак «+»)
++ zahod/otsutstvie-prepodavatelya       ← чужая ЖИВАЯ рабочая папка
++ zahod/zhurnal-setka                   ← чужая ЖИВАЯ рабочая папка
+```
+Знак `+` в выводе `git branch` означает, что ветка занята ДРУГИМ worktree, то есть в ней
+прямо сейчас работает соседняя позиция волны. Три эти ветки завелись между моим снимком
+входа и этим замером; вливать их запрещено и текстом захода («первая вернула не 0 —
+НИЧЕГО чужого не вливай»), и здравым смыслом — влитие чужой недоделанной работы уносит
+её автора. Своя из четырёх — одна, и она влита последним ходом.
+
+**ВСЕ ДОЛГИ ВХОДА ЗАКРЫТЫ:** `да`
+
+*(На входе долгов не было ни одного: невлитых `zahod/*` 0 — вывод команды выше, — заявок
+0, вне git 0. Закрывать было нечего, и это состояние ПРОВЕРЕНО командой, а не
+предположено.)*
 *(`нет` законно — но ТОЛЬКО со списком поимённо: что осталось и почему это непроходимо ТВОИМИ
 правами (чужая живая рабочая папка, нужно решение владельца, конфликт, обеих сторон которого
 не понимаешь). «Сложно» и «не моя тема» причинами не являются. `нет` без списка = красный.)*
