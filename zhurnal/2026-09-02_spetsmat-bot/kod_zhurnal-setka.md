@@ -228,6 +228,73 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
+Six items of the owner's review, done IN ORDER, each committed on its own.
+
+**Measured before touching anything** (copy of the live base, `scratchpad/zhurnal-setka/kopia.db`):
+* `sessions` holds ONE row: `2026-09-10`, kind `обычное`. So the grid today is one column wide.
+* 57 students (54 active), 19 teachers (14 active).
+* 15 900 marks; 15 112 `assert` from `источник=импорт` (excluded from the grid by design),
+  53 `assert` from `фото`, ALL of them dated `2026-09-03T12:00:00Z` and ALL with
+  `teacher_id = NULL`. `2026-09-03` has no `sessions` row, so not one сдача reaches a cell.
+* `tests/veb/test_istoria_zanyatij.py` — 12 passed, three runs in a row. Green baseline.
+
+**1 · PROSE OUT** (`istoria_zanyatij.py`). Delete: the `.podpis` line
+(«занятий N · без принимающего в этот день: N»), both `ist-zachem` subtitles
+(«прообраз личного кабинета», «по нему считается зарплата…»), and the
+«отменённые занятия (в решётке их нет…)» line — the latter also stops being TRUE at
+item 3, because a cancelled day is a planned slot of the quarter and gets a column.
+Cancellation survives as a CSS class on the `<th>`, not as a sentence.
+
+**2 · ONLY THE DATE IN THE HEADER.** `_shapka` drops the `ist-rod` second line and the
+`IMYA_RODA` table with it; the weekday prefix goes too — «там ничего другого не пиши,
+только даты».
+
+**3 · SIXTEEN COLUMNS, A QUARTER AHEAD.** The columns stop being «days with a `sessions`
+row» and become «the lesson days of the chosen quarter», built from the calendar.
+New shared helpers in `veb/obshchee/karkas.py` (the file the заход names as the seam with
+the `kabinet-plitki` position, so that there is ONE definition and not two):
+`ZANYATIJ_V_CHETVERTI = 16`, `chetverti_goda(den)`, `nomer_chetverti(den)`,
+`perekluchatel_chetvertej(...)`. A quarter is defined as 16 consecutive lesson days from
+1 September — that is the owner's own arithmetic («примерно 8 недель в четверти, то есть
+16 клеточек узких») and it needs no holiday calendar. Lesson days themselves come from
+the one place that knows them, `core.services.sostav_na_den.blizhajshie_zanyatiya`.
+The page merges: a column with no data (future, or a past lesson never recorded) is
+EMPTY — not a ✕, which would claim an absence that nobody recorded.
+`core/services/istoria_poseshchenij.py` is NOT touched: it is outside the zone, and the
+merge happens in the page.
+
+**4 · THE CELL OPENS THE КОНДУИТ FORMAT.** The expansion panel stops being a flat list of
+«листок N · задача X» and becomes one row per листок: a листок button (a link to the
+sheet's own page) plus the tasks as buttons. Rendered by ONE helper shared with the
+`kabinet-plitki` position, `karkas.SDACHI_SKRIPT` — a browser-side function both pages
+include, rather than the same markup written twice.
+
+**5 · GRAMMATICAL GENDER.** `karkas.rod_imeni(имя)` + `karkas.v_rode(имя, м, ж)`.
+The rule reads the SURNAME first (`-ова/-ева/-ина/-ая/-ская` → feminine,
+`-ов/-ев/-ин/-ский/-ий/-ый` → masculine) and only falls back to the first name when the
+surname is indeclinable (Шнитке, Амбург, Мирошниченко, Маршалл, Тертерян) — because the
+first name alone gets `Саша Оревкова`, `Ваня Яковлев`, `Даня`, `Дима`, `Вася` wrong.
+Coverage is reported as a number over all 19 teachers of the live base.
+
+**6 · ONE RECEIVER.** «принял X» stops being repeated on every task line and is said ONCE
+per cell, in the right gender. Where the several receivers in one day come from is
+answered by measurement rather than by guessing, and the numbers go in the report.
+
+**Ready when:** live run against a copy of the live base — 16 of 16 columns, date-only
+headers, zero lines of explanatory prose, 3 of 3 opened cells in the «листок + задачи»
+form, zero masculine verbs about a woman. Then a fresh verifier subagent (§3) re-counts
+by a different method.
+
+### A premise I am disputing before writing code (§1 requires this out loud)
+Item 6 says «принимающий один на занятие». In this base that is NOT what the data model
+says, and I am not going to bend the screen to it: `enrollment` gives EACH student their
+own teacher, room and slot, so one lesson day legitimately carries as many receivers as
+there are teachers holding it. Measured on `2026-09-10`: 14 distinct receivers over 54
+active students, plus 9 students with no receiver assigned at all. What I implement is
+the reading that IS true and is what the owner's sentence «я бы писал просто, кто
+принимает» asks for: ONE receiver per student per lesson, said once. The 14 is named in
+the report as a number rather than smoothed over.
+
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
 > ```

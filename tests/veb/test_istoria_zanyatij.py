@@ -179,11 +179,19 @@ def test_days_override_teacher_shows_up_not_the_standing_one(running_server):
 
 
 def test_column_count_matches_a_direct_database_count(running_server, tmp_path):
-    """Criterion 1 of the ЗАДАЧА: columns == a count taken independently from the база."""
+    """Criterion 1 of the ЗАДАЧА: columns == a count taken independently from the база.
+
+    🔴 СЧИТАЮТСЯ САМИ СТОЛБЦЫ, А НЕ ПОДПИСЬ ПОД ЗАГОЛОВКОМ. Здесь стояло
+    `assert "занятий: 2" in telo` — то есть проверялась СТРОКА «занятий: 2», а не
+    решётка. Владелец 11.09 эту строку запретил («„Занятий 2, без принимающего в этот
+    день 7“ — всё это ерунда, такого не должно быть»), и вместе с ней исчезла бы вся
+    проверка числа столбцов. Число берётся из разметки и сверяется с прямым счётом по
+    базе — с тем, что тест и обещал названием.
+    """
     status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
-    assert "занятий: 2" in telo
+    assert telo.count('<th class="ist-zn"') == 2 * 2, "две решётки по два занятия"
 
 
 def test_teacher_marked_absent_reads_as_absent_even_with_a_students_override(running_server):
@@ -279,19 +287,23 @@ def test_the_page_carries_the_menu_and_the_journal_item_is_last(running_server):
 # ------------------------------------------------- два журнала, клетка-место, род
 
 
-def test_the_two_journals_are_named_and_say_what_each_is_for(running_server):
-    """Владелец поправил аналитика за смешение: это ДВА журнала, а не две вкладки.
+def test_the_two_journals_are_named_and_nothing_explains_them(running_server):
+    """Два журнала по-прежнему НАЗВАНЫ, но больше ничего собой не поясняют.
 
-    Преподавательский — по нему считается зарплата; школьный — прообраз личного
-    кабинета. Пока обе вкладки назывались «Школьники»/«Преподаватели», экран не
-    говорил, что это разные документы с разной ценой ошибки.
+    🔴 ПОЛОВИНА ЭТОГО ТЕСТА ПЕРЕВЁРНУТА РЕШЕНИЕМ ВЛАДЕЛЬЦА 11.09, А НЕ ОСЛАБЛЕНА.
+    Он требовал `"зарплат" in telo` — пояснение «по нему считается зарплата, цена
+    ошибки в клетках». Владелец, глядя на живой экран: «выкидываем это. Выкидываем
+    все комментарии, это ужасно, это нельзя людям показывать». Теперь то же место
+    сторожит обратное: имена стоят, пояснений нет ни одного.
     """
     status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
     assert "Журнал школьников" in telo
     assert "Журнал преподавателей" in telo
-    assert "зарплат" in telo, "цена ошибки преподавательского журнала названа"
+    for proza in ("зарплат", "прообраз личного кабинета", "цена ошибки",
+                  "без принимающего в этот день"):
+        assert proza not in telo, "пояснительная проза на экране: %r" % proza
 
 
 def test_the_cell_is_a_place_with_empty_slots_for_a_mark_and_a_comment(running_server):
@@ -346,11 +358,9 @@ def test_a_zachyot_reads_as_kontrolnaya_and_a_cancelled_day_is_named_apart(runni
     assert status == 200
     telo = body.decode("utf-8")
     assert "контрольная" in telo, "«зачёт» в базе читается как «контрольная» на экране"
-    assert "отменённые занятия" in telo, "отменённый день назван отдельной строкой"
-    assert _shapka_dnya_kak_na_stranice(otmenennyj) in telo
+    # 🔴 СТРОКИ «отменённые занятия (в решётке их нет…)» БОЛЬШЕ НЕТ, И ЭТО РЕШЕНИЕ
+    # ВЛАДЕЛЬЦА 11.09, А НЕ ПОТЕРЯ ПРОВЕРКИ: «выкидываем все комментарии». Сам факт
+    # отмены с экрана не уходит — он переезжает в сам столбец отменённого дня
+    # (решётка строится по календарю четверти и держит такой день колонкой).
+    assert "отменённые занятия" not in telo
 
-
-def _shapka_dnya_kak_na_stranice(den: str) -> str:
-    from veb.razdely.istoria_zanyatij import _shapka_dnya
-
-    return _shapka_dnya(den)

@@ -249,26 +249,6 @@ def sdachi_po_zanyatiyam(c: sqlite3.Connection, dni) -> dict:
     return {k: tuple(v) for k, v in itog.items()}
 
 
-def _otmenennye(sessii, dni) -> tuple:
-    """Дни, отменённые целиком, — их в решётке НЕТ И НЕ БУДЕТ, и молчать об этом нельзя.
-
-    🔴 РЕШЁТКА ИХ НЕ СОДЕРЖИТ ПО УСТРОЙСТВУ, А НЕ ПО НЕДОСМОТРУ.
-    `IstoriyaService.sostavit` отбирает занятия условием `s.kind != "отменённое"` —
-    и это верно для решётки: столбец отменённого дня был бы столбцом крестиков,
-    то есть сказал бы «никто не пришёл» там, где занятия не было вовсе.
-    Но владелец просил ровно этот факт: «когда был праздник и урок отменился… Всю
-    эту историю курса важно где-то документировать». Между «столбцом, который врёт»
-    и «фактом, которого нет на экране» есть третье, и оно здесь: отменённые дни
-    названы отдельной строкой под журналом, поимённо.
-    Перенести их в саму решётку нельзя внутри этой зоны — отбор живёт в
-    `core/services/istoria_poseshchenij.py`, а зона захода до него не достаёт;
-    пункт очереди стоит в `## ВОПРОСЫ`.
-    """
-    v_reshetke = set(dni)
-    return tuple(sorted(s.held_on for s in sessii
-                        if s.kind == "отменённое" and s.held_on not in v_reshetke))
-
-
 def _rod_zanyatiya(c: sqlite3.Connection, sessii) -> dict:
     """`{день: род}` из тех же строк `sessions`, которые уже прочитаны для решётки.
 
@@ -451,7 +431,6 @@ def _chto_raskryvaetsya(students, teachers, istoriya, sdachi) -> dict:
 SVOI_STILI = """
 .istoria{max-width:none;padding:1.3em 2.4em 2.4em}
 .istoria h1{font-family:var(--sans);font-size:1.6em;margin:0 0 .3em}
-.istoria .podpis{color:var(--muted);font-family:var(--sans);font-size:.92em;margin:0 0 1.2em}
 .ist-vkladki{display:flex;gap:.4rem;margin:0 0 1rem;font-family:var(--sans)}
 .ist-vkladki label{cursor:pointer;font-weight:600;padding:.35em 1.1rem;border-radius:8px;
   border:1px solid var(--rule);color:var(--muted)}
@@ -488,7 +467,6 @@ SVOI_STILI = """
    подпись давала контраст 2.16:1 при пороге AA 4.5:1 — самый слабый текст на
    странице, и ровно на нём стоит слово, ради которого столбец подписан. */
 .ist-tabl th.ist-zn .ist-rod-tiho{color:var(--muted);font-weight:400}
-.ist-otmeneno{font-family:var(--sans);font-size:.92rem;color:var(--warm);margin:.8rem 0 0}
 /* Клетка — МЕСТО: знак и два пустых, поимённо названных гнезда под оценку и
    комментарий. Пустые гнёзда ничего не рисуют и ничего не занимают. */
 .ist-tabl td.ist-kl{cursor:pointer}
@@ -509,8 +487,7 @@ SVOI_STILI = """
 .ist-raskrytie ul{margin:.3rem 0 0;padding-left:1.2rem}
 .ist-raskrytie li{padding:.12rem 0}
 .ist-raskrytie .ist-nichego{color:var(--muted)}
-.ist-zhurnal{margin:0 0 .2rem;font-family:var(--sans);font-size:1.15rem;font-weight:600}
-.ist-zachem{color:var(--muted);font-family:var(--sans);font-size:.92rem;margin:0 0 .8rem}
+.ist-zhurnal{margin:0 0 .8rem;font-family:var(--sans);font-size:1.15rem;font-weight:600}
 @media(max-width:760px){
   .istoria{padding-left:1.1rem;padding-right:1.1rem}
   .ist-tabl td.ist-kto{width:7rem;max-width:7rem;overflow:hidden;text-overflow:ellipsis;
@@ -519,20 +496,16 @@ SVOI_STILI = """
 """
 
 
-#: 🔴 ДВА ЖУРНАЛА — ЭТО ДВЕ РАЗНЫЕ ВЕЩИ, И ВЛАДЕЛЕЦ ПОПРАВИЛ ЗА ИХ СМЕШЕНИЕ.
-#: Преподавательский — кто в какой день был; ПО НЕМУ СЧИТАЕТСЯ ЗАРПЛАТА, и неверная
-#: клетка стоит денег живому человеку. Школьный — посещения и сколько сдал, и туда же
-#: пойдут оценки: «это прообраз будущего личного кабинета». До этой правки они были
-#: двумя безымянными вкладками «Школьники»/«Преподаватели» — то есть выглядели как
-#: два вида одного списка. Названия и подписи ниже — единственное, чем экран говорит,
-#: что это разные документы с разной ценой ошибки.
-ZACHEM_ZHURNAL = {
-    "shk": ("Журнал школьников",
-            "посещения и сдача. Сюда же пойдут оценки — прообраз личного кабинета"),
-    "prep": ("Журнал преподавателей",
-             "кто в какой день был. По нему считается зарплата — цена ошибки в клетке "
-             "не в отображении, а в деньгах"),
-}
+#: 🔴 ИМЯ ЖУРНАЛА — ОДНА СТРОКА, И ПОЯСНЕНИЯ ПОД НЕЙ БОЛЬШЕ НЕТ. Здесь стояла
+#: пара «имя + зачем»: «посещения и сдача. Сюда же пойдут оценки — прообраз личного
+#: кабинета» и «кто в какой день был. По нему считается зарплата — цена ошибки в
+#: клетке не в отображении, а в деньгах». Владелец 11.09, глядя на живой экран, назвал
+#: ровно эти две строки: «опять какие-то странные подписи сверху, которых не надо
+#: делать… выкидываем все комментарии, это ужасно, это нельзя людям показывать».
+#: Почему они вообще появились, записано выше по истории файла и остаётся ВЕРНЫМ —
+#: два журнала действительно две разные вещи с разной ценой ошибки. Но объяснять это
+#: читателю СТРОКОЙ НА ЭКРАНЕ он запретил прямо; объяснение живёт здесь, в коде.
+IMYA_ZHURNALA = {"shk": "Журнал школьников", "prep": "Журнал преподавателей"}
 
 #: Раскрытие клетки. Одна панель на страницу и один обработчик на таблицу: клетка
 #: называет себя тремя значениями (`data-den`, `data-vid`, `data-kto`), панель по ним
@@ -609,24 +582,11 @@ def stranica(c: sqlite3.Connection) -> str:
     teachers_by_id = {t["id"]: t for t in teachers}
     istoriya, sessii = _sostavit(c)
     rody = _rod_zanyatiya(c, sessii)
-    otmeneno = _otmenennye(sessii, istoriya.dni)
     sdachi = sdachi_po_zanyatiyam(c, istoriya.dni)
     dannye = _chto_raskryvaetsya(students, teachers, istoriya, sdachi)
 
-    podpis = ("прошедших занятий пока нет" if not istoriya.dni
-              else "занятий: %d" % len(istoriya.dni))
-    if istoriya.nekuda_det_vsego:
-        podpis += " · без принимающего в этот день: %d" % istoriya.nekuda_det_vsego
-
-    stroka_otmen = (
-        '<p class="ist-otmeneno">отменённые занятия (в решётке их нет — занятия не '
-        'было): %s</p>' % e(", ".join(_shapka_dnya(d) for d in otmeneno))
-        if otmeneno else "")
-
     def zagolovok(vid: str) -> str:
-        imya, zachem = ZACHEM_ZHURNAL[vid]
-        return (f'<p class="ist-zhurnal">{e(imya)}</p>'
-                f'<p class="ist-zachem">{e(zachem)}</p>')
+        return f'<p class="ist-zhurnal">{e(IMYA_ZHURNALA[vid])}</p>'
 
     return f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
@@ -653,7 +613,6 @@ def stranica(c: sqlite3.Connection) -> str:
   <input class="rd" type="radio" name="ist-vid" id="iv-shk" checked hidden>
   <input class="rd" type="radio" name="ist-vid" id="iv-prep" hidden>
   <h1>Журнал</h1>
-  <p class="podpis">{e(podpis)}</p>
   <nav class="ist-vkladki" id="ist-vkladki">
     <label for="iv-shk">Школьники</label>
     <label for="iv-prep">Преподаватели</label>
@@ -662,7 +621,6 @@ def stranica(c: sqlite3.Connection) -> str:
     {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody)}</section>
   <section id="is-prep">{zagolovok("prep")}
     {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody)}</section>
-  {stroka_otmen}
   <div class="ist-raskrytie" id="ist-raskrytie" hidden>
     <button class="ist-zakryt" id="ist-zakryt" type="button">закрыть</button>
     <h2 id="ist-raskrytie-zag"></h2>
