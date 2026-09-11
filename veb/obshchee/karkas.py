@@ -1824,12 +1824,31 @@ def chetverti_goda(den: str) -> tuple:
     считая от 1 сентября. Ни одна дата не повторяется в двух четвертях, и вместе
     они покрывают год без дыр — это одна последовательность, нарезанная на четыре.
     """
+    import config
     from core.services.sostav_na_den import blizhajshie_zanyatiya
 
+    # 🔴 ГРАНИЦЫ ЧЕТВЕРТЕЙ ЗАДАЮТ КАНИКУЛЫ, А НЕ СЧЁТ ПО ШЕСТНАДЦАТЬ. Владелец
+    # 11.09: «надеюсь, ты занёс в систему даты каникул и отталкиваешься от них,
+    # когда распределяешь занятия по четвертям». Прежняя нарезка резала ровно по
+    # шестнадцать занятий подряд, и первая четверть кончалась 2 ноября — уже ПОСЛЕ
+    # осенних каникул, то есть заезжала во вторую. Теперь каникулы разрезают
+    # последовательность: четверть кончается последним занятием перед ними.
+    # Число шестнадцать осталось только запасом длины, а не правилом.
     vse = blizhajshie_zanyatiya(nachalo_uchebnogo_goda(den),
                                 ZANYATIJ_V_CHETVERTI * CHETVERTEJ_V_GODU)
-    return tuple(tuple(vse[n * ZANYATIJ_V_CHETVERTI:(n + 1) * ZANYATIJ_V_CHETVERTI])
-                 for n in range(CHETVERTEJ_V_GODU))
+    granicy = sorted(ot for ot, _ in config.KANIKULY)
+    chasti, tek = [], []
+    for d in vse:
+        if tek and any(g <= d for g in granicy if g > tek[-1]):
+            # день лежит за ближайшей границей каникул — начинается новая четверть
+            chasti.append(tuple(tek))
+            tek = []
+        tek.append(d)
+    if tek:
+        chasti.append(tuple(tek))
+    while len(chasti) < CHETVERTEJ_V_GODU:
+        chasti.append(())
+    return tuple(chasti[:CHETVERTEJ_V_GODU])
 
 
 def nomer_chetverti(den: str) -> int:

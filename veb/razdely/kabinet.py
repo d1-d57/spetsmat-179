@@ -262,6 +262,12 @@ SVOI_STILI = """
    меры, которой отбита каждая другая страница сайта. */
 .kab-stranica{padding:1.3rem 3rem 4rem}
 .kab-stranica h1{margin:0 0 .2rem}
+.kab-mdn{font-family:var(--sans);font-size:.86rem;color:var(--muted);
+  margin:.2rem 0 1rem;display:flex;align-items:center;gap:.45rem}
+.mdn-den{font:inherit;font-weight:600;min-width:2.6rem;padding:.28em .7em;cursor:pointer;
+  border-radius:8px;border:1px solid var(--accent);color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 12%, transparent)}
+.mdn-den.mdn-net{border-color:var(--rule);color:var(--muted);background:transparent}
 .kab-kto{font-family:var(--sans);color:var(--muted);margin:0 0 2rem;font-size:1.05rem}
 .kab-kto a{color:var(--accent);text-decoration:none}
 .kab-kto a:hover{text-decoration:underline}
@@ -569,6 +575,76 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
 </script>"""
 
 
+def _moi_dni(c: sqlite3.Connection, teacher_id: int) -> str:
+    """«прихожу по дням: пн чт» — две тапалки и три слова, больше ничего.
+
+    🔴 ЭТО ЕДИНСТВЕННОЕ, ЧТО ПРЕПОДАВАТЕЛЬ ВПРАВЕ МЕНЯТЬ САМ. Владелец 11.09:
+    «ты не можешь выбрать себе школьников, это делает администратор через
+    распределение, а отметить, что ты бываешь только по понедельникам, но не по
+    четвергам, естественно должна быть возможность у самого учителя… максимально
+    минималистично, просто тапалка — и самый короткий комментарий типа „прихожу по
+    дням“».
+
+    Пишет В ТУ ЖЕ таблицу `prepodavatel_ne_prihodit`, что и галочки в постоянном
+    распределении: один факт — одно место. Оттуда его читают и распределение, и
+    журнал, поэтому снятая здесь галочка тут же убирает человека из принимающих в
+    свой день и ставит ему крестики в решётке.
+    """
+    from core.services.sostav_na_den import SLOTY_ZANYATIJ
+    net = {r[0] for r in c.execute(
+        "select slot from prepodavatel_ne_prihodit where teacher_id = ?", (teacher_id,))}
+    imena = {1: "пн", 2: "чт"}
+    knopki = "".join(
+        '<button type="button" class="mdn-den%s" data-slot="%d">%s</button>'
+        % ("" if sl not in net else " mdn-net", sl, imena.get(sl, str(sl)))
+        for sl in sorted(set(SLOTY_ZANYATIJ.values())))
+    return ('<p class="kab-mdn">прихожу по дням %s</p>' % knopki)
+
+
+def otmetit_svoi_dni(h) -> bool:
+    """`/api/kabinet/dni` — «в этот день прихожу / не прихожу», про СЕБЯ.
+
+    🔴 ЧЕЛОВЕК БЕРЁТСЯ ИЗ КУКИ, А НЕ ИЗ ТЕЛА, И ЭТО ГРАНИЦА ПРАВ, НАЗВАННАЯ
+    ВЛАДЕЛЬЦЕМ 11.09: «править распределение и журнал может только организатор, а
+    другие преподаватели могут править только своё расписание через личный
+    кабинет». Поле `teacher_id` в теле игнорируется намеренно: дверь, которая его
+    слушает, позволила бы отметить дни ЧУЖОГО человека.
+
+    Пишет в `prepodavatel_ne_prihodit` — ту же таблицу, что галочки постоянного
+    распределения, чтобы у факта остался один хозяин.
+    """
+    import json as _json
+    from infra.prepodavatel_den_repo import otmetit as _otmetit, obespechit as _obesp
+    if getattr(h, "command", "POST") != "POST":
+        _otdat_json(h, 405, {"error": "только POST"})
+        return True
+    kto = vhod.kto(h.headers)
+    if kto is None:
+        _otdat_json(h, 403, {"error": "нужно войти"})
+        return True
+    try:
+        dlina = int(h.headers.get("Content-Length", 0) or 0)
+        telo = _json.loads(h.rfile.read(dlina) or b"{}")
+    except (ValueError, TypeError):
+        _otdat_json(h, 400, {"error": "нечитаемое тело"})
+        return True
+    try:
+        slot = int(telo.get("slot"))
+    except (TypeError, ValueError):
+        _otdat_json(h, 400, {"error": "нужен slot"})
+        return True
+    prihodit = bool(telo.get("prihodit"))
+    c = _soedinenie(h)
+    try:
+        _obesp(c)
+        _otmetit(c, int(kto), slot, prihodit)
+        c.commit()
+        _otdat_json(h, 200, {"ok": True, "slot": slot, "prihodit": prihodit})
+    finally:
+        c.close()
+    return True
+
+
 def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
     """The whole page for one named teacher."""
     from veb.razdely.listki import tekushchij
@@ -803,6 +879,7 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
     telo = f"""<div class="kab-stranica">
   <h1>{e(kto["name"])}</h1>
   <p class="kab-kto">кабинет преподавателя{gruppa_html}</p>
+  {_moi_dni(c, teacher_id)}
   {blok_blizh}
   <div class="kab-blok">
     <p class="zag2">мои занятия</p>
@@ -1038,4 +1115,5 @@ def marshruty():
     занятии.
     """
     return {"/kabinet": pokazat_kabinet,
-            "/api/kabinet/otsutstvie": otmetit_otsutstvie}
+            "/api/kabinet/otsutstvie": otmetit_otsutstvie,
+            "/api/kabinet/dni": otmetit_svoi_dni}

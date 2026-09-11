@@ -132,8 +132,14 @@ def blizhajshie_zanyatiya(ot: str, skolko: int) -> list:
     dni = []
     # 7 days per lesson week times the number wanted, plus one week of slack, is a
     # bound that cannot loop forever however ``SLOTY_ZANYATIJ`` is later edited.
-    for step in range(0, 7 * skolko + 7):
+    for step in range(0, 7 * skolko + 40):   # +40: каникулы съедают до трёх недель подряд
         kandidat = moment + timedelta(days=step)
+        # 🔴 В КАНИКУЛЫ ЗАНЯТИЙ НЕТ, И ЗНАЕТ ОБ ЭТОМ ОДНО МЕСТО. Владелец 11.09
+        # назвал даты и предупредил, что они меняются по ходу года; список лежит в
+        # `config.KANIKULY`, а спрашивается отсюда — иначе каждый экран считал бы
+        # календарь сам и давал свой ответ.
+        if config.v_kanikuly(kandidat.isoformat()):
+            continue
         if kandidat.isoweekday() in SLOTY_ZANYATIJ:
             dni.append(kandidat.isoformat())
             if len(dni) == skolko:

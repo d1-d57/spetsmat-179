@@ -228,8 +228,14 @@ def test_column_count_matches_a_direct_database_count(running_server, tmp_path):
     # базе: в фикстуре их два. Решётка — календарь четверти, а данные на него
     # накладываются (владелец 11.09: «не нужна пустая табличка… распланированная
     # сразу на 16 занятий»).
-    assert karkas.ZANYATIJ_V_CHETVERTI == 16
-    assert telo.count('<th class="ist-zn') == 2 * karkas.ZANYATIJ_V_CHETVERTI
+    # 🔴 ЧИСЛО СТОЛБЦОВ ЗАДАЮТ КАНИКУЛЫ, А НЕ КОНСТАНТА. Владелец 11.09 назвал
+    # даты каникул и потребовал отталкиваться от них при нарезке четвертей; с тех
+    # пор четверть — это занятия МЕЖДУ каникулами, и их бывает 14, 15, 17 или 18.
+    # Сторожить «ровно шестнадцать» значило бы сторожить сломанную нарезку.
+    nomer = karkas.nomer_chetverti(MONDAY)
+    zhdyom = len(karkas.chetverti_goda(MONDAY)[nomer - 1])
+    assert zhdyom > 0, "четверть не может быть пустой"
+    assert telo.count('<th class="ist-zn') == 2 * zhdyom
     # Два дня фикстуры — живые клетки; остальные четырнадцать столбцов пусты.
     for den in (MONDAY, FRIDAY):
         assert f'data-den="{den}"' in telo

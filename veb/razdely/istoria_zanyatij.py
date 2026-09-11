@@ -525,11 +525,14 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
                 continue
             yacheika = po_dnyam.get(den)
             if den in otmecheno_byl and den not in est:
-                # Рука сказала «будет» на дату, где правило говорит обратное —
-                # показываем галочку, иначе снятое исключение выглядит как пустота
-                # и человек не видит, что его правка сохранилась.
-                kletki.append(_kletka("ist-byl", "✓",
-                                      v_rode(t["name"], "будет", "будет"),
+                # 🔴 НА БУДУЩЕЕ ГАЛОЧЕК НЕ БЫВАЕТ. Владелец 11.09 задал словарь
+                # клетки дословно: «галочка означает, что человек БЫЛ на занятии,
+                # крестик — что его точно не будет (это имеет смысл и в будущем),
+                # пустая клеточка — что планирует быть». Значит запись «будет»
+                # (переопределение постоянного правила на одну дату) показывается
+                # ПУСТОТОЙ, а не галочкой: галочка — это свершившийся факт.
+                kletki.append(_kletka("ist-vpered", "",
+                                      v_rode(t["name"], "планирует быть", "планирует быть"),
                                       den, "prep", t["id"], ugolok=mozhno_pravit))
                 continue
             if den in otmecheno_net and den not in est:
@@ -1416,6 +1419,9 @@ def dver_otsutstvia(h) -> bool:
                         "where teacher_id = ? and slot = ? limit 1",
                         (tid, _sl)).fetchone() is not None
                     if den > segodnya:
+                        # В будущем клетка показывает ЛИБО крестик (не будет), ЛИБО
+                        # пустоту (планирует быть). Галочки нет как состояния, и клик
+                        # ходит между двумя: пусто → ✕ → пусто.
                         vidno_galochku = not po_pravilu_net
                         est_zadachi = est_deti = False
                     est_deti = (not (den > segodnya)) and bool(sl) and c.execute(
