@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import threading
 import urllib.error
@@ -99,6 +100,20 @@ def running_server(tmp_path):
         httpd.server_close()
         thread.join()
         connection.close()
+
+
+def _bez_kommentariev(telo: str) -> str:
+    """Страница без того, чего читатель не видит: стилей и всех комментариев.
+
+    🔴 БЕЗ ЭТОГО ПРОВЕРКА НА СЛОВО ЛОВИТ СОБСТВЕННЫЙ РАЗБОР КОДА. `kabinet.py`
+    объясняет свои решения прямо в `SVOI_STILI` и в `SKRIPT`, то есть внутри того,
+    что уезжает в документ, — и слово «сдач» стоит там в предложении, которое
+    рассказывает, почему его больше нет на экране. Проверка «слова нет в теле
+    ответа» краснела бы на объяснении, а не на экране.
+    """
+    telo = re.sub(r"<style\b.*?</style>", "", telo, flags=re.S)
+    telo = re.sub(r"<!--.*?-->", "", telo, flags=re.S)
+    return re.sub(r"/\*.*?\*/", "", telo, flags=re.S)
 
 
 def _kuka(rol: str, kto=None) -> str:
@@ -546,3 +561,17 @@ def test_the_made_up_summary_line_is_gone(running_server):
     assert 'class="kab-svodka"' not in telo, "класс сводки снят вместе с ней"
     assert "принято сдач" not in telo
     assert "работал со школьниками" not in telo
+
+
+def test_the_screen_says_zadach_and_never_sdach(running_server):
+    """Пункт 2 рецензии 11.09: *«слово „сдач“ очень странное. Лучше пиши „задач“»*.
+
+    Проверяется по ВИДИМОМУ тексту, а не по исходнику: слово живёт в шапке плитки
+    занятия, и именно там владелец на него и наткнулся. Формат — его собственный,
+    `задач: N`.
+    """
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = _bez_kommentariev(body.decode("utf-8"))
+    assert "сдач" not in telo, "слова «сдач» на экране быть не должно"
+    assert re.search(r"задач: \d+", telo), "шапка плитки называет число задач"

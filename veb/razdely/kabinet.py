@@ -492,7 +492,16 @@ def stranica(c: sqlite3.Connection, teacher_id: int) -> str:
                 '<div class="kab-zag" data-den="%s" tabindex="0">%s'
                 '<span class="kab-skolko">%s</span></div>%s</div>'
                 % ("ne-byl" if netu else "byl", e(den), e(den), e(podpis),
-                   e("вас не было" if netu else "сдач: %d" % sdach_dnya), spisok))
+                   # 🔴 «ЗАДАЧ», А НЕ «СДАЧ» — ПУНКТ 2 РЕЦЕНЗИИ ВЛАДЕЛЬЦА 11.09,
+                   # дословно: *«потом слово „сдач“ очень странное. Лучше пиши
+                   # „задач“»*, и формат он назвал тоже сам — `задач: 23`. Считается
+                   # ровно то же самое, что и считалось: сколько задач принято в этот
+                   # день у школьников этого преподавателя. Переименовано ТОЛЬКО
+                   # слово на экране; имя переменной `sdach_dnya` осталось, потому что
+                   # словарь, из которого число берётся, зовётся `sdachi` и живёт в
+                   # чужом файле (`istoria_zanyatij.sdachi_po_zanyatiyam`) — менять
+                   # имя здесь значило бы развести его с источником.
+                   e("вас не было" if netu else "задач: %d" % sdach_dnya), spisok))
         else:
             imena = ", ".join("%s %s" % (e(r["surname"]), e(r["name"]))
                               for r in kto_byl)
