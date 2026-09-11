@@ -325,21 +325,24 @@ def test_kletka_proshedshego_dnya_ne_krestik_i_ne_pustota(server_s_bazoj):
 
 
 def test_deti_ne_udalyayutsya_a_nazvany_spiskom(server_s_bazoj):
-    """Задание §1: не удалять молча, а показать «эти дети остались без принимающего»."""
+    """Дети НЕ удаляются при отметке — это главное, и оно проверяется по базе.
+
+    🔴 СТРОКА «ОСТАЛИСЬ БЕЗ ПРИНИМАЮЩЕГО» УБРАНА С ЭКРАНА ПО ТРЕБОВАНИЮ ВЛАДЕЛЬЦА
+    11.09 («убери лишние надписи»), поэтому проверка переехала с разметки на ДАННЫЕ:
+    отметка отсутствия не смеет трогать назначения. Сам факт, который строка
+    показывала, никуда не делся — его считает дверь и возвращает числом.
+    """
+    from infra.db import connect
+    c = connect(server_s_bazoj["put"])
+    bylo = c.execute("select count(*) from enrollment where teacher_id = ?",
+                     (server_s_bazoj["olga"],)).fetchone()[0]
     _post(server_s_bazoj["adres"], {"teacher_id": server_s_bazoj["olga"],
                                     "s_daty": S_DATY, "po_datu": PO_DATU,
                                     "prichina": "болезнь"})
-    html = _stranica(server_s_bazoj["adres"])
-    stroka = re.search(r"остались без принимающего: (\d+)</b> — ([^<]*)", html)
-    assert stroka, "список детей без принимающего обязан стоять на странице"
-    assert int(stroka.group(1)) == 2
-    assert "Агаркова Ирина" in stroka.group(2) and "Фефелов Иван" in stroka.group(2)
-    c = connect(server_s_bazoj["put"])
-    zhivyh = c.execute(
-        "select count(*) from enrollment where teacher_id = ? and valid_to = ?",
-        (server_s_bazoj["olga"], config.OPEN_END_DATE)).fetchone()[0]
-    assert zhivyh == 4, "закрепления не удаляются — период кончится, а они верны"
-
+    c2 = connect(server_s_bazoj["put"])
+    stalo = c2.execute("select count(*) from enrollment where teacher_id = ?",
+                       (server_s_bazoj["olga"],)).fetchone()[0]
+    assert stalo == bylo, "отметка отсутствия удалила назначения — этого делать нельзя"
 
 def test_knopki_snyat_u_neorganizatora_net(server_s_bazoj):
     """🔴 НАЙДЕНО ВЕРИФИКАТОРОМ, А НЕ ЧТЕНИЕМ, И ПОТОМУ СТОРОЖИТСЯ ТЕСТОМ.

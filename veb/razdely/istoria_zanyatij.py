@@ -316,7 +316,8 @@ def _shapka(dni, rody, pervyj_stolbec: str) -> str:
     return f'<th>{e(pervyj_stolbec)}</th>' + "".join(stolbcy)
 
 
-def _kletka(klass: str, znak: str, vsplyv: str, den: str, vid: str, kto_id) -> str:
+def _kletka(klass: str, znak: str, vsplyv: str, den: str, vid: str, kto_id,
+            ugolok: bool = False) -> str:
     """🔴 КЛЕТКА — МЕСТО, А НЕ ГАЛОЧКА, и это единственное место захода, где что-то
     сделано на шаг вперёд (владелец: «в неё позже пойдут ОЦЕНКА и КОММЕНТАРИЙ»).
 
@@ -332,9 +333,17 @@ def _kletka(klass: str, znak: str, vsplyv: str, den: str, vid: str, kto_id) -> s
     САМОЙ ОЦЕНКИ ЗДЕСЬ НЕТ И НЕ ЗАВОДИТСЯ: ни поля ввода, ни двери записи, ни
     колонки в базе — владелец сказал прямо, что сейчас их не вводим.
     """
+    # 🔴 УГОЛОК — ОТДЕЛЬНЫЙ ОРГАН, ПОТОМУ ЧТО РЕДКОЕ ДЕЙСТВИЕ НЕ СМЕЕТ ЗАНИМАТЬ
+    # ГЛАВНЫЙ ЖЕСТ. Владелец 11.09: «по умолчанию нажатие на клеточку должно
+    # выводить кондуит… а можно где-то в углу сделать маленькое поле, при нажатии
+    # на которое галочка будет меняться на крестик. Это более редкая ситуация».
+    # Поэтому клик по ТЕЛУ клетки прошедшего дня открывает кондуит, а правка явки
+    # живёт в уголке — и он есть только у того, кто вправе править.
+    ugol = ('<span class="kl-ugol ots-klik" title="отметить, что его не было" '
+            'role="button" tabindex="0">▫</span>') if ugolok else ""
     return (f'<td class="ist-kl {klass}" title="{vsplyv}" '
             f'data-den="{e(den)}" data-vid="{vid}" data-kto="{kto_id}" tabindex="0">'
-            f'<span class="kl-znak">{znak}</span>{PUSTYE_MESTA}</td>')
+            f'<span class="kl-znak">{znak}</span>{ugol}{PUSTYE_MESTA}</td>')
 
 
 #: 🔴 СТОЛБЦЫ РЕШЁТКИ — КАЛЕНДАРЬ ЧЕТВЕРТИ, А НЕ СПИСОК ЗАПИСАННЫХ ЗАНЯТИЙ, И ЭТО
@@ -360,7 +369,7 @@ def _kletka(klass: str, znak: str, vsplyv: str, den: str, vid: str, kto_id) -> s
 KLETKA_PUSTAYA = '<td class="ist-pusta"></td>'
 
 
-def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni) -> str:
+def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni, mozhno_pravit=False) -> str:
     est = set(istoriya.dni)
     # Всплывающая подсказка клетки — тоже фраза о человеке, и род у неё тот же.
     # Считается по разу на школьника, а не по разу на клетку: клеток 57 × 16.
@@ -379,7 +388,7 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni) -> str:
                 kletki.append(KLETKA_PUSTAYA)
             elif yacheika is None or not yacheika.prisutstvoval:
                 kletki.append(_kletka("ist-net", "✕", ne_byl[u["id"]],
-                                      den, "shk", u["id"]))
+                                      den, "shk", u["id"], ugolok=mozhno_pravit))
             elif yacheika.nekuda_det:
                 kletki.append(_kletka("ist-def", "?", byl_bez[u["id"]],
                                       den, "shk", u["id"]))
@@ -397,8 +406,30 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni) -> str:
             f'<tbody>{"".join(stroki)}</tbody></table></div>')
 
 
+def otmetki_otsutstviya_po_dnyam(c) -> dict:
+    """`{teacher_id: {день, …}}` — где человек отмечен «не был/не будет».
+
+    🔴 ОДНА ТАБЛИЦА НА ТРИ ПАНЕЛИ. В `teacher_attendance` пишут ВСЕ трое: личный
+    кабинет (`veb/razdely/kabinet.py`), текущее распределение
+    (`veb/server.py::_post_zanyatie`) и этот журнал. Читать её обязаны тоже все, и
+    именно поэтому чтение вынесено сюда одной функцией, а не повторено запросом в
+    каждом месте: разошедшиеся копии одного факта — это ровно то, что владелец
+    запретил 11.09 («должно быть ровно одно место»).
+    """
+    po: dict = {}
+    for r in c.execute(
+            "select ta.teacher_id tid, s.held_on den from teacher_attendance ta "
+            "join sessions s on s.id = ta.session_id where ta.status = ?",
+            ("не был",)):
+        tid = r["tid"] if hasattr(r, "keys") else r[0]
+        den = r["den"] if hasattr(r, "keys") else r[1]
+        po.setdefault(tid, set()).add(den)
+    return po
+
+
 def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
-                             ots_po_dnyam=None, mozhno_pravit=False) -> str:
+                             ots_po_dnyam=None, mozhno_pravit=False,
+                             soedinenie_istorii=None) -> str:
     """Журнал преподавателей. Клетка дня отмеченного периода — СВОЕГО вида.
 
     🔴 ТРИ СОСТОЯНИЯ, А НЕ ДВА, И СПУТАТЬ ИХ НЕЛЬЗЯ (задание §3). `✕` значит «не
@@ -416,8 +447,13 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
     ots_po_dnyam = ots_po_dnyam or {}
     est = set(istoriya.dni)
     stroki = []
+    # `{teacher_id: {день, …}}` — отметки «не был/не будет» из ЕДИНОЙ таблицы явки,
+    # включая дни, до которых история ещё не дошла (будущее).
+    net_po_prepam = (otmetki_otsutstviya_po_dnyam(soedinenie_istorii)
+                     if soedinenie_istorii is not None else {})
     for t in teachers:
         po_dnyam = istoriya.prepodavateli.get(t["id"], {})
+        otmecheno_net = net_po_prepam.get(t["id"], frozenset())
         kletki = []
         for den in dni:
             svoi_periody = [x for x in ots_po_dnyam.get(den, ())
@@ -430,6 +466,18 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
                     den, "prep", t["id"]))
                 continue
             yacheika = po_dnyam.get(den)
+            if den in otmecheno_net and den not in est:
+                # 🔴 ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ, И ЖУРНАЛ ЧИТАЕТ ЕГО ДАЖЕ ДЛЯ БУДУЩЕГО.
+                # Требование владельца 11.09: «ровно одно место, которое
+                # редактируется из трёх панелей… и изменение отображается сразу в
+                # этих трёх местах». Разрыв найден замером: «его не будет 14.09»,
+                # поставленное из РАСПРЕДЕЛЕНИЯ, легло в `teacher_attendance`, а
+                # журнал рисовал ту же клетку пустой — он эту таблицу для будущих
+                # дней не спрашивал вовсе.
+                kletki.append(_kletka("ist-otsut", "✕",
+                                      v_rode(t["name"], "его не будет", "её не будет"),
+                                      den, "prep", t["id"], ugolok=mozhno_pravit))
+                continue
             if den not in est:
                 # 🔴 БУДУЩИЙ ДЕНЬ — ЭТО МЕСТО ДЛЯ ОТМЕТКИ, А НЕ ДЫРКА.
                 # Владелец 11.09: «просто чтобы я мог кликнуть на клеточку в
@@ -446,19 +494,16 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
                                       den, "prep", t["id"]))
             elif yacheika is None or not yacheika.prisutstvoval:
                 kletki.append(_kletka(
-                    "ist-net ots-klik" if mozhno_pravit else "ist-net", "✕",
-                    v_rode(t["name"], "не был", "не была")
-                    + (" · нажмите, чтобы снять" if mozhno_pravit else ""),
-                    den, "prep", t["id"]))
+                    "ist-net", "✕",
+                    v_rode(t["name"], "не был", "не была"),
+                    den, "prep", t["id"], ugolok=mozhno_pravit))
             else:
                 imena = ", ".join(
                     _imya_shkolnika(students_by_id[sid])
                     for sid in yacheika.ucheniki if sid in students_by_id)
                 kletki.append(_kletka(
-                    "ist-byl ots-klik" if mozhno_pravit else "ist-byl", "✓",
-                    (e(imena) or "никого")
-                    + (" · нажмите, чтобы поправить" if mozhno_pravit else ""),
-                    den, "prep", t["id"]))
+                    "ist-byl", "✓", e(imena) or "никого",
+                    den, "prep", t["id"], ugolok=mozhno_pravit))
         stroki.append(
             f'<tr><td class="ist-kto"><b>{e(t["name"])}</b></td>{"".join(kletki)}</tr>')
     return (f'<div class="ist-prokrutka"><table class="ist-tabl"><thead><tr>'
@@ -742,9 +787,14 @@ def _stroka_bez_prinimayushchego(deti) -> str:
 
 
 SVOI_STILI = """
-.istoria{max-width:none;padding:1.3em 2.4em 2.4em}
-.istoria h1{font-family:var(--sans);font-size:1.6em;margin:0 0 .3em}
-.ist-vkladki{display:flex;gap:.4rem;margin:0 0 1rem;font-family:var(--sans)}
+.istoria{max-width:none;padding:.9em 1.2em 1.6em}
+.istoria .chetverti{display:inline-flex;margin:0 0 .8rem;vertical-align:middle}
+.ist-prokrutka{width:100%}
+.ist-tabl{width:100%;table-layout:auto}
+.ist-tabl td.ist-kl{min-width:2.4rem}
+.istoria h1{display:none}
+.ist-vkladki{display:inline-flex;gap:.4rem;margin:0 1.6rem .8rem 0;
+  vertical-align:middle;font-family:var(--sans)}
 .ist-vkladki label{cursor:pointer;font-weight:600;padding:.35em 1.1rem;border-radius:8px;
   border:1px solid var(--rule);color:var(--muted)}
 #iv-shk:checked~.ist-vkladki label[for=iv-shk],
@@ -845,6 +895,10 @@ SVOI_STILI = """
   color:var(--warm);border:1px solid var(--warm);
   background:color-mix(in srgb, var(--warm) 14%, transparent)}
 .ist-vpered{cursor:pointer}
+.ist-kl{position:relative}
+.kl-ugol{position:absolute;right:2px;bottom:0;font-size:.62rem;line-height:1;
+  color:var(--muted);opacity:.35;cursor:pointer;padding:2px 3px}
+.kl-ugol:hover{opacity:1;color:var(--warm)}
 .ist-vpered:hover{background:color-mix(in srgb, var(--warm) 10%, transparent)}
 .ots-klik{cursor:pointer}
 .ots-zhdyot{opacity:.45}
@@ -959,22 +1013,28 @@ SKRIPT_OTSUTSTVIE = """
   tablica.addEventListener('click', function(sob){
     var kl = sob.target.closest('.ots-klik');
     if(!kl) return;
-    var den = kl.getAttribute('data-den'), kto = kl.getAttribute('data-kto');
+    /* 🔴 ГЛУШИМ ВСПЛЫТИЕ: по клетке слушает ещё и раскрытие кондуита
+       (`td.ist-kl` в основном скрипте). Без этого клик по уголку разом правил бы
+       явку И открывал панель — два ответа на один жест. */
+    sob.preventDefault();
+    sob.stopPropagation();
+    var yach = kl.closest('td.ist-kl') || kl;
+    var den = yach.getAttribute('data-den'), kto = yach.getAttribute('data-kto');
     if(!den || !kto) return;
-    kl.classList.add('ots-zhdyot');
+    yach.classList.add('ots-zhdyot');
     fetch('/api/otsutstvie', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({teacher_id: Number(kto), den: den})
     }).then(function(o){
       return o.json().catch(function(){ return {}; }).then(function(d){
-        if(!o.ok){ kl.classList.remove('ots-zhdyot'); alert(d.error || ('не вышло: ' + o.status)); return; }
+        if(!o.ok){ yach.classList.remove('ots-zhdyot'); alert(d.error || ('не вышло: ' + o.status)); return; }
         /* перечитываем страницу целиком: отметка меняет и клетку, и списки
            принимающих на обеих версиях распределения — держать второе описание
            того же факта в браузере значит разойтись с сервером */
         location.reload();
       });
-    }).catch(function(){ kl.classList.remove('ots-zhdyot'); alert('сервер не ответил'); });
+    }).catch(function(){ yach.classList.remove('ots-zhdyot'); alert('сервер не ответил'); });
   });
 })();
 </script>
@@ -1012,7 +1072,12 @@ def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False,
     dannye = _chto_raskryvaetsya(students, teachers, istoriya, sdachi, dni_setki)
 
     def zagolovok(vid: str) -> str:
-        return f'<p class="ist-zhurnal">{e(IMYA_ZHURNALA[vid])}</p>'
+        # 🔴 ЗАГОЛОВОК УБРАН ПО ТРЕБОВАНИЮ ВЛАДЕЛЬЦА 11.09: «убери лишние надписи
+        # „Журнал преподавателей“ и „остались без принимающего…“». Какая вкладка
+        # открыта, видно по самой вкладке — подпись повторяла её и занимала строку.
+        # Функция оставлена пустой, а не вырезана: её зовут два места сборки, и
+        # удаление тронуло бы их обоих ради нуля пользы.
+        return ""
 
     return f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
@@ -1038,18 +1103,21 @@ def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False,
        Ни одно правило CSS при этом не изменилось — изменилось РОДСТВО узлов. -->
   <input class="rd" type="radio" name="ist-vid" id="iv-shk" checked hidden>
   <input class="rd" type="radio" name="ist-vid" id="iv-prep" hidden>
-  <h1>Журнал</h1>
+  <!-- 🔴 ОДНА ПОЛОСА УПРАВЛЕНИЯ ВМЕСТО ТРЁХ ЭТАЖЕЙ. Владелец 11.09: вкладки и
+       кнопки четвертей ставятся НА ОДИН УРОВЕНЬ, отдельные подписи убираются,
+       имя остаётся только на ярлыке вкладки, а таблица растягивается на весь
+       экран. Три строки шапки занимали ровно ту высоту, которой не хватало
+       решётке. -->
   <nav class="ist-vkladki" id="ist-vkladki">
     <label for="iv-shk">Школьники</label>
     <label for="iv-prep">Преподаватели</label>
   </nav>
   {perekluchatel_chetvertej("/istoria", nomer, segodnya)}
   <section id="is-shk">{zagolovok("shk")}
-    {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni_setki)}</section>
+    {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni_setki, mozhno_pravit)}</section>
   <section id="is-prep">{zagolovok("prep")}
-    {_siroty_stroka(siroty) if mozhno_pravit else ""}
     {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody,
-                              dni_setki, ots_po_dnyam, mozhno_pravit)}</section>
+                              dni_setki, ots_po_dnyam, mozhno_pravit, c)}</section>
   <div class="ist-raskrytie" id="ist-raskrytie" hidden>
     <button class="ist-zakryt" id="ist-zakryt" type="button">закрыть</button>
     <h2 id="ist-raskrytie-zag"></h2>
@@ -1185,8 +1253,26 @@ def dver_otsutstvia(h) -> bool:
             # второе крестик». Значит у прошедшего дня ТРИ состояния по кругу:
             # пусто → был → не был → пусто. Отсутствие периодом остаётся способом
             # сказать о БУДУЩЕМ, где занятия ещё нет.
+            # 🔴 БУДУЩЕЕ РЕШАЕТСЯ ДАТОЙ, А НЕ НАЛИЧИЕМ СТРОКИ В `sessions`.
+            # Живой случай владельца 11.09: «почему-то нету возможности поставить
+            # крестик на 14». Замер боевой базы: строка `sessions` на 2026-09-14 УЖЕ
+            # ЕСТЬ — её завёл экран кабинета, показывающий «следующий спецмат 14
+            # сентября». Прежний порядок вёл такой день в ветку ЯВКИ: отметка ложилась
+            # в `teacher_attendance`, а клетка будущего дня её не читает и оставалась
+            # пустой. Человек кликал, запись происходила, и на экране не менялось
+            # НИЧЕГО — худший вид поломки.
+            # 🔴 ОДНО МЕСТО ДЛЯ ФАКТА «ЕГО НЕ БУДЕТ НА ЭТОМ ЗАНЯТИИ» — ТАБЛИЦА ЯВКИ.
+            # Требование владельца 11.09: «должно быть ровно одно место, которое
+            # редактируется из трёх панелей: личный кабинет, текущее расписание и
+            # журнал». Распределение и кабинет пишут в `teacher_attendance`; журнал
+            # теперь пишет туда же — и для прошедшего дня, и для будущего. Прежде он
+            # заводил на будущий день ПЕРИОД отсутствия, то есть второй ответ на тот
+            # же вопрос: у одной клетки было два хозяина, и они расходились.
+            # Периоды остаются для многодневных отметок («не будет две недели») —
+            # их журнал ЧИТАЕТ и показывает, но новые кликом не заводит.
+            segodnya = date.today().isoformat()
             ryad = c.execute("select id from sessions where held_on = ?", (den,)).fetchone()
-            if ryad is None and den <= date.today().isoformat():
+            if ryad is None:
                 # 🔴 ПРОШЕДШИЙ ДЕНЬ БЕЗ ЗАНЯТИЯ В БАЗЕ — ЭТО НЕ БУДУЩЕЕ, А ДЫРА.
                 # Владелец 11.09: «первое занятие, 3-го, там сейчас нет отметок — у
                 # меня должна быть возможность проставить их вручную». Строка в
@@ -1195,7 +1281,7 @@ def dver_otsutstvia(h) -> bool:
                 # ровно так же, как это делает отметка из кабинета
                 # (`veb/razdely/kabinet.py`: «Занятия ещё нет в базе — его заводит
                 # первый экран, открытый на этот день»).
-                kur = c.execute("insert into sessions (held_on) values (?)", (den,))
+                c.execute("insert into sessions (held_on) values (?)", (den,))
                 ryad = c.execute("select id from sessions where held_on = ?", (den,)).fetchone()
             if ryad is not None:
                 session_id = ryad["id"] if hasattr(ryad, "keys") else ryad[0]
@@ -1233,12 +1319,18 @@ def dver_otsutstvia(h) -> bool:
                     est_zadachi = c.execute(
                         "select 1 from marks where substr(valid_at, 1, 10) = ? "
                         "and teacher_id = ? limit 1", (den, tid)).fetchone() is not None
-                    est_deti = bool(sl) and c.execute(
+                    # На БУДУЩЕМ дне решётка галочек не рисует вовсе — клетка пуста,
+                    # значит первый клик обязан означать «его не будет», а не «был».
+                    if den > segodnya:
+                        vidno_galochku = True
+                        est_zadachi = est_deti = False
+                    est_deti = (not (den > segodnya)) and bool(sl) and c.execute(
                         "select 1 from enrollment where teacher_id = ? and slot = ? "
                         "and (valid_from is null or valid_from <= ?) "
                         "and (valid_to is null or valid_to >= ?) limit 1",
                         (tid, sl, den, den)).fetchone() is not None
-                    vidno_galochku = est_zadachi or est_deti
+                    if den <= segodnya:
+                        vidno_galochku = est_zadachi or est_deti
                     novoe = ne_byl if vidno_galochku else byl
                 else:
                     novoe = ne_byl if tek == byl else byl
