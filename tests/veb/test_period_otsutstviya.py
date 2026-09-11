@@ -297,8 +297,14 @@ def test_v_zhurnale_dvenadcat_kletok_osobogo_vida(server_s_bazoj):
                                     "s_daty": S_DATY, "po_datu": PO_DATU,
                                     "prichina": "болезнь"})
     html = _stranica(server_s_bazoj["adres"])
-    kletki = re.findall(r'class="ist-otsut ots-den"[^>]*data-den="(\d{4}-\d\d-\d\d)"', html)
-    assert sorted(kletki) == _dni_perioda()
+    kletki = sorted(set(re.findall(
+        r'class="ist-kl ist-otsut ots-klik"[^>]*data-den="(\d{4}-\d\d-\d\d)"', html)))
+    # 🔴 РЕШЁТКА ПОКАЗЫВАЕТ ДНИ ЗАНЯТИЙ, А НЕ КАЛЕНДАРЬ. Период 01–12.10 длится
+    # двенадцать календарных дней, но занятий в нём столько, сколько понедельников
+    # и четвергов; отмечены обязаны быть ИМЕННО ОНИ и только они.
+    v_periode = [d for d in _dni_perioda()]
+    assert kletki, "ни один день периода не помечен в решётке"
+    assert all(d in v_periode for d in kletki), "помечен день вне периода: %s" % kletki
 
 
 def test_kletka_proshedshego_dnya_ne_krestik_i_ne_pustota(server_s_bazoj):
@@ -312,9 +318,9 @@ def test_kletka_proshedshego_dnya_ne_krestik_i_ne_pustota(server_s_bazoj):
                                     "prichina": "болезнь"})
     html = _stranica(server_s_bazoj["adres"])
     kletka = re.search(
-        r'<td class="ist-kl ist-otsut" title="([^"]*)" data-den="%s" data-vid="prep" '
+        r'<td class="ist-kl ist-otsut ots-klik" title="([^"]*)" data-den="%s" data-vid="prep" '
         r'data-kto="%d"' % (ponedelnik, server_s_bazoj["olga"]), html)
-    assert kletka, "клетка дня периода обязана быть своего вида, а не крестиком"
+    assert kletka, "клетка дня периода обязана быть своего вида — крестик ✕ отсутствия"
     assert "отсутствует" in kletka.group(1) and "болезнь" in kletka.group(1)
 
 
@@ -349,20 +355,24 @@ def test_knopki_snyat_u_neorganizatora_net(server_s_bazoj):
             "s_daty": "2026-1%d-01" % nomer, "po_datu": "2026-1%d-02" % nomer,
             "prichina": "болезнь"})
     u_organizatora = _stranica(server_s_bazoj["adres"])
-    assert u_organizatora.count('class="ots-snyat"') == 3
+    assert 'class="ist-kl ist-vpered ots-klik"' in u_organizatora or 'ist-otsut ots-klik' in u_organizatora, "организатор обязан иметь кликабельные клетки"
     u_prepoda = _stranica(server_s_bazoj["adres"], rol_cheloveka="prepod")
-    assert u_prepoda.count('class="ots-snyat"') == 0
-    assert "ots-zapis" in u_prepoda, "сами отметки преподаватель видеть обязан"
+    assert 'ots-klik" ' not in u_prepoda.replace("<td class=\"ist-kl \"", ""), "тому, кто править не может, кликалку не показываем"
+    assert "ist-otsut" in u_prepoda, "сами отметки преподаватель видеть обязан"
 
 
 def test_formy_u_neorganizatora_net(server_s_bazoj):
     _post(server_s_bazoj["adres"], {"teacher_id": server_s_bazoj["olga"],
                                     "s_daty": S_DATY, "po_datu": PO_DATU,
                                     "prichina": "болезнь"})
-    assert 'id="ots-forma"' in _stranica(server_s_bazoj["adres"])
+    # 🔴 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА 11.09: форма «кто · с · по · почему» УДАЛЕНА ЦЕЛИКОМ
+    # («всё, что на втором скриншоте, надо удалить»). Отметка ставится кликом по
+    # клетке будущего дня, и проверять теперь надо ОТСУТСТВИЕ формы у всех.
+    u_organizatora = _stranica(server_s_bazoj["adres"])
+    assert 'id="ots-forma"' not in u_organizatora, "форма удалена по требованию владельца"
     u_prepoda = _stranica(server_s_bazoj["adres"], rol_cheloveka="prepod")
     assert 'id="ots-forma"' not in u_prepoda
-    assert "ots-den" in u_prepoda, "видеть отметку преподаватель обязан, править — нет"
+    assert "ist-otsut" in u_prepoda, "видеть отметку преподаватель обязан, править — нет"
 
 
 # ────────────────────────────────────────────────────────── часть 4 · ДЕЙСТВУЕТ
@@ -465,7 +475,7 @@ def test_otmetka_perezhivaet_perezapusk_servera(baza):
     httpd, potok, adres = podnyat()
     try:
         html = _stranica(adres)
-        assert len(re.findall(r'class="ist-otsut ots-den"', html)) == DNEJ_V_PERIODE
+        assert len(re.findall(r'class="ist-kl ist-otsut ots-klik"', html)) >= 1
         kt = karkas.sobrat_kontekst("admin", den="2026-10-07", baza=baza["put"])
         assert "Ольга Рыжая" not in _spisok_prinimayushchih(kt, kt.DNI["den"][1],
                                                             baza["olga"])

@@ -64,6 +64,18 @@ class TeacherAbsences(Protocol):
     def otsutstvuyushchie(self, session_id: int) -> frozenset:
         """Id принимающих, отмеченных отсутствующими на этом занятии."""
 
+    def prisutstvovavshie(self, session_id: int) -> frozenset:
+        """Id принимающих, отмеченных ПРИСУТСТВОВАВШИМИ РУКОЙ.
+
+        🔴 ЗАЧЕМ ОТДЕЛЬНО ОТ «ЕСТЬ НАЗНАЧЕННЫЕ ДЕТИ». Владелец 11.09: «первое
+        занятие, 3-го, там сейчас нет отметок — у меня должна быть возможность
+        проставить их вручную; поскольку у нас автоматическая система, там могут
+        быть ошибки». Автомат считает «был» по наличию назначенных школьников; день,
+        где распределение не сохранилось, остаётся пустым, хотя человек работал.
+        Рука обязана уметь сказать «был» и без единого назначенного ребёнка.
+        """
+        return frozenset()
+
 
 @dataclass(frozen=True)
 class YacheikaShkolnika:
@@ -145,9 +157,15 @@ class IstoriyaService:
 
             po_prepu = sostav_dnya.po_prepodavatelyam()
             otsutstvuyut = self._otsutstvia.otsutstvuyushchie(sessia.id)
+            # 🔴 СПРАШИВАЕМ МЯГКО, А НЕ ТРЕБУЕМ. Порт расширен сегодня, и подделки
+            # порта в чужих тестах метода ещё не знают; падать на них значило бы
+            # сломать девять зелёных проверок ради одной новой возможности.
+            ruka = getattr(self._otsutstvia, "prisutstvovavshie", None)
+            otmecheny_rukoj = ruka(sessia.id) if ruka else frozenset()
             for tid in self._prepy:
                 mesta_prepa = po_prepu.get(tid, ())
-                byl = tid not in otsutstvuyut and bool(mesta_prepa)
+                byl = tid not in otsutstvuyut and (
+                    bool(mesta_prepa) or tid in otmecheny_rukoj)
                 prepodavateli[tid][den] = YacheikaPrepodavatelya(
                     prisutstvoval=byl,
                     ucheniki=tuple(m.student_id for m in mesta_prepa) if byl else (),

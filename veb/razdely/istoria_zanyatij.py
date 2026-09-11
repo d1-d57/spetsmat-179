@@ -64,6 +64,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 import config
 from core.services.history import nachalo_zanyatia_iso, zanyatie_po_iso
@@ -120,6 +121,11 @@ class _TeacherAbsences:
         return frozenset(r[0] for r in self._c.execute(
             "select teacher_id from teacher_attendance where session_id = ? and status = ?",
             (session_id, "не был")))
+
+    def prisutstvovavshie(self, session_id: int) -> frozenset:
+        return frozenset(r[0] for r in self._c.execute(
+            "select teacher_id from teacher_attendance where session_id = ? and status = ?",
+            (session_id, "был")))
 
 
 def _spravochniki(c: sqlite3.Connection) -> tuple:
@@ -391,7 +397,7 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni) -> str:
 
 
 def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
-                             ots_po_dnyam=None) -> str:
+                             ots_po_dnyam=None, mozhno_pravit=False) -> str:
     """Журнал преподавателей. Клетка дня отмеченного периода — СВОЕГО вида.
 
     🔴 ТРИ СОСТОЯНИЯ, А НЕ ДВА, И СПУТАТЬ ИХ НЕЛЬЗЯ (задание §3). `✕` значит «не
@@ -417,24 +423,41 @@ def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni,
                             if x["teacher_id"] == t["id"]]
             if svoi_periody:
                 kletki.append(_kletka(
-                    "ist-otsut", "О",
+                    "ist-otsut ots-klik" if mozhno_pravit else "ist-otsut", "✕",
                     e("отсутствует · " + "; ".join(
                         _podpis_perioda(x) for x in svoi_periody)),
                     den, "prep", t["id"]))
                 continue
             yacheika = po_dnyam.get(den)
             if den not in est:
-                kletki.append(KLETKA_PUSTAYA)
-            elif yacheika is None or not yacheika.prisutstvoval:
-                kletki.append(_kletka("ist-net", "✕",
-                                      v_rode(t["name"], "не был", "не была"),
+                # 🔴 БУДУЩИЙ ДЕНЬ — ЭТО МЕСТО ДЛЯ ОТМЕТКИ, А НЕ ДЫРКА.
+                # Владелец 11.09: «просто чтобы я мог кликнуть на клеточку в
+                # расписании на будущее, и там появился бы крестик». Поэтому
+                # пустая клетка будущего дня кликабельна и несёт свой адрес;
+                # форма с полями «кто · с · по · почему» удалена целиком — она
+                # спрашивала то, что клик говорит сам.
+                if not mozhno_pravit:
+                    kletki.append(KLETKA_PUSTAYA)
+                    continue
+                kletki.append(_kletka("ist-vpered ots-klik", "",
+                                      v_rode(t["name"], "нажмите, если его не будет",
+                                             "нажмите, если её не будет"),
                                       den, "prep", t["id"]))
+            elif yacheika is None or not yacheika.prisutstvoval:
+                kletki.append(_kletka(
+                    "ist-net ots-klik" if mozhno_pravit else "ist-net", "✕",
+                    v_rode(t["name"], "не был", "не была")
+                    + (" · нажмите, чтобы снять" if mozhno_pravit else ""),
+                    den, "prep", t["id"]))
             else:
                 imena = ", ".join(
                     _imya_shkolnika(students_by_id[sid])
                     for sid in yacheika.ucheniki if sid in students_by_id)
-                kletki.append(_kletka("ist-byl", "✓", e(imena) or "никого",
-                                      den, "prep", t["id"]))
+                kletki.append(_kletka(
+                    "ist-byl ots-klik" if mozhno_pravit else "ist-byl", "✓",
+                    (e(imena) or "никого")
+                    + (" · нажмите, чтобы поправить" if mozhno_pravit else ""),
+                    den, "prep", t["id"]))
         stroki.append(
             f'<tr><td class="ist-kto"><b>{e(t["name"])}</b></td>{"".join(kletki)}</tr>')
     return (f'<div class="ist-prokrutka"><table class="ist-tabl"><thead><tr>'
@@ -591,6 +614,22 @@ def _forma_otsutstvia(teachers) -> str:
   </div>
   <p class="ots-oshibka" id="ots-oshibka" hidden></p>
 </form>"""
+
+
+def _siroty_stroka(siroty) -> str:
+    """Одна строка про детей, оставшихся без принимающего, — и ничего больше.
+
+    🔴 СПИСОК ПЕРИОДОВ И ФОРМА УДАЛЕНЫ ПО ТРЕБОВАНИЮ ВЛАДЕЛЬЦА 11.09 («всё, что
+    на втором скриншоте, надо удалить»). Отметка теперь живёт В КЛЕТКЕ: клик по
+    будущему дню ставит крестик, клик по крестику снимает. Пояснительной прозы
+    над таблицей не остаётся вовсе — её место заняла подсказка самой клетки.
+    Единственное, что печатается, — предупреждение о детях, оставшихся без
+    принимающего: это следствие отметки, которого человек не видит в решётке.
+    """
+    deti = [r for spisok in siroty.values() for r in spisok]
+    if not deti:
+        return ""
+    return _stroka_bez_prinimayushchego(deti)
 
 
 def _spisok_periodov(periody, teachers_by_id, siroty, mozhno_pravit=False) -> str:
@@ -804,6 +843,11 @@ SVOI_STILI = """
   font-variant-numeric:tabular-nums;padding:.16em .42em;border-radius:6px;
   color:var(--warm);border:1px solid var(--warm);
   background:color-mix(in srgb, var(--warm) 14%, transparent)}
+.ist-vpered{cursor:pointer}
+.ist-vpered:hover{background:color-mix(in srgb, var(--warm) 10%, transparent)}
+.ots-klik{cursor:pointer}
+.ots-zhdyot{opacity:.45}
+.ist-otsut .kl-znak{color:var(--warm);font-weight:700}
 .ots-siroty{flex-basis:100%;margin:.3rem 0 0;font-size:.88rem;color:var(--warm)}
 .ots-sirot-net{flex-basis:100%;margin:.3rem 0 0;font-size:.88rem;color:var(--muted)}
 .ist-raskrytie .ist-komu{margin:0 0 .5rem;font-weight:600}
@@ -904,54 +948,36 @@ SKRIPT = """
 SKRIPT_OTSUTSTVIE = """
 <script>
 (function(){
-  var forma = document.getElementById('ots-forma');
-  if(!forma) return;                      // не организатор: формы на странице нет
-  var oshibka = document.getElementById('ots-oshibka');
-
-  function skazat(text){
-    oshibka.textContent = text;
-    oshibka.hidden = !text;
-  }
-  function poslat(telo, chto){
-    return fetch('/api/otsutstvie', {
+  /* 🔴 ОТМЕТКА ЖИВЁТ В КЛЕТКЕ, А НЕ В ФОРМЕ. Владелец 11.09: «просто чтобы я мог
+     кликнуть на клеточку в расписании на будущее, и там появился бы крестик».
+     Форма «кто · с · по · почему» удалена целиком: три её поля из четырёх клетка
+     знает о себе сама (кто — строка, день — колонка), а четвёртое спрашивать не
+     о чем. Повторный клик по крестику снимает отметку. */
+  var tablica = document.getElementById('is-prep');
+  if(!tablica) return;
+  tablica.addEventListener('click', function(sob){
+    var kl = sob.target.closest('.ots-klik');
+    if(!kl) return;
+    var den = kl.getAttribute('data-den'), kto = kl.getAttribute('data-kto');
+    if(!den || !kto) return;
+    kl.classList.add('ots-zhdyot');
+    fetch('/api/otsutstvie', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(telo)
-    }).then(function(otvet){
-      return otvet.json().catch(function(){ return {}; }).then(function(d){
-        if(!otvet.ok){ skazat(d.error || (chto + ' не удалось: ' + otvet.status)); return; }
-        /* 🔴 СТРАНИЦА ПЕРЕЧИТЫВАЕТСЯ ЦЕЛИКОМ, А НЕ ПОДПРАВЛЯЕТСЯ НА МЕСТЕ.
-           Отметка меняет ТРИ вещи сразу: список отметок, вид клеток в решётке и
-           полосу дней периода. Подправить их руками — значит завести второе
-           описание того же факта в браузере, и оно разойдётся с сервером на
-           первом же пересечении периодов. */
+      body: JSON.stringify({teacher_id: Number(kto), den: den})
+    }).then(function(o){
+      return o.json().catch(function(){ return {}; }).then(function(d){
+        if(!o.ok){ kl.classList.remove('ots-zhdyot'); alert(d.error || ('не вышло: ' + o.status)); return; }
+        /* перечитываем страницу целиком: отметка меняет и клетку, и списки
+           принимающих на обеих версиях распределения — держать второе описание
+           того же факта в браузере значит разойтись с сервером */
         location.reload();
       });
-    }).catch(function(){ skazat(chto + ' не удалось: сервер не ответил'); });
-  }
-
-  forma.addEventListener('submit', function(sob){
-    sob.preventDefault();
-    skazat('');
-    var s = document.getElementById('ots-s').value;
-    var po = document.getElementById('ots-po').value;
-    if(!s || !po){ skazat('нужны обе даты'); return; }
-    if(s > po){ skazat('начало периода позже его конца'); return; }
-    poslat({
-      teacher_id: +document.getElementById('ots-kto').value,
-      s_daty: s, po_datu: po,
-      prichina: document.getElementById('ots-prichina').value
-    }, 'отметка');
-  });
-
-  document.addEventListener('click', function(sob){
-    var knopka = sob.target.closest ? sob.target.closest('.ots-snyat') : null;
-    if(!knopka) return;
-    skazat('');
-    poslat({snyat: +knopka.dataset.id}, 'снятие отметки');
+    }).catch(function(){ kl.classList.remove('ots-zhdyot'); alert('сервер не ответил'); });
   });
 })();
-</script>"""
+</script>
+"""
 
 
 def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False,
@@ -1020,10 +1046,9 @@ def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False,
   <section id="is-shk">{zagolovok("shk")}
     {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni_setki)}</section>
   <section id="is-prep">{zagolovok("prep")}
-    {_forma_otsutstvia(teachers) if mozhno_pravit else ""}
-    {_spisok_periodov(periody, teachers_by_id, siroty, mozhno_pravit)}
+    {_siroty_stroka(siroty) if mozhno_pravit else ""}
     {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody,
-                              dni_setki, ots_po_dnyam)}</section>
+                              dni_setki, ots_po_dnyam, mozhno_pravit)}</section>
   <div class="ist-raskrytie" id="ist-raskrytie" hidden>
     <button class="ist-zakryt" id="ist-zakryt" type="button">закрыть</button>
     <h2 id="ist-raskrytie-zag"></h2>
@@ -1032,7 +1057,7 @@ def stranica(c: sqlite3.Connection, mozhno_pravit: bool = False,
 </main>
 <script type="application/json" id="ist-dannye">{json.dumps(dannye, ensure_ascii=False)}</script>
 {SDACHI_SKRIPT}
-{SKRIPT}{SKRIPT_OTSUTSTVIE}
+{SKRIPT}{SKRIPT_OTSUTSTVIE if mozhno_pravit else ''}
 </body></html>"""
 
 
@@ -1127,6 +1152,75 @@ def dver_otsutstvia(h) -> bool:
     p = _telo_zaprosa(h)
     c = _soedinenie(h)
     try:
+        # 🔴 КЛИК ПО КЛЕТКЕ — ТРЕТЬЕ ДЕЙСТВИЕ ЭТОЙ ЖЕ ДВЕРИ, И ОНО ПЕРЕКЛЮЧАТЕЛЬ.
+        # Владелец 11.09: «просто чтобы я мог кликнуть на клеточку в расписании на
+        # будущее, и там появился бы крестик». Клик НЕ спрашивает ни причины, ни
+        # второй даты: день известен из самой клетки, период равен одному дню.
+        # Повторный клик по крестику снимает отметку — иначе поставить её было бы
+        # можно, а убрать нечем, и человек остался бы отсутствующим навсегда.
+        if p.get("den") is not None and p.get("snyat") is None:
+            den = _den_ili_nichego(p.get("den"))
+            if den is None:
+                _otdat_json(h, 400, {"error": "нужны даты в виде ГГГГ-ММ-ДД"})
+                return True
+            try:
+                tid = int(p["teacher_id"])
+            except (KeyError, TypeError, ValueError):
+                _otdat_json(h, 400, {"error": "нужен teacher_id"})
+                return True
+            est = [x for x in periody_otsutstvij(c)
+                   if x["teacher_id"] == tid and x["s_daty"] <= den <= x["po_datu"]]
+            if est:
+                for x in est:
+                    snyat_otsutstvie(c, int(x["id"]))
+                _otdat_json(h, 200, {"ok": True, "den": den, "stalo": "снято"})
+                return True
+            # 🔴 ДЕНЬ, У КОТОРОГО ЕСТЬ ЗАНЯТИЕ, — ЭТО ПРАВКА ЯВКИ, А НЕ ОТСУТСТВИЕ.
+            # Владелец 11.09: «сделай возможность менять галочки на крестики
+            # постфактум, чтобы я мог отмечать поля, которые заполнены неправильно;
+            # поскольку у нас автоматическая система, там могут быть ошибки» и
+            # «первое занятие, 3-го, там сейчас нет отметок — одно нажатие галочка,
+            # второе крестик». Значит у прошедшего дня ТРИ состояния по кругу:
+            # пусто → был → не был → пусто. Отсутствие периодом остаётся способом
+            # сказать о БУДУЩЕМ, где занятия ещё нет.
+            ryad = c.execute("select id from sessions where held_on = ?", (den,)).fetchone()
+            if ryad is None and den <= date.today().isoformat():
+                # 🔴 ПРОШЕДШИЙ ДЕНЬ БЕЗ ЗАНЯТИЯ В БАЗЕ — ЭТО НЕ БУДУЩЕЕ, А ДЫРА.
+                # Владелец 11.09: «первое занятие, 3-го, там сейчас нет отметок — у
+                # меня должна быть возможность проставить их вручную». Строка в
+                # `sessions` заводится ЛЕНИВО, первым открывшим экран этого дня, и
+                # для 03.09 её просто нет. Клик по такой клетке заводит занятие —
+                # ровно так же, как это делает отметка из кабинета
+                # (`veb/razdely/kabinet.py`: «Занятия ещё нет в базе — его заводит
+                # первый экран, открытый на этот день»).
+                kur = c.execute("insert into sessions (held_on) values (?)", (den,))
+                ryad = c.execute("select id from sessions where held_on = ?", (den,)).fetchone()
+            if ryad is not None:
+                session_id = ryad["id"] if hasattr(ryad, "keys") else ryad[0]
+                tek = c.execute(
+                    "select status from teacher_attendance "
+                    "where session_id = ? and teacher_id = ?", (session_id, tid)).fetchone()
+                tek = (tek["status"] if hasattr(tek, "keys") else tek[0]) if tek else None
+                byl, ne_byl = config.ATTENDANCE_STATUSES[0], config.ATTENDANCE_STATUSES[1]
+                # 🔴 ДВА СОСТОЯНИЯ, А НЕ ТРИ, И ЭТО ПОПРАВЛЕНО ПОСЛЕ ЖИВОГО ПРОГОНА.
+                # Владелец сказал ровно: «одно нажатие галочка, второе крестик».
+                # Третий клик я сперва сделала «пусто» — и прогон показал, что в
+                # решётке ПУСТО НЕОТЛИЧИМО ОТ КРЕСТИКА: клетка без строки в
+                # `teacher_attendance` и так рисуется «не был». Состояние, которого
+                # не видно, — это не состояние, а обещание.
+                novoe = ne_byl if tek == byl else byl
+                if True:
+                    c.execute(
+                        "insert or replace into teacher_attendance "
+                        "(session_id, teacher_id, status, answered_at) values (?, ?, ?, ?)",
+                        (session_id, tid, novoe,
+                         datetime.now(ZoneInfo(config.TZ_DISPLAY)).isoformat(timespec="seconds")))
+                c.commit()
+                _otdat_json(h, 200, {"ok": True, "den": den, "stalo": novoe or "пусто"})
+                return True
+            otmetit_otsutstvie(c, tid, den, den, PRICHINY_OTSUTSTVIYA[0])
+            _otdat_json(h, 200, {"ok": True, "den": den, "stalo": "отмечено"})
+            return True
         if p.get("snyat") is not None:
             try:
                 snyato = snyat_otsutstvie(c, int(p["snyat"]))
