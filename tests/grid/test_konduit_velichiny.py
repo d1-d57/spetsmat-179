@@ -396,6 +396,79 @@ def test_the_year_tick_says_in_words_which_of_the_two_facts_lit_it(
     assert "листок" in podskazka and "целиком" in podskazka, podskazka
 
 
+def podpisi_galok(kusok: str) -> list:
+    """Подпись рядом с каждой горящей галочкой, сверху вниз (пустая строка — нет подписи)."""
+    out = []
+    for kletka in re.findall(r'<td class="sch"[^>]*>(.*?)</td>', kusok, re.S):
+        znak = re.search(r'<i class="ob-sch gt-da">\u2713(.*?)</i>', kletka, re.S)
+        if not znak:
+            continue
+        podpis = re.match(r'^<span class="iz">(.*)</span>$', znak.group(1))
+        out.append(podpis.group(1) if podpis else znak.group(1))
+    return out
+
+
+def test_the_year_tick_names_the_листок_that_closed_it(connection, marking):
+    """🔴 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА 11.09, ДОСЛОВНО: «Что значит галочка в разделе Весь год?
+    Я не понимаю.  Это значит, что один из листков закрыт?  Тогда должна быть не просто
+    галочка, а дописано, ЧТО ЭТО 16-й листок — что у него нет долгов по 16-му листку,
+    потому что он сдал 16A».
+
+    Мир построен так, что ОБЕ причины годовой галочки горят в одном столбце, на соседних
+    строках, — иначе проверять нечего:
+      * первый школьник закрыл ПЕРВЫЙ листок целиком и не тронул второй.  Обязательных у
+        него 3 из 6, то есть галочку зажёг именно листок, и его номер обязан стоять рядом;
+      * второй сдал обязательные ОБОИХ листков и ничего сверх них.  Ни одного листка
+        целиком у него нет — называть нечего, и подпись говорит «всё».
+    Третий не закрыл ничего: у него стоит счётчик, и подписи нет вовсе.
+    """
+    for zapros in ZHIVYE_KOLONKI:
+        connection.execute(zapros)
+    # 🔴 НОМЕРА ЛИСТКОВ НЕ ПЕРЕПИСЫВАЮТСЯ ПОД КРАСИВЫЙ ПРИМЕР ВЛАДЕЛЬЦА («16A»).
+    # Номер, начинающийся с «16», кондуит относит к ДЕВЯТОМУ классу (`veb.razdely.listki.L9`),
+    # и переименованный листок уехал бы с той вкладки, которую читает этот тест.  Номер
+    # берётся из шапки самой панели — так же, как его увидит владелец.
+    mir = seed_world(connection, students=3, sheets=(LISTOK, LISTOK))
+    pervyj, vtoroj = mir.sheet_ids
+    for zadacha in mir.problems_by_sheet[pervyj]:
+        otmetit(marking, mir.student_ids[0], zadacha)
+    for listok in (pervyj, vtoroj):
+        for zadacha in mir.problems_by_sheet[listok][:3]:
+            otmetit(marking, mir.student_ids[1], zadacha)
+    connection.commit()
+    god = panel(konduit.razdel(kontekst(connection)), "vse8")
+
+    nomera = re.findall(r'<th class="zn"[^>]*>([^<]*)</th>', god)
+    assert len(nomera) == 2, nomera
+
+    assert galki(god) == [True, True, False]
+    assert podpisi_galok(god) == [nomera[0], "всё"]
+
+    podskazki = re.findall(r'<td class="sch" title="([^"]*)"', god)
+    assert nomera[0] in podskazki[0] and "целиком" in podskazki[0], podskazki[0]
+    assert "все 6 обязательных" in podskazki[1], podskazki[1]
+    # 🔴 И «ВСЁ» НЕ ВЫДАЁТ СЕБЯ ЗА НОМЕР ЛИСТКА: у второго школьника ни один листок
+    # целиком не закрыт, и вписанный туда номер был бы утверждением, которого база не
+    # поддерживает.  Это и есть та половина критерия готовности, которую заход оспорил
+    # в `## ПЛАН` до работы.
+    assert not [n for n in nomera if n in podskazki[1]], podskazki[1]
+
+
+def test_on_a_listok_tab_the_tick_carries_no_подпись(mir, connection, marking):
+    """Подпись — ответ на вопрос «почему долгов нет», и он есть только у годового разреза.
+
+    На вкладке ОДНОГО листка галочка значит ровно одно — «закрыл всё обязательное этого
+    листка», — и дописывать к ней номер листка, который написан заголовком панели над
+    таблицей и вкладкой над ней же, значило бы повторить его третий раз.
+    """
+    for zadacha in mir.problems_by_sheet[mir.sheet_ids[0]][:3]:
+        otmetit(marking, mir.student_ids[0], zadacha)
+    connection.commit()
+    kusok = panel(konduit.razdel(kontekst(connection)), str(mir.sheet_ids[0]))
+    assert galki(kusok)[0] is True
+    assert podpisi_galok(kusok) == [""]
+
+
 # ------------------------------------------------- величина 3: сколько сдало задачу
 
 
