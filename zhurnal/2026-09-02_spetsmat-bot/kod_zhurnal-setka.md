@@ -450,7 +450,9 @@ $ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_z
 **РОД АРТЕФАКТА:** `исходник`
 **ЧТО ОТКРЫТЬ ГЛАЗАМИ (не гейтовая строка, а адрес для владельца):**
 `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/zhurnal-setka/scratchpad/zhurnal-setka/istoria.html`
-— готовая страница, собранная на копии боевой базы (157 546 байт, 12:11), открывается
+— готовая страница, собранная на копии боевой базы ПОСЛЕ влития, то есть ровно то, что
+лежит сейчас в `main` (162 991 байт, 12:27 — то же число, что напечатала пост-проверка
+ниже; до влития было 157 546, разница это форма отсутствия соседней позиции). Открывается
 двойным щелчком в браузере. Живьём то же самое: `http://math-kluychiki.ru/istoria`
 после выкатки (деплоя в этом заходе нет — так стояло в задании).
 **КОММИТ:** `7c05787` — `журнал: one receiver, named once — and the numbers behind the several (item 6)` · `git_zona.py check --zone <вся зона>` → ✅ на всех четырёх путях
