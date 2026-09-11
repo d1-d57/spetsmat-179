@@ -1447,6 +1447,112 @@ def razdel_raspredeleniya(kt, *, vid_vse, vid_prepodavateli, vkladka_gruppy) -> 
 # ВЫШЕ него и в сравнение не попадает. А пометка `videt-svoyo` на этом пункте
 # сняла бы его со страницы преподавателя и оставила у организатора — то есть ровно
 # наоборот тому, зачем пункт заведён.
+# ──────────────────────────────────────────── ЧЕТВЕРТЬ: ШЕСТНАДЦАТЬ ЗАНЯТИЙ ВПЕРЁД
+#
+# 🔴 ЭТО ОБЩИЙ ПОМОЩНИК, А НЕ ЧАСТЬ ЖУРНАЛА, И ИМЕННО ПОЭТОМУ ОН ЗДЕСЬ. Владелец
+# 11.09 попросил одну и ту же вещь на ДВУХ экранах: «нужна табличка с узкими
+# колонками, распланированная сразу на 16 занятий» (журнал) и «переключатель
+# четвертей — как в кабинете». Две страницы, каждая со своим представлением о том,
+# где кончается четверть, разошлись бы на первой же правке — и разошлись бы МОЛЧА,
+# потому что обе были бы зелёными. Определение четверти живёт тут в одном экземпляре;
+# `veb/razdely/istoria_zanyatij.py` и `veb/razdely/kabinet.py` его ЗОВУТ.
+#
+# 🔴 ЧЕТВЕРТЬ ОПРЕДЕЛЕНА ЗАНЯТИЯМИ, А НЕ КАЛЕНДАРЁМ ПРАЗДНИКОВ, И ЭТО АРИФМЕТИКА
+# ВЛАДЕЛЬЦА, А НЕ УПРОЩЕНИЕ ЗА НЕГО: «до конца четверти, примерно 8 недель в
+# четверти, то есть 16 клеточек узких». Восемь недель по два занятия — шестнадцать.
+# Календарь школьных каникул в этом проекте не хранится НИГДЕ (ни таблицы, ни файла,
+# проверено грепом по репозиторию), поэтому граница четверти, выведенная из него,
+# была бы выдуманной датой. Шестнадцать занятий подряд от 1 сентября — граница,
+# которую можно посчитать из того, что есть.
+#
+# 🔴 КАКИЕ ДНИ ВООБЩЕ ЯВЛЯЮТСЯ ДНЯМИ ЗАНЯТИЙ, ЗДЕСЬ НЕ РЕШАЕТСЯ. На это отвечает
+# ровно одно место — `core.services.sostav_na_den` со своим `SLOTY_ZANYATIJ`
+# (пн и чт), и его собственный docstring открывается разбором того, во что обошлось
+# второе мнение об этом. Отсюда зовётся его `blizhajshie_zanyatiya`.
+
+#: Сколько занятий в четверти. Слова владельца 11.09, дословно: «16 клеточек узких».
+ZANYATIJ_V_CHETVERTI = 16
+
+#: Четвертей в учебном году. 4 × 16 = 64 занятия ≈ 32 недели, то есть сентябрь — май.
+CHETVERTEJ_V_GODU = 4
+
+#: Месяц, с которого считается учебный год. Год НЕ вписывается числом: вписанный
+#: протухает молча — тот же приём и та же причина, что у
+#: `veb/razdely/kabinet.py::nachalo_uchebnogo_goda`.
+NACHALO_GODA_MESYAC = 9
+
+
+def nachalo_uchebnogo_goda(den: str) -> str:
+    """`2026-11-03` → `2026-09-01`; `2026-03-03` → `2025-09-01`."""
+    d = date.fromisoformat(den)
+    god = d.year if d.month >= NACHALO_GODA_MESYAC else d.year - 1
+    return date(god, NACHALO_GODA_MESYAC, 1).isoformat()
+
+
+def chetverti_goda(den: str) -> tuple:
+    """Четыре четверти учебного года, содержащего `den`: кортеж кортежей дат.
+
+    Каждая четверть — ровно `ZANYATIJ_V_CHETVERTI` подряд идущих дней занятий,
+    считая от 1 сентября. Ни одна дата не повторяется в двух четвертях, и вместе
+    они покрывают год без дыр — это одна последовательность, нарезанная на четыре.
+    """
+    from core.services.sostav_na_den import blizhajshie_zanyatiya
+
+    vse = blizhajshie_zanyatiya(nachalo_uchebnogo_goda(den),
+                                ZANYATIJ_V_CHETVERTI * CHETVERTEJ_V_GODU)
+    return tuple(tuple(vse[n * ZANYATIJ_V_CHETVERTI:(n + 1) * ZANYATIJ_V_CHETVERTI])
+                 for n in range(CHETVERTEJ_V_GODU))
+
+
+def nomer_chetverti(den: str) -> int:
+    """В какой четверти лежит `den` — 1..4.
+
+    День между четвертями (каникулы) относится к БЛИЖАЙШЕЙ СЛЕДУЮЩЕЙ четверти: экран
+    открывается на той, к которой человек готовится, а не на той, что кончилась.
+    День после последней — четвёртая: за край года эта функция не уходит.
+    """
+    for nomer, dni in enumerate(chetverti_goda(den), 1):
+        if dni and den <= dni[-1]:
+            return nomer
+    return CHETVERTEJ_V_GODU
+
+
+#: Стили переключателя. Отдельной строкой, а не внутри страницы, по той же причине,
+#: по какой сам переключатель здесь: два экрана, один вид.
+CHETVERTI_STILI = """
+.chetverti{display:flex;gap:.4rem;align-items:baseline;margin:0 0 1rem;
+  font-family:var(--sans)}
+.chetverti .cht{text-decoration:none;color:var(--muted);font-weight:600;
+  padding:.3em .85rem;border:1px solid var(--rule);border-radius:8px}
+.chetverti .cht:hover{color:var(--accent);border-color:var(--accent)}
+.chetverti .cht-tut{color:var(--accent);background:var(--accent-soft);
+  border-color:var(--accent)}
+"""
+
+
+def perekluchatel_chetvertej(adres: str, tekushchaya: int, den: str = "") -> str:
+    """Полоса «1 2 3 4» ссылками на тот же адрес с `?ch=N`.
+
+    🔴 ССЫЛКИ, А НЕ РАДИОКНОПКИ, И ЭТО НЕ ВКУС. Радиокнопка переключает то, что уже
+    лежит на странице; четверть — это ДРУГИЕ шестнадцать столбцов и другой блок
+    данных к ним, то есть другой ответ сервера. Ссылкой он ещё и делится: адрес
+    четверти можно послать человеку, и он откроет ровно её.
+
+    `den` — дата, по которой считается, какие четверти вообще существуют; пустая
+    строка значит «сегодня». Он есть в подписи параметров ради тестов и ради
+    страницы, которая смотрит не на сегодняшний день.
+    """
+    segodnya = den or date.today().isoformat()
+    vsego = len(chetverti_goda(segodnya))
+    punkty = []
+    for nomer in range(1, vsego + 1):
+        tut = " cht-tut" if nomer == tekushchaya else ""
+        punkty.append('<a class="cht%s" href="%s?ch=%d">%d</a>'
+                      % (tut, e(adres), nomer, nomer))
+    return ('<nav class="chetverti" aria-label="четверть">'
+            '<span class="cht-imya">четверть</span>%s</nav>' % "".join(punkty))
+
+
 MENYU_PUNKT_KABINETA = '<a class="ssyl ssyl-kab" href="/kabinet">Кабинет</a>'
 
 #: 🔴 ВХОД НА `/istoria` — H5.1, И ЭТО ВОССТАНОВЛЕНИЕ, А НЕ НОВАЯ СТРАНИЦА.

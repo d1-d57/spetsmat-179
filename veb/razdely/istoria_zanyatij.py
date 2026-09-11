@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import config
 from core.services.history import nachalo_zanyatia_iso, zanyatie_po_iso
@@ -62,7 +62,9 @@ from infra.enrollment_repo import SqliteEnrollmentRepo
 from infra.room_repo import SqliteAttendance, SqliteSessions
 from infra.sessions_repo import SqliteSessionBook
 from veb import vhod
-from veb.obshchee.karkas import e, menyu_ssylkami
+from veb.obshchee.karkas import (CHETVERTI_STILI, chetverti_goda, e,
+                                menyu_ssylkami, nomer_chetverti,
+                                perekluchatel_chetvertej)
 from core.istochnik import put_bazy
 from veb.razdely.list_odin import _obshchij_stil
 
@@ -316,16 +318,40 @@ def _kletka(klass: str, znak: str, vsplyv: str, den: str, vid: str, kto_id) -> s
             f'<span class="kl-znak">{znak}</span>{PUSTYE_MESTA}</td>')
 
 
-def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody) -> str:
-    if not istoriya.dni:
-        return '<p class="ist-pusto">прошедших занятий пока нет</p>'
+#: 🔴 СТОЛБЦЫ РЕШЁТКИ — КАЛЕНДАРЬ ЧЕТВЕРТИ, А НЕ СПИСОК ЗАПИСАННЫХ ЗАНЯТИЙ, И ЭТО
+#: ПЕРЕВОРОТ, А НЕ ДОБАВКА. Раньше столбцами были `istoriya.dni` — то есть ровно те
+#: дни, у которых уже есть строка в `sessions`. На живой базе такая строка была ОДНА
+#: (10.09), и решётка «школьники × занятия» была таблицей в один столбец; отсюда
+#: слова владельца 11.09: «не нужна пустая табличка, нужна табличка с узкими
+#: колонками, распланированная сразу на 16 занятий».
+#:
+#: Столбцы теперь заводит `karkas.chetverti_goda` — шестнадцать дней занятий
+#: четверти, все сразу, независимо от того, есть ли о них хоть одна запись. Данные
+#: НАКЛАДЫВАЮТСЯ на этот календарь: день, о котором записи нет (будущий, или
+#: прошедший, но не заведённый), даёт ПУСТУЮ клетку.
+#:
+#: 🔴 ПУСТАЯ КЛЕТКА — НЕ КРЕСТИК, И РАЗНИЦА ЗДЕСЬ СОДЕРЖАТЕЛЬНАЯ. Крестик значит «не
+#: был» — утверждение о человеке, которое кто-то сделал. Будущее занятие такого
+#: утверждения не несёт, и нарисовать там крестик значило бы сказать про весь класс,
+#: что он не придёт. Пустая клетка не кликается и не открывает панель: открывать
+#: нечего.
+#:
+#: `core/services/istoria_poseshchenij.py` при этом не тронут ни строкой — он вне
+#: зоны этого захода, и наложение сделано ЗДЕСЬ, там, где календарь уже в руках.
+KLETKA_PUSTAYA = '<td class="ist-pusta"></td>'
+
+
+def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni) -> str:
+    est = set(istoriya.dni)
     stroki = []
     for u in students:
         po_dnyam = istoriya.shkolniki.get(u["id"], {})
         kletki = []
-        for den in istoriya.dni:
+        for den in dni:
             yacheika = po_dnyam.get(den)
-            if yacheika is None or not yacheika.prisutstvoval:
+            if den not in est:
+                kletki.append(KLETKA_PUSTAYA)
+            elif yacheika is None or not yacheika.prisutstvoval:
                 kletki.append(_kletka("ist-net", "✕", "не был", den, "shk", u["id"]))
             elif yacheika.nekuda_det:
                 kletki.append(_kletka("ist-def", "?", "был, но принимающий не назначен",
@@ -339,36 +365,37 @@ def _tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody) -> str:
         stroki.append(
             f'<tr><td class="ist-kto"><b>{e(u["surname"])}</b> {e(u["name"])}</td>'
             f'{"".join(kletki)}</tr>')
-    return (f'<table class="ist-tabl"><thead><tr>'
-            f'{_shapka(istoriya.dni, rody, "Школьник")}</tr></thead>'
-            f'<tbody>{"".join(stroki)}</tbody></table>')
+    return (f'<div class="ist-prokrutka"><table class="ist-tabl"><thead><tr>'
+            f'{_shapka(dni, rody, "Школьник")}</tr></thead>'
+            f'<tbody>{"".join(stroki)}</tbody></table></div>')
 
 
-def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody) -> str:
-    if not istoriya.dni:
-        return '<p class="ist-pusto">прошедших занятий пока нет</p>'
+def _tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni) -> str:
+    est = set(istoriya.dni)
     stroki = []
     for t in teachers:
         po_dnyam = istoriya.prepodavateli.get(t["id"], {})
         kletki = []
-        for den in istoriya.dni:
+        for den in dni:
             yacheika = po_dnyam.get(den)
-            if yacheika is None or not yacheika.prisutstvoval:
+            if den not in est:
+                kletki.append(KLETKA_PUSTAYA)
+            elif yacheika is None or not yacheika.prisutstvoval:
                 kletki.append(_kletka("ist-net", "✕", "не был", den, "prep", t["id"]))
             else:
                 imena = ", ".join(
                     _imya_shkolnika(students_by_id[sid])
                     for sid in yacheika.ucheniki if sid in students_by_id)
-                kletki.append(_kletka("ist-byl", "✓", e(imena) or "принимал: никого",
+                kletki.append(_kletka("ist-byl", "✓", e(imena) or "никого",
                                       den, "prep", t["id"]))
         stroki.append(
             f'<tr><td class="ist-kto"><b>{e(t["name"])}</b></td>{"".join(kletki)}</tr>')
-    return (f'<table class="ist-tabl"><thead><tr>'
-            f'{_shapka(istoriya.dni, rody, "Преподаватель")}</tr></thead>'
-            f'<tbody>{"".join(stroki)}</tbody></table>')
+    return (f'<div class="ist-prokrutka"><table class="ist-tabl"><thead><tr>'
+            f'{_shapka(dni, rody, "Преподаватель")}</tr></thead>'
+            f'<tbody>{"".join(stroki)}</tbody></table></div>')
 
 
-def _chto_raskryvaetsya(students, teachers, istoriya, sdachi) -> dict:
+def _chto_raskryvaetsya(students, teachers, istoriya, sdachi, dni) -> dict:
     """Содержимое раскрытия каждой клетки — одним словарём, а не в самих клетках.
 
     🔴 ПОЧЕМУ ОТДЕЛЬНЫМ БЛОКОМ, А НЕ СПРЯТАННЫМ `<div>` В КАЖДОЙ КЛЕТКЕ. Решётка
@@ -383,10 +410,13 @@ def _chto_raskryvaetsya(students, teachers, istoriya, sdachi) -> dict:
     """
     imena_prepov = {t["id"]: t["name"] for t in teachers}
     imena_detej = {u["id"]: _imya_shkolnika(u) for u in students}
+    # Только те дни решётки, о которых запись ЕСТЬ: пустая клетка не кликается, и
+    # содержимое для неё было бы мёртвым весом в каждом ответе страницы.
+    dni = tuple(d for d in dni if d in set(istoriya.dni))
     itog: dict = {}
     for u in students:
         po_dnyam = istoriya.shkolniki.get(u["id"], {})
-        for den in istoriya.dni:
+        for den in dni:
             ya = po_dnyam.get(den)
             sdal = sdachi.get((den, u["id"]), ())
             itog["shk|%s|%s" % (den, u["id"])] = {
@@ -399,7 +429,7 @@ def _chto_raskryvaetsya(students, teachers, istoriya, sdachi) -> dict:
             }
     for t in teachers:
         po_dnyam = istoriya.prepodavateli.get(t["id"], {})
-        for den in istoriya.dni:
+        for den in dni:
             ya = po_dnyam.get(den)
             deti = []
             if ya is not None and ya.prisutstvoval:
@@ -433,19 +463,31 @@ SVOI_STILI = """
 #iv-shk:checked~#is-shk,#iv-prep:checked~#is-prep{display:block}
 .ist-pusto{color:var(--muted)}
 /* Решётка «люди × даты» в той же форме, что уже стоит у Кондуита: закреплённая первая
-   колонка, узкие клетки дат, никакого горизонтального скролла страницы (канон, правило 4)
-   — при паре занятий в неделю ширина решётки далека от предела, который Кондуит уже
-   проверил на двадцати одном столбце. */
-.ist-tabl{font-size:.95rem;width:100%;border-collapse:separate;border-spacing:0}
-.ist-tabl th.ist-zn{padding:.5rem .2rem;text-align:center;font-size:.78rem;min-width:3em;
+   колонка, узкие клетки дат, никакого горизонтального скролла СТРАНИЦЫ (канон,
+   правило 4) — прокручивается сама решётка, в своей обёртке `.ist-prokrutka`.
+   🔴 ШИРИНА ТАБЛИЦЫ — `auto`, А НЕ `100%`, И ЭТО ПРЯМОЕ ТРЕБОВАНИЕ ВЛАДЕЛЬЦА 11.09:
+   «нужна табличка с УЗКИМИ колонками». При `width:100%` шестнадцать столбцов
+   растянулись бы на всю ширину экрана — то есть тем шире, чем больше монитор, —
+   и «узкими» перестали бы быть ровно там, где владелец смотрит. Замер на 1440:
+   12.5rem имени + 16 × 2.7rem дат = 55.7rem ≈ 890px, прокрутки нет. */
+.ist-prokrutka{overflow-x:auto}
+.ist-tabl{font-size:.95rem;width:auto;table-layout:fixed;
+  border-collapse:separate;border-spacing:0}
+.ist-tabl th.ist-zn{width:2.7rem;padding:.5rem .1rem;text-align:center;font-size:.7rem;
   border-bottom:2px solid var(--rule);border-left:1px solid var(--rule)}
+.ist-tabl thead th:first-child{width:12.5rem}
+/* Клетка дня, о котором записи нет: будущее занятие четверти или прошедшее, но не
+   заведённое. Ничего не рисует, ничего не открывает — см. `KLETKA_PUSTAYA`. */
+.ist-tabl td.ist-pusta{border-left:1px solid var(--rule);
+  border-bottom:1px solid var(--rule)}
 .ist-tabl thead th{position:sticky;top:0;z-index:2;background:var(--panel)}
 .ist-tabl thead th:first-child{left:0;z-index:3;text-align:left;
   border-bottom:2px solid var(--rule)}
-.ist-tabl td.ist-kto{white-space:nowrap;padding:.3rem 1.2rem .3rem 0;font-size:.95rem;
+.ist-tabl td.ist-kto{white-space:nowrap;padding:.3rem 1.2rem .3rem 0;font-size:.9rem;
+  overflow:hidden;text-overflow:ellipsis;
   position:sticky;left:0;z-index:1;background:var(--bg);border-bottom:1px solid var(--rule)}
-.ist-tabl tbody td+td{text-align:center;padding:.42rem .3rem;font-family:var(--sans);
-  font-size:.92rem;min-width:3em;border-left:1px solid var(--rule);
+.ist-tabl tbody td+td{text-align:center;padding:.42rem .1rem;font-family:var(--sans);
+  font-size:.85rem;border-left:1px solid var(--rule);
   border-bottom:1px solid var(--rule)}
 .ist-tabl td.ist-byl{color:var(--accent);font-weight:600}
 .ist-tabl td.ist-net{color:var(--faint)}
@@ -563,15 +605,26 @@ SKRIPT = """
 </script>"""
 
 
-def stranica(c: sqlite3.Connection) -> str:
-    """Вся страница: два журнала, собранные по одному разу каждый."""
+def stranica(c: sqlite3.Connection, chetvert=None, segodnya: str = "") -> str:
+    """Вся страница: два журнала на ОДНУ четверть, собранные по одному разу каждый.
+
+    `chetvert` — номер 1..4; вне диапазона или `None` значит «та, в которой мы
+    сейчас». `segodnya` есть ради теста и ради прогона на дату, отличную от
+    сегодняшней; пустая строка значит сегодня.
+    """
+    segodnya = segodnya or date.today().isoformat()
+    vse_chetverti = chetverti_goda(segodnya)
+    nomer = chetvert if chetvert in range(1, len(vse_chetverti) + 1) \
+        else nomer_chetverti(segodnya)
+    dni_setki = vse_chetverti[nomer - 1]
+
     students, teachers = _spravochniki(c)
     students_by_id = {u["id"]: u for u in students}
     teachers_by_id = {t["id"]: t for t in teachers}
     istoriya, sessii = _sostavit(c)
     rody = _rod_zanyatiya(c, sessii)
-    sdachi = sdachi_po_zanyatiyam(c, istoriya.dni)
-    dannye = _chto_raskryvaetsya(students, teachers, istoriya, sdachi)
+    sdachi = sdachi_po_zanyatiyam(c, dni_setki)
+    dannye = _chto_raskryvaetsya(students, teachers, istoriya, sdachi, dni_setki)
 
     def zagolovok(vid: str) -> str:
         return f'<p class="ist-zhurnal">{e(IMYA_ZHURNALA[vid])}</p>'
@@ -580,7 +633,7 @@ def stranica(c: sqlite3.Connection) -> str:
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Журнал — Ключики</title>
-<style>{_obshchij_stil(put_bazy(c))}{SVOI_STILI}</style></head>
+<style>{_obshchij_stil(put_bazy(c))}{CHETVERTI_STILI}{SVOI_STILI}</style></head>
 <body>
 {menyu_ssylkami("/istoria")}
 <main class="istoria">
@@ -605,10 +658,11 @@ def stranica(c: sqlite3.Connection) -> str:
     <label for="iv-shk">Школьники</label>
     <label for="iv-prep">Преподаватели</label>
   </nav>
+  {perekluchatel_chetvertej("/istoria", nomer, segodnya)}
   <section id="is-shk">{zagolovok("shk")}
-    {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody)}</section>
+    {_tablitsa_shkolnikov(students, teachers_by_id, istoriya, rody, dni_setki)}</section>
   <section id="is-prep">{zagolovok("prep")}
-    {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody)}</section>
+    {_tablitsa_prepodavatelej(teachers, students_by_id, istoriya, rody, dni_setki)}</section>
   <div class="ist-raskrytie" id="ist-raskrytie" hidden>
     <button class="ist-zakryt" id="ist-zakryt" type="button">закрыть</button>
     <h2 id="ist-raskrytie-zag"></h2>
@@ -653,6 +707,22 @@ def _otdat_html(h, status: int, telo: str) -> None:
     h.wfile.write(telo_bytes)
 
 
+def _chetvert_iz_adresa(put: str):
+    """`?ch=3` → `3`. Всё нечисловое и пустое — `None`, то есть «четверть сейчас».
+
+    Номер НЕ проверяется здесь на диапазон: единственное место, которое знает,
+    сколько четвертей в году, — `karkas.chetverti_goda`, и проверка живёт там же,
+    в `stranica`. Здесь только разбор адреса.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    syroj = parse_qs(urlparse(put).query).get("ch", [""])[0]
+    try:
+        return int(syroj)
+    except ValueError:
+        return None
+
+
 def pokazat_istoriyu(h) -> bool:
     """`/istoria` — обе решётки на одной странице. Только для вошедших.
 
@@ -665,7 +735,7 @@ def pokazat_istoriyu(h) -> bool:
         return True
     c = _soedinenie(h)
     try:
-        _otdat_html(h, 200, stranica(c))
+        _otdat_html(h, 200, stranica(c, chetvert=_chetvert_iz_adresa(h.path)))
     finally:
         c.close()
     return True

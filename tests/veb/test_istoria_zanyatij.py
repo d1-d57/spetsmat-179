@@ -39,16 +39,47 @@ from veb import vhod
 #: клетки «был». Два теста из шести падали шесть дней в неделю, и падали на данных
 #: фикстуры, а не на коде страницы. Дни считаются от сегодняшнего назад до
 #: ближайших пн и чт, то есть остаются днями занятий в любой день прогона.
-def _proshedshij(iso_den_nedeli: int, ne_pozzhe_chem_dnej_nazad: int = 7) -> str:
-    """Ближайший ПРОШЕДШИЙ день недели `iso_den_nedeli`, не сегодня."""
-    d = date.today() - timedelta(days=ne_pozzhe_chem_dnej_nazad)
-    while d.isoweekday() != iso_den_nedeli:
-        d -= timedelta(days=1)
-    return d.isoformat()
+#: 🔴 ДНИ ФИКСТУРЫ ОБЯЗАНЫ ЛЕЖАТЬ В ОДНОЙ ЧЕТВЕРТИ, И ЭТО ВТОРАЯ ПРАВКА ТОГО ЖЕ
+#: МЕСТА. Здесь стоял «ближайший прошедший понедельник/четверг» — и с решёткой,
+#: которая строится по КАЛЕНДАРЮ ЧЕТВЕРТИ (владелец 11.09: «распланированная сразу
+#: на 16 занятий»), он стал промахиваться мимо экрана: при сборке правки 11.09
+#: ближайшим прошедшим понедельником было 31.08, то есть ПРОШЛЫЙ учебный год, а
+#: решётка показывала 03.09–26.10. Ни одна клетка фикстуры в неё не попадала, и
+#: четыре теста краснели на данных фикстуры, а не на коде страницы — ровно тот же
+#: род поломки, что этот блок чинил в прошлый раз.
+#: Дни берутся теперь ИЗ ТОЙ ЖЕ функции, что строит столбцы, и вместе с ними
+#: берётся номер их четверти: страница открывается запросом `?ch=<номер>`.
+def _dni_fikstury():
+    """`(понедельник, четверг, номер четверти)` — прошедшие дни ОДНОЙ четверти.
+
+    Идём от нынешней четверти назад: первая, в которой уже прошли и день слота 1,
+    и день слота 2, и даёт пару. Не нашлось ни одной — значит в этом учебном году
+    ещё не было двух прошедших занятий разных слотов, и решётке нечего показывать;
+    тесты содержания в этот день пропускаются с названной причиной, а не краснеют.
+    """
+    from veb.obshchee import karkas
+
+    segodnya = date.today().isoformat()
+    vse = karkas.chetverti_goda(segodnya)
+    for nomer in range(karkas.nomer_chetverti(segodnya), 0, -1):
+        proshli = [d for d in vse[nomer - 1] if d < segodnya]
+        pn = [d for d in proshli if date.fromisoformat(d).isoweekday() == 1]
+        cht = [d for d in proshli if date.fromisoformat(d).isoweekday() == 4]
+        if pn and cht:
+            return pn[-1], cht[-1], nomer
+    return None, None, karkas.nomer_chetverti(segodnya)
 
 
-MONDAY = _proshedshij(1)          # понедельник — слот 1 в `SLOTY_ZANYATIJ`
-FRIDAY = _proshedshij(4)          # четверг — слот 2; имя оставлено прежним
+MONDAY, FRIDAY, CHETVERT = _dni_fikstury()   # слот 1, слот 2, их общая четверть
+
+#: Адрес решётки той четверти, в которой лежат дни фикстуры. Без него страница
+#: открывает четверть «сейчас», и в конце четверти дни фикстуры остаются за краем.
+ADRES = "/istoria?ch=%d" % CHETVERT
+
+pytestmark = pytest.mark.skipif(
+    MONDAY is None,
+    reason="в этом учебном году ещё не было двух прошедших занятий разных слотов",
+)
 
 
 @pytest.fixture
@@ -144,12 +175,12 @@ def _get(url: str, cookie: str | None = None) -> tuple[int, bytes]:
 
 
 def test_guest_is_refused(running_server):
-    status, _body = _get(f'{running_server["baza"]}/istoria')
+    status, _body = _get(f'{running_server["baza"]}{ADRES}')
     assert status == 403
 
 
 def test_signed_in_organizer_sees_the_page(running_server):
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
     assert "Журнал" in telo, "владелец 10.09 предложил слово «журнал» вместо «истории»"
@@ -160,7 +191,7 @@ def test_signed_in_organizer_sees_the_page(running_server):
 
 
 def test_absence_is_a_krestik_and_default_is_a_present_checkmark(running_server):
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
     # Иван отсутствовал в понедельник: хотя бы один крестик в его строке.
@@ -171,7 +202,7 @@ def test_absence_is_a_krestik_and_default_is_a_present_checkmark(running_server)
 
 
 def test_days_override_teacher_shows_up_not_the_standing_one(running_server):
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
     # Пятница: Иван (s1) принят Олегом (t2, «ПО»), а не своим обычным ИМ, в клетке пятницы.
@@ -188,14 +219,25 @@ def test_column_count_matches_a_direct_database_count(running_server, tmp_path):
     проверка числа столбцов. Число берётся из разметки и сверяется с прямым счётом по
     базе — с тем, что тест и обещал названием.
     """
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    from veb.obshchee import karkas
+
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
-    assert telo.count('<th class="ist-zn') == 2 * 2, "две решётки по два занятия"
+    # Столбцов ровно шестнадцать в каждой из двух решёток, и это НЕ число занятий в
+    # базе: в фикстуре их два. Решётка — календарь четверти, а данные на него
+    # накладываются (владелец 11.09: «не нужна пустая табличка… распланированная
+    # сразу на 16 занятий»).
+    assert karkas.ZANYATIJ_V_CHETVERTI == 16
+    assert telo.count('<th class="ist-zn') == 2 * karkas.ZANYATIJ_V_CHETVERTI
+    # Два дня фикстуры — живые клетки; остальные четырнадцать столбцов пусты.
+    for den in (MONDAY, FRIDAY):
+        assert f'data-den="{den}"' in telo
+    assert '<td class="ist-pusta"></td>' in telo
 
 
 def test_teacher_marked_absent_reads_as_absent_even_with_a_students_override(running_server):
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("prepod"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("prepod"))
     assert status == 200
     telo = body.decode("utf-8")
     assert "ist-net" in telo
@@ -239,7 +281,7 @@ def _roditeli(telo: str) -> dict:
 
 def test_the_tab_switches_and_the_panels_are_siblings(running_server):
     """Селектор `~` требует сестру: переключатель и панель — один родитель."""
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     rod = _roditeli(body.decode("utf-8"))
     for pereklyuchatel, panel in (("iv-shk", "is-shk"), ("iv-prep", "is-prep")):
@@ -272,7 +314,7 @@ def test_the_page_carries_the_menu_and_the_journal_item_is_last(running_server):
     стоял третьим. Проверяется ПОРЯДОК, а не наличие: список, в котором все пункты
     есть, но журнал второй, — это ровно то состояние, которое чинит эта правка.
     """
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     podpisi = _podpisi_menyu(body.decode("utf-8"))
     assert podpisi, "страница обязана нести верхнее меню"
@@ -296,7 +338,7 @@ def test_the_two_journals_are_named_and_nothing_explains_them(running_server):
     все комментарии, это ужасно, это нельзя людям показывать». Теперь то же место
     сторожит обратное: имена стоят, пояснений нет ни одного.
     """
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
     assert "Журнал школьников" in telo
@@ -313,7 +355,7 @@ def test_the_cell_is_a_place_with_empty_slots_for_a_mark_and_a_comment(running_s
     значениями, по которым её найдёт будущий редактор оценки. Появление РЕАЛЬНОЙ
     оценки в разметке сегодня — тоже красное: владелец сказал их не вводить.
     """
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
     assert '<span class="kl-ocenka" data-mesto="оценка"></span>' in telo
@@ -325,6 +367,32 @@ def test_the_cell_is_a_place_with_empty_slots_for_a_mark_and_a_comment(running_s
         '<span class="kl-ocenka" data-mesto="оценка"></span>', "")
 
 
+def test_the_quarter_switch_offers_every_quarter_and_marks_the_open_one(running_server):
+    """Владелец 11.09: «переключатель четвертей — как в кабинете».
+
+    Переключатель — ССЫЛКИ, а не радиокнопки: четверть это другой ответ сервера, а
+    не другой вид того же ответа. Проверяется, что все четверти предложены, открытая
+    отмечена, и что соседняя четверть ДЕЙСТВИТЕЛЬНО показывает другие даты — иначе
+    переключатель был бы украшением.
+    """
+    from veb.obshchee import karkas
+
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
+    assert status == 200
+    telo = body.decode("utf-8")
+    for nomer in range(1, karkas.CHETVERTEJ_V_GODU + 1):
+        assert f'href="/istoria?ch={nomer}"' in telo
+    assert f'class="cht cht-tut" href="/istoria?ch={CHETVERT}"' in telo
+
+    drugaya = CHETVERT % karkas.CHETVERTEJ_V_GODU + 1
+    status, body = _get(f'{running_server["baza"]}/istoria?ch={drugaya}',
+                        _kuka("organizator"))
+    assert status == 200
+    inoe = body.decode("utf-8")
+    assert f'class="cht cht-tut" href="/istoria?ch={drugaya}"' in inoe
+    assert f'data-den="{MONDAY}"' not in inoe, "дни чужой четверти сюда не попадают"
+
+
 def test_the_header_of_a_column_is_the_date_and_nothing_else(running_server):
     """Владелец 11.09: «там ничего другого не пиши, только даты».
 
@@ -333,7 +401,7 @@ def test_the_header_of_a_column_is_the_date_and_nothing_else(running_server):
     это слово владелец и поправил. Сторожится теперь другое и такое же проверяемое:
     в шапке столбца стоит ДАТА и ничего кроме неё.
     """
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
     assert "обычное" not in telo
@@ -363,7 +431,7 @@ def test_a_zachyot_reads_as_kontrolnaya_and_a_cancelled_day_is_named_apart(runni
     conn.commit()
     conn.close()
 
-    status, body = _get(f'{running_server["baza"]}/istoria', _kuka("organizator"))
+    status, body = _get(f'{running_server["baza"]}{ADRES}', _kuka("organizator"))
     assert status == 200
     telo = body.decode("utf-8")
     # 🔴 СЛОВА «контрольная» НА ЭКРАНЕ БОЛЬШЕ НЕТ, И ЭТО ТОЖЕ РЕШЕНИЕ ВЛАДЕЛЬЦА
