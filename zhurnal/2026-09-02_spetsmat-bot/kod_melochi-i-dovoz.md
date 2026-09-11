@@ -358,7 +358,7 @@ Merged branch zahod/melochi-i-dovoz into main (commit 01391ae). Two commits: b54
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — перегнано оркестратором грепом по живым файлам: «Елена» в seed/teachers.csv, veb/obshchee/karkas.py, veb/razdely/shkolniki.py → 0 вхождений в каждом; «Лена» в seed/teachers.csv → есть; слово «приходит» в veb/razdely/prepodavateli.py → 5 вхождений; три документа doc/ от 06.09 → все три под контролем git (`git ls-files` → 3)
 
 **ВЕТКА РАБОТЫ:** `zahod/melochi-i-dovoz`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*

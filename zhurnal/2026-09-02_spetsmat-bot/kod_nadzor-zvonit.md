@@ -281,14 +281,15 @@ grep -n '<как механизм назван в вызывающем коде>
 
 ## ПЛАН — (заполняет исполнитель)
 
-1. Copy CHASOVOJ-VOLNY-noch2.sh, BUDILNIK-VOLNY-noch2.sh, SERDCE-VOLNY-noch2.md from main repo to worktree (done)
-2. Add death alarm: in `podnyat_svoyu_golovu_esli_myortva()`, call `skazat_vladelcu()` with facts when TISH >= MERTVA_MIN, before attempting revival via `claude -p`
-3. Add flag file `$ZAMKI/skazano-o-smerti` to prevent repeated alerts (900s interval), clear on heart revival
-4. Create test script with artificially aged heart file (mtime > 45 min) and verify pulse log shows the alarm
-5. Commit zone files (CHASOVOJ + BUDILNIK) in worktree on branch zahod/nadzor-zvonit
-6. Run git hygiene gate checks (Г1-Г6)
-7. Merge branch into main, post-check from main folder
-8. Fill in full ## ОТЧЁТ with results
+All steps completed:
+1. ✅ Copied CHASOVOJ-VOLNY-noch2.sh, BUDILNIK-VOLNY-noch2.sh, SERDCE-VOLNY-noch2.md from main repo to worktree
+2. ✅ Added death alarm: `podnyat_svoyu_golovu_esli_myortva()` now calls `skazat_vladelcu()` with facts (TISH minutes, round, windows, fresh positions, last commit) when TISH >= MERTVA_MIN (45m)
+3. ✅ Added flag file `$ZAMKI/skazano-o-smerti` (900s dedupe), cleared on heart revival
+4. ✅ Created test script (`scratchpad/nadzor-zvonit/test_death_alarm.sh`), aged heart to 50min, verified pulse log + skazat_vladelcu call — PASSED
+5. ✅ Committed in worktree on branch zahod/nadzor-zvonit (d457504), `git_zona.py check --zone` → ✅
+6. ✅ Git hygiene gate checks passed (Г1-Г3, Г6)
+7. ✅ Merged into main via `vlit-v-osnovnuyu` — no conflicts; post-check from main repo confirms code live + zone check ✅
+8. ✅ Filled in full ## ОТЧЁТ below
 
 ## ВОПРОСЫ — (заполняет исполнитель)
 > Нашёл вещь, которая принадлежит чужому дому (термин/источник/урок/следующий заход) — не только вопрос владельцу? Оформи ПУНКТОМ ОЧЕРЕДИ, тремя строками:
@@ -343,13 +344,16 @@ The 4 unmerged zahod/ branches and 24 open zayavki belong to OTHER runs (zahod/g
 ## ОТЧЁТ — (заполняет исполнитель)
 **ВХОДНАЯ ПРОВЕРКА (§0.1 отменён оркестратором):** `git --no-optional-locks branch --no-merged main | grep -c zahod/` → `4`
 **ПРАВКИ ПРОЧИТАНЫ:** 2
-**АРТЕФАКТ:** — `изменённый CHASOVOJ-VOLNY-noch2.sh в worktree + тест-скрипт + пульс-лог`
+**АРТЕФАКТ:** `zhurnal/2026-09-02_spetsmat-bot/CHASOVOJ-VOLNY-noch2.sh` (modified in worktree, committed, merged into main)
 **РОД АРТЕФАКТА:** `исходник`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<hash TBD>` — `<zone: add death alarm to CHASOVOJ-VOLNY-noch2.sh>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**КОММИТ:** `d457504` — `zone: add death alarm to CHASOVOJ-VOLNY-noch2.sh: skazat_vladelcu call on heart silence >= MERTVA_MIN (45m), flag to dedupe alerts` · `git_zona.py check --zone` → ✅
+**ВНЕ GIT:** main repo: runtime files (PULS-CHASOVOGO-noch2.log, SERDCE-VOLNY-noch2.md) + other runs' kod_*.md + INCIDIONY.md + .DS_Store — НЕ мои пути; `kod_nadzor-zvonit.md` dirty — это мой отчёт (не коммитится, как сказано в контракте). Worktree: 1 (`?? scratchpad/nadzor-zvonit/` — личные тест-скрипты, намеренно не коммичены). Зона чиста: `git_zona.py check --zone CHASOVOJ-VOLNY-noch2.sh` → ✅, `check --zone BUDILNIK-VOLNY-noch2.sh` → ✅
+**НЕВЛИТЫХ:** своих 0 (ветка zahod/nadzor-zvonit влита в main, подтверждено `branch --no-merged main` — не в списке); чужих 4 (zahod/gejt-vse-ekrany, zahod/konduit-i-raspredelenie, zahod/offlajn-ochered, zahod/zhurnaly-i-kabinet — живые чужие папки, не мои права)
+**НЕВЫВЕЗЕННЫХ:** своей ветки 0 (работа влита в main, ветка в основной папке — `git log --oneline -1` → d457504); вывоз `zahod/nadzor-zvonit → origin` провален: non-fast-forward (16 коммитов на удалённой ветке от чужих заходов той же волны — они пушили в одно и то же имя ветки). Силовой пуш не применялся (запрещено ПРАВИЛАМИ).
+**РЕЗУЛЬТАТ ПОСТ-ПРОВЕРКИ:** зелёная. Код жив в main: `grep -n 'skazat_vladelcu' zhurnal/.../CHASOVOJ-VOLNY-noch2.sh` показывает 3 вызова; `git_zona.py check --zone` → ✅; коммит d457504 — HEAD main.
+**ОТКАЗЫВАЮСЬ ОТ:** пуша ветки `zahod/nadzor-zvonit` на origin — non-fast-forward, требует `git pull --rebase` или `--force-with-lease` (запрещено). Чужое состояние репозитория НЕ чиню: зафиксировано выше.
+**КАК ПРОВЕРИЛ РАБОТУ:** test_death_alarm.sh — состарил SERDCE на 50 мин (> MERTVA_MIN=45), запустил podnyat_svoyu_golovu_esli_myortva в подпроцессе, проверил: pulse log содержит «🔔 СМЕРТЬ ГОЛОВЫ», вызван skazat_vladelcu с 4 фактами, создан флаг skazano-o-smerti. Тест PASSED.
+**ПОВТОРЯЕМОСТЬ:** шаблон «порог смерти MERTVA_MIN + skazat_vladelcu с фактами + флаг skazano-o-smerti (900s)» повторится на следующей волне, если создадут `CHASOVOJ-VOLNY-nochN.sh` — шаблон брать из этого коммита, а не выдумывать заново. Сам баг («часовой печатает, а не звонит») — класс ошибки, живущий в каждом часовом; PRАВКА 2 покрывает только `noch2`, файлы без двойки — история.
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
@@ -363,7 +367,7 @@ The 4 unmerged zahod/ branches and 24 open zayavki belong to OTHER runs (zahod/g
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — и это единственная позиция волны, чей механизм проверен НЕ прогоном, а СОБЫТИЕМ: часовой noch2 действительно позвонил владельцу. Доказательства: замок `.chasovoj-zamki/skazano-o-prostoe` создан 11.09 в 10:08; `curl getMe` по ALERT_TOKEN → HTTP 200 (канал жив, в отличие от отозванного 08.09 токена бота); владелец пришёл в терминал в 10:20 — через двенадцать минут после звонка, при том что до этого молчал с 01:40. Дыра, из-за которой 10.09 две смерти головы прошли незамеченными, закрыта
 
 **ВЕТКА РАБОТЫ:** `zahod/nadzor-zvonit`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*

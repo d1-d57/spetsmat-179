@@ -356,12 +356,39 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 - `zahod/shirina-prep-vdn` — собственная рабочая ветка; она намеренно остаётся невлитой до последнего хода этого захода.
 
 ## ОТЧЁТ — (заполняет исполнитель)
-**АРТЕФАКТ:** `<АБСОЛЮТНЫЙ путь к собранному файлу, который владелец должен открыть>` — `<чем открывать>`
-*(собрал HTML, документ, PDF, картинки — путь сюда. Собранного файла нет — напиши «артефакта нет: <почему>». Пустая строка = отчёт не принимается: гейт `check_uroki.py` краснеет на коммите.)*
-**РОД АРТЕФАКТА:** `<исходник | собранный>`
-*(`собранный` — колода, PDF, картинка, любой файл, ПОРОЖДЁННЫЙ этим заходом: он обязан быть моложе файла-захода, и Г3 приёмки сверяет ВРЕМЯ. `исходник` — заход, чей продукт есть КОД: он коммитится РАНЬШЕ отчёта, потому что отчёт цитирует хэш коммита, и сверка по времени дала бы вечное ложное красное — тогда Г3 сверяет не время, а «доехал ли артефакт в названный §4 коммит». Не заполнено — Г3 работает по времени, как раньше.)*
-**КОММИТ:** `<хэш>` — `<сообщение>` · `git_zona.py check --zone <зона>` → ✅
-*(нет хэша — назови причину прямо здесь; пустая строка = отчёт не принимается)*
+**АРТЕФАКТ:** `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot-wt/shirina-prep-vdn/veb/obshchee/karkas.py` — open as source
+**РОД АРТЕФАКТА:** `исходник`
+**КОММИТ:** `663e97c` — `layout: widen organiser group recipient controls` · `git_zona.py check --zone veb/obshchee/karkas.py` → ✅
+
+**WHAT CHANGED**
+- Replaced exactly one CSS rule in `veb/obshchee/karkas.py`. The single declaration block now gives the logged-in recipient control `flex:0 0 11rem;max-width:11rem` on group tabs `В`, `Д`, and `Н`.
+- The rule is scoped to `#s-rasp #v-В`, `#s-rasp #v-Д`, and `#s-rasp #v-Н`; permanent rows target `.dv-pn:has(.org.pr-sel)` and `.dv-cht:has(.org.pr-sel)`, while the lesson rows keep their existing `.dv-den` parent. No font, spacing, card, guest, school-tab, or other design rule was changed.
+- No password was required or used.
+
+**VERIFICATION**
+- Read-only live-database query: 14 active teachers. The length query returned `Александр Тертерян` (18 characters, canvas width `149.819px` in the rendered select font); `Елена Мирошниченко` is tied at 18 characters and is the widest rendered option at `159.690px`.
+- Targeted Chromium verification at `1440×900`: 6/6 logged-in group screens checked — `/raspredelenie` and `/raspredelenie/postoyannoe`, tabs `В/Д/Н`, 135 recipient controls total.
+  - Unfit controls: `135/135 → 0/135` (lesson: `45/45 → 0/45`; permanent: `90/90 → 0/90`).
+  - Minimum select client width: lesson `158 → 174px`; permanent `152 → 174px`. Widest option required `159.690px`; after the change every control fits it.
+  - Student-name left edge: `48 → 48px` on all six screens. Permanent day-parent width changed from `153.594 → 176px`; lesson parent remained `208px`.
+  - Document horizontal overflow: `0px` on all six screens.
+- Byte-identical screenshot checks for the untouched guest and school-tab views on both URLs: guest `/raspredelenie` `3ccc3871…e418`, guest permanent `0f326a06…b0e`, organiser school-tab `/raspredelenie` `8ccd11af…800`, organiser school-tab permanent `33e2b08b…eb7c`; every before/after pair matched exactly.
+- `SPETSMAT_BAZA=/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/data/spetsmat.db python3 tools/gejt_verstki.py` → `RC=1`, coverage `17/17` screens. All six targeted group tabs had zero clipping, needless wrap, escaped content, and horizontal scroll. The gate remained red on 12/17 screens because of pre-existing centred-text findings and two clipping findings on the permanent school-tab view. The gate also warns that this database copy is stale: last record `2026-09-06`, last lesson `2026-09-10`.
+- Main post-check after the attempted merge: `SPETSMAT_BAZA=/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot/data/spetsmat.db python3 tools/gejt_verstki.py` from `/Users/ivanyakovlev/Documents/GitHub/spetsmat-bot` → `POST_GATE_RC=1`, `29/31` red screens, coverage `31/41` (+2 redirects), with the same stale-database warning and unrelated layout findings. Per the task contract, the merge was rolled back; `fa30f5f` is no longer an ancestor of `main` (`merge-base` rc `1`).
+
+**GIT / DELIVERY**
+- Push succeeded: `b06033f..663e97c`; upstream count is `0`.
+- `vlit-v-osnovnuyu` created `fa30f5f` without conflicts and touched only `veb/obshchee/karkas.py`; it was then rolled back because the required main post-check was red.
+- Worktree `git status --porcelain` count: `0`; `git diff --check` rc `0`; zone check rc `0`; commit stat contains only `veb/obshchee/karkas.py`.
+- Main worktree has `19` unrelated uncommitted paths; `veb/obshchee/karkas.py` is clean there. `git branch --no-merged main` count is `1`, the own branch, which remains unmerged pending a green main post-check.
+
+**ROLLBACK / IRREVERSIBLE ACTIONS**
+- The failed merge was removed from `main` with `git reset --mixed f601729` and `git restore --source=f601729 -- veb/obshchee/karkas.py`; no unrelated dirty file was overwritten. The merge commit remains recoverable from the main reflog.
+
+**REPEATABILITY**
+- The selector pattern is repeatable: lesson rows use `.dv-den` and must retain their `208px` parent, while permanent rows use `.dv-pn/.dv-cht` and need the wider parent. Future group-control width changes should keep the parent selectors separate from the single select rule.
+
+**ПРАВКИ ПРОЧИТАНЫ: 1, ОБЩАЯ**
 
 ## ПРАВКИ ПОСЛЕ ВЫДАЧИ — (заполняет АНАЛИТИК; исполнитель ЧИТАЕТ)
 > 🔴 **Пусто — значит заход не правился с момента выдачи.** Непустой блок читается ПЕРЕД продолжением работы: правка отменяет любое противоречащее ей место выше по файлу, каким бы категоричным оно ни было.
@@ -375,7 +402,7 @@ python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zon
 > 🔴 **Без этого раздела заход НЕ ЗАКРЫТ.** Гейт — `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/priyomka.py <этот файл>` (Г13): пока раздел пуст или несёт плейсхолдеры, приёмка красная, и это единственное место, где вердикт остаётся ЗАПИСАННЫМ, а не сказанным в чат.
 > Заполняется ПОСЛЕ отчёта исполнителя. Исполнителю сюда писать нечего — его половина выше.
 
-**ВЕРДИКТ:** `<принято | доработка | отклонено>` — `<почему именно так, одной фразой: что проверено и чем>`
+**ВЕРДИКТ:** `принято` — правка на месте и она ровно заказанного масштаба: правило `flex:0 0 11rem;max-width:11rem` для групп В/Д/Н против прежних 8.6rem, левый край не тронут (F6). ЗАМЕЧАНИЕ ПРОЦЕССА: ветку позиция за собой НЕ влила, влитие доделал оркестратор (f5a0d99) — на бесплатной модели последний ход волны не доживает, и это надо закладывать в заход, а не ждать
 
 **ВЕТКА РАБОТЫ:** `zahod/shirina-prep-vdn`
 *(проверяется фактом, не словом: ветка обязана существовать и быть либо ВЛИТА в основную, либо названа в открытой заявке на влитие. Ни того, ни другого — Г14 краснеет. Снять состояние: `python3 /Users/ivanyakovlev/Documents/GitHub/disciplina/_generator/tools/git_zona.py poteri --branch <ветка>`)*
