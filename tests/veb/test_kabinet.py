@@ -757,3 +757,83 @@ def test_the_lesson_konduit_is_a_named_button_and_not_a_click_on_the_date(runnin
     assert '<summary class="kab-zag" data-den=' not in telo, (
         "дата больше не несёт раскрытие: она выключатель <details>")
     assert ".kab-konduit" in telo, "кнопка размечена своим классом"
+
+
+def test_the_konduit_is_a_row_per_sheet_whose_button_really_opens_that_sheet(
+        running_server):
+    """Пункт 8 рецензии 11.09 — владелец назвал его главным.
+
+    Дословно: *«кондуит записан странно: задачи записаны в список. Если было бы 10
+    задач, это было бы нереально поместить. Нужно писать в несколько колонок: первая
+    колонка — 16A, то есть название листка, кнопочкой большой красивой, и дальше
+    список задач тоже кнопочками, без слова „задача“: просто 3, 8, 10а. Вторая
+    строчка: 16 альфа и тоже 1, 2. По кнопке листка должна быть возможность перейти к
+    этому листку»*.
+
+    🔴 ПРОВЕРЯЕТСЯ И АДРЕС КНОПКИ, А НЕ ТОЛЬКО ЕЁ ВИД. Строку кондуита рисует
+    браузер, и отсюда её не увидеть; зато видно ДВЕ вещи, из которых она состоит, и
+    обе умеют сгнить молча: данные обязаны нести номер листка у каждой задачи, а
+    адрес `/listki/<номер>`, который скрипт из него собирает, обязан отвечать 200.
+    Кнопка, ведущая в 404, выглядит на экране ровно как рабочая.
+    """
+    import sqlite3 as _s
+    from datetime import timezone
+
+    from core.services.history import nachalo_zanyatia_iso
+    from core.services.istoria_poseshchenij import zanyatie_zaversheno
+    from veb.razdely.kabinet import proshedshie_zanyatiya, segodnya
+
+    seichas = datetime.now(timezone.utc)
+    proshlo = [d for d in proshedshie_zanyatiya(segodnya())
+               if zanyatie_zaversheno(d, seichas=seichas)]
+    assert proshlo, "фикстура обязана иметь хотя бы одно завершившееся занятие"
+    den = proshlo[-1]
+    kogda = nachalo_zanyatia_iso(den)
+
+    conn = _s.connect(str(running_server["put"]))
+    try:
+        sheet_id = conn.execute(
+            "insert into sheets (number, title, issued_at, ord) "
+            "values ('16A', '16A. Деревья', ?, 1)", (den,)).lastrowid
+        # Две задачи ОДНОГО листка: строка обязана быть одна, а не две.
+        zadachi = {}
+        for poryadok, metka in ((1, "3"), (2, "10а")):
+            zadachi[metka] = conn.execute(
+                "insert into problems (sheet_id, label, kind, ord) "
+                "values (?, ?, 'обычная', ?)", (sheet_id, metka, poryadok)).lastrowid
+        for problem_id in zadachi.values():
+            conn.execute(
+                "insert into marks (student_id, problem_id, event, teacher_id, "
+                "valid_at, recorded_at, source) "
+                "values (?, ?, 'assert', ?, ?, ?, 'кнопка')",
+                (running_server["s1"], problem_id, running_server["t1"], kogda, kogda))
+        conn.commit()
+    finally:
+        conn.close()
+
+    _status, body, _h = _get(
+        f'{running_server["baza"]}/kabinet', _kuka("prepod", running_server["t1"]))
+    telo = body.decode("utf-8")
+
+    blok = re.search(r'<script type="application/json" id="kab-dannye">(.*?)</script>',
+                     telo, re.S)
+    assert blok is not None
+    dannye = json.loads(blok.group(1))
+    klyuch = f'{den}|{running_server["s1"]}'
+    assert klyuch in dannye, "у школьника этого дня обязано быть что раскрывать"
+    sdal = dannye[klyuch]["sdal"]
+    assert [z["zadacha"] for z in sdal] == ["3", "10а"], sdal
+    assert {z["listok"] for z in sdal} == {"16A"}, (
+        "у КАЖДОЙ задачи стоит её листок — из него строится строка кондуита")
+    assert dannye[den]["deti"], "кондуит за занятие обязан называть школьников дня"
+
+    # Скрипт собирает адрес листка, и слово «задача» из кондуита ушло.
+    assert "'/listki/' + encodeURIComponent(r.listok)" in telo, (
+        "кнопка листка ведёт на сам листок")
+    kod = _bez_kommentariev(telo)   # разбор правки цитирует снятую строку — это не она
+    assert "'листок ' + z.listok" not in kod and "' · задача '" not in kod, (
+        "прежний список «листок X · задача Y» снят")
+
+    # 🔴 И АДРЕС ОТВЕЧАЕТ. Это та половина, которую разметка не проверяет.
+    status, _telo_listka, _h = _get(f'{running_server["baza"]}/listki/16A')
+    assert status == 200, f"кнопка листка ведёт в {status}"

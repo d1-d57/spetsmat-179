@@ -376,8 +376,28 @@ SVOI_STILI = """
   padding:1rem 1.3rem;font-family:var(--sans);box-shadow:0 -2px 14px rgba(0,0,0,.06)}
 .kab-raskrytie[hidden]{display:none}
 .kab-raskrytie h2{font-size:1.1rem;margin:0 0 .5rem;font-family:var(--sans)}
-.kab-raskrytie ul{margin:.3rem 0 0;padding-left:1.2rem}
-.kab-raskrytie .kab-nichego{color:var(--muted)}
+.kab-raskrytie .kab-nichego{color:var(--muted);margin:.1rem 0 0;font-size:.95rem}
+/* 🔴 ПАНЕЛЬ ОБЯЗАНА ПРОКРУЧИВАТЬСЯ, И ЭТО СЛЕДСТВИЕ ПУНКТА 8. Кондуит за занятие —
+   это строки на КАЖДОГО школьника дня, то есть до пятнадцати блоков; панель прибита
+   к низу экрана (`position:sticky`), и без своей прокрутки она выехала бы за экран
+   вверх, унося первого школьника туда, откуда его не достать. */
+.kab-raskrytie{max-height:62vh;overflow-y:auto}
+.kab-konduit-shkolnik{margin:0 0 .9rem}
+.kab-konduit-shkolnik:last-child{margin-bottom:0}
+.kab-konduit-imya{font-weight:600;margin:0 0 .3rem}
+.kab-konduit-den{color:var(--muted);margin:0 0 .5rem}
+.kab-listki{display:flex;flex-direction:column;gap:.4rem}
+/* Строка листка: «первая колонка — 16A… кнопочкой большой красивой, и дальше список
+   задач тоже кнопочками». `flex-wrap` — чтобы десять задач переносились ВНУТРИ своей
+   строки, а не растягивали панель вбок: горизонтальной прокрутки на этой странице
+   нет нигде, и здесь тоже не заводится. */
+.kab-stroka-listka{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem}
+.kab-listok-knopka{font-family:var(--sans);font-weight:600;font-size:1.1rem;
+  padding:.25em .9em;margin-right:.35rem;border-radius:10px;background:var(--accent);
+  color:var(--panel);text-decoration:none;min-width:3.6rem;text-align:center}
+.kab-listok-knopka:hover,.kab-listok-knopka:focus-visible{background:var(--text)}
+.kab-zadacha{font-family:var(--sans);font-size:.98rem;padding:.2em .75em;
+  border:1px solid var(--rule);border-radius:9px;background:var(--bg);color:var(--text)}
 .kab-raskrytie .kab-zakryt{float:right;cursor:pointer;border:1px solid var(--rule);
   background:none;color:var(--muted);border-radius:8px;padding:.2em .7em;font:inherit}
 @media(max-width:1400px){.kab-tablica{columns:4}}
@@ -449,26 +469,76 @@ document.querySelectorAll('.kab-zanyatie input').forEach(function(fl){
   var panel = document.getElementById('kab-raskrytie');
   var telo = document.getElementById('kab-raskrytie-telo');
   var zag = document.getElementById('kab-raskrytie-zag');
-  function zadachi(sdal){
-    return sdal.map(function(z){ return 'листок ' + z.listok + ' · задача ' + z.zadacha; });
+  /* 🔴 КОНДУИТ — СТРОКА НА ЛИСТОК, А НЕ СПИСОК ЗАДАЧ. Пункт 8 рецензии 11.09, и
+     владелец назвал его главным: *«кондуит записан странно: задачи записаны в
+     список. Если было бы 10 задач, это было бы нереально поместить. Нужно писать в
+     несколько колонок: первая колонка — 16A, то есть название листка, кнопочкой
+     большой красивой, и дальше список задач тоже кнопочками, без слова „задача“:
+     просто 3, 8, 10а. Вторая строчка: 16 альфа и тоже 1, 2. По кнопке листка должна
+     быть возможность перейти к этому листку»*.
+     Здесь стояло `'листок ' + z.listok + ' · задача ' + z.zadacha` пунктом `<li>` на
+     КАЖДУЮ задачу: десять задач — десять строк, в девяти из которых слово «листок»
+     повторяется зря. Стало: строка на листок, номер листка — ссылка на сам листок,
+     задачи — пилюли без слова «задача».
+     Адрес листка НЕ выдумывается здесь: `/listki/<номер>` — та самая дверь, которую
+     держит `veb/server.py::_listok` и которой пользуется весь сайт. */
+  function po_listkam(sdal){
+    /* [{listok, zadachi:[…]}] в порядке первого появления листка. Порядок задаёт
+       сервер (`order by s.ord, p.ord` в `sdachi_po_zanyatiyam`), и второго мнения о
+       нём здесь не заводится — группировка только собирает подряд идущее. */
+    var poryadok = [], po_nomeru = {};
+    sdal.forEach(function(z){
+      if (!po_nomeru[z.listok]) {
+        po_nomeru[z.listok] = {listok: z.listok, zadachi: []};
+        poryadok.push(po_nomeru[z.listok]);
+      }
+      po_nomeru[z.listok].zadachi.push(z.zadacha);
+    });
+    return poryadok;
   }
-  function spisok(punkty, pusto){
-    if (!punkty.length) return '<p class="kab-nichego">' + pusto + '</p>';
-    return '<ul>' + punkty.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul>';
+  /* Узлы строятся, а не склеиваются из строк: в кондуит попадают фамилии школьников
+     и метки задач, то есть данные, а `innerHTML` из данных — это разметка из данных. */
+  function uzel(tip, klass, tekst){
+    var u = document.createElement(tip);
+    if (klass) u.className = klass;
+    if (tekst !== undefined) u.textContent = tekst;
+    return u;
+  }
+  function konduit(sdal, pusto){
+    var stroki = po_listkam(sdal);
+    if (!stroki.length) return uzel('p', 'kab-nichego', pusto);
+    var obolochka = uzel('div', 'kab-listki');
+    stroki.forEach(function(r){
+      var stroka = uzel('div', 'kab-stroka-listka');
+      var knopka = uzel('a', 'kab-listok-knopka', r.listok);
+      knopka.href = '/listki/' + encodeURIComponent(r.listok);
+      stroka.appendChild(knopka);
+      r.zadachi.forEach(function(z){
+        stroka.appendChild(uzel('span', 'kab-zadacha', z));
+      });
+      obolochka.appendChild(stroka);
+    });
+    return obolochka;
   }
   function zakryt(){ panel.hidden = true; }
   function pokazat(klyuch){
     var d = dannye[klyuch];
     if (!d) return;
     zag.textContent = d.kto;
+    telo.textContent = '';
     if (d.deti) {
-      telo.innerHTML = spisok(d.deti.map(function(r){
-        var z = zadachi(r.sdal);
-        return '<b>' + r.kto + '</b>' + (z.length ? ' — ' + z.join('; ') : ' — задач нет');
-      }), 'в этот день школьников не было');
+      if (!d.deti.length) {
+        telo.appendChild(uzel('p', 'kab-nichego', 'в этот день школьников не было'));
+      }
+      d.deti.forEach(function(r){
+        var blok = uzel('div', 'kab-konduit-shkolnik');
+        blok.appendChild(uzel('p', 'kab-konduit-imya', r.kto));
+        blok.appendChild(konduit(r.sdal, 'задач нет'));
+        telo.appendChild(blok);
+      });
     } else {
-      telo.innerHTML = '<p>' + d.den + '</p>'
-        + spisok(zadachi(d.sdal), 'в этот день задач нет');
+      telo.appendChild(uzel('p', 'kab-konduit-den', d.den));
+      telo.appendChild(konduit(d.sdal, 'в этот день задач нет'));
     }
     panel.hidden = false;
   }
