@@ -1,0 +1,14 @@
+# СЛЕПОК ПРАВИЛА ЗАГЛУШКИ, живущего на сервере в /etc/nginx/snippets/spetsmat-obshchee.conf.
+# Держим копию в репозитории, потому что конфиг nginx правится на машине и иначе
+# существовал бы только там — а значит и терялся бы вместе с ней.
+location = /tehrabota.html {
+    root /opt/spetsmat-bot/deploy;
+    internal;
+}
+
+location / {
+    if (-f /opt/spetsmat-bot/deploy/REMONT) { return 503; }
+    error_page 502 503 504 /tehrabota.html;
+    proxy_pass http://127.0.0.1:8765;
+    # … остальные proxy_set_header как были
+}

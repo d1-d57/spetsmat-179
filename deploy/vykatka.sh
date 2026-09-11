@@ -213,7 +213,8 @@ otkatit() {
     for D in \$(cd \"\$BAK\" && ls); do
       sudo rsync -a \"\$BAK/\$D\" $TARGET/
     done
-    sudo systemctl restart $UNIT_VEB"
+    sudo systemctl restart $UNIT_VEB
+    sudo rm -f $TARGET/deploy/REMONT"
 }
 
 if [ "$ROLLBACK_ONLY" = 1 ]; then
@@ -342,6 +343,19 @@ fi
 # its code moved is the other half-deploy: the files are new and the running process is old,
 # and nothing anywhere says so.  So the answer comes from what rsync reports it changed.
 
+# 🔴 ЗАГЛУШКА НА ВРЕМЯ РЕМОНТА — ЧТОБЫ ЧЕЛОВЕК ВИДЕЛ ОТВЕТ, А НЕ КРУТЯЩИЙСЯ ЭКРАН.
+# Владелец 11.09: «если сайт может падать из-за ремонтных работ, придумай заглушку,
+# которую можно выводить, когда ты что-то выкатываешь; а то он просто грузится и ничего
+# не происходит; и поставь там ссылку на мой телеграм». Флаг поднимается ПЕРЕД
+# перезапуском и снимается после того, как сайт ответил 200 — то есть ровно на окно, в
+# котором ответить некому. Если выкатка оборвётся, флаг останется поднятым, и это
+# ПРАВИЛЬНО: посетитель увидит честное «чиним», а не пустоту.
+say "поднимаю заглушку на время перезапуска"
+# Флаг лежит в `deploy/`, а НЕ в `data/`: каталог данных закрыт правами, и nginx
+# его не читает — проверено живьём, правило `if (-f …)` молча не срабатывало, а
+# заглушка не показывалась ни разу.
+run $SSH "$SERVER" "sudo mkdir -p $TARGET/deploy && sudo touch $TARGET/deploy/REMONT"
+
 say "restart $UNIT_VEB"
 run $SSH "$SERVER" "sudo systemctl restart $UNIT_VEB"
 
@@ -367,6 +381,20 @@ if [ "$DRY_RUN" = 1 ]; then
   echo "dry run finished.  Nothing was changed."
   exit 0
 fi
+
+# 🔴 СНАЧАЛА ЖДЁМ САМ СЕРВИС, ПОТОМ СНИМАЕМ ЗАГЛУШКУ, И ТОЛЬКО ПОТОМ СПРАШИВАЕМ САЙТ.
+# Порядок не переставляется: при поднятом флаге nginx отвечает 503, и проверка «сайт дал
+# 200» провалилась бы на собственной заглушке, приняв ремонт за поломку и откатив
+# исправную выкатку. Поэтому готовность меряется У СЕРВИСА, изнутри машины.
+say "жду, пока сервис ответит изнутри"
+for i in $(seq 1 "$OZHIDANIE_200"); do
+  if [ "$($SSH "$SERVER" "curl -s -o /dev/null -w '%{http_code}' -m 3 http://127.0.0.1:8765/ || true")" = "200" ]; then
+    say "сервис отвечает через ${i}с — снимаю заглушку"
+    break
+  fi
+  sleep 1
+done
+run $SSH "$SERVER" "sudo rm -f $TARGET/deploy/REMONT"
 
 say "does $PUBLIC_URL answer 200?"
 for i in $(seq 1 "$OZHIDANIE_200"); do
